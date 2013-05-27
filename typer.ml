@@ -671,7 +671,7 @@ let make_call ctx e params t p =
 			| TAnon a -> (try PMap.find fname a.a_fields with Not_found -> raise Exit), (match !(a.a_status) with Statics c -> Some c | _ -> None)
 			| _ -> raise Exit
 		) in
-		if f.cf_kind <> Method MethInline then raise Exit;
+		if f.cf_kind <> Method MethInline || ctx.curfield.cf_kind = Method MethInline then raise Exit;
 		let is_extern = (match cl with
 			| Some { cl_extern = true } -> true
 			| Some { cl_kind = KAbstractImpl _ } -> true

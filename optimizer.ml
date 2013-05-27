@@ -296,6 +296,10 @@ let rec type_inline ctx cf f ethis params tret config p force =
 		| TBinop ((OpAssign | OpAssignOp _),{ eexpr = TLocal v },_) ->
 			(read_local v).i_write <- true;
 			Type.map_expr (map false) e;
+		| TCall (({eexpr = TField(({eexpr = TFunction fd}),(FInstance(c,cf) | FStatic(c,cf)))}) as ethis,el) ->
+			(match type_inline ctx cf fd ethis (List.map (Type.map_expr (map false)) el) e.etype None p (c.cl_extern || Meta.has Meta.Extern cf.cf_meta) with
+			| None -> e
+			| Some e -> e)
 		| TFunction f ->
 			(match f.tf_args with [] -> () | _ -> has_vars := true);
 			let old = save_locals ctx and old_fun = !in_local_fun in
