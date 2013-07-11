@@ -370,6 +370,16 @@ let add_libs com libs =
 		com.class_path <- (List.map (fun l -> l,CPKNormal) lines) @ com.class_path;
 		List.rev !extra_args
 
+let add_zip_lib com filepath =
+	let file = (try (match Common.find_file com filepath with RFZip _ -> raise Not_found | RFFile file -> file) with Not_found -> failwith ("Archive not found: " ^ filepath)) in
+	let zip = Zip.open_in file in
+	let h = Hashtbl.create 0 in
+	List.iter (fun entry ->
+		Hashtbl.replace h entry.Zip.filename (Zip.read_entry zip entry)
+	) (Zip.entries zip);
+	Hashtbl.replace com.zip_entries (normalize_path filepath) h;
+	Zip.close_in zip
+
 let run_command ctx cmd =
 	let h = Hashtbl.create 0 in
 	Hashtbl.add h "__file__" ctx.com.file;
@@ -542,7 +552,7 @@ and wait_loop boot_com host port =
 		Hashtbl.replace cache.c_modules (m.m_path,m.m_extra.m_sign) m;
 	in
 	let check_module_path com m p =
-		m.m_extra.m_file = Common.unique_full_path (Typeload.resolve_module_file com m.m_path (ref[]) p)
+		m.m_extra.m_file = Common.unique_full_path ((match Typeload.resolve_module_file com m.m_path (ref[]) p with RFFile file -> file | RFZip _ -> failwith "Unsupported"))
 	in
 	let compilation_step = ref 0 in
 	let compilation_mark = ref 0 in
@@ -881,8 +891,13 @@ try
 			classes := cpath :: !classes
 		),"<class> : select startup class");
 		("-lib",Arg.String (fun l ->
-			cp_libs := l :: !cp_libs;
-			Common.raw_define com l;
+			if ExtString.String.ends_with l ".zip" then begin
+				add_zip_lib com l;
+				com.class_path <- (normalize_path l, CPKZip) :: com.class_path
+			end else begin
+				cp_libs := l :: !cp_libs;
+				Common.raw_define com l;
+			end
 		),"<library[:version]> : use a haxelib library");
 		("-D",Arg.String (fun var ->
 			if var = fst (Define.infos Define.UseRttiDoc) then Parser.use_doc := true;
@@ -946,7 +961,7 @@ try
 				| [file] -> file, file
 				| _ -> raise (Arg.Bad "Invalid Resource format, expected file@name")
 			) in
-			let file = (try Common.find_file com file with Not_found -> file) in
+			let file = (try (match Common.find_file com file with RFZip _ -> raise Not_found | RFFile file -> file) with Not_found -> file) in
 			let data = (try
 				let s = Std.input_file ~bin:true file in
 				if String.length s > 12000000 then raise Exit;

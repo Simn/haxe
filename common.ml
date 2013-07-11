@@ -102,6 +102,10 @@ type class_path_kind =
 	| CPKStd
 	| CPKZip
 
+type resolved_file =
+	| RFFile of string
+	| RFZip of string * string
+
 type context = {
 	(* config *)
 	version : int;
@@ -115,6 +119,7 @@ type context = {
 	mutable config : platform_config;
 	mutable std_path : (string * class_path_kind) list;
 	mutable class_path : (string * class_path_kind) list;
+	mutable zip_entries : (string,(string,string) Hashtbl.t) Hashtbl.t;
 	mutable main_class : Type.path option;
 	mutable defines : (string,string) PMap.t;
 	mutable package_rules : (string,package_rule) PMap.t;
@@ -598,6 +603,7 @@ let create v args =
 		run_command = Sys.command;
 		std_path = [];
 		class_path = [];
+		zip_entries = Hashtbl.create 0;
 		main_class = None;
 		defines = PMap.add "true" "1" (if !display_default then PMap.add "display" "1" PMap.empty else PMap.empty);
 		package_rules = PMap.empty;
@@ -773,13 +779,25 @@ let find_file ctx f =
 	let rec loop = function
 		| [] -> raise Not_found
 		| (p,cpk) :: l ->
-			let file = p ^ f in
-			if Sys.file_exists file then
-				file
-			else
-				loop l
+			match cpk with
+			| CPKNormal | CPKStd ->
+				let file = p ^ f in
+				if Sys.file_exists file then
+					RFFile file
+				else
+					loop l
+			| CPKZip ->
+				try
+					let h = Hashtbl.find ctx.zip_entries p in
+					let entry = Hashtbl.find h f in
+					RFZip (f,entry)
+				with Not_found -> loop l
 	in
 	loop ctx.class_path
+
+let resolved_file_name = function
+	| RFFile file -> file
+	| RFZip (path,data) -> path
 
 let get_full_path f = try Extc.get_full_path f with _ -> f
 

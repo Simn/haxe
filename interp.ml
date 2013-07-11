@@ -2071,7 +2071,7 @@ let macro_lib =
 		);
 		"resolve", Fun1 (fun file ->
 			match file with
-			| VString s -> VString (try Common.find_file (ccom()) s with Not_found -> failwith ("File not found '" ^ s ^ "'"))
+			| VString s -> VString (try Common.resolved_file_name (Common.find_file (ccom()) s) with Not_found -> failwith ("File not found '" ^ s ^ "'"))
 			| _ -> error();
 		);
 		"define", Fun1 (fun s ->

@@ -459,7 +459,7 @@ let remove_debug_infos as3 =
 let parse_swf com file =
 	let t = Common.timer "read swf" in
 	let is_swc = file_extension file = "swc" in
-	let file = (try Common.find_file com file with Not_found -> failwith ((if is_swc then "SWC" else "SWF") ^ " Library not found : " ^ file)) in
+	let file = (try (match Common.find_file com file with RFZip _ -> failwith "Unsupported" | RFFile file -> file) with Not_found -> failwith ((if is_swc then "SWC" else "SWF") ^ " Library not found : " ^ file)) in
 	let ch = if is_swc then begin
 		let zip = Zip.open_in file in
 		try
@@ -830,11 +830,18 @@ let build_swf9 com file swc =
 		tag (TBinaryData (!cid,data)) :: acc
 	) com.resources [] in
 	let load_file_data file p =
-		let file = try Common.find_file com file with Not_found -> file in
-		if String.length file > 5 && String.sub file 0 5 = "data:" then
-			String.sub file 5 (String.length file - 5)
-		else
-			(try Std.input_file ~bin:true file with Invalid_argument("String.create") -> error "File is too big (max 16MB allowed)" p | _  -> error "File not found" p)
+		begin try
+			match Common.find_file com file with
+			| RFFile file ->
+				if String.length file > 5 && String.sub file 0 5 = "data:" then
+					String.sub file 5 (String.length file - 5)
+				else
+					(try Std.input_file ~bin:true file with Invalid_argument("String.create") -> error "File is too big (max 16MB allowed)" p | _  -> error "File not found" p)
+			| RFZip _ ->
+				failwith "Not supported yet"
+		with Not_found ->
+			error "File not found" p
+		end
 	in
 	let bmp = List.fold_left (fun acc t ->
 		match t with
@@ -842,7 +849,7 @@ let build_swf9 com file swc =
 			let rec loop = function
 				| [] -> acc
 				| (Meta.Font,(EConst (String file),p) :: args,_) :: l ->
-					let file = try Common.find_file com file with Not_found -> file in
+					let file = try (match Common.find_file com file with RFZip _ -> error "Unsupported" p | RFFile file -> file) with Not_found -> file in
 					let ch = try open_in_bin file with _ -> error "File not found" p in
 					let ttf = TTFParser.parse ch in
 					close_in ch;
@@ -1153,7 +1160,7 @@ let generate com swf_header =
 	let meta_data =
 		try
 			let file = Common.defined_value com Define.SwfMetadata in
-			let file = try Common.find_file com file with Not_found -> file in
+			let file = try (match Common.find_file com file with RFZip _ -> failwith "Unsupported" | RFFile file -> file) with Not_found -> file in
 			let data = try Std.input_file ~bin:true file with Sys_error _ -> failwith ("Metadata resource file not found : " ^ file) in
 			[tag(TMetaData (data))]
 		with Not_found ->

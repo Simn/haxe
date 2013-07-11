@@ -198,6 +198,15 @@ let parse_file com file p =
 	Common.log com ("Parsed " ^ file);
 	data
 
+let parse_string com file s p =
+	let t = Common.timer "parsing" in
+	Lexer.init file;
+	incr stats.s_files_parsed;
+	let data = Parser.parse com (Lexing.from_string s) in
+	t();
+	Common.log com ("Parsed " ^ file);
+	data
+
 let parse_hook = ref parse_file
 let type_module_hook = ref (fun _ _ _ -> None)
 let type_function_params_rec = ref (fun _ _ _ _ -> assert false)
@@ -2321,7 +2330,6 @@ let type_module ctx m file tdecls p =
 	List.iter (init_module_type ctx context_init do_init) tdecls;
 	m
 
-
 let resolve_module_file com m remap p =
 	let forbid = ref false in
 	let file = (match m with
@@ -2337,14 +2345,20 @@ let resolve_module_file com m remap p =
 			String.concat "/" (x :: l) ^ "/" ^ name
 	) ^ ".hx" in
 	let file = Common.find_file com file in
-	let file = (match String.lowercase (snd m) with
-	| "con" | "aux" | "prn" | "nul" | "com1" | "com2" | "com3" | "lpt1" | "lpt2" | "lpt3" when Sys.os_type = "Win32" ->
-		(* these names are reserved by the OS - old DOS legacy, such files cannot be easily created but are reported as visible *)
-		if (try (Unix.stat file).Unix.st_size with _ -> 0) > 0 then file else raise Not_found
-	| _ -> file
-	) in
+	let file,f = match file with
+	| RFZip (path,data) ->
+		file,fun () -> parse_string com path data p
+	| RFFile path ->
+		let path = (match String.lowercase (snd m) with
+		| "con" | "aux" | "prn" | "nul" | "com1" | "com2" | "com3" | "lpt1" | "lpt2" | "lpt3" when Sys.os_type = "Win32" ->
+			(* these names are reserved by the OS - old DOS legacy, such files cannot be easily created but are reported as visible *)
+			if (try (Unix.stat path).Unix.st_size with _ -> 0) > 0 then path else raise Not_found
+		| _ -> path
+		) in
+		RFFile path,fun () -> (!parse_hook) com path p
+	in
 	if !forbid then begin
-		let _, decls = (!parse_hook) com file p in
+		let _, decls = f() in
 		let meta = (match decls with
 		| (EClass d,_) :: _ -> d.d_meta
 		| (EEnum d,_) :: _ -> d.d_meta
@@ -2362,7 +2376,7 @@ let resolve_module_file com m remap p =
 let parse_module ctx m p =
 	let remap = ref (fst m) in
 	let file = resolve_module_file ctx.com m remap p in
-	let pack, decls = (!parse_hook) ctx.com file p in
+	let file, (pack, decls) = match file with RFFile file -> file,(!parse_hook) ctx.com file p | RFZip(path,data) -> path,parse_string ctx.com path data p in
 	if pack <> !remap then begin
 		let spack m = if m = [] then "<empty>" else String.concat "." m in
 		if p == Ast.null_pos then
