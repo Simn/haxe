@@ -209,7 +209,7 @@ let rec read_type_path com p =
 				Not_found -> p)
 		| _ -> p
 	) in
-	List.iter (fun path ->
+	List.iter (fun (path,_) ->
 		let dir = path ^ String.concat "/" p in
 		let r = (try Sys.readdir dir with _ -> [||]) in
 		Array.iter (fun f ->
@@ -306,7 +306,7 @@ let parse_hxml file =
 let lookup_classes com spath =
 	let rec loop = function
 		| [] -> []
-		| cp :: l ->
+		| (cp,cpk) :: l ->
 			let cp = (if cp = "" then "./" else cp) in
 			let c = normalize_path (Extc.get_real_path (Common.unique_full_path cp)) in
 			let clen = String.length c in
@@ -367,7 +367,7 @@ let add_libs com libs =
 				if value <> "" then extra_args := value :: !extra_args;
 				acc
 		) [] lines in
-		com.class_path <- lines @ com.class_path;
+		com.class_path <- (List.map (fun l -> l,CPKNormal) lines) @ com.class_path;
 		List.rev !extra_args
 
 let run_command ctx cmd =
@@ -816,15 +816,15 @@ try
 				l
 		in
 		let parts = "" :: Str.split_delim (Str.regexp "[;:]") p in
-		com.class_path <- List.map normalize_path (loop parts)
+		com.class_path <- List.map (fun path -> normalize_path path,CPKNormal) (loop parts)
 	with
 		Not_found ->
 			if Sys.os_type = "Unix" then
-				com.class_path <- ["/usr/lib/haxe/std/";"/usr/local/lib/haxe/std/";"/usr/lib/haxe/extraLibs/";"/usr/local/lib/haxe/extraLibs/";"";"/"]
+				com.class_path <- ["/usr/lib/haxe/std/",CPKStd;"/usr/local/lib/haxe/std/",CPKStd;"/usr/lib/haxe/extraLibs/",CPKNormal;"/usr/local/lib/haxe/extraLibs/",CPKNormal;"",CPKNormal;"/",CPKNormal]
 			else
 				let base_path = normalize_path (Extc.get_real_path (try executable_path() with _ -> "./")) in
-				com.class_path <- [base_path ^ "std/";base_path ^ "extraLibs/";""]);
-	com.std_path <- List.filter (fun p -> ExtString.String.ends_with p "std/" || ExtString.String.ends_with p "std\\") com.class_path;
+				com.class_path <- [base_path ^ "std/",CPKStd;base_path ^ "extraLibs/",CPKNormal;"",CPKNormal]);
+	com.std_path <- List.filter (fun (_,cpk) -> cpk = CPKStd) com.class_path;
 	let set_platform pf file =
 		if com.platform <> Cross then failwith "Multiple targets";
 		Common.init_platform com pf;
@@ -845,7 +845,7 @@ try
 	let basic_args_spec = [
 		("-cp",Arg.String (fun path ->
 			process_libs();
-			com.class_path <- normalize_path path :: com.class_path
+			com.class_path <- (normalize_path path, CPKNormal) :: com.class_path
 		),"<path> : add a directory to find source files");
 		("-js",Arg.String (set_platform Js),"<file> : compile code to JavaScript file");
 		("-swf",Arg.String (set_platform Flash),"<file> : compile code to Flash SWF file");
@@ -1128,7 +1128,7 @@ try
 		Common.log com ("Classes found : ["  ^ (String.concat "," (List.map Ast.s_type_path !classes)) ^ "]");
 	end;
 	let add_std dir =
-		com.class_path <- List.filter (fun s -> not (List.mem s com.std_path)) com.class_path @ List.map (fun p -> p ^ dir ^ "/_std/") com.std_path @ com.std_path
+		com.class_path <- List.filter (fun s -> not (List.mem s com.std_path)) com.class_path @ List.map (fun (p,cpk) -> p ^ dir ^ "/_std/",cpk) com.std_path @ com.std_path
 	in
 	let ext = (match com.platform with
 		| Cross ->
@@ -1194,7 +1194,7 @@ try
 		if !cmds = [] && not !did_something then Arg.usage basic_args_spec usage;
 	end else begin
 		ctx.setup();
-		Common.log com ("Classpath : " ^ (String.concat ";" com.class_path));
+		Common.log com ("Classpath : " ^ (String.concat ";" (List.map fst com.class_path)));
 		Common.log com ("Defines : " ^ (String.concat ";" (PMap.foldi (fun v _ acc -> v :: acc) com.defines [])));
 		let t = Common.timer "typing" in
 		Typecore.type_expr_ref := (fun ctx e with_type -> Typer.type_expr ctx e with_type);

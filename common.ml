@@ -97,6 +97,11 @@ type platform_config = {
 	pf_pattern_matching : bool;
 }
 
+type class_path_kind =
+	| CPKNormal
+	| CPKStd
+	| CPKZip
+
 type context = {
 	(* config *)
 	version : int;
@@ -108,8 +113,8 @@ type context = {
 	mutable foptimize : bool;
 	mutable platform : platform;
 	mutable config : platform_config;
-	mutable std_path : string list;
-	mutable class_path : string list;
+	mutable std_path : (string * class_path_kind) list;
+	mutable class_path : (string * class_path_kind) list;
 	mutable main_class : Type.path option;
 	mutable defines : (string,string) PMap.t;
 	mutable package_rules : (string,package_rule) PMap.t;
@@ -767,7 +772,7 @@ let add_filter ctx f =
 let find_file ctx f =
 	let rec loop = function
 		| [] -> raise Not_found
-		| p :: l ->
+		| (p,cpk) :: l ->
 			let file = p ^ f in
 			if Sys.file_exists file then
 				file

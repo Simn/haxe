@@ -3712,8 +3712,8 @@ let get_macro_context ctx p =
 		com2.display <- false;
 		List.iter (fun p -> com2.defines <- PMap.remove (platform_name p) com2.defines) platforms;
 		com2.defines_signature <- None;
-		com2.class_path <- List.filter (fun s -> not (ExtString.String.exists s "/_std/")) com2.class_path;
-		com2.class_path <- List.map (fun p -> p ^ "neko" ^ "/_std/") com2.std_path @ com2.class_path;
+		com2.class_path <- List.filter (fun (s,_) -> not (ExtString.String.exists s "/_std/")) com2.class_path;
+		com2.class_path <- List.map (fun (p,cpk) -> p ^ "neko" ^ "/_std/",cpk) com2.std_path @ com2.class_path;
 		let to_remove = List.map (fun d -> fst (Define.infos d)) [Define.NoTraces] in
 		let to_remove = to_remove @ List.map (fun (_,d) -> "flash" ^ d) Common.flash_versions in
 		com2.defines <- PMap.foldi (fun k v acc -> if List.mem k to_remove then acc else PMap.add k v acc) com2.defines PMap.empty;

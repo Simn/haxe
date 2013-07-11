@@ -2067,7 +2067,7 @@ let macro_lib =
 			| _ -> error()
 		);
 		"class_path", Fun0 (fun() ->
-			VArray (Array.of_list (List.map (fun s -> VString s) (ccom()).class_path));
+			VArray (Array.of_list (List.map (fun s -> VString s) (List.map fst (ccom()).class_path)));
 		);
 		"resolve", Fun1 (fun file ->
 			match file with
@@ -2398,7 +2398,7 @@ let macro_lib =
 			match v with
 			| VString cp ->
 				let com = ccom() in
-				com.class_path <- (Common.normalize_path cp) :: com.class_path;
+				com.class_path <- (Common.normalize_path cp, CPKNormal) :: com.class_path;
 				VNull
 			| _ ->
 				error()

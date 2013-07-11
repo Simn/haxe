@@ -1120,11 +1120,11 @@ let hx_stack_push ctx output clazz func_name pos =
 	let flen = String.length file in
 	(* Not quite right - should probably test is file exists *)
    let stripped_file = try
-		List.iter (fun path ->
+		List.iter (fun (path,_) ->
 			let plen = String.length path in
 			if (flen>plen && path=(String.sub file 0 plen ))
 				then raise (PathFound (String.sub file plen (flen-plen)) ) )
-			 (ctx.ctx_common.class_path @ ctx.ctx_common.std_path);
+			(ctx.ctx_common.class_path @ ctx.ctx_common.std_path);
 		file;
 	with PathFound tail -> tail in
    let qfile = "\"" ^ (Ast.s_escape stripped_file) ^ "\"" in
@@ -2482,7 +2482,7 @@ let generate_files common_ctx file_info =
 	output_files " 0 };\n";
 	output_files "const char *__hxcpp_class_path[] = {\n";
 	output_files "#ifdef HXCPP_DEBUGGER\n";
-	List.iter ( fun file -> output_files ("	\"" ^ file ^ "\",\n" ) ) (common_ctx.class_path @ common_ctx.std_path);
+	List.iter ( fun (file,_) -> output_files ("	\"" ^ file ^ "\",\n" ) ) (common_ctx.class_path @ common_ctx.std_path);
 	output_files "#endif\n";
 	output_files " 0 };\n";
 	output_files "} // namespace hx\n";
