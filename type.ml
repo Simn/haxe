@@ -1014,9 +1014,20 @@ let rec apply_in t ta =
 	in
 	apply t
 
-let apply_right tl = match List.rev tl with
-	| t :: tl -> t,List.rev (!t_in :: tl)
+
+
+let apply_right tl = 
+	let rec loop tl = match tl with
+	| t :: tl -> 
+		if t == !t_in then
+			let x,xl = loop tl in
+			x,t::xl
+		else 
+			t,!t_in :: tl
 	| [] -> assert false
+	in
+	let t, tl = loop (List.rev tl) in
+	t, List.rev tl
 
 let rec to_of a_of tl =
 	let rec loop t = match t with
@@ -1028,8 +1039,8 @@ let rec to_of a_of tl =
 			let t,tl = apply_right tl in
 			let t2 = TEnum(en,tl) in
 			TAbstract(a_of,[t2;t])
-		| TFun([t1],t2) ->
-			let t1 = TFun([t1],!t_in) in
+		| TFun([(a,b,t1) as p1],t2) ->
+			let t1,t2 = if t2 == !t_in then TFun([(a,b,!t_in)],t2),t1 else TFun([p1],!t_in),t2 in
 			TAbstract(a_of,[t1;t2])
 		| t ->
 			print_endline (s_type (print_context()) t);

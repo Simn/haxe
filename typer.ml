@@ -3370,6 +3370,11 @@ and build_call ctx acc el (with_type:with_type) p =
 		ignore(acc_get ctx acc p);
 		assert false
 	| AKExpr e ->
+		(* checks if t is a callable Function inside of an of. *)
+		let is_supported_of_func t = match follow t with
+		| TFun([(a,b,_)], _) -> true
+		| _ -> false
+		in
 		let rec loop t = match follow t with
 		| TFun (args,r) ->
 			let fopts = (match acc with
@@ -3384,8 +3389,25 @@ and build_call ctx acc el (with_type:with_type) p =
 				| _ ->
 					let el, tfunc = unify_call_params ctx fopts el args r p false in
 					el,(match tfunc with TFun(_,r) -> r | _ -> assert false), {e with etype = tfunc})
-		| TAbstract({a_path=[],"Of"},[TFun(args,_);tr]) ->
-			loop (TFun(args,tr))
+		
+		| TAbstract({a_path=[],"Of"},[f]) when is_supported_of_func(f) ->
+			let t = match follow f with
+			| TFun([(a,b,tl)],tr) -> TFun([(a,b,tl)],tr)
+			| _ -> assert false
+			in
+			loop t
+		(* Allow to call functions wrapped in Of<Of<In->In, String, Int>. Follows 
+		   the inner type f to check if it's aliased. Currently this function calls follow 
+		   twice on f which could be optimized (same in the case above).
+		*)
+		| TAbstract({a_path=[],"Of"},[TAbstract({a_path=[],"Of"}, [f; tl]);tr]) when is_supported_of_func(f) ->
+			let t = match follow f with
+			| TFun([(a,b,_)],_) -> TFun([(a,b,tl)],tr)
+			| _ -> assert false
+			in
+			loop t
+			
+
 		| TMono _ ->
 			let t = mk_mono() in
 			let el = List.map (fun e -> type_expr ctx e Value) el in
