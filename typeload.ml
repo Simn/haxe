@@ -379,7 +379,9 @@ let rec load_instance ctx t p allow_no_params =
 				| _ -> assert false
 			) types;
 			f (!pl)
-		end else if path = ([],"Dynamic") then
+		end else if path = ([],"In") then
+			!t_in
+		else if path = ([],"Dynamic") then
 			match t.tparams with
 			| [] -> t_dynamic
 			| [TPType t] -> TDynamic (load_complex_type ctx p t)
