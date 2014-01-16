@@ -3086,7 +3086,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 				PMap.fold (fun f acc ->
 					if f.cf_name <> "_new" && can_access ctx c f true && Meta.has Meta.Impl f.cf_meta && not (Meta.has Meta.Enum f.cf_meta) then begin
 						let f = prepare_using_field f in
-						let t = apply_params a.a_types pl (follow f.cf_type) in
+						let t = apply_params a.a_types pl (follow_reversible_ofs f.cf_type) in
 						PMap.add f.cf_name { f with cf_public = true; cf_type = opt_type t } acc
 					end else
 						acc
@@ -3313,8 +3313,15 @@ and build_call ctx acc el (with_type:with_type) p =
 			e
 		| _ ->
 			let t = follow (field_type ctx cl [] ef p) in
+
+			let etype_follow = match t with
+			| TFun ((_,_,t1) :: _, _) -> (match follow_reversible_ofs t1 with
+			| TAbstract({a_path=[], "Of"}, _ ) -> follow_reversible_ofs
+			| _ -> follow)
+			| _ -> assert false
+			in
 			(* for abstracts we have to apply their parameters to the static function *)
-			let t,tthis = match follow eparam.etype with
+			let t,tthis = match etype_follow eparam.etype with
 				| TAbstract(a,tl) when Meta.has Meta.Impl ef.cf_meta -> apply_params a.a_types tl t,apply_params a.a_types tl a.a_this
 				| te -> t,te
 			in
@@ -3385,7 +3392,7 @@ and build_call ctx acc el (with_type:with_type) p =
 					let el, tfunc = unify_call_params ctx fopts el args r p false in
 					el,(match tfunc with TFun(_,r) -> r | _ -> assert false), {e with etype = tfunc})
 		| TAbstract({a_path=[],"Of"},[tm;tr]) ->
-			let x, applied = unapply_in tm tr in
+			let x, applied = unapply_in tm tr false in
 			if applied then 
 				loop(x) 
 			else 

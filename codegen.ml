@@ -615,7 +615,7 @@ module Abstract = struct
 		match a.a_path,pl with
 			| ([],"Of"),[tm;ta] -> 
 				
-				let x, applied = unapply_in tm ta in
+				let x, applied = unapply_in tm ta false in
 				if applied then 
 					x 
 				else 

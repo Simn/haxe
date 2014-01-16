@@ -266,6 +266,7 @@ class Test #if swf_mark implements mt.Protect #end {
 			new TestOrder(),
 			new TestGADT(),
 			new TestGeneric(),
+			new TestTypeConstructor(),
 			#if !no_pattern_matching
 			new TestMatch(),
 			#end
