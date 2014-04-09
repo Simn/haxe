@@ -1530,8 +1530,8 @@ let generate_class ctx c =
 	List.iter (fun e -> Hashtbl.replace ctx.field_names e.cf_name true) c.cl_ordered_fields;
 	PMap.iter (scan_for_inline ctx c) c.cl_fields;
 	PMap.iter (scan_for_inline ctx c) c.cl_statics;
-	PMap.iter (scan_for_inline ctx c) c.cl_removed_fields;
-	PMap.iter (scan_for_inline ctx c) c.cl_removed_statics;
+(* 	PMap.iter (scan_for_inline ctx c) c.cl_removed_fields;
+	PMap.iter (scan_for_inline ctx c) c.cl_removed_statics; *)
 	let pack = open_block ctx in
 	print ctx "  %s%s%s %s " (final c.cl_meta) (match c.cl_dynamic with None -> "" | Some _ -> if c.cl_interface then "" else "" (* "dynamic " *)) (if c.cl_interface then "class" else "class") (tweak_class_name (snd c.cl_path));
 	(match c.cl_super with
