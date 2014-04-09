@@ -49,6 +49,7 @@ class BytesBuffer {
 		b = untyped StringBuf.__make();
 		#elseif flash9
 		b = new flash.utils.ByteArray();
+		b.endian = flash.utils.Endian.LITTLE_ENDIAN;
 		#elseif php
 		b = "";
 		#elseif cpp
@@ -117,6 +118,40 @@ class BytesBuffer {
 		#end
 	}
 
+	public inline function addString( v : String ) {
+		#if neko
+		untyped StringBuf.__add(b, v.__s);
+		#elseif flash9
+		b.writeUTFBytes(v);
+		#else
+		add(Bytes.ofString(v));
+		#end
+	}
+
+	public inline function addFloat( v : Float ) {
+		#if neko
+		untyped StringBuf.__add(b, Output._float_bytes(v, false));
+		#elseif flash9
+		b.writeFloat(v);
+		#else
+		var b = new BytesOutput();
+		b.writeFloat(v);
+		add(b.getBytes());
+		#end
+	}
+	
+	public inline function addDouble( v : Float ) {
+		#if neko
+		untyped StringBuf.__add(b, Output._double_bytes(v, false));
+		#elseif flash9
+		b.writeDouble(v);
+		#else
+		var b = new BytesOutput();
+		b.writeDouble(v);
+		add(b.getBytes());
+		#end
+	}
+	
 	public inline function addBytes( src : Bytes, pos : Int, len : Int ) {
 		#if !neko
 		if( pos < 0 || len < 0 || pos + len > src.length ) throw Error.OutsideBounds;

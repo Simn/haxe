@@ -468,7 +468,7 @@ let rec type_str ctx t p =
 	| TInst (c,_) ->
 		(match c.cl_kind with
 		| KNormal | KGeneric | KGenericInstance _ | KAbstractImpl _ -> s_path ctx false c.cl_path p
-		| KTypeParameter _ | KExtension _ | KExpr _ | KMacroType -> "*")
+		| KTypeParameter _ | KExtension _ | KExpr _ | KMacroType | KGenericBuild _ -> "*")
 	| TFun _ ->
 		"Function"
 	| TMono r ->
@@ -1027,25 +1027,21 @@ and gen_expr ?(toplevel=false) ?(preblocked=false) ?(postblocked=false) ?(shorte
 	| TThrow e ->
 		spr ctx "raise ";
 		gen_value ctx e;
-	| TVars [] ->
-		()
-	| TVars vl ->
-		(* spr ctx "var "; *)
-		concat ctx ", " (fun (v,eo) ->
-			print ctx "%s" (s_ident_local ctx v.v_name) (*type_str ctx v.v_type e.epos*);
-			match eo with
-			| None ->
-			    spr ctx " = nil";
-			| Some e ->
-			    spr ctx " = ";
-			    match e.eexpr with
-			    | TUnop (op,Ast.Postfix,e2) when op = Ast.Increment ->
-				gen_expr ctx e2;
-				newline ctx;
-				gen_expr ~toplevel:true ctx e;
-			    | _ ->
-				gen_value ctx e;
-				) vl;
+	| TVar (v,eo) ->
+		print ctx "%s" (s_ident_local ctx v.v_name) (*type_str ctx v.v_type e.epos*);
+		begin match eo with
+		| None ->
+		    spr ctx " = nil";
+		| Some e ->
+		    spr ctx " = ";
+		    match e.eexpr with
+		    | TUnop (op,Ast.Postfix,e2) when op = Ast.Increment ->
+			gen_expr ctx e2;
+			newline ctx;
+			gen_expr ~toplevel:true ctx e;
+		    | _ ->
+			gen_value ctx e;
+		end
 	| TNew (c,params,el) ->
 		(match c.cl_path, params with
 		| (["haxe";"ds"],"StringMap"), [pt] -> print ctx "{}";
@@ -1284,7 +1280,7 @@ and gen_value ctx e =
 	| TBreak
 	| TContinue ->
 		unsupported e.epos
-	| TVars _
+	| TVar _
 	| TFor _
 	| TWhile _
 	| TThrow _ ->

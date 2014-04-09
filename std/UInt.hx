@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#if (flash9 || flash9doc || cs)
+#if ((flash9 || flash9doc || cs) && !doc_gen)
 /**
 	The unsigned Int type is only defined for Flash9 and C#. It's currently
 	handled the same as a normal Int.
@@ -31,7 +31,75 @@
 	The unsigned Int type is only defined for Flash9 and C#.
 	Simulate it for other platforms.
 **/
-abstract UInt(Int) from Int {
+abstract UInt(Int) from Int to Int {
+
+	@:op(A + B) private static inline function add(a:UInt, b:UInt):UInt {
+		return a.toInt() + b.toInt();
+	}
+
+	@:op(A / B) private static inline function div(a:UInt, b:UInt):Float {
+		return a.toFloat() / b.toFloat();
+	}
+
+	@:op(A * B) private static inline function mul(a:UInt, b:UInt):UInt {
+		return a.toInt() * b.toInt();
+	}
+
+	@:op(A - B) private static inline function sub(a:UInt, b:UInt):UInt {
+		return a.toInt() - b.toInt();
+	}
+
+	@:op(A > B) private static inline function gt(a:UInt, b:UInt):Bool {
+		var aNeg = a.toInt() < 0;
+		var bNeg = b.toInt() < 0;
+		return
+			if( aNeg != bNeg ) aNeg;
+			else a.toInt() > b.toInt();
+	}
+
+	@:op(A >= B) private static inline function gte(a:UInt, b:UInt):Bool {
+		var aNeg = a.toInt() < 0;
+		var bNeg = b.toInt() < 0;
+		return
+			if( aNeg != bNeg ) aNeg;
+			else a.toInt() >= b.toInt();
+	}
+
+	@:op(A < B) private static inline function lt(a:UInt, b:UInt):Bool {
+		return gt(b, a);
+	}
+
+	@:op(A <= B) private static inline function lte(a:UInt, b:UInt):Bool {
+		return gte(b, a);
+	}
+
+	@:op(A & B) private static inline function and(a:UInt, b:UInt):UInt {
+		return a.toInt() & b.toInt();
+	}
+
+	@:op(A | B) private static inline function or(a:UInt, b:UInt):UInt {
+		return a.toInt() | b.toInt();
+	}
+
+	@:op(A ^ B) private static inline function xor(a:UInt, b:UInt):UInt {
+		return a.toInt() ^ b.toInt();
+	}
+
+	@:op(A << B) private static inline function shl(a:UInt, b:Int):UInt {
+		return a.toInt() << b;
+	}
+
+	@:op(A >> B) private static inline function shr(a:UInt, b:UInt):UInt {
+		return a.toInt() >> b;
+	}
+
+	@:op(A >>> B) private static inline function ushr(a:UInt, b:UInt):UInt {
+		return a.toInt() >>> b;
+	}
+
+	@:op(A % B) private static inline function mod(a:UInt, b:UInt):UInt {
+		return Std.int( a.toFloat() % b.toFloat() );
+	}
 
 	@:commutative @:op(A + B) private static inline function addWithFloat(a:UInt, b:Float):Float {
 		return a.toFloat() + b;
@@ -60,6 +128,14 @@ abstract UInt(Int) from Int {
 	@:op(A > B) private static inline function gtFloat(a:UInt, b:Float):Bool {
 		return a.toFloat() > b;
 	}
+
+	@:commutative @:op(A == B) private static inline function equalsFloat(a:UInt, b:Float):Bool {
+        return a.toFloat() == b;
+    }
+
+    @:commutative @:op(A != B) private static inline function notEqualsFloat(a:UInt, b:Float):Bool {
+        return a.toFloat() != b;
+    }
 
 	@:op(A >= B) private static inline function gteFloat(a:UInt, b:Float):Bool {
 		return a.toFloat() >= b;
@@ -99,96 +175,6 @@ abstract UInt(Int) from Int {
 		return a % b.toFloat();
 	}
 
-	@:op(A + B) private static inline function add(a:UInt, b:UInt):UInt {
-		return a.toInt() + b.toInt();
-	}
-
-	@:op(A / B) private static inline function div(a:UInt, b:UInt):Float {
-		return a.toInt() / b.toInt();
-	}
-
-	@:op(A * B) private static inline function mul(a:UInt, b:UInt):UInt {
-		return a.toInt() * b.toInt();
-	}
-
-	@:op(A - B) private static inline function sub(a:UInt, b:UInt):UInt {
-		return a.toInt() - b.toInt();
-	}
-
-	@:op(A > B) private static inline function gt(a:UInt, b:UInt):Bool {
-		if (a.toInt() < 0) {
-			if (b.toInt() >= 0) {
-				return false;
-			}
-			else {
-				return a.toInt() > b.toInt();
-			}
-		}
-		else {
-			if (b.toInt() >= 0) {
-				return a.toInt() > b.toInt();
-			}
-			else {
-				return true;
-			}
-		}
-	}
-
-	@:op(A >= B) private static inline function gte(a:UInt, b:UInt):Bool {
-		if (a.toInt() < 0) {
-			if (b.toInt() >= 0) {
-				return false;
-			}
-			else {
-				return a.toInt() >= b.toInt();
-			}
-		}
-		else {
-			if (b.toInt() >= 0) {
-				return a.toInt() >= b.toInt();
-			}
-			else {
-				return true;
-			}
-		}
-	}
-
-	@:op(A < B) private static inline function lt(a:UInt, b:UInt):Bool {
-		return gt(b, a);
-	}
-
-	@:op(A <= B) private static inline function lte(a:UInt, b:UInt):Bool {
-		return gte(b, a);
-	}
-
-	@:op(A & B) private static inline function and(a:UInt, b:UInt):UInt {
-		return a.toInt() & b.toInt();
-	}
-
-	@:op(A | B) private static inline function or(a:UInt, b:UInt):UInt {
-		return a.toInt() | b.toInt();
-	}
-
-	@:op(A ^ B) private static inline function xor(a:UInt, b:UInt):UInt {
-		return a.toInt() ^ b.toInt();
-	}
-
-	@:op(A << B) private static inline function shl(a:UInt, b:Int):UInt {
-		return a.toInt() << b;
-	}
-
-	@:op(A >> B) private static inline function shr(a:UInt, b:UInt):UInt {
-		return a.toInt() >> b;
-	}
-
-	@:op(A >>> B) private static inline function ushr(a:UInt, b:UInt):UInt {
-		return a.toInt() >>> b;
-	}
-
-	@:op(A % B) private static inline function mod(a:UInt, b:UInt):UInt {
-		return a.toInt() % b.toInt();
-	}
-
 	@:op(~A) private inline function negBits():UInt {
 		return ~this;
 	}
@@ -209,12 +195,13 @@ abstract UInt(Int) from Int {
 		return this--;
 	}
 
-	private inline function toString():String {
+	// TODO: radix is just defined to deal with doc_gen issues
+	private inline function toString(?radix:Int):String {
 		return Std.string(toFloat());
 	}
 
-	@:to private inline function toDynamic():Dynamic {
-		return toFloat();
+	private inline function toInt():Int {
+		return this;
 	}
 
 	@:to private inline function toFloat():Float {
@@ -223,13 +210,10 @@ abstract UInt(Int) from Int {
 			return 4294967296.0 + int;
 		}
 		else {
-			return int;
+			// + 0.0 here to make sure we promote to Float on some platforms
+			// In particular, PHP was having issues when comparing to Int in the == op.
+			return int + 0.0;
 		}
 	}
-
-	@:to private inline function toInt():Int {
-		return this;
-	}
-
 }
 #end

@@ -27,7 +27,7 @@ import haxe.macro.Type;
 
 class TypedExprTools {
 	#if macro
-	
+
 	static function with(e:TypedExpr, ?edef:TypedExprDef, ?t:Type) {
 		return {
 			expr: edef == null ? e.expr : edef,
@@ -35,10 +35,10 @@ class TypedExprTools {
 			t: t == null ? e.t : t
 		}
 	}
-	
+
 	/**
 		Transforms the sub-expressions of [e] by calling [f] on each of them.
-		
+
 		See `haxe.macro.ExprTools.map` for details on expression mapping in
 		general. This function works the same way, but with a different data
 		structure.
@@ -60,10 +60,10 @@ class TypedExprTools {
 			case TBlock(el): with(e, TBlock(el.map(f)));
 			case TObjectDecl(fl): with(e, TObjectDecl(fl.map(function(field) return { name: field.name, expr: f(field.expr) })));
 			case TCall(e1, el): with(e, TCall(f(e1), el.map(f)));
-			case TVars(vl): with(e, TVars(vl.map(function(v) return { v: v.v, expr: v.expr == null ? null : f(v.expr) })));
+			case TVar(v,eo): with(e, TVar(v, eo == null ? null : f(eo)));
 			case TFunction(fu): with(e, TFunction({ t: fu.t, args: fu.args, expr: f(fu.expr)}));
-			case TIf(e1, e2, e3): with(e, TIf(f(e1), f(e2), f(e3)));
-			case TSwitch(e1, cases, e2): with(e, TSwitch(e1, cases.map(function(c) return { values: c.values, expr: f(c.expr) }), e2 == null ? null : f(e2)));
+			case TIf(e1, e2, e3): with(e, TIf(f(e1), f(e2), e3 == null ? null : f(e3)));
+			case TSwitch(e1, cases, e2): with(e, TSwitch(f(e1), cases.map(function(c) return { values: c.values, expr: f(c.expr) }), e2 == null ? null : f(e2)));
 			case TPatMatch: throw false;
 			case TTry(e1, catches): with(e, TTry(f(e1), catches.map(function(c) return { v:c.v, expr: f(c.expr) })));
 			case TReturn(e1): with(e, TReturn(e1 == null ? null : f(e1)));
@@ -71,12 +71,12 @@ class TypedExprTools {
 			case TMeta(m, e1): with(e, TMeta(m, f(e1)));
 		}
 	}
-	
+
 	/**
 		Transforms the sub-expressions of [e] by calling [f] on each of them.
 		Additionally, types are mapped using `ft` and variables are mapped using
 		`fv`.
-		
+
 		See `haxe.macro.ExprTools.map` for details on expression mapping in
 		general. This function works the same way, but with a different data
 		structure.
@@ -99,10 +99,10 @@ class TypedExprTools {
 			case TBlock(el): with(e, TBlock(el.map(f)), ft(e.t));
 			case TObjectDecl(fl): with(e, TObjectDecl(fl.map(function(field) return { name: field.name, expr: f(field.expr) })), ft(e.t));
 			case TCall(e1, el): with(e, TCall(f(e1), el.map(f)), ft(e.t));
-			case TVars(vl): with(e, TVars(vl.map(function(v) return { v: fv(v.v), expr: v.expr == null ? null : f(v.expr) })), ft(e.t));
+			case TVar(v,eo): with(e, TVar(fv(v), eo == null ? null : f(eo)), ft(e.t));
 			case TFunction(fu): with(e, TFunction({ t: ft(fu.t), args: fu.args.map(function(arg) return { v: fv(arg.v), value: arg.value }), expr: f(fu.expr)}), ft(e.t));
-			case TIf(e1, e2, e3): with(e, TIf(f(e1), f(e2), f(e3)), ft(e.t));
-			case TSwitch(e1, cases, e2): with(e, TSwitch(e1, cases.map(function(c) return { values: c.values, expr: f(c.expr) }), e2 == null ? null : f(e2)), ft(e.t));
+			case TIf(e1, e2, e3): with(e, TIf(f(e1), f(e2), e3 == null ? null : f(e3)), ft(e.t));
+			case TSwitch(e1, cases, e2): with(e, TSwitch(f(e1), cases.map(function(c) return { values: c.values, expr: f(c.expr) }), e2 == null ? null : f(e2)), ft(e.t));
 			case TPatMatch: throw false;
 			case TTry(e1, catches): with(e, TTry(f(e1), catches.map(function(c) return { v:fv(c.v), expr: f(c.expr) })), ft(e.t));
 			case TReturn(e1): with(e, TReturn(e1 == null ? null : f(e1)), ft(e.t));
@@ -110,9 +110,9 @@ class TypedExprTools {
 			case TMeta(m, e1): with(e, TMeta(m, f(e1)), ft(e.t));
 		}
 	}
-	
+
 	static public function toString(t:TypedExpr, ?pretty = false):String {
-		return Context.load("s_expr", 2)(t, pretty);
+		return new String(Context.load("s_expr", 2)(t, pretty));
 	}
 	#end
 }

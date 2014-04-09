@@ -2,6 +2,7 @@ package unit;
 import haxe.io.Bytes;
 import haxe.test.Base;
 import haxe.test.Base.Base_InnerClass;
+import haxe.test.TEnum;
 
 #if java
 class TestJava extends Test
@@ -19,6 +20,12 @@ class TestJava extends Test
       hx.excTest()
     catch(e:Dynamic) throw e; //shouldn't throw any exception
   }
+
+	function testNameCase()
+	{
+		t(haxe.uppercasepackage.SomeClass.SomeClassFound);
+		t(haxe.uppercasepackage.Lowercase.lowercaseFound);
+	}
 
 	function testHaxeKeywords()
 	{
@@ -101,6 +108,19 @@ class TestJava extends Test
 		t(c.stringCalled);
 		b.normalOverload({});
 		t(c.dynamicCalled);
+	}
+
+	function testJavaLibEnum()
+	{
+		var e = TEnum.TA;
+		switch(e)
+		{
+			case TA:
+				t(true);
+			case _:
+				t(false);
+		}
+		eq("TA",Type.enumConstructor(e));
 	}
 
 	function testMiscJavaLib()

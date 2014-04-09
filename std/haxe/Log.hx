@@ -70,7 +70,7 @@ class Log {
 				untyped __call__('_hx_trace', v + extra, infos);
 			}
 			else
-				untyped __call__('_hx_trace', v, infos);		
+				untyped __call__('_hx_trace', v, infos);
 		#elseif cpp
 			if (infos!=null && infos.customParams!=null) {
 				var extra:String = "";
@@ -92,7 +92,7 @@ class Log {
 				str = v;
 			}
 			#if cs
-			untyped __cs__("System.Console.WriteLine(str)");
+			cs.system.Console.WriteLine(str);
 			#elseif java
 			untyped __java__("java.lang.System.out.println(str)");
 			#elseif rb

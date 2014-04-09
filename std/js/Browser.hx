@@ -36,7 +36,16 @@ class Browser {
 
 	public static var navigator(get, never):js.html.Navigator;
 	inline static function get_navigator() return untyped __js__("window.navigator");
-	
+
+	/**
+	 * True if a window object exists, false otherwise.
+	 *
+	 * This can be used to check if the code is being executed in a non-browser
+	 * environment such as node.js.
+	 */
+	public static var supported(get, never):Bool;
+	public static function get_supported() return untyped __js__("typeof window != \"undefined\"");
+
 	/**
 	 * Safely gets the browser's local storage, or returns null if localStorage is unsupported or
 	 * disabled.

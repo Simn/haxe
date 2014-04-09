@@ -41,7 +41,7 @@ private typedef AbstractSocket = {
 /**
 	This class can be used to handle Http requests consistently across
 	platforms. There are two intended usages:
-	
+
 	- call haxe.Http.requestUrl(url) and receive the result as a String (not
 	available on flash)
 	- create a new haxe.Http(url), register your callbacks for onData, onError
@@ -62,7 +62,7 @@ class Http {
 	public var responseHeaders : haxe.ds.StringMap<String>;
 	var chunk_size : Null<Int>;
 	var chunk_buf : haxe.io.Bytes;
-	var file : { param : String, filename : String, io : haxe.io.Input, size : Int };
+	var file : { param : String, filename : String, io : haxe.io.Input, size : Int, mimeType : String };
 #elseif js
 	public var async : Bool;
 #end
@@ -89,7 +89,7 @@ class Http {
 		this.url = url;
 		headers = new List<{ header:String, value:String }>();
 		params = new List<{ param:String, value:String }>();
-		
+
 		#if js
 		async = true;
 		#elseif sys
@@ -117,7 +117,7 @@ class Http {
 		headers.push({ header:header, value:value });
 		return this;
 	}
-	
+
 	/**
 		Sets the parameter identified as `param` to value `value`.
 
@@ -135,7 +135,7 @@ class Http {
 		params.push({ param:param, value:value });
 		return this;
 	}
-	
+
 	#if !flash8
 	/**
 		Sets the post data of `this` Http request to `data`.
@@ -150,6 +150,30 @@ class Http {
 	public function setPostData( data : String ):Http {
 		postData = data;
 		return this;
+	}
+	#end
+
+	#if (js || flash9)
+
+	#if js
+	var req:js.html.XMLHttpRequest;
+	#elseif flash9
+	var req:flash.net.URLLoader;
+	#end
+
+	/**
+		Cancels `this` Http request if `request` has been called and a response
+		has not yet been received.
+	**/
+	public function cancel()
+	{
+		if (req == null) return;
+		#if js
+		req.abort();
+		#elseif flash9
+		req.close();
+		#end
+		req = null;
 	}
 	#end
 
@@ -174,7 +198,7 @@ class Http {
 		var me = this;
 	#if js
 		me.responseData = null;
-		var r = js.Browser.createXMLHttpRequest();
+		var r = req = js.Browser.createXMLHttpRequest();
 		var onreadystatechange = function(_) {
 			if( r.readyState != 4 )
 				return;
@@ -183,16 +207,23 @@ class Http {
 				s = null;
 			if( s != null )
 				me.onStatus(s);
-			if( s != null && s >= 200 && s < 400 )
+			if( s != null && s >= 200 && s < 400 ) {
+				me.req = null;
 				me.onData(me.responseData = r.responseText);
-			else if ( s == null )
-				me.onError("Failed to connect or resolve host")
+			}
+			else if ( s == null ) {
+				me.req = null;
+				me.onError("Failed to connect or resolve host");
+			}
 			else switch( s ) {
 			case 12029:
+				me.req = null;
 				me.onError("Failed to connect to host");
 			case 12007:
+				me.req = null;
 				me.onError("Unknown host");
 			default:
+				me.req = null;
 				me.responseData = r.responseText;
 				me.onError("Http Error #"+r.status);
 			}
@@ -219,6 +250,7 @@ class Http {
 			} else
 				r.open("GET",url,async);
 		} catch( e : Dynamic ) {
+			me.req = null;
 			onError(e.toString());
 			return;
 		}
@@ -232,8 +264,9 @@ class Http {
 			onreadystatechange(null);
 	#elseif flash9
 		me.responseData = null;
-		var loader = new flash.net.URLLoader();
+		var loader = req = new flash.net.URLLoader();
 		loader.addEventListener( "complete", function(e) {
+			me.req = null;
 			me.responseData = loader.data;
 			me.onData( loader.data );
 		});
@@ -243,10 +276,12 @@ class Http {
 				me.onStatus( e.status );
 		});
 		loader.addEventListener( "ioError", function(e:flash.events.IOErrorEvent){
+			me.req = null;
 			me.responseData = loader.data;
 			me.onError(e.text);
 		});
 		loader.addEventListener( "securityError", function(e:flash.events.SecurityErrorEvent){
+			me.req = null;
 			me.onError(e.text);
 		});
 
@@ -283,6 +318,7 @@ class Http {
 		try {
 			loader.load( request );
 		}catch( e : Dynamic ){
+			me.req = null;
 			onError("Exception: "+Std.string(e));
 		}
 	#elseif flash
@@ -353,12 +389,12 @@ class Http {
       Note: Deprecated in 4.0
 	 **/
 	@:noCompletion
-	inline public function fileTransfert( argname : String, filename : String, file : haxe.io.Input, size : Int ) {
-	    fileTransfer(argname, filename, file, size);
+	inline public function fileTransfert( argname : String, filename : String, file : haxe.io.Input, size : Int, mimeType = "application/octet-stream" ) {
+	    fileTransfer(argname, filename, file, size, mimeType);
     }
 
-	public function fileTransfer( argname : String, filename : String, file : haxe.io.Input, size : Int ) {
-		this.file = { param : argname, filename : filename, io : file, size : size };
+	public function fileTransfer( argname : String, filename : String, file : haxe.io.Input, size : Int, mimeType = "application/octet-stream" ) {
+		this.file = { param : argname, filename : filename, io : file, size : size, mimeType : mimeType };
 	}
 
 	public function customRequest( post : Bool, api : haxe.io.Output, ?sock : AbstractSocket, ?method : String  ) {
@@ -373,6 +409,8 @@ class Http {
 			if( secure ) {
 				#if php
 				sock = new php.net.SslSocket();
+				#elseif java
+				sock = new java.net.SslSocket();
 				#elseif hxssl
 				sock = new neko.tls.Socket();
 				#else
@@ -419,7 +457,7 @@ class Http {
 			b.add(file.filename);
 			b.add('"');
 			b.add("\r\n");
-			b.add("Content-Type: "+"application/octet-stream"+"\r\n"+"\r\n");
+			b.add("Content-Type: "+file.mimeType+"\r\n"+"\r\n");
 			uri = b.toString();
 		} else {
 			for( p in params ) {
@@ -602,6 +640,7 @@ class Http {
 			var a = hline.split(": ");
 			var hname = a.shift();
 			var hval = if( a.length == 1 ) a[0] else a.join(": ");
+			hval = StringTools.ltrim( StringTools.rtrim( hval ) );
 			responseHeaders.set(hname, hval);
 			switch(hname.toLowerCase())
 			{

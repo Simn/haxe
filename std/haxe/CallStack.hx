@@ -80,6 +80,27 @@ class CallStack {
 			a.shift(); // remove Stack.callStack()
 			(untyped Error).prepareStackTrace = oldValue;
 			return a;
+		#elseif java
+			var stack = [];
+			for ( el in java.lang.Thread.currentThread().getStackTrace() ) {
+				var className = el.getClassName();
+				var methodName = el.getMethodName();
+				var fileName = el.getFileName();
+				var lineNumber = el.getLineNumber();
+				var method = Method( className, methodName );
+				if ( fileName != null || lineNumber >= 0 ) {
+					stack.push( FilePos( method, fileName, lineNumber ) );
+				}
+				else {
+					stack.push( method );
+				}
+			}
+			stack.shift();
+			stack.shift();
+			stack.pop();
+			return stack;
+		#elseif cs
+			return makeStack(new cs.system.diagnostics.StackTrace(1, true));
 		#else
 			return []; // Unsupported
 		#end
@@ -117,6 +138,27 @@ class CallStack {
 		#elseif cpp
 			var s:Array<String> = untyped __global__.__hxcpp_get_exception_stack();
 			return makeStack(s);
+		#elseif java
+			var stack = [];
+			for ( el in java.internal.Exceptions.currentException().getStackTrace() ) {
+				var className = el.getClassName();
+				var methodName = el.getMethodName();
+				var fileName = el.getFileName();
+				var lineNumber = el.getLineNumber();
+				var method = Method( className, methodName );
+				if ( fileName != null || lineNumber >= 0 ) {
+					stack.push( FilePos( method, fileName, lineNumber ) );
+				}
+				else {
+					stack.push( method );
+				}
+			}
+			// stack.shift();
+			stack.shift();
+			stack.pop();
+			return stack;
+		#elseif cs
+			return makeStack(new cs.system.diagnostics.StackTrace(cs.internal.Exceptions.exception, true));
 		#else
 			return []; // Unsupported
 		#end
@@ -161,7 +203,7 @@ class CallStack {
 	}
 
 	#if cpp @:noStack #end /* Do not mess up the exception stack */
-	private static function makeStack(s) {
+	private static function makeStack(s #if cs : cs.system.diagnostics.StackTrace #end) {
 		#if neko
 			var a = new Array();
 			var l = untyped __dollar__asize(s);
@@ -240,6 +282,24 @@ class CallStack {
 			} else {
 				return cast s;
 			}
+		#elseif cs
+			var stack = [];
+			for (i in 0...s.FrameCount)
+			{
+				var frame = s.GetFrame(i);
+				var m = frame.GetMethod();
+
+				var method = StackItem.Method(m.ReflectedType.ToString(), m.Name);
+
+				var fileName = frame.GetFileName();
+				var lineNumber = frame.GetFileLineNumber();
+
+				if (fileName != null || lineNumber >= 0)
+					stack.push(FilePos(method, fileName, lineNumber));
+				else
+					stack.push(method);
+			}
+			return stack;
 		#else
 			return null;
 		#end

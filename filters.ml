@@ -35,7 +35,7 @@ let mk_block_context com gen_temp =
 	let push e = block_el := e :: !block_el in
 	let declare_temp t eo p =
 		let v = gen_temp t in
-		let e = mk (TVars [v,eo]) com.basic.tvoid p in
+		let e = mk (TVar (v,eo)) com.basic.tvoid p in
 		push e;
 		mk (TLocal v) t p
 	in
@@ -71,6 +71,8 @@ let handle_side_effects com gen_temp e =
 		match e.eexpr with
 		| TBlock el ->
 			{e with eexpr = TBlock (block loop el)}
+		| TCall({eexpr = TLocal v},_) when Meta.has Meta.Unbound v.v_meta ->
+			e
 		| TCall(e1,el) ->
 			let e1 = loop e1 in
 			{e with eexpr = TCall(e1,ordered_list el)}
@@ -90,6 +92,15 @@ let handle_side_effects com gen_temp e =
 				e1,mk (TConst (TBool(false))) com.basic.tbool e.epos
 			in
 			mk (TIf(e_if,e_then,Some e_else)) com.basic.tbool e.epos
+		| TBinop((OpAssign | OpAssignOp _) as op,{eexpr = TArray(e11,e12)},e2) ->
+			let e1 = match ordered_list [e11;e12] with
+				| [e1;e2] ->
+					{e with eexpr = TArray(e1,e2)}
+				| _ ->
+					assert false
+			in
+			let e2 = loop e2 in
+			{e with eexpr = TBinop(op,e1,e2)}
  		| TBinop(op,e1,e2) ->
 			begin match ordered_list [e1;e2] with
 				| [e1;e2] ->
@@ -104,44 +115,29 @@ let handle_side_effects com gen_temp e =
 				| _ ->
 					assert false
 			end
+		| TWhile(e1,e2,flag) when (match e1.eexpr with TParenthesis {eexpr = TConst(TBool true)} -> false | _ -> true) ->
+			let p = e.epos in
+			let e_break = mk TBreak t_dynamic p in
+			let e_not = mk (TUnop(Not,Prefix,Codegen.mk_parent e1)) e1.etype e1.epos in
+			let e_if = mk (TIf(e_not,e_break,None)) com.basic.tvoid p in
+			let e_block = if flag = NormalWhile then Type.concat e_if e2 else Type.concat e2 e_if in
+			let e_true = mk (TConst (TBool true)) com.basic.tbool p in
+			let e = mk (TWhile(Codegen.mk_parent e_true,e_block,NormalWhile)) e.etype p in
+			loop e
 		| _ ->
 			Type.map_expr loop e
 	and ordered_list el =
-		let had_side_effect = ref false in
 		let bind e =
-			if !had_side_effect then
-				declare_temp e.etype (Some (loop e)) e.epos
-			else begin
-				had_side_effect := true;
+			declare_temp e.etype (Some (loop e)) e.epos
+		in
+		let rec no_side_effect e =
+			if Optimizer.has_side_effect e then
+				bind e
+			else
 				e
-			end
 		in
-		let rec no_side_effect e = match e.eexpr with
-			| TNew _ | TCall _ | TArrayDecl _ | TObjectDecl _ | TBinop ((OpAssignOp _ | OpAssign),_,_) | TUnop ((Increment|Decrement),_,_) ->
-				bind e;
-			| TBinop(op,e1,e2) when Optimizer.has_side_effect e1 || Optimizer.has_side_effect e2 ->
-				bind e;
-			| TConst _ | TLocal _ | TTypeExpr _ | TFunction _
-			| TReturn _ | TBreak | TContinue | TThrow _ | TCast (_,Some _) ->
-				e
-			| TBlock _ ->
-				loop e
-			| _ ->
-				Type.map_expr no_side_effect e
-		in
-		let rec loop2 acc el = match el with
-			| e :: el ->
-				let e = no_side_effect e in
-				if !had_side_effect then
-					(List.map no_side_effect (List.rev el)) @ e :: acc
-				else
-					loop2 (e :: acc) el
-			| [] ->
-				acc
-		in
-		List.map loop (loop2 [] (List.rev el))
+		List.map no_side_effect el
 	in
-	let e = blockify_ast e in
 	let e = loop e in
 	match close_block() with
 		| [] ->
@@ -189,24 +185,22 @@ let promote_complex_rhs ctx e =
 		let r = ref [] in
 		List.iter (fun e ->
 			match e.eexpr with
-			| TVars(vl) ->
-				List.iter (fun (v,eo) ->
-					match eo with
+			| TVar(v,eo) ->
+				begin match eo with
 					| Some e when is_complex e ->
 						r := (loop (fun e -> mk (TBinop(OpAssign,mk (TLocal v) v.v_type e.epos,e)) v.v_type e.epos) e)
-							:: ((mk (TVars [v,None]) ctx.basic.tvoid e.epos))
+							:: ((mk (TVar (v,None)) ctx.basic.tvoid e.epos))
 							:: !r
 					| Some e ->
-						r := (mk (TVars [v,Some (find e)]) ctx.basic.tvoid e.epos) :: !r
-					| None -> r := (mk (TVars [v,None]) ctx.basic.tvoid e.epos) :: !r
-
-				) vl
+						r := (mk (TVar (v,Some (find e))) ctx.basic.tvoid e.epos) :: !r
+					| None -> r := (mk (TVar (v,None)) ctx.basic.tvoid e.epos) :: !r
+				end
 			| _ -> r := (find e) :: !r
 		) el;
 		List.rev !r
 	and find e = match e.eexpr with
 		| TReturn (Some e1) -> loop (fun e -> {e with eexpr = TReturn (Some e)}) e1
-		| TBinop(OpAssign, ({eexpr = TLocal _ | TField _ | TArray _} as e1), e2) -> loop (fun er -> {e with eexpr = TBinop(OpAssign, e1, er)}) e2
+		| TBinop(OpAssign | OpAssignOp _ as op, ({eexpr = TLocal _ | TField _ | TArray _} as e1), e2) -> loop (fun er -> {e with eexpr = TBinop(op, e1, er)}) e2
 		| TBlock(el) -> {e with eexpr = TBlock (block el)}
 		| _ -> Type.map_expr find e
 	in
@@ -274,15 +268,15 @@ let check_local_vars_init e =
 				if v.v_name = "this" then error "Missing this = value" e.epos
 				else error ("Local variable " ^ v.v_name ^ " used without being initialized") e.epos
 			end
-		| TVars vl ->
-			List.iter (fun (v,eo) ->
+		| TVar (v,eo) ->
+			begin
 				match eo with
 				| None ->
 					declared := v.v_id :: !declared;
 					vars := PMap.add v.v_id false !vars
 				| Some e ->
 					loop vars e
-			) vl
+			end
 		| TBlock el ->
 			let old = !declared in
 			let old_vars = !vars in
@@ -308,12 +302,12 @@ let check_local_vars_init e =
 				vars := intersect !vars v1)
 		| TWhile (cond,e,flag) ->
 			(match flag with
-			| NormalWhile ->
+			| NormalWhile when (match cond.eexpr with TParenthesis {eexpr = TConst (TBool true)} -> false | _ -> true) ->
 				loop vars cond;
 				let old = !vars in
 				loop vars e;
 				vars := old;
-			| DoWhile ->
+			| _ ->
 				loop vars e;
 				loop vars cond)
 		| TTry (e,catches) ->
@@ -412,11 +406,9 @@ let rec local_usage f e =
 	match e.eexpr with
 	| TLocal v ->
 		f (Use v)
-	| TVars l ->
-		List.iter (fun (v,e) ->
-			(match e with None -> () | Some e -> local_usage f e);
-			f (Declare v);
-		) l
+	| TVar (v,eo) ->
+		(match eo with None -> () | Some e -> local_usage f e);
+		f (Declare v);
 	| TFunction tf ->
 		let cc f =
 			List.iter (fun (v,_) -> f (Declare v)) tf.tf_args;
@@ -478,7 +470,7 @@ let captured_vars com e =
 	let t = com.basic in
 
 	let rec mk_init av v pos =
-		mk (TVars [av,Some (mk (TArrayDecl [mk (TLocal v) v.v_type pos]) av.v_type pos)]) t.tvoid pos
+		mk (TVar (av,Some (mk (TArrayDecl [mk (TLocal v) v.v_type pos]) av.v_type pos))) t.tvoid pos
 
 	and mk_var v used =
 		let v2 = alloc_var v.v_name (PMap.find v.v_id used) in
@@ -487,27 +479,27 @@ let captured_vars com e =
 
 	and wrap used e =
 		match e.eexpr with
-		| TVars vl ->
-			let vl = List.map (fun (v,ve) ->
+		| TVar (v,ve) ->
+			let v,ve =
 				if PMap.mem v.v_id used then
 					v, Some (mk (TArrayDecl (match ve with None -> [] | Some e -> [wrap used e])) v.v_type e.epos)
 				else
 					v, (match ve with None -> None | Some e -> Some (wrap used e))
-			) vl in
-			{ e with eexpr = TVars vl }
+			 in
+			{ e with eexpr = TVar (v,ve) }
 		| TLocal v when PMap.mem v.v_id used ->
 			mk (TArray ({ e with etype = v.v_type },mk (TConst (TInt 0l)) t.tint e.epos)) e.etype e.epos
 		| TFor (v,it,expr) when PMap.mem v.v_id used ->
 			let vtmp = mk_var v used in
 			let it = wrap used it in
 			let expr = wrap used expr in
-			mk (TFor (vtmp,it,Codegen.concat (mk_init v vtmp e.epos) expr)) e.etype e.epos
+			mk (TFor (vtmp,it,Type.concat (mk_init v vtmp e.epos) expr)) e.etype e.epos
 		| TTry (expr,catchs) ->
 			let catchs = List.map (fun (v,e) ->
 				let e = wrap used e in
 				try
 					let vtmp = mk_var v used in
-					vtmp, Codegen.concat (mk_init v vtmp e.epos) e
+					vtmp, Type.concat (mk_init v vtmp e.epos) e
 				with Not_found ->
 					v, e
 			) catchs in
@@ -555,7 +547,7 @@ let captured_vars com e =
 			let fargs = List.map (fun (v,o) ->
 				if PMap.mem v.v_id used then
 					let vtmp = mk_var v used in
-					fexpr := Codegen.concat (mk_init v vtmp e.epos) !fexpr;
+					fexpr := Type.concat (mk_init v vtmp e.epos) !fexpr;
 					vtmp, o
 				else
 					v, o
@@ -677,7 +669,7 @@ let rename_local_vars com e =
 	in
 	let save() =
 		let old = !vars in
-		if cfg.pf_unique_locals then (fun() -> ()) else (fun() -> vars := if !rebuild_vars then rebuild old else old)
+		if cfg.pf_unique_locals || not cfg.pf_locals_scope then (fun() -> ()) else (fun() -> vars := if !rebuild_vars then rebuild old else old)
 	in
 	let rename vars v =
 		let count = ref 1 in
@@ -735,12 +727,10 @@ let rename_local_vars com e =
 	in
 	let rec loop e =
 		match e.eexpr with
-		| TVars l ->
-			List.iter (fun (v,eo) ->
-				if not cfg.pf_locals_scope then declare v e.epos;
-				(match eo with None -> () | Some e -> loop e);
-				if cfg.pf_locals_scope then declare v e.epos;
-			) l
+		| TVar (v,eo) ->
+			if not cfg.pf_locals_scope then declare v e.epos;
+			(match eo with None -> () | Some e -> loop e);
+			if cfg.pf_locals_scope then declare v e.epos;
 		| TFunction tf ->
 			let old = save() in
 			List.iter (fun (v,_) -> declare v e.epos) tf.tf_args;
@@ -805,6 +795,15 @@ let rename_local_vars com e =
 	in
 	declare (alloc_var "this" t_dynamic) Ast.null_pos; (* force renaming of 'this' vars in abstract *)
 	loop e;
+	e
+
+let check_unification com e t =
+	begin match follow e.etype,follow t with
+		| TEnum _,TDynamic _ ->
+			add_feature com "may_print_enum";
+		| _ ->
+			()
+	end;
 	e
 
 (* PASS 1 end *)
@@ -928,6 +927,7 @@ let add_rtti ctx t =
 
 (* Adds member field initializations as assignments to the constructor *)
 let add_field_inits ctx t =
+	let is_as3 = Common.defined ctx.com Define.As3 && not ctx.in_macro in
 	let apply c =
 		let ethis = mk (TConst TThis) (TInst (c,List.map snd c.cl_types)) c.cl_pos in
 		(* TODO: we have to find a variable name which is not used in any of the functions *)
@@ -936,8 +936,8 @@ let add_field_inits ctx t =
 		let inits,fields = List.fold_left (fun (inits,fields) cf ->
 			match cf.cf_kind,cf.cf_expr with
 			| Var _, Some _ ->
-				if Common.defined ctx.com Define.As3 then (inits, cf :: fields) else (cf :: inits, cf :: fields)
-			| Method MethDynamic, Some e when Common.defined ctx.com Define.As3 ->
+				if is_as3 then (inits, cf :: fields) else (cf :: inits, cf :: fields)
+			| Method MethDynamic, Some e when is_as3 ->
 				(* TODO : this would have a better place in genSWF9 I think - NC *)
 				(* we move the initialization of dynamic functions to the constructor and also solve the
 				   'this' problem along the way *)
@@ -970,13 +970,13 @@ let add_field_inits ctx t =
 					let lhs = mk (TField(ethis,FInstance (c,cf))) cf.cf_type e.epos in
 					cf.cf_expr <- None;
 					let eassign = mk (TBinop(OpAssign,lhs,e)) e.etype e.epos in
-					if Common.defined ctx.com Define.As3 then begin
+					if is_as3 then begin
 						let echeck = mk (TBinop(OpEq,lhs,(mk (TConst TNull) lhs.etype e.epos))) ctx.com.basic.tbool e.epos in
 						mk (TIf(echeck,eassign,None)) eassign.etype e.epos
 					end else
 						eassign;
 			) inits in
-			let el = if !need_this then (mk (TVars([v, Some ethis])) ethis.etype ethis.epos) :: el else el in
+			let el = if !need_this then (mk (TVar((v, Some ethis))) ethis.etype ethis.epos) :: el else el in
 			match c.cl_constructor with
 			| None ->
 				let ct = TFun([],ctx.com.basic.tvoid) in
@@ -1076,11 +1076,16 @@ let post_process_end() =
 let run com tctx main =
 	if com.display = DMUsage then
 		Codegen.detect_usage com;
+	if not (Common.defined com Define.NoDeprecationWarnings) then
+		Codegen.DeprecationCheck.run com;
+
 	(* PASS 1: general expression filters *)
  	let filters = [
+ 		Codegen.UnificationCallback.run (check_unification com);
 		Codegen.Abstract.handle_abstract_casts tctx;
+		blockify_ast;
 		(match com.platform with
-			| Cpp -> (fun e ->
+			| Cpp | Flash8 -> (fun e ->
 				let save = save_locals tctx in
 				let e = handle_side_effects com (Typecore.gen_local tctx) e in
 				save();
@@ -1113,7 +1118,7 @@ let run com tctx main =
 	if not (Common.defined com Define.As3 || dce_mode = "no" || Common.defined com Define.DocGen) then Dce.run com main (dce_mode = "full" && not (Common.defined com Define.Interp));
 	(* always filter empty abstract implementation classes (issue #1885) *)
 	List.iter (fun mt -> match mt with
-		| TClassDecl({cl_kind = KAbstractImpl _} as c) when c.cl_ordered_statics = [] && c.cl_ordered_fields = [] -> c.cl_extern <- true
+		| TClassDecl({cl_kind = KAbstractImpl _} as c) when c.cl_ordered_statics = [] && c.cl_ordered_fields = [] && not (Meta.has Meta.Used c.cl_meta) -> c.cl_extern <- true
 		| _ -> ()
 	) com.types;
 	(* PASS 3: type filters *)

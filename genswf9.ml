@@ -205,7 +205,7 @@ let rec follow_basic t =
 		t
 	| TType (t,tl) ->
 		follow_basic (apply_params t.t_types tl t.t_type)
-	| TAbstract (a,pl) when a.a_impl <> None ->
+	| TAbstract (a,pl) when not (Meta.has Meta.CoreType a.a_meta) ->
 		follow_basic (apply_params a.a_types pl a.a_this)
 	| _ -> t
 
@@ -753,15 +753,20 @@ let begin_fun ctx args tret el stat p =
 		ignore(alloc_reg ctx (classify ctx v.v_type)));
 
 	let dparams = (match !dparams with None -> None | Some l -> Some (List.rev l)) in
+	let is_not_rethrow (_,e) =
+		match e.eexpr with
+		| TBlock [{ eexpr = TThrow { eexpr = TNew (_,_,[]) } }] -> false
+		| _ -> true
+	in
 	let rec loop_try e =
 		match e.eexpr with
 		| TFunction _ -> ()
-		| TTry _ -> raise Exit
+		| TTry (_,catches) when List.exists is_not_rethrow catches -> raise Exit
 		| _ -> Type.iter loop_try e
 	in
 	ctx.try_scope_reg <- (try List.iter loop_try el; None with Exit -> Some (alloc_reg ctx KDynamic));
 	(fun () ->
-		let hasblock = ctx.block_vars <> [] || ctx.trys <> [] in
+		let hasblock = ctx.block_vars <> [] || ctx.try_scope_reg <> None in
 		let code = DynArray.to_list ctx.code in
 		let extra = (
 			if hasblock then begin
@@ -992,11 +997,13 @@ let rec gen_expr_content ctx retval e =
 		gen_constant ctx c e.etype e.epos
 	| TThrow e ->
 		ctx.infos.icond <- true;
-		getvar ctx (VGlobal (type_path ctx (["flash"],"Boot")));
-		let id = type_path ctx (["flash";"errors"],"Error") in
-		write ctx (HFindPropStrict id);
-		write ctx (HConstructProperty (id,0));
-		setvar ctx (VId (ident "lastError")) None;
+		if has_feature ctx.com "haxe.CallStack.exceptionStack" then begin
+			getvar ctx (VGlobal (type_path ctx (["flash"],"Boot")));
+			let id = type_path ctx (["flash";"errors"],"Error") in
+			write ctx (HFindPropStrict id);
+			write ctx (HConstructProperty (id,0));
+			setvar ctx (VId (ident "lastError")) None;
+		end;
 		gen_expr ctx true e;
 		write ctx HThrow;
 		no_value ctx retval;
@@ -1004,7 +1011,7 @@ let rec gen_expr_content ctx retval e =
 		gen_expr ctx retval e
 	| TObjectDecl fl ->
 		List.iter (fun (name,e) ->
-			write ctx (HString name);
+			write ctx (HString (reserved name));
 			gen_expr ctx true e
 		) fl;
 		write ctx (HObject (List.length fl))
@@ -1024,16 +1031,14 @@ let rec gen_expr_content ctx retval e =
 		let b = open_block ctx retval in
 		loop el;
 		b();
-	| TVars vl ->
-		List.iter (fun (v,ei) ->
-			define_local ctx v e.epos;
-			(match ei with
-			| None -> ()
-			| Some e ->
-				let acc = gen_local_access ctx v e.epos Write in
-				gen_expr ctx true e;
-				setvar ctx acc None)
-		) vl
+	| TVar (v,ei) ->
+		define_local ctx v e.epos;
+		(match ei with
+		| None -> ()
+		| Some e ->
+			let acc = gen_local_access ctx v e.epos Write in
+			gen_expr ctx true e;
+			setvar ctx acc None)
 	| TReturn None ->
 		write ctx HRetVoid;
 		ctx.infos.icond <- true;
@@ -1126,8 +1131,11 @@ let rec gen_expr_content ctx retval e =
 				if ctx.infos.imax < ctx.infos.istack then ctx.infos.imax <- ctx.infos.istack;
 				write ctx HThis;
 				write ctx HScope;
-				write ctx (HReg (match ctx.try_scope_reg with None -> assert false | Some r -> r.rid));
-				write ctx HScope;
+				(match ctx.try_scope_reg with
+				| None -> ()
+				| Some r ->
+					write ctx (HReg r.rid);
+					write ctx HScope);
 				(* store the exception into local var, using a tmp register if needed *)
 				define_local ctx v e.epos;
 				let r = (match snd (try PMap.find v.v_id ctx.locals with Not_found -> assert false) with
@@ -1148,7 +1156,7 @@ let rec gen_expr_content ctx retval e =
 					| _ -> Type.iter call_loop e
 				in
 				let has_call = (try call_loop e; false with Exit -> true) in
-				if has_call then begin
+				if has_call && has_feature ctx.com "haxe.CallStack.exceptionStack" then begin
 					getvar ctx (gen_local_access ctx v e.epos Read);
 					write ctx (HAsType (type_path ctx (["flash";"errors"],"Error")));
 					let j = jump ctx J3False in
@@ -1628,7 +1636,10 @@ and gen_binop ctx retval op e1 e2 t p =
 			let k1 = classify ctx e1.etype in
 			let k2 = classify ctx e2.etype in
 			(match k1, k2 with
-			| KInt, KInt | KUInt, KUInt | KInt, KUInt | KUInt, KInt -> write ctx (HOp iop)
+			| KInt, KInt | KUInt, KUInt | KInt, KUInt | KUInt, KInt ->
+				write ctx (HOp iop);
+				let ret = classify ctx t in
+				if ret <> KInt then coerce ctx ret
 			| _ ->
 				write ctx (HOp op);
 				(* add is a generic operation, so let's make sure we don't loose our type in the process *)
@@ -2033,7 +2044,24 @@ let generate_field_kind ctx f c stat =
 			hlv_value = HVNone;
 			hlv_const = false;
 		})
-
+		
+let check_constructor ctx c f =
+	(*
+		check that we don't assign a super Float var before we call super() : will result in NaN
+	*)
+	let rec loop e =
+		Type.iter loop e;
+		match e.eexpr with
+		| TCall ({ eexpr = TConst TSuper },_) -> raise Exit
+		| TBinop (OpAssign,{ eexpr = TField({ eexpr = TConst TThis },FInstance (cc,cf)) },_) when c != cc && (match classify ctx cf.cf_type with KFloat | KDynamic -> true | _ -> false) ->
+			error "You cannot assign some super class vars before calling super() in flash, this will reset them to default value" e.epos
+		| _ -> ()
+	in
+	try
+		loop f.tf_expr
+	with Exit ->
+		()
+		
 let generate_class ctx c =
 	let name = type_path ctx c.cl_path in
 	ctx.cur_class <- c;
@@ -2056,6 +2084,7 @@ let generate_class ctx c =
 			| Some { eexpr = TFunction fdata } ->
 				let old = do_debug ctx f.cf_meta in
 				let m = generate_construct ctx fdata c in
+				check_constructor ctx c fdata;
 				old();
 				m
 			| _ -> assert false

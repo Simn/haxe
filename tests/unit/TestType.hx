@@ -15,11 +15,11 @@ class TestType extends Test {
 	static public macro function getCompilationDate() {
 		return macro $v { Std.string(Date.now()) };
 	}
-	
+
 	static public macro function typedAs(actual:haxe.macro.Expr, expected:haxe.macro.Expr) {
 		var tExpected = haxe.macro.Context.typeof(expected);
 		var tActual = haxe.macro.Context.typeof(actual);
-		return haxe.macro.Context.parse("{Test.count++; eq('" +Std.string(tActual) + "', '" +Std.string(tExpected) + "');}", haxe.macro.Context.currentPos());
+		return haxe.macro.Context.parse("eq('" +Std.string(tActual) + "', '" +Std.string(tExpected) + "')", haxe.macro.Context.currentPos());
 	}
 
 	static public macro function typeError(e:haxe.macro.Expr) {
@@ -572,26 +572,26 @@ class TestType extends Test {
 		hsf(TestType, "gf1_haxe_Template");
 		#end
 
-		hsf(TestType, #if (flash9 || cpp) "gf1_haxe_ds_GenericStack_Int" #else "gf1_haxe_ds_GenericStack" #end);
+		hsf(TestType, "gf1_haxe_ds_GenericStack_Int");
 		t(typeError(gf1(null))); // monos don't work
 		t(typeError(gf1( { foo:1 } ))); // structures don't work
 
 		eq("foo[1,2]", gf2("foo", [1, 2]));
 		eq("foo[[1,2]]", gf2("foo", [[1, 2]]));
 		hsf(TestType, "gf2_String_Int");
-		hsf(TestType, "gf2_String_Array");
+		hsf(TestType, "gf2_String_Array_Int");
 
 		var a = gf3("foo", ["bar", "baz"]);
 		eq(a[0], "bar");
 		eq(a[1], "baz");
 		eq(a[2], "foo");
-		hsf(TestType, "gf3_String_Array");
+		hsf(TestType, "gf3_String_Array_String");
 
 		#if !flash8
 		var t = new haxe.Template("foo");
 		var ta = gf3(t, [])[0];
 		f(t == ta);
-		hsf(TestType, "gf3_haxe_Template_Array");
+		hsf(TestType, "gf3_haxe_Template_Array__");
 		#end
 
 		eq(overloadFake(1), 1);
@@ -855,12 +855,12 @@ class TestType extends Test {
 		eq(func1(), "foo");
 		eq(s.test()(), "bar");
 	}
-	
+
 	function testAbstractTypeParameterVariance() {
 		var a:Array<unit.MyAbstract.MyInt> = [1, 2, 3];
 		var b:Array<unit.MyAbstract.MyInt2> = a;
 	}
-	
+
 	function testExposingAbstract() {
 		#if !macro
 		var ea = new unit.MyAbstract.ExposingAbstract();

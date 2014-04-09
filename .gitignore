@@ -7,6 +7,9 @@
 *.exe
 .*.swp
 
+/extra/hxclasses
+/extra/*.swf
+/extra/*.swc
 
 /version.ml
 /haxe
@@ -42,10 +45,15 @@
 /tests/unit/native_java/obj
 /tests/unit/native_java/cmd
 /tests/unit/native_java/native.jar
+/tests/unit/native_cs/obj
+/tests/unit/native_cs/cmd
+/tests/unit/native_cs/bin
+/tests/unit/native_cs/native_cs.csproj
 /tests/unit/unit.js.map
 /tests/unit/unit.n
 
 /haxe.sublime*
 build.bat
 tests/unit/compile.php.hxml
-/doc/*.xml
+/extra/*.xml
+tests/optimization/testopt.js

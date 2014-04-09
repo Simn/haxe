@@ -46,7 +46,7 @@ class Resource {
 		if (paths != null)
 			return paths;
 		var p = new haxe.ds.StringMap();
-		var all:cs.NativeArray<String> = untyped __cs__("typeof(haxe.Resource).Assembly.GetManifestResourceNames()");
+		var all = cs.Lib.toNativeType(haxe.Resource).Assembly.GetManifestResourceNames();
 		for (i in 0...all.Length)
 		{
 			var path = all[i];
@@ -88,7 +88,7 @@ class Resource {
 		return stream.readAll().toString();
 		#elseif cs
 		var path = getPaths().get(name);
-		var str:cs.system.io.Stream = untyped __cs__("typeof(haxe.Resource).Assembly.GetManifestResourceStream(path)");
+		var str = cs.Lib.toNativeType(haxe.Resource).Assembly.GetManifestResourceStream(path);
 		if (str != null)
 			return new cs.io.NativeInput(str).readAll().toString();
 		return null;
@@ -99,7 +99,7 @@ class Resource {
 				return new String(x.data);
 				#else
 				if( x.str != null ) return x.str;
-				var b : haxe.io.Bytes = haxe.Unserializer.run(x.data);
+				var b : haxe.io.Bytes = haxe.crypto.Base64.decode(x.data);
 				return b.toString();
 				#end
 			}
@@ -122,7 +122,7 @@ class Resource {
 		return stream.readAll();
 		#elseif cs
 		var path = getPaths().get(name);
-		var str:cs.system.io.Stream = untyped __cs__("typeof(haxe.Resource).Assembly.GetManifestResourceStream(path)");
+		var str = cs.Lib.toNativeType(haxe.Resource).Assembly.GetManifestResourceStream(path);
 		if (str != null)
 			return new cs.io.NativeInput(str).readAll();
 		return null;
@@ -133,7 +133,7 @@ class Resource {
 				return haxe.io.Bytes.ofData(cast x.data);
 				#else
 				if( x.str != null ) return haxe.io.Bytes.ofString(x.str);
-				return haxe.Unserializer.run(x.data);
+				return haxe.crypto.Base64.decode(x.data);
 				#end
 			}
 		return null;

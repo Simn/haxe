@@ -45,9 +45,9 @@ exception Abort
 exception Completion of string
 
 
-let version = 30100
-let version_major = version / 10000
-let version_minor = (version mod 10000) / 100
+let version = 3103
+let version_major = version / 1000
+let version_minor = (version mod 1000) / 100
 let version_revision = (version mod 100)
 let version_is_stable = version_minor land 1 = 0
 
@@ -55,6 +55,8 @@ let measure_times = ref false
 let prompt = ref false
 let start_time = ref (get_time())
 let global_cache = ref None
+
+let path_sep = if Sys.os_type = "Unix" then "/" else "\\"
 
 let get_real_path p =
 	try
@@ -109,11 +111,10 @@ let deprecated = [
 	"Identifier 'CType' is not part of enum haxe.macro.Constant","CType has been removed, use CIdent instead";
 	"Class not found : haxe.rtti.Infos","Use @:rtti instead of implementing haxe.rtti.Infos";
 	"Class not found : haxe.rtti.Generic","Use @:generic instead of implementing haxe.Generic";
-	"Class not found : haxe.Int32","haxe.Int32 has been removed, use normal Int instead";
 	"Class not found : flash.utils.TypedDictionary","flash.utils.TypedDictionary has been removed, use Map instead";
 	"Class not found : haxe.Stack", "haxe.Stack has been renamed to haxe.CallStack";
 	"Class not found : neko.zip.Reader", "neko.zip.Reader has been removed, use haxe.zip.Reader instead";
-	"Class not found : neko.zip.Reader", "neko.zip.Writer has been removed, use haxe.zip.Writer instead";
+	"Class not found : neko.zip.Writer", "neko.zip.Writer has been removed, use haxe.zip.Writer instead";
 	"Class not found : haxe.Public", "Use @:publicFields instead of implementing or extending haxe.Public";
 	"#Xml has no field createProlog", "Xml.createProlog was renamed to Xml.createProcessingInstruction";
 ]
@@ -910,7 +911,7 @@ and do_connect host port args =
 
 and init ctx =
 	let usage = Printf.sprintf
-		"Haxe Compiler %s %s- (C)2005-2013 Haxe Foundation\n Usage : haxe%s -main <class> [-swf|-js|-neko|-php|-cpp|-as3|-rb] <output> [options]\n Options :"
+		"Haxe Compiler %s %s- (C)2005-2014 Haxe Foundation\n Usage : haxe%s -main <class> [-swf|-js|-neko|-php|-cpp|-as3|-rb] <output> [options]\n Options :"
 		s_version (match Version.version_extra with None -> "" | Some v -> v) (if Sys.os_type = "Win32" then ".exe" else "")
 	in
 	let com = ctx.com in
@@ -927,7 +928,9 @@ try
 	let force_typing = ref false in
 	let pre_compilation = ref [] in
 	let interp = ref false in
-	Common.define_value com Define.HaxeVer (float_repres (float_of_int version /. 10000.));
+	let swf_version = ref false in
+	Common.define_value com Define.HaxeVer (float_repres (float_of_int version /. 1000.));
+	Common.define_value com Define.HxcppApiLevel "311";
 	Common.raw_define com "haxe3";
 	Common.define_value com Define.Dce "std";
 	com.warning <- (fun msg p -> message ctx ("Warning : " ^ msg) p);
@@ -951,7 +954,7 @@ try
 	with
 		Not_found ->
 			if Sys.os_type = "Unix" then
-				com.class_path <- ["/usr/lib/haxe/std/";"/usr/local/lib/haxe/std/";"/usr/lib/haxe/extraLibs/";"/usr/local/lib/haxe/extraLibs/";"";"/"]
+				com.class_path <- ["/usr/lib/haxe/std/";"/usr/local/lib/haxe/std/";"/usr/lib/haxe/extraLibs/";"/usr/local/lib/haxe/extraLibs/";""]
 			else
 				let base_path = normalize_path (get_real_path (try executable_path() with _ -> "./")) in
 				com.class_path <- [base_path ^ "std/";base_path ^ "extraLibs/";""]);
@@ -1019,10 +1022,12 @@ try
 			Common.raw_define com l;
 		),"<library[:version]> : use a haxelib library");
 		("-D",Arg.String (fun var ->
-			if var = fst (Define.infos Define.UseRttiDoc) then Parser.use_doc := true;
-			if var = fst (Define.infos Define.NoOpt) then com.foptimize <- false;
-			if List.mem var reserved_flags then raise (Arg.Bad (var ^ " is a reserved compiler flag and cannot be defined from command line"));
-			Common.raw_define com var
+			begin match var with
+				| "no_copt" | "no-copt" -> com.foptimize <- false;
+				| "use_rtti_doc" | "use-rtti-doc" -> Parser.use_doc := true;
+				| _ -> 	if List.mem var reserved_flags then raise (Arg.Bad (var ^ " is a reserved compiler flag and cannot be defined from command line"));
+			end;
+			Common.raw_define com var;
 		),"<var> : define a conditional compilation flag");
 		("-v",Arg.Unit (fun () ->
 			com.verbose <- true
@@ -1040,7 +1045,8 @@ try
 			Common.define_value com Define.Dce mode
 		),"[std|full|no] : set the dead code elimination mode");
 		("-swf-version",Arg.Float (fun v ->
-			com.flash_version <- v;
+			if not !swf_version || com.flash_version < v then com.flash_version <- v;
+			swf_version := true;
 		),"<version> : change the SWF version (6 to 10)");
 		("-swf-header",Arg.String (fun h ->
 			try
@@ -1065,8 +1071,15 @@ try
 			Genjava.add_java_lib com file false
 		),"<file> : add an external JAR or class directory library");
 		("-net-lib",Arg.String (fun file ->
-			Gencs.add_net_lib com file false
-		),"<file> : add an external .NET DLL file");
+			let file, is_std = match ExtString.String.nsplit file "@" with
+				| [file] ->
+					file,false
+				| [file;"std"] ->
+					file,true
+				| _ -> raise Exit
+			in
+			Gencs.add_net_lib com file is_std
+		),"<file>[@std] : add an external .NET DLL file");
 		("-net-std",Arg.String (fun file ->
 			Gencs.add_net_std com file
 		),"<file> : add a root std .NET DLL search path");
@@ -1273,10 +1286,14 @@ try
 		com.error <- error ctx;
 		com.main_class <- None;
 		let real = get_real_path (!Parser.resume_display).Ast.pfile in
+		(* try to fix issue on windows when get_real_path fails (8.3 DOS names disabled) *)
+		let real = (match List.rev (ExtString.String.nsplit real path_sep) with
+		| file :: path when String.length file > 0 && file.[0] >= 'a' && file.[1] <= 'z' -> file.[0] <- char_of_int (int_of_char file.[0] - int_of_char 'a' + int_of_char 'A'); String.concat path_sep (List.rev (file :: path))
+		| _ -> real) in
 		classes := lookup_classes com real;
 		if !classes = [] then begin
 			if not (Sys.file_exists real) then failwith "Display file does not exist";
-			(match List.rev (ExtString.String.nsplit real "\\") with
+			(match List.rev (ExtString.String.nsplit real path_sep) with
 			| file :: _ when file.[0] >= 'a' && file.[1] <= 'z' -> failwith ("Display file '" ^ file ^ "' should not start with a lowercase letter")
 			| _ -> ());
 			failwith "Display file was not found in class path";
@@ -1351,7 +1368,14 @@ try
 	if not !no_output && file_extension com.file = ext then delete_file com.file;
 	List.iter (fun f -> f()) (List.rev (!pre_compilation));
 	if !classes = [([],"Std")] && not !force_typing then begin
-		if !cmds = [] && not !did_something then Arg.usage basic_args_spec usage;
+		let help_spec = basic_args_spec @ [
+			("-help", Arg.Unit (fun () -> ()),": show extended help information");
+			("--help", Arg.Unit (fun () -> ()),": show extended help information");
+			("--help-defines", Arg.Unit (fun () -> ()),": print help for all compiler specific defines");
+			("--help-metas", Arg.Unit (fun () -> ()),": print help for all compiler metadatas");
+			("<dot-path>", Arg.Unit (fun () -> ()),": compile the module specified by dot-path");
+		] in
+		if !cmds = [] && not !did_something then Arg.usage help_spec usage;
 	end else begin
 		ctx.setup();
 		Common.log com ("Classpath : " ^ (String.concat ";" com.class_path));
@@ -1544,6 +1568,9 @@ with
 				raise (Completion c)
 			| _ ->
 				error ctx ("Could not load module " ^ (Ast.s_type_path (p,c))) Ast.null_pos)
+	| Interp.Sys_exit i ->
+		ctx.flush();
+		exit i
 	| e when (try Sys.getenv "OCAMLRUNPARAM" <> "b" || !global_cache <> None with _ -> true) && not (is_debug_run()) ->
 		error ctx (Printexc.to_string e) Ast.null_pos
 

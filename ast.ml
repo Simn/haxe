@@ -30,6 +30,7 @@ module Meta = struct
 	type strict_meta =
 		| Abstract
 		| Access
+		| Accessor
 		| Allow
 		| Annotation
 		| ArrayAccess
@@ -52,11 +53,13 @@ module Meta = struct
 		| Debug
 		| Decl
 		| DefParam
+		| Delegate
 		| Depend
 		| Deprecated
 		| DynamicObject
 		| Enum
 		| EnumConstructorParam
+		| Event
 		| Exhaustive
 		| Expose
 		| Extern
@@ -70,6 +73,7 @@ module Meta = struct
 		| FunctionCode
 		| FunctionTailCode
 		| Generic
+		| GenericBuild
 		| Getter
 		| Hack
 		| HaxeGeneric
@@ -90,6 +94,7 @@ module Meta = struct
 		| Meta
 		| Macro
 		| MaybeUsed
+		| MergeBlock
 		| MultiType
 		| Native
 		| NativeGen
@@ -107,6 +112,7 @@ module Meta = struct
 		| Optional
 		| Overload
 		| PrivateAccess
+		| Property
 		| Protected
 		| Public
 		| PublicFields
@@ -282,7 +288,7 @@ and complex_type =
 	| CTFunction of complex_type list * complex_type
 	| CTAnonymous of class_field list
 	| CTParent of complex_type
-	| CTExtend of type_path * class_field list
+	| CTExtend of type_path list * class_field list
 	| CTOptional of complex_type
 
 and func = {
@@ -611,6 +617,22 @@ let unescape s =
 					let c = (try char_of_int (int_of_string ("0x" ^ String.sub s (i+1) 2)) with _ -> raise Exit) in
 					Buffer.add_char b c;
 					inext := !inext + 2;
+				| 'u' ->
+					let (u, a) =
+					  (try
+					      (int_of_string ("0x" ^ String.sub s (i+1) 4), 4)
+					    with
+					      _ -> try
+						assert (s.[i+1] = '{');
+						let l = String.index_from s (i+3) '}' - (i+2) in
+						let u = int_of_string ("0x" ^ String.sub s (i+2) l) in
+						assert (u <= 0x10FFFF);
+						(u, l+2)
+					      with _ -> raise Exit) in
+					let ub = UTF8.Buf.create 0 in
+					UTF8.Buf.add_char ub (UChar.uchar_of_int u);
+					Buffer.add_string b (UTF8.Buf.contents ub);
+					inext := !inext + a;
 				| _ ->
 					raise Exit);
 				loop false !inext;
@@ -643,7 +665,7 @@ let map_expr loop (e,p) =
 		| CTFunction (cl,c) -> CTFunction (List.map ctype cl, ctype c)
 		| CTAnonymous fl -> CTAnonymous (List.map cfield fl)
 		| CTParent t -> CTParent (ctype t)
-		| CTExtend (t,fl) -> CTExtend (tpath t, List.map cfield fl)
+		| CTExtend (tl,fl) -> CTExtend (List.map tpath tl, List.map cfield fl)
 		| CTOptional t -> CTOptional (ctype t)
 	and tparamdecl t =
 		{ tp_name = t.tp_name; tp_constraints = List.map ctype t.tp_constraints; tp_params = List.map tparamdecl t.tp_params }

@@ -21,17 +21,12 @@
  */
 @:coreApi class Reflect {
 
-	public static function hasField( o : Dynamic, field : String ) : Bool {
+	public inline static function hasField( o : Dynamic, field : String ) : Bool {
 		return untyped __js__('Object').prototype.hasOwnProperty.call(o, field);
 	}
 
-	public inline static function field( o : Dynamic, field : String ) : Dynamic untyped {
-		var v = null;
-		try {
-			v = o[field];
-		} catch( e : Dynamic ) {
-		}
-		return v;
+	public static function field( o : Dynamic, field : String ) : Dynamic untyped {
+		return try o[field] catch( e : Dynamic ) null;
 	}
 
 	public inline static function setField( o : Dynamic, field : String, value : Dynamic ) : Void untyped {
@@ -85,7 +80,7 @@
 		var t = __js__("typeof(v)");
 		return (t == "string" || (t == "object" && v.__enum__ == null)) || (t == "function" && (js.Boot.isClass(v) || js.Boot.isEnum(v)) != null);
 	}
-	
+
 	public static function isEnumValue( v : Dynamic ) : Bool {
 		return v != null && v.__enum__ != null;
 	}

@@ -1,31 +1,45 @@
 language: node_js
 
 env:
-  - TARGET=neko
-  - TARGET=macro
-  - TARGET=php
-  - TARGET=cpp
-  - TARGET=js
-  - TARGET=java
-  - TARGET=cs
-  # - TARGET=flash8
-  # - TARGET=flash9
-  # - TARGET=as3
+  global:
+    # SAUCE_USERNAME
+    - secure: SjyKefmjUEXi0IKHGGpcbLAajU0mLHONg8aA8LoY7Q9nAkSN6Aql+fzS38Boq7w1jWn+2FOpr+4jy0l6wVd/bftsF+huFfYpFJmdh8BlKmE0K71zZAral0H1c7YxkuQpPiJCIFGXqtkvev7SWTy0z31u7kuuQeEyW27boXe5cDA=
+    # SAUCE_ACCESS_KEY
+    - secure: sUvWUjCyPuWht4seNa4f2VG9DkvXkhZyLZfjJO9TUAHB2JndS16E2j/qrvKEjycyH6w8tU/B9vnjDRvvGrYXxEXcBEwsJVfkorFnRl9uwGCGIYrzjMhssEl3fMYZK7P304f+gAp5ULrDBX2gIaKeSa8lUNRtz2PsZOieE4kMdhk=
+  matrix:
+    - TARGET=macro
+    - TARGET=neko
+    - TARGET=js
+    - TARGET=php
+    - TARGET=cpp
+    - TARGET=flash9
+    - TARGET=as3
+    - TARGET=java
+    - TARGET=cs
+    - TARGET=flash8
+    - TARGET=polygonal-ds
+    - TARGET=flambe
+    - TARGET=hxtemplo
+    - TARGET=munit
+    - TARGET=openfl-samples
 
 matrix:
+  fast_finish: true
   allow_failures:
-    - env: TARGET=java
-    - env: TARGET=cs
+    - env: TARGET=flash8
 
 before_install:
-  - sudo apt-get install ocaml zlib1g-dev libgc-dev -y
-  - git clone https://github.com/HaxeFoundation/neko.git ~/neko && cd ~/neko && make && sudo make install && cd $TRAVIS_BUILD_DIR
+  - travis_retry sudo apt-get update
+  - travis_retry sudo apt-get install ocaml zlib1g-dev libgc-dev -y
+  - travis_retry git clone https://github.com/HaxeFoundation/neko.git ~/neko
+  - cd ~/neko && make && sudo make install && cd $TRAVIS_BUILD_DIR
 
 script:
   - make
   - make tools
   - sudo make install
-  - cd tests/unit/
+  - cd tests/
   - mkdir ~/haxelib && haxelib setup ~/haxelib
+  - haxelib git hx-yaml https://github.com/mikestead/hx-yaml master src
   - haxe -version
-  - haxe -main RunTravis --interp
+  - haxe -main RunTravis -lib hx-yaml --interp

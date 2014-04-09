@@ -62,6 +62,11 @@ let quote_ident s =
 	with Exit ->
 		quoted_ident_prefix ^ s
 
+let unquote_ident f =
+	let pf = quoted_ident_prefix in
+	let pflen = String.length pf in
+	if String.length f >= pflen && String.sub f 0 pflen = pf then String.sub f pflen (String.length f - pflen), false else f, true
+
 let cache = ref (DynArray.create())
 let last_doc = ref None
 let use_doc = ref false
@@ -215,12 +220,17 @@ let reify in_macro =
 		) in
 		mk_enum "TypeParam" n [v] p
 	and to_tpath t p =
-		let fields = [
-			("pack", to_array to_string t.tpackage p);
-			("name", to_string t.tname p);
-			("params", to_array to_tparam t.tparams p);
-		] in
-		to_obj (match t.tsub with None -> fields | Some s -> fields @ ["sub",to_string s p]) p
+		let len = String.length t.tname in
+		if t.tpackage = [] && len > 1 && t.tname.[0] = '$' then
+			(EConst (Ident (String.sub t.tname 1 (len - 1))),p)
+		else begin
+			let fields = [
+				("pack", to_array to_string t.tpackage p);
+				("name", to_string t.tname p);
+				("params", to_array to_tparam t.tparams p);
+			] in
+			to_obj (match t.tsub with None -> fields | Some s -> fields @ ["sub",to_string s p]) p
+		end
 	and to_ctype t p =
 		let ct n vl = mk_enum "ComplexType" n vl p in
 		match t with
@@ -230,7 +240,7 @@ let reify in_macro =
 		| CTFunction (args,ret) -> ct "TFunction" [to_array to_ctype args p; to_ctype ret p]
 		| CTAnonymous fields -> ct "TAnonymous" [to_array to_cfield fields p]
 		| CTParent t -> ct "TParent" [to_ctype t p]
-		| CTExtend (t,fields) -> ct "TExtend" [to_tpath t p; to_array to_cfield fields p]
+		| CTExtend (tl,fields) -> ct "TExtend" [to_array to_tpath tl p; to_array to_cfield fields p]
 		| CTOptional t -> ct "TOptional" [to_ctype t p]
 	and to_fun f p =
 		let farg (n,o,t,e) p =
@@ -530,7 +540,11 @@ let semicolon s =
 let rec	parse_file s =
 	last_doc := None;
 	match s with parser
-	| [< '(Kwd Package,_); p = parse_package; _ = semicolon; l = parse_type_decls p []; '(Eof,_) >] -> p , l
+	| [< '(Kwd Package,_); pack = parse_package; s >] ->
+		begin match s with parser
+		| [< '(Const(Ident _),p) when pack = [] >] -> error (Custom "Package name must start with a lowercase character") p
+		| [< _ = semicolon; l = parse_type_decls pack []; '(Eof,_) >] -> pack , l
+		end
 	| [< l = parse_type_decls [] []; '(Eof,_) >] -> [] , l
 
 and parse_type_decls pack acc s =
@@ -704,6 +718,9 @@ and parse_class_field_resume tdecl s =
 		in
 		let rec loop k =
 			match List.rev_map fst (Stream.npeek k s) with
+			(* metadata *)
+			| Kwd _ :: At :: _ | Kwd _ :: DblDot :: At :: _ ->
+				loop (k + 1)
 			(* field declaration *)
 			| Const _ :: Kwd Function :: _
 			| Kwd New :: Kwd Function :: _ ->
@@ -765,16 +782,20 @@ and parse_complex_type s =
 	let t = parse_complex_type_inner s in
 	parse_complex_type_next t s
 
+and parse_structural_extension = parser
+	| [< '(Binop OpGt,_); t = parse_type_path; '(Comma,_); s >] ->
+		t
+
 and parse_complex_type_inner = parser
 	| [< '(POpen,_); t = parse_complex_type; '(PClose,_) >] -> CTParent t
 	| [< '(BrOpen,p1); s >] ->
 		(match s with parser
 		| [< l = parse_type_anonymous false >] -> CTAnonymous l
-		| [< '(Binop OpGt,_); t = parse_type_path; '(Comma,_); s >] ->
+		| [< t = parse_structural_extension; s>] ->
+			let tl = t :: plist parse_structural_extension s in
 			(match s with parser
-			| [< l = parse_type_anonymous false >] -> CTExtend (t,l)
-			| [< l, _ = parse_class_fields true p1 >] -> CTExtend (t,l)
-			| [< >] -> serror())
+			| [< l = parse_type_anonymous false >] -> CTExtend (tl,l)
+			| [< l, _ = parse_class_fields true p1 >] -> CTExtend (tl,l))
 		| [< l, _ = parse_class_fields true p1 >] -> CTAnonymous l
 		| [< >] -> serror())
 	| [< '(Question,_); t = parse_complex_type_inner >] ->
@@ -850,10 +871,6 @@ and parse_type_anonymous opt = parser
 	| [< '(Question,_) when not opt; s >] -> parse_type_anonymous true s
 	| [< name, p1 = ident; '(DblDot,_); t = parse_complex_type; s >] ->
 		let next p2 acc =
-			let t = if not opt then t else (match t with
-				| CTPath { tpackage = []; tname = "Null" } -> t
-				| _ -> CTPath { tpackage = []; tname = "Null"; tsub = None; tparams = [TPType t] }
-			) in
 			{
 				cff_name = name;
 				cff_meta = if opt then [Meta.Optional,[],p1] else [];
@@ -970,8 +987,8 @@ and parse_fun_name = parser
 	| [< '(Kwd New,_) >] -> "new"
 
 and parse_fun_param = parser
-	| [< '(Question,_); name, _ = ident; t = parse_type_opt; c = parse_fun_param_value >] -> (name,true,t,c)
-	| [< name, _ = ident; t = parse_type_opt; c = parse_fun_param_value >] -> (name,false,t,c)
+	| [< '(Question,_); name, _ = dollar_ident; t = parse_type_opt; c = parse_fun_param_value >] -> (name,true,t,c)
+	| [< name, _ = dollar_ident; t = parse_type_opt; c = parse_fun_param_value >] -> (name,false,t,c)
 
 and parse_fun_param_value = parser
 	| [< '(Binop OpAssign,_); e = toplevel_expr >] -> Some e
@@ -1223,17 +1240,17 @@ and expr_next e1 = parser
 		| [< >] -> serror())
 	| [< '(BkOpen,_); e2 = expr; '(BkClose,p2); s >] ->
 		expr_next (EArray (e1,e2), punion (pos e1) p2) s
-	| [< '(Binop OpGt,_); s >] ->
+	| [< '(Binop OpGt,p1); s >] ->
 		(match s with parser
-		| [< '(Binop OpGt,_); s >] ->
+		| [< '(Binop OpGt,p2) when p1.pmax = p2.pmin; s >] ->
 			(match s with parser
-			| [< '(Binop OpGt,_) >] ->
+			| [< '(Binop OpGt,p3) when p2.pmax = p3.pmin >] ->
 				(match s with parser
-				| [< '(Binop OpAssign,_); e2 = expr >] -> make_binop (OpAssignOp OpUShr) e1 e2
+				| [< '(Binop OpAssign,p4) when p3.pmax = p4.pmin; e2 = expr >] -> make_binop (OpAssignOp OpUShr) e1 e2
 				| [< e2 = secure_expr >] -> make_binop OpUShr e1 e2)
-			| [< '(Binop OpAssign,_); e2 = expr >] -> make_binop (OpAssignOp OpShr) e1 e2
+			| [< '(Binop OpAssign,p3) when p2.pmax = p3.pmin; e2 = expr >] -> make_binop (OpAssignOp OpShr) e1 e2
 			| [< e2 = secure_expr >] -> make_binop OpShr e1 e2)
-		| [< '(Binop OpAssign,_); s >] ->
+		| [< '(Binop OpAssign,p2) when p1.pmax = p2.pmin; s >] ->
 			make_binop OpGte e1 (secure_expr s)
 		| [< e2 = secure_expr >] ->
 			make_binop OpGt e1 e2)
@@ -1264,7 +1281,7 @@ and parse_switch_cases eswitch cases = parser
 	| [< '(Kwd Case,p1); el = psep Comma expr; eg = popt parse_guard; '(DblDot,_); s >] ->
 		(match el with
 		| [] -> error (Custom "case without a pattern is not allowed") p1
-		| _ -> 
+		| _ ->
 			let b = (try block [] s with Display e -> display (ESwitch (eswitch,List.rev ((el,eg,Some e) :: cases),None),punion (pos eswitch) (pos e))) in
 			let b = match b with
 				| [] -> None

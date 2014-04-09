@@ -140,6 +140,8 @@ class Debugger
      *          - threadNumber, the thread number of the event
      *          - event, one of THREAD_CREATED, THREAD_TERMINATED,
      *            THREAD_STARTED, or THREAD_STOPPED
+     *          - stackFrame, the stack frame number at which the thread is stopped,
+     *            undefined if event is not THREAD_STOPPED
      *          - className, the class name at which the thread is stopped,
      *            undefined if event is not THREAD_STOPPED
      *          - functionName, the function name at which the thread is
@@ -150,7 +152,7 @@ class Debugger
      *            undefined if event is not THREAD_STOPPED
      **/
     public static function setEventNotificationHandler(
-             handler : Int -> Int -> String -> String -> String -> Int -> Void)
+             handler : Int -> Int -> Int -> String -> String -> String -> Int -> Void)
     {
         untyped __global__.__hxcpp_dbg_setEventNotificationHandler(handler);
     }
@@ -188,6 +190,21 @@ class Debugger
         return untyped __global__.__hxcpp_dbg_getFiles();
    }
 
+
+    /**
+     * Returns the full paths of the set of source files known to the debugger.
+     * This is a copy of the original array and could be quite large.
+     * It is possible that this set will be empty, in which case the full paths are not known.
+     * The index of these files matches the index from "getFiles", so the full path for
+     * a given short path can be calculated.
+     *
+     * @return the known full paths of the set of source files
+     **/
+   public static function getFilesFullPath() : Array<String>
+   {
+        return untyped __global__.__hxcpp_dbg_getFilesFullPath();
+   }
+
     /**
      * Returns the set of class names of all classes known to the debugger.
      * This is a copy of the original array and could be quite large.  The
@@ -200,7 +217,7 @@ class Debugger
     {
         return untyped __global__.__hxcpp_dbg_getClasses();
     }
-    
+
     /**
      * Returns a ThreadInfo object describing every thread that existed at the
      * moment that the call was made, except for the debugger thread.
@@ -209,7 +226,7 @@ class Debugger
     {
         return untyped __global__.__hxcpp_dbg_getThreadInfos();
     }
-    
+
     /**
      * Returns a ThreadInfo object describing a single thread, or null if
      * there is no such thread or the thread queried about was the debugger
@@ -221,18 +238,18 @@ class Debugger
         return untyped __global__.__hxcpp_dbg_getThreadInfo
             (threadNumber, unsafe);
     }
-    
+
     /**
      * Adds a new file:line breakpoint.  The breakpoint number of the newly
      * added breakpoint is returned.
      **/
-    public static function addFileLineBreakpoint(file : String, 
+    public static function addFileLineBreakpoint(file : String,
                                                  line : Int) : Int
     {
         return untyped __global__.__hxcpp_dbg_addFileLineBreakpoint
             (file, line);
     }
-    
+
     /**
      * Adds a new class:function breakpoint.  The breakpoint number of the
      * newly added breakpoint is returned.
@@ -257,7 +274,7 @@ class Debugger
                 (cast (number, Int));
         }
     }
-    
+
     /**
      * Breaks all threads except the debugger thread (which should be the same
      * as the calling thread!).
@@ -270,7 +287,7 @@ class Debugger
     {
         untyped __global__.__hxcpp_dbg_breakNow(wait);
     }
-    
+
     /**
      * Continue execution of all stopped threads.  If specialThreadNumber
      * is a valid thread number, then it will be continued past
@@ -287,14 +304,14 @@ class Debugger
     /**
      * Single steps the given thread.
      **/
-    public static function stepThread(threadNumber : Int, 
+    public static function stepThread(threadNumber : Int,
                                       stepType : Int,
                                       stepCount : Int = 1)
     {
         untyped __global__.__hxcpp_dbg_stepThread
             (threadNumber, stepType, stepCount);
     }
-    
+
     /**
      * Returns the list of local variables (including "this", function
      * arguments, and local variables) visible to the given thread at the
@@ -321,7 +338,7 @@ class Debugger
      * requested value does not exist.  If the thread is actively running
      * and unsafe is not true, returns THREAD_NOT_STOPPED.
      **/
-    public static function getStackVariableValue(threadNumber : Int, 
+    public static function getStackVariableValue(threadNumber : Int,
                                                  stackFrameNumber : Int,
                                                  name : String,
                                                  unsafe : Bool) : Dynamic
