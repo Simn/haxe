@@ -55,7 +55,7 @@ let type_constant com c p =
 		(try mk (TConst (TInt (Int32.of_string s))) t.tint p
 		with _ -> mk (TConst (TFloat s)) t.tfloat p)
 	| Float f -> mk (TConst (TFloat f)) t.tfloat p
-	| String s -> mk (TConst (TString s)) t.tstring p
+	| String (s,_) -> mk (TConst (TString s)) t.tstring p
 	| Ident "true" -> mk (TConst (TBool true)) t.tbool p
 	| Ident "false" -> mk (TConst (TBool false)) t.tbool p
 	| Ident "null" -> mk (TConst TNull) (t.tnull (mk_mono())) p
@@ -157,7 +157,7 @@ let extend_remoting ctx c t p async prot =
 			else
 				fd.f_args, eargs
 			in
-			let id = (EConst (String f.cff_name), p) in
+			let id = (EConst (String (f.cff_name,false)), p) in
 			let id = if prot then id else ECall ((EConst (Ident "__unprotect__"),p),[id]),p in
 			let expr = ECall (
 				(EField (
@@ -620,7 +620,7 @@ let on_inherit ctx c p h =
 	| HExtends { tpackage = ["mt"]; tname = "AsyncProxy"; tparams = [TPType(CTPath t)] } ->
 		extend_remoting ctx c t p true false;
 		false
-	| HExtends { tpackage = ["haxe";"xml"]; tname = "Proxy"; tparams = [TPExpr(EConst (String file),p);TPType t] } ->
+	| HExtends { tpackage = ["haxe";"xml"]; tname = "Proxy"; tparams = [TPExpr(EConst (String (file,false)),p);TPType t] } ->
 		extend_xml_proxy ctx c t file p;
 		true
 	| _ ->
@@ -1683,7 +1683,7 @@ module DeprecationCheck = struct
 
 	let print_deprecation_message com meta s p_usage =
 		let s = match meta with
-			| _,[EConst(String s),_],_ -> s
+			| _,[EConst(String (s,_)),_],_ -> s
 			| _ -> Printf.sprintf "Usage of this %s is deprecated" s
 		in
 		if not (Hashtbl.mem warned_positions p_usage) then begin

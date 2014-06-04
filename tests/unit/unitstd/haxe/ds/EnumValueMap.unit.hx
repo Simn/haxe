@@ -2,8 +2,8 @@ var em = new haxe.ds.EnumValueMap();
 var test = [
 	1 => EContinue,
 	2 => EBreak,
-	3 => EConst(CString("bar")),
-	4 => EConst(CString("foo")),
+	3 => EConst(CString("bar", false)),
+	4 => EConst(CString("foo", false)),
 	5 => EArray(null, null),
 ];
 for (k in test.keys()) {

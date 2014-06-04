@@ -241,7 +241,7 @@ type unop =
 type constant =
 	| Int of string
 	| Float of string
-	| String of string
+	| String of string * bool
 	| Ident of string
 	| Regexp of string * string
 
@@ -487,7 +487,8 @@ let s_escape ?(hex=true) s =
 let s_constant = function
 	| Int s -> s
 	| Float s -> s
-	| String s -> "\"" ^ s_escape s ^ "\""
+	| String (s,false) -> "\"" ^ s_escape s ^ "\""
+	| String (s,true) -> "'" ^ s_escape s ^ "'"
 	| Ident s -> s
 	| Regexp (r,o) -> "~/" ^ r ^ "/"
 

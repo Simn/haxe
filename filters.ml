@@ -891,8 +891,8 @@ let apply_native_paths ctx t =
 	let get_real_path meta path =
 		let (_,e,mp) = Meta.get Meta.Native meta in
 		match e with
-		| [Ast.EConst (Ast.String name),p] ->
-			(Meta.RealPath,[Ast.EConst (Ast.String (s_type_path path)),p],mp),parse_path name
+		| [Ast.EConst (Ast.String (name,_)),p] ->
+			(Meta.RealPath,[Ast.EConst (Ast.String (s_type_path path,false)),p],mp),parse_path name
 		| _ ->
 			error "String expected" mp
 	in

@@ -1122,7 +1122,7 @@ let configure gen =
 					write w " )"
 				| TField (e, FStatic(_, cf)) when Meta.has Meta.Native cf.cf_meta ->
 					let rec loop meta = match meta with
-						| (Meta.Native, [EConst (String s), _],_) :: _ ->
+						| (Meta.Native, [EConst (String (s,_)), _],_) :: _ ->
 							expr_s w e; write w "."; write_field w s
 						| _ :: tl -> loop tl
 						| [] -> expr_s w e; write w "."; write_field w (cf.cf_name)
@@ -1559,10 +1559,10 @@ let configure gen =
 								end else begin
 									expr_s w expr;
 								end)
-							| (Meta.Throws, [Ast.EConst (Ast.String t), _], _) :: tl ->
+							| (Meta.Throws, [Ast.EConst (Ast.String (t,_)), _], _) :: tl ->
 								print w " throws %s" t;
 								loop tl
-							| (Meta.FunctionCode, [Ast.EConst (Ast.String contents),_],_) :: tl ->
+							| (Meta.FunctionCode, [Ast.EConst (Ast.String (contents,_)),_],_) :: tl ->
 								begin_block w;
 								write w contents;
 								end_block w
@@ -1586,7 +1586,7 @@ let configure gen =
 
 		let rec loop_meta meta acc =
 			match meta with
-				| (Meta.SuppressWarnings, [Ast.EConst (Ast.String w),_],_) :: meta -> loop_meta meta (w :: acc)
+				| (Meta.SuppressWarnings, [Ast.EConst (Ast.String (w,_)),_],_) :: meta -> loop_meta meta (w :: acc)
 				| _ :: meta -> loop_meta meta acc
 				| _ -> acc
 		in
@@ -1657,7 +1657,7 @@ let configure gen =
 		let rec loop meta =
 			match meta with
 				| [] ->  ()
-				| (Meta.ClassCode, [Ast.EConst (Ast.String contents),_],_) :: tl ->
+				| (Meta.ClassCode, [Ast.EConst (Ast.String (contents,_)),_],_) :: tl ->
 					write w contents
 				| _ :: tl -> loop tl
 		in
@@ -2361,7 +2361,7 @@ and convert_signature ctx p jsig =
 
 let convert_constant ctx p const =
 	Option.map_default (function
-		| ConstString s -> Some (EConst (String s), p)
+		| ConstString s -> Some (EConst (String (s,false)), p)
 		| ConstInt i -> Some (EConst (Int (Printf.sprintf "%ld" i)), p)
 		| ConstFloat f | ConstDouble f -> Some (EConst (Float (Printf.sprintf "%E" f)), p)
 		| _ -> None) None const
@@ -2401,7 +2401,7 @@ let del_override field =
 	{ field with jf_attributes = List.filter (fun a -> not (is_override_attrib a)) field.jf_attributes }
 
 let convert_java_enum ctx p pe =
-	let meta = ref [Meta.Native, [EConst (String (real_java_path ctx pe.cpath) ), p], p ] in
+	let meta = ref [Meta.Native, [EConst (String (real_java_path ctx pe.cpath,false) ), p], p ] in
 	let data = ref [] in
 	List.iter (fun f ->
 		(* if List.mem JEnum f.jf_flags then *)
@@ -2519,7 +2519,7 @@ let convert_java_enum ctx p pe =
 			if String.get cff_name 0 = '%' then
 				let name = (String.sub cff_name 1 (String.length cff_name - 1)) in
 				"_" ^ name,
-				(Meta.Native, [EConst (String (name) ), cff_pos], cff_pos) :: !cff_meta
+				(Meta.Native, [EConst (String (name,false) ), cff_pos], cff_pos) :: !cff_meta
 			else
 				cff_name, !cff_meta
 		in
@@ -2564,7 +2564,7 @@ let convert_java_enum ctx p pe =
 		| false ->
 			let flags = ref [HExtern] in
 			(* todo: instead of JavaNative, use more specific definitions *)
-			let meta = ref [Meta.JavaNative, [], p; Meta.Native, [EConst (String (real_java_path ctx jc.cpath) ), p], p] in
+			let meta = ref [Meta.JavaNative, [], p; Meta.Native, [EConst (String (real_java_path ctx jc.cpath,false) ), p], p] in
 
 			let is_interface = ref false in
 			List.iter (fun f -> match f with

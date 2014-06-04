@@ -1094,7 +1094,7 @@ let configure gen =
 						do_call w e [v]
 				| TField (e, (FStatic(_, cf) | FInstance(_, cf))) when Meta.has Meta.Native cf.cf_meta ->
 					let rec loop meta = match meta with
-						| (Meta.Native, [EConst (String s), _],_) :: _ ->
+						| (Meta.Native, [EConst (String (s,_)), _],_) :: _ ->
 							expr_s w e; write w "."; write_field w s
 						| _ :: tl -> loop tl
 						| [] -> expr_s w e; write w "."; write_field w (cf.cf_name)
@@ -1522,7 +1522,7 @@ let configure gen =
 		| EConst c, p -> (match c with
 			| Int s | Float s | Ident s ->
 				write w s
-			| String s ->
+			| String (s,_) ->
 				write w "\"";
 				write w (escape s);
 				write w "\""
@@ -1816,7 +1816,7 @@ let configure gen =
 									if not (Common.defined gen.gcon Define.RealPosition) then write w "#line default";
 									end_block w;
 								end)
-							| (Meta.FunctionCode, [Ast.EConst (Ast.String contents),_],_) :: tl ->
+							| (Meta.FunctionCode, [Ast.EConst (Ast.String (contents,_)),_],_) :: tl ->
 								begin_block w;
 								write w contents;
 								end_block w
@@ -2033,7 +2033,7 @@ let configure gen =
 		let rec loop meta =
 			match meta with
 				| [] ->  ()
-				| (Meta.ClassCode, [Ast.EConst (Ast.String contents),_],_) :: tl ->
+				| (Meta.ClassCode, [Ast.EConst (Ast.String (contents,_)),_],_) :: tl ->
 					write w contents
 				| _ :: tl -> loop tl
 		in
@@ -2897,7 +2897,7 @@ let get_cls = function
 	| _,_,c -> c
 
 let convert_ilenum ctx p ilcls =
-	let meta = ref [Meta.Native, [EConst (String (ilpath_s ilcls.cpath) ), p], p ] in
+	let meta = ref [Meta.Native, [EConst (String (ilpath_s ilcls.cpath,false) ), p], p ] in
 	let data = ref [] in
 	List.iter (fun f -> match f.fname with
 		| "value__" -> ()
@@ -2957,7 +2957,7 @@ let convert_ilfield ctx p field =
 		if String.get cff_name 0 = '%' then
 			let name = (String.sub cff_name 1 (String.length cff_name - 1)) in
 			"_" ^ name,
-			(Meta.Native, [EConst (String (name) ), cff_pos], cff_pos) :: !cff_meta
+			(Meta.Native, [EConst (String (name,false) ), cff_pos], cff_pos) :: !cff_meta
 		else
 			cff_name, !cff_meta
 	in
@@ -3097,7 +3097,7 @@ let convert_ilmethod ctx p m is_explicit_impl =
 		if String.get cff_name 0 = '%' then
 			let name = (String.sub cff_name 1 (String.length cff_name - 1)) in
 			"_" ^ name,
-			(Meta.Native, [EConst (String (name) ), cff_pos], cff_pos) :: meta
+			(Meta.Native, [EConst (String (name,false) ), cff_pos], cff_pos) :: meta
 		else
 			cff_name, meta
 	in
@@ -3338,7 +3338,7 @@ let convert_ilclass ctx p ?(delegate=false) ilcls = match ilcls.csuper with
 		(* todo: instead of CsNative, use more specific definitions *)
 		if PMap.mem "net_loader_debug" ctx.ncom.defines then
 			print_endline ("converting " ^ ilpath_s ilcls.cpath);
-		let meta = ref [Meta.CsNative, [], p; Meta.Native, [EConst (String (ilpath_s ilcls.cpath) ), p], p] in
+		let meta = ref [Meta.CsNative, [], p; Meta.Native, [EConst (String (ilpath_s ilcls.cpath,false) ), p], p] in
 
 		let is_interface = ref false in
 		List.iter (fun f -> match f with

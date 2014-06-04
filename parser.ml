@@ -155,13 +155,15 @@ let reify in_macro =
 		| _ -> (ECall (constr,vl),p)
 	in
 	let to_const c p =
-		let cst n v = mk_enum "Constant" n [EConst (String v),p] p in
+		let cst n v = mk_enum "Constant" n [EConst (String (v,false)),p] p in
 		match c with
 		| Int i -> cst "CInt" i
-		| String s -> cst "CString" s
+		| String (s,b) ->
+			let i = if b then "true" else "false" in
+			mk_enum "Constant" "CString" [EConst (String (s,false)),p;EConst (Ident i),p; ] p
 		| Float s -> cst "CFloat" s
 		| Ident s -> cst "CIdent" s
-		| Regexp (r,o) -> mk_enum "Constant" "CRegexp" [(EConst (String r),p);(EConst (String o),p)] p
+		| Regexp (r,o) -> mk_enum "Constant" "CRegexp" [(EConst (String (r,false)),p);(EConst (String (o,false)),p)] p
 	in
 	let rec to_binop o p =
 		let op n = mk_enum "Binop" n [] p in
@@ -195,7 +197,7 @@ let reify in_macro =
 		if len > 1 && s.[0] = '$' then
 			(EConst (Ident (String.sub s 1 (len - 1))),p)
 		else
-			(EConst (String s),p)
+			(EConst (String (s,false)),p)
 	in
 	let to_array f a p =
 		(EArrayDecl (List.map (fun s -> f s p) a),p)
@@ -313,7 +315,7 @@ let reify in_macro =
 		| Some p ->
 			p
 		| None ->
-		let file = (EConst (String p.pfile),p) in
+		let file = (EConst (String (p.pfile,false)),p) in
 		let pmin = (EConst (Int (string_of_int p.pmin)),p) in
 		let pmax = (EConst (Int (string_of_int p.pmax)),p) in
 		if in_macro then
@@ -1038,7 +1040,7 @@ and parse_class_herit = parser
 
 and block1 = parser
 	| [< name,p = dollar_ident; s >] -> block2 name (Ident name) p s
-	| [< '(Const (String name),p); s >] -> block2 (quote_ident name) (String name) p s
+	| [< '(Const (String (name,b)),p); s >] -> block2 (quote_ident name) (String (name,b)) p s
 	| [< b = block [] >] -> EBlock b
 
 and block2 name ident p s =
@@ -1079,7 +1081,7 @@ and parse_obj_decl = parser
 	| [< '(Comma,_); s >] ->
 		(match s with parser
 		| [< name, _ = ident; '(DblDot,_); e = expr; l = parse_obj_decl >] -> (name,e) :: l
-		| [< '(Const (String name),_); '(DblDot,_); e = expr; l = parse_obj_decl >] -> (quote_ident name,e) :: l
+		| [< '(Const (String (name,_)),_); '(DblDot,_); e = expr; l = parse_obj_decl >] -> (quote_ident name,e) :: l
 		| [< >] -> [])
 	| [< >] -> []
 
@@ -1337,8 +1339,8 @@ and parse_macro_cond allow_op s =
 	match s with parser
 	| [< '(Const (Ident t),p) >] ->
 		parse_macro_ident allow_op t p s
-	| [< '(Const (String s),p) >] ->
-		None, (EConst (String s),p)
+	| [< '(Const (String (s,b)),p) >] ->
+		None, (EConst (String (s,b)),p)
 	| [< '(Const (Int i),p) >] ->
 		None, (EConst (Int i),p)
 	| [< '(Const (Float f),p) >] ->
@@ -1409,7 +1411,7 @@ let rec eval ctx (e,p) =
 	match e with
 	| EConst (Ident i) ->
 		(try TString (Common.raw_defined_value ctx i) with Not_found -> TNull)
-	| EConst (String s) -> TString s
+	| EConst (String (s,_)) -> TString s
 	| EConst (Int i) -> TFloat (float_of_string i)
 	| EConst (Float f) -> TFloat (float_of_string f)
 	| EBinop (OpBoolAnd, e1, e2) -> TBool (is_true (eval ctx e1) && is_true (eval ctx e2))
@@ -1473,7 +1475,7 @@ let parse ctx code =
 			process_token (enter_macro (snd tk))
 		| Sharp "error" ->
 			(match Lexer.token code with
-			| (Const (String s),p) -> error (Custom s) p
+			| (Const (String (s,_)),p) -> error (Custom s) p
 			| _ -> error Unimplemented (snd tk))
 		| Sharp "line" ->
 			let line = (match next_token() with

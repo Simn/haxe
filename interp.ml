@@ -2209,9 +2209,9 @@ let macro_lib =
 					| VFloat f -> haxe_float f p
 					| VAbstract (APos p) ->
 						(Ast.EObjectDecl (
-							("fileName" , (Ast.EConst (Ast.String p.Ast.pfile) , p)) ::
+							("fileName" , (Ast.EConst (Ast.String (p.Ast.pfile,false)) , p)) ::
 							("lineNumber" , (Ast.EConst (Ast.Int (string_of_int (Lexer.get_error_line p))),p)) ::
-							("className" , (Ast.EConst (Ast.String ("")),p)) ::
+							("className" , (Ast.EConst (Ast.String ("",false)),p)) ::
 							[]
 						), p)
 					| VString _ | VArray _ | VAbstract _ | VFunction _ | VClosure _ as v -> error v
@@ -2229,7 +2229,7 @@ let macro_lib =
 							| _, Some (VArray a), _, Some (VInt len) ->
 								(Ast.EArrayDecl (List.map loop (Array.to_list (Array.sub a 0 len))),p)
 							| _, _, Some (VString s), _ ->
-								(Ast.EConst (Ast.String s),p)
+								(Ast.EConst (Ast.String (s,false)),p)
 							| Some (VObject en), _, _, _ ->
 								(match get_field en h_et, get_field o h_tag with
 								| VAbstract (ATDecl t), VString tag ->
@@ -3671,7 +3671,7 @@ let encode_const c =
 	let tag, pl = match c with
 	| Int s -> 0, [enc_string s]
 	| Float s -> 1, [enc_string s]
-	| String s -> 2, [enc_string s]
+	| String (s,b) -> 2, [enc_string s;VBool b]
 	| Ident s -> 3, [enc_string s]
 	| Regexp (s,opt) -> 4, [enc_string s;enc_string opt]
 	in
@@ -3950,7 +3950,7 @@ let decode_const c =
 	match decode_enum c with
 	| 0, [s] -> Int (dec_string s)
 	| 1, [s] -> Float (dec_string s)
-	| 2, [s] -> String (dec_string s)
+	| 2, [s;b] -> String (dec_string s,dec_bool b)
 	| 3, [s] -> Ident (dec_string s)
 	| 4, [s;opt] -> Regexp (dec_string s, dec_string opt)
 	| 5, [s] -> Ident (dec_string s) (** deprecated CType, keep until 3.0 release **)
@@ -4911,7 +4911,7 @@ let rec make_ast e =
 	let mk_const = function
 		| TInt i -> Int (Int32.to_string i)
 		| TFloat s -> Float s
-		| TString s -> String s
+		| TString s -> String (s,false)
 		| TBool b -> Ident (if b then "true" else "false")
 		| TNull -> Ident "null"
 		| TThis -> Ident "this"

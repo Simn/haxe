@@ -231,7 +231,7 @@ class ExprTools {
 		return switch (e.expr) {
 			case EConst(CInt(v)): Std.parseInt(v);
 			case EConst(CFloat(v)): Std.parseFloat(v);
-			case EConst(CString(s)): s;
+			case EConst(CString(s,_)): s;
 			case EConst(CIdent("true")): true;
 			case EConst(CIdent("false")): false;
 			case EConst(CIdent("null")): null;

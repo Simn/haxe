@@ -370,7 +370,7 @@ let rec load_instance ctx t p allow_no_params =
 				match t with
 				| TPExpr e ->
 					let name = (match fst e with
-						| EConst (String s) -> "S" ^ s
+						| EConst (String (s,_)) -> "S" ^ s
 						| EConst (Int i) -> "I" ^ i
 						| EConst (Float f) -> "F" ^ f
 						| _ -> "Expr"
@@ -2116,7 +2116,7 @@ let init_class ctx c p context_init herits fields =
 						| _ -> ""
 					in
 					if not (Parser.is_true (Parser.eval ctx.com e)) then
-						Some (sc,(match List.rev l with (EConst (String msg),_) :: _ -> Some msg | _ -> None))
+						Some (sc,(match List.rev l with (EConst (String (msg,_)),_) :: _ -> Some msg | _ -> None))
 					else
 						loop l
 			in
@@ -2134,7 +2134,7 @@ let init_class ctx c p context_init herits fields =
 			begin try
 				let _,args,_ = Meta.get Meta.IfFeature f.cf_meta in
 				List.iter (fun e -> match fst e with
-					| EConst(String s) ->
+					| EConst(String (s,_)) ->
 						ctx.m.curmod.m_extra.m_features <- (s,(c,f,is_static)) :: ctx.m.curmod.m_extra.m_features;
 					| _ ->
 						error "String expected" (pos e)

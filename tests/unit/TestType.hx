@@ -32,7 +32,7 @@ class TestType extends Test {
 
 	static public macro function complete(e:String) : haxe.macro.Expr.ExprOf<String> {
 		var str = new String(untyped haxe.macro.Context.load("display", 1)(e.__s));
-		return { expr : EConst(CString(str)), pos : haxe.macro.Context.currentPos() };
+		return { expr : EConst(CString(str, false)), pos : haxe.macro.Context.currentPos() };
 	}
 
 	public function testType() {

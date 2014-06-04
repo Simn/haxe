@@ -330,7 +330,7 @@ let join_class_path_remap path separator =
 let get_meta_string meta key =
    let rec loop = function
       | [] -> ""
-      | (k,[Ast.EConst (Ast.String name),_],_) :: _  when k=key-> name
+      | (k,[Ast.EConst (Ast.String (name,_)),_],_) :: _  when k=key-> name
       | _ :: l -> loop l
       in
    loop meta

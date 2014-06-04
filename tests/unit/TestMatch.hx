@@ -47,9 +47,9 @@ class TestMatch extends Test {
 
 	static function switchNormal(e:Expr):String {
 		return switch(e.expr) {
-			case EConst(CString(s)): s;
-			case EParenthesis( { expr : EConst(CString(s)) } )
-			| EUntyped( { expr : EConst(CString(s)) } ):
+			case EConst(CString(s,_)): s;
+			case EParenthesis( { expr : EConst(CString(s,_)) } )
+			| EUntyped( { expr : EConst(CString(s,_)) } ):
 				s;
 			case EField(_, s):
 				s;
@@ -64,7 +64,7 @@ class TestMatch extends Test {
 
 	static function switchCapture(e:Expr) {
 		return switch(e) {
-			case { expr : EConst(const = (CString("foobar") | CInt("9"))) } :
+			case { expr : EConst(const = (CString("foobar",_) | CInt("9"))) } :
 				const;
 			case _:
 				null;
@@ -117,9 +117,9 @@ class TestMatch extends Test {
 
 	static function switchGuard(e:Expr):String {
 		return switch(e.expr) {
-			case EConst(CString(s)) if (StringTools.startsWith(s, "foo")):
+			case EConst(CString(s,_)) if (StringTools.startsWith(s, "foo")):
 				"1";
-			case EConst(CString(s)) if (StringTools.startsWith(s, "bar")):
+			case EConst(CString(s,_)) if (StringTools.startsWith(s, "bar")):
 				"2";
 			case EConst(CInt(i)) if (switch(Std.parseInt(i) * 2) { case 4: true; case _: false; }):
 				"3";
@@ -156,7 +156,7 @@ class TestMatch extends Test {
 		eq("[]", switchArray(macro []));
 		eq("_", switchArray(macro 2));
 		eq("[EConst(CInt(22))]", switchArray(macro [22]));
-		eq("[EConst(CInt(22)),EConst(CString(foo))]", switchArray(macro [22,"foo"]));
+		eq("[EConst(CInt(22)),EConst(CString(foo,false))]", switchArray(macro [22,"foo"]));
 		eq("_", switchArray(macro [22, "foo", "bar"]));
 
 		eq("0", switchArray2(["a", "b"]));
@@ -169,7 +169,7 @@ class TestMatch extends Test {
 		eq("6", switchArray2([]));
 		eq("7", switchArray2(["a", "a", "a", "b"]));
 
-		eq("EConst(CString(foobar)):12", switchCrazy(macro untyped ("foobar"[12])));
+		eq("EConst(CString(foobar,false)):12", switchCrazy(macro untyped ("foobar"[12])));
 
 		eq("1", switchGuard(macro "foobar"));
 		eq("2", switchGuard(macro "barfoo"));

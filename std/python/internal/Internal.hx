@@ -28,7 +28,7 @@ class Internal {
 
 	static function _getPrefixed (x:Expr):Expr {
 		return switch (x.expr) {
-			case EConst(CString(x)): macro @:pos(Context.currentPos()) $v{_prefix + x};
+			case EConst(CString(x,_)): macro @:pos(Context.currentPos()) $v{_prefix + x};
 			case _ : macro @:pos(Context.currentPos()) (python.Syntax.binop($v{_prefix},"+",$x):String);
 		}
 	}
@@ -51,7 +51,7 @@ class Internal {
 
 	macro public static function getPrefixed (x:ExprOf<String>):Expr {
 		return switch (x.expr) {
-			case EConst(CString(x)): macro @:pos(Context.currentPos()) $v{_prefix + x};
+			case EConst(CString(x,_)): macro @:pos(Context.currentPos()) $v{_prefix + x};
 			case _ : macro @:pos(Context.currentPos()) (python.Syntax.binop($v{_prefix},"+",$x):String);
 		}
 	}

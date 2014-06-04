@@ -61,7 +61,7 @@ let gen_arg_name (name,opt,_) =
 let real_path path meta =
 	let rec loop = function
 		| [] -> path
-		| (Meta.RealPath,[(Ast.EConst (Ast.String s),_)],_) :: _ -> parse_path s
+		| (Meta.RealPath,[(Ast.EConst (Ast.String (s,false)),_)],_) :: _ -> parse_path s
 		| _ :: l -> loop l
 	in
 	loop meta
@@ -407,7 +407,7 @@ let generate_type com t =
 					List.map (fun (a,o,t) ->
 						let rec loop = function
 							| [] -> Ident "null"
-							| (Meta.DefParam,[(EConst (String p),_);(EConst v,_)],_) :: _ when p = a ->
+							| (Meta.DefParam,[(EConst (String (p,false)),_);(EConst v,_)],_) :: _ when p = a ->
 								(match v with
 								| Float "1.#QNAN" -> Float "0./*NaN*/"
 								| Float "4294967295." -> Int "0xFFFFFFFF"

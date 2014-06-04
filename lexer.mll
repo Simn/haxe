@@ -304,15 +304,14 @@ and token = parse
 			let pmin = lexeme_start lexbuf in
 			let pmax = (try string lexbuf with Exit -> error Unterminated_string pmin) in
 			let str = (try unescape (contents()) with Exit -> error Invalid_escape pmin) in
-			mk_tok (Const (String str)) pmin pmax;
+			mk_tok (Const (String (str,false))) pmin pmax;
 		}
 	| "'" {
 			reset();
 			let pmin = lexeme_start lexbuf in
 			let pmax = (try string2 lexbuf with Exit -> error Unterminated_string pmin) in
 			let str = (try unescape (contents()) with Exit -> error Invalid_escape pmin) in
-			let t = mk_tok (Const (String str)) pmin pmax in
-			fast_add_fmt_string (snd t);
+			let t = mk_tok (Const (String (str,true))) pmin pmax in
 			t
 		}
 	| "~/" {
@@ -367,7 +366,7 @@ and string2 = parse
 		string2 lexbuf;
 	}
 	| [^'\'' '\\' '\r' '\n' '$']+ { store lexbuf; string2 lexbuf }
-	
+
 and code_string = parse
 	| eof { raise Exit }
 	| '\n' | '\r' | "\r\n" { newline lexbuf; store lexbuf; code_string lexbuf }

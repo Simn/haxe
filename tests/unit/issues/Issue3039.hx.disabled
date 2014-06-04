@@ -1,0 +1,12 @@
+package unit.issues;
+
+class Issue3039 extends Test {
+
+	static inline var a = 2.0;
+	static inline var b:Float = 2;
+	static inline var c = Std.int(a + b);
+
+	function test() {
+		feq(4.0, c);
+	}
+}

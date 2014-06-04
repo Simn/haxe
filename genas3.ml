@@ -934,8 +934,8 @@ let generate_field ctx static f =
 		| Ast.Meta.Meta, [Ast.ECall ((Ast.EConst (Ast.Ident n),_),args),_] ->
 			let mk_arg (a,p) =
 				match a with
-				| Ast.EConst (Ast.String s) -> (None, s)
-				| Ast.EBinop (Ast.OpAssign,(Ast.EConst (Ast.Ident n),_),(Ast.EConst (Ast.String s),_)) -> (Some n, s)
+				| Ast.EConst (Ast.String (s,_)) -> (None, s)
+				| Ast.EBinop (Ast.OpAssign,(Ast.EConst (Ast.Ident n),_),(Ast.EConst (Ast.String (s,_)),_)) -> (Some n, s)
 				| _ -> error "Invalid meta definition" p
 			in
 			print ctx "[%s" n;
@@ -983,8 +983,8 @@ let generate_field ctx static f =
 			| TFun (args,r) ->
 				let rec loop = function
 					| [] -> f.cf_name
-					| (Ast.Meta.Getter,[Ast.EConst (Ast.String name),_],_) :: _ -> "get " ^ name
-					| (Ast.Meta.Setter,[Ast.EConst (Ast.String name),_],_) :: _ -> "set " ^ name
+					| (Ast.Meta.Getter,[Ast.EConst (Ast.String (name,_)),_],_) :: _ -> "get " ^ name
+					| (Ast.Meta.Setter,[Ast.EConst (Ast.String (name,_)),_],_) :: _ -> "set " ^ name
 					| _ :: l -> loop l
 				in
 				print ctx "function %s(" (loop f.cf_meta);

@@ -1033,7 +1033,7 @@ module Printer = struct
 	let print_base_type tp =
 		try
 			begin match Meta.get Meta.Native tp.mt_meta with
-				| _,[EConst(String s),_],_ -> s
+				| _,[EConst(String (s,_)),_],_ -> s
 				| _ -> raise Not_found
 			end
 		with Not_found ->
@@ -1681,7 +1681,7 @@ module Generator = struct
 	let gen_pre_code_meta ctx metadata =
 		try
 			begin match Meta.get (Meta.Custom ":preCode") metadata with
-				| _,[(EConst(String s)),_],_ ->
+				| _,[(EConst(String (s,_))),_],_ ->
 					newline ctx;
 					spr ctx s
 				| _ ->
@@ -1693,7 +1693,7 @@ module Generator = struct
 	let gen_py_metas ctx metas indent =
 		List.iter (fun (n,el,_) ->
 			match el with
-				| [EConst(String s),_] ->
+				| [EConst(String (s,_)),_] ->
 					print ctx "%s@%s\n" indent s
 				| _ ->
 					assert false
@@ -1913,18 +1913,18 @@ module Generator = struct
 			in
 
 			let import_type,ignore_error = match args with
-				| [(EConst(String(module_name)), _)]
-				| [(EConst(String(module_name)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("false")),_)),_)] ->
+				| [(EConst(String(module_name,_)), _)]
+				| [(EConst(String(module_name,_)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("false")),_)),_)] ->
 					IModule module_name, false
 
-				| [(EConst(String(module_name)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("true")),_)),_)] ->
+				| [(EConst(String(module_name,_)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("true")),_)),_)] ->
 					IModule module_name,true
 
-				| [(EConst(String(module_name)), _); (EConst(String(object_name)), _)]
-				| [(EConst(String(module_name)), _); (EConst(String(object_name)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("false")),_)),_)] ->
+				| [(EConst(String(module_name,_)), _); (EConst(String(object_name,_)), _)]
+				| [(EConst(String(module_name,_)), _); (EConst(String(object_name,_)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("false")),_)),_)] ->
 					IObject (module_name,object_name), false
 
-				| [(EConst(String(module_name)), _); (EConst(String(object_name)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("true")),_)),_)] ->
+				| [(EConst(String(module_name,_)), _); (EConst(String(object_name,_)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("true")),_)),_)] ->
 					IObject (module_name,object_name), true
 				| _ ->
 					error "Unsupported @:pythonImport format" mp

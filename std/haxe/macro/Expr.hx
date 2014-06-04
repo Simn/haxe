@@ -35,7 +35,7 @@ typedef Position = {
 enum Constant {
 	CInt( v : String );
 	CFloat( f : String );
-	CString( s : String );
+	CString( s : String, isFmt : Bool );
 	CIdent( s : String );
 	CRegexp( r : String, opt : String );
 }
