@@ -3338,7 +3338,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 			| FunMemberAbstract -> FunMemberAbstractLocal
 			| _ -> FunMemberClassLocal
 		in
-		let e , fargs = Typeload.type_function ctx args rt curfun f false p in
+		let e , fargs = Typeload.type_function ctx None args rt curfun f false p in
 		ctx.type_params <- old;
 		let f = {
 			tf_args = fargs;

@@ -1265,7 +1265,34 @@ let find_before_pos com e =
 	in
 	map e
 
-let type_function ctx args ret fmode f do_display p =
+let load_core_class ctx c =
+	let ctx2 = (match ctx.g.core_api with
+		| None ->
+			let com2 = Common.clone ctx.com in
+			com2.defines <- PMap.empty;
+			Common.define com2 Define.CoreApi;
+			Common.define com2 Define.Sys;
+			if ctx.in_macro then Common.define com2 Define.Macro;
+			com2.class_path <- ctx.com.std_path;
+			let ctx2 = ctx.g.do_create com2 in
+			ctx.g.core_api <- Some ctx2;
+			ctx2
+		| Some c ->
+			c
+	) in
+	let tpath = match c.cl_kind with
+		| KAbstractImpl a -> { tpackage = fst a.a_path; tname = snd a.a_path; tparams = []; tsub = None; }
+		| _ -> { tpackage = fst c.cl_path; tname = snd c.cl_path; tparams = []; tsub = None; }
+	in
+	let t = load_instance ctx2 tpath c.cl_pos true in
+	flush_pass ctx2 PFinal "core_final";
+	match t with
+	| TInst (ccore,_) | TAbstract({a_impl = Some ccore}, _) ->
+		ccore
+	| _ ->
+		assert false
+
+let type_function ctx infos args ret fmode f do_display p =
 	let locals = save_locals ctx in
 	let fargs = List.map (fun (n,c,t) ->
 		if n.[0] = '$' then error "Function argument names starting with a dollar are not allowed" p;
@@ -1379,33 +1406,6 @@ let type_function ctx args ret fmode f do_display p =
 	ctx.curfun <- old_fun;
 	ctx.opened <- old_opened;
 	e , fargs
-
-let load_core_class ctx c =
-	let ctx2 = (match ctx.g.core_api with
-		| None ->
-			let com2 = Common.clone ctx.com in
-			com2.defines <- PMap.empty;
-			Common.define com2 Define.CoreApi;
-			Common.define com2 Define.Sys;
-			if ctx.in_macro then Common.define com2 Define.Macro;
-			com2.class_path <- ctx.com.std_path;
-			let ctx2 = ctx.g.do_create com2 in
-			ctx.g.core_api <- Some ctx2;
-			ctx2
-		| Some c ->
-			c
-	) in
-	let tpath = match c.cl_kind with
-		| KAbstractImpl a -> { tpackage = fst a.a_path; tname = snd a.a_path; tparams = []; tsub = None; }
-		| _ -> { tpackage = fst c.cl_path; tname = snd c.cl_path; tparams = []; tsub = None; }
-	in
-	let t = load_instance ctx2 tpath c.cl_pos true in
-	flush_pass ctx2 PFinal "core_final";
-	match t with
-	| TInst (ccore,_) | TAbstract({a_impl = Some ccore}, _) ->
-		ccore
-	| _ ->
-		assert false
 
 let init_core_api ctx c =
 	let ccore = load_core_class ctx c in
@@ -2070,7 +2070,7 @@ let init_class ctx c p context_init herits fields =
 							if constr then FunConstructor else if stat then FunStatic else FunMember
 					) in
 					let display_field = display_file && (f.cff_pos.pmin <= cp.pmin && f.cff_pos.pmax >= cp.pmax) in
-					let e , fargs = type_function ctx args ret fmode fd display_field p in
+					let e , fargs = type_function ctx (Some(c,cf,stat)) args ret fmode fd display_field p in
 					let f = {
 						tf_args = fargs;
 						tf_type = ret;
