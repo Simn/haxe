@@ -1319,24 +1319,43 @@ let type_function ctx infos args ret fmode f do_display p =
 	ctx.curfun <- fmode;
 	ctx.ret <- ret;
 	ctx.opened <- [];
-	let e = match f.f_expr with None -> error "Function body required" p | Some e -> e in
-	let e = if not do_display then
-		type_expr ctx e NoValue
-	else begin
-		let e = match ctx.com.display with
-			| DMToplevel -> find_enclosing ctx.com e
-			| DMPosition | DMUsage -> find_before_pos ctx.com e
-			| _ -> e
-		in
-		try
-			if Common.defined ctx.com Define.NoCOpt then raise Exit;
-			type_expr ctx (Optimizer.optimize_completion_expr e) NoValue
-		with
-		| Parser.TypePath (_,None) | Exit ->
-			type_expr ctx e NoValue
-		| DisplayTypes [t] when (match follow t with TMono _ -> true | _ -> false) ->
-			type_expr ctx (if ctx.com.display = DMToplevel then find_enclosing ctx.com e else e) NoValue
-	end in
+	let e = match f.f_expr with
+		| None ->
+			begin try
+				let c,cf,stat = match infos with Some (c,cf,stat) -> c,cf,stat | None -> raise Not_found in
+				let c = load_core_class ctx c in
+				let cf = PMap.find cf.cf_name (if stat then c.cl_statics else c.cl_fields) in
+				ignore(follow cf.cf_type);
+				let tf = match cf.cf_expr with
+					| Some {eexpr = TFunction tf} -> tf
+					| _ -> raise Not_found
+				in
+				let ethis = (!type_module_type_ref) ctx (TClassDecl c) None p in
+				let args = List.map (fun (v,_) -> mk (TLocal v) v.v_type p) fargs in
+				let e = Optimizer.type_inline ctx cf tf ethis args tf.tf_type None p true in
+				(match e with Some e -> mk (TReturn (Some e)) t_dynamic p | None -> raise Not_found)
+			with Not_found ->
+				error "Function body required" p
+			end
+		| Some e ->
+			if not do_display then
+				type_expr ctx e NoValue
+			else begin
+				let e = match ctx.com.display with
+					| DMToplevel -> find_enclosing ctx.com e
+					| DMPosition | DMUsage -> find_before_pos ctx.com e
+					| _ -> e
+				in
+				try
+					if Common.defined ctx.com Define.NoCOpt then raise Exit;
+					type_expr ctx (Optimizer.optimize_completion_expr e) NoValue
+				with
+				| Parser.TypePath (_,None) | Exit ->
+					type_expr ctx e NoValue
+				| DisplayTypes [t] when (match follow t with TMono _ -> true | _ -> false) ->
+					type_expr ctx (if ctx.com.display = DMToplevel then find_enclosing ctx.com e else e) NoValue
+			end
+	in
 	let e = match e.eexpr with
 		| TMeta((Meta.MergeBlock,_,_), ({eexpr = TBlock el} as e1)) -> e1
 		| _ -> e
