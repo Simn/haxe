@@ -1961,20 +1961,6 @@ let init_class ctx c p context_init herits fields =
 				cf_params = params;
 				cf_overloads = [];
 			} in
-			if Common.defined ctx.com Define.CoreApi then begin match fd.f_expr with
-				| Some e -> cf.cf_meta <- (Meta.Ast,[e],p) :: cf.cf_meta;
-				| None -> ()
-			end;
-			let fd = try
-				if fd.f_expr <> None || not core_api then raise Not_found;
-				let c = load_core_class ctx c in
-				let cf = PMap.find name (if stat then c.cl_statics else c.cl_fields) in
-				match Meta.get Meta.Ast cf.cf_meta with
-					| _,[e],_ -> {fd with f_expr = Some e}
-					| _ -> raise Not_found
-			with Not_found ->
-				fd
-			in
 			let do_bind = ref (((not c.cl_extern || inline) && not c.cl_interface) || cf.cf_name = "__init__") in
 			let do_add = ref true in
 			(match c.cl_kind with
