@@ -165,6 +165,9 @@ let print ctx =
 
 let unsupported p = error "This expression cannot be compiled to Javascript" p
 
+let s_type_access ctx path =
+	ctx.type_accessor (TClassDecl { null_class with cl_path = path})
+
 let add_mapping ctx e =
 	if not ctx.com.debug || e.epos.pmin < 0 then () else
 	let pos = e.epos in
@@ -686,7 +689,7 @@ and gen_expr ctx e =
 				end
 			| Some t ->
 				if not !else_block then newline ctx;
-				print ctx "if( %s.__instanceof(%s," (ctx.type_accessor (TClassDecl { null_class with cl_path = ["js"],"Boot" })) vname;
+				print ctx "if( %s.__instanceof(%s," (s_type_access ctx (["js"],"Boot")) vname;
 				gen_value ctx (mk (TTypeExpr t) (mk_mono()) e.epos);
 				spr ctx ") ) {";
 				let bend = open_block ctx in
@@ -741,7 +744,7 @@ and gen_expr ctx e =
 	| TCast (e,None) ->
 		gen_expr ctx e
 	| TCast (e1,Some t) ->
-		print ctx "%s.__cast(" (ctx.type_accessor (TClassDecl { null_class with cl_path = ["js"],"Boot" }));
+		print ctx "%s.__cast(" (s_type_access ctx (["js"],"Boot"));
 		gen_expr ctx e1;
 		spr ctx " , ";
 		spr ctx (ctx.type_accessor t);
@@ -822,7 +825,7 @@ and gen_value ctx e =
 	| TCast (e1, None) ->
 		gen_value ctx e1
 	| TCast (e1, Some t) ->
-		print ctx "%s.__cast(" (ctx.type_accessor (TClassDecl { null_class with cl_path = ["js"],"Boot" }));
+		print ctx "%s.__cast(" (s_type_access ctx (["js"],"Boot"));
 		gen_value ctx e1;
 		spr ctx " , ";
 		spr ctx (ctx.type_accessor t);
@@ -1276,7 +1279,7 @@ let generate com =
 	let vars = [] in
 	let vars = (if has_feature ctx "Type.resolveClass" || has_feature ctx "Type.resolveEnum" then ("$hxClasses = " ^ (if ctx.js_modern then "{}" else "$hxClasses || {}")) :: vars else vars) in
 	let vars = if has_feature ctx "may_print_enum"
-		then ("$estr = function() { return " ^ (ctx.type_accessor (TClassDecl { null_class with cl_path = ["js"],"Boot" })) ^ ".__string_rec(this,''); }") :: vars
+		then ("$estr = function() { return " ^ (s_type_access ctx (["js"],"Boot")) ^ ".__string_rec(this,''); }") :: vars
 		else vars in
 	(match List.rev vars with
 	| [] -> ()
