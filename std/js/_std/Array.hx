@@ -20,6 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 @:coreApi
+@:access(HxOverrides)
 extern class Array<T> {
 
 	var length(default,null) : Int;
@@ -38,7 +39,7 @@ extern class Array<T> {
 	function unshift( x : T ) : Void;
 
 	inline function insert( pos : Int, x : T ) : Void {
-		(untyped this).splice(pos,0,x);
+		HxOverrides.arrayInsert(this, pos, x);
 	}
 
 	inline function remove( x : T ) : Bool {
@@ -51,11 +52,11 @@ extern class Array<T> {
 
 #else
 	inline function indexOf( x : T, ?fromIndex:Int ) : Int {
-		return @:privateAccess HxOverrides.indexOf(this,x,(fromIndex!=null)?fromIndex:0);
+		return HxOverrides.indexOf(this,x,(fromIndex!=null)?fromIndex:0);
 	}
 
 	inline function lastIndexOf( x : T, ?fromIndex:Int ) : Int {
-		return @:privateAccess HxOverrides.lastIndexOf(this,x,(fromIndex!=null)?fromIndex:length-1);
+		return HxOverrides.lastIndexOf(this,x,(fromIndex!=null)?fromIndex:length-1);
 	}
 #end
 

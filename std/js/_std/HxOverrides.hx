@@ -83,6 +83,10 @@ class HxOverrides {
 		return (untyped s).substr(pos, len);
 	}
 
+	static function arrayInsert<T>( a: Array<T>, pos : Int, obj : T) {
+		(untyped a).splice(pos, 0, obj);
+	}
+
 	static function indexOf<T>( a : Array<T>, obj : T, i : Int) {
 		var len = a.length;
 		if (i < 0) {
@@ -144,6 +148,18 @@ class HxOverrides {
 			return untyped __js__("$bind(d, d.iterator)");
 		} else {
 			return untyped d["iterator"];
+		}
+	}
+
+	@:ifFeature("dynamic.insert")
+	@:runtime
+	static function insert(d:Dynamic) {
+		if (Std.is(d, Array)) {
+			return function(pos, obj) {
+				return arrayInsert(d, pos, obj);
+			}
+		} else {
+			return untyped d["insert"];
 		}
 	}
 
