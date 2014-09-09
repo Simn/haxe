@@ -120,7 +120,7 @@ class HxOverrides {
 		return true;
 	}
 
-	static function iter<T>( a : Array<T> ) : Iterator<T> untyped {
+	static function arrayIterator<T>( a : Array<T> ) : Iterator<T> untyped {
 		return {
 			cur : 0,
 			arr : a,
@@ -131,6 +131,20 @@ class HxOverrides {
 				return __this__.arr[__this__.cur++];
 			}
 		};
+	}
+
+	@:ifFeature("dynamic.iterator")
+	@:runtime
+	static function iterator(d:Dynamic) {
+		if (Std.is(d, Array)) {
+			return function() {
+				return HxOverrides.arrayIterator(d);
+			}
+		} else if (untyped __js__("typeof(d.iterator) == 'function'")) {
+			return untyped __js__("$bind(d, d.iterator)");
+		} else {
+			return untyped d["iterator"];
+		}
 	}
 
 	@:ifFeature("dynamic.remove")

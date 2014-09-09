@@ -341,23 +341,6 @@ let handle_break ctx e =
 
 let this ctx = match ctx.in_value with None -> "this" | Some _ -> "$this"
 
-let is_dynamic_iterator ctx e =
-	let check x =
-		has_feature ctx "HxOverrides.iter" && (match follow x.etype with
-			| TInst ({ cl_path = [],"Array" },_)
-			| TInst ({ cl_kind = KTypeParameter _}, _)
-			| TAnon _
-			| TDynamic _
-			| TMono _ ->
-				true
-			| _ -> false
-		)
-	in
-	match e.eexpr with
-	| TField (x,f) when field_name f = "iterator" -> check x
-	| _ ->
-		false
-
 let gen_constant ctx p = function
 	| TInt i -> print ctx "%ld" i
 	| TFloat s -> spr ctx s
@@ -496,11 +479,6 @@ and gen_expr ctx e =
 		print ctx "%s.%s(" (s_type_access ctx ([],"HxOverrides")) s;
 		gen_value ctx e1;
 		spr ctx ")"
-	| TField (x,f) when field_name f = "iterator" && is_dynamic_iterator ctx e ->
-		add_feature ctx "use.$iterator";
-		print ctx "$iterator(";
-		gen_value ctx x;
-		print ctx ")";
 	| TField (x,FClosure (Some {cl_path=[],"Array"}, {cf_name="push"})) ->
 		(* see https://github.com/HaxeFoundation/haxe/issues/1997 *)
 		add_feature ctx "use.$arrayPushClosure";
@@ -1318,21 +1296,6 @@ let generate com =
 		()
 	end;
 	List.iter (generate_type ctx) com.types;
-	let rec chk_features e =
-		if is_dynamic_iterator ctx e then add_feature ctx "use.$iterator";
-		match e.eexpr with
-		| TField (_,FClosure _) ->
-			add_feature ctx "use.$bind"
-		| _ ->
-			Type.iter chk_features e
-	in
-	List.iter chk_features ctx.inits;
-	List.iter (fun (_,_,e) -> chk_features e) ctx.statics;
-	if has_feature ctx "use.$iterator" then begin
-		add_feature ctx "use.$bind";
-		print ctx "function $iterator(o) { if( o instanceof Array ) return function() { return HxOverrides.iter(o); }; return typeof(o.iterator) == 'function' ? $bind(o,o.iterator) : o.iterator; }";
-		newline ctx;
-	end;
 	if has_feature ctx "use.$bind" then begin
 		print ctx "var $_, $fid = 0";
 		newline ctx;

@@ -67,7 +67,7 @@ extern class Array<T> {
 	function filter(f:T->Bool):Array<T>;
 
 	@:runtime inline function iterator() : Iterator<T> {
-		return untyped HxOverrides.iter(this);
+		return untyped HxOverrides.arrayIterator(this);
 	}
 
 }
