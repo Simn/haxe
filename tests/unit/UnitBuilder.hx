@@ -128,6 +128,7 @@ class UnitBuilder {
 					case EBinop(OpEq, e1, { expr: EArrayDecl(el) } )
 					| EBinop(OpEq, { expr: EArrayDecl(el) }, e1 ):
 						var el2 = [];
+						el2.push(mkEq((macro $v{el.length}), macro $e1.length, e.pos));
 						for (i in 0...el.length) {
 							var e2 = el[i];
 							el2.push(mkEq((macro $e1[$v{i}]), e2, e.pos));
