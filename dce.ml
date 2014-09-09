@@ -348,10 +348,18 @@ and expr dce e =
 		mark_t dce e.epos e.etype;
 		List.iter (expr dce) el;
 	| TField(e,fa) ->
+		let dynamic_field_access s =
+			let ft = "dynamic." ^ s in
+			Common.add_feature dce.com ft;
+			check_feature dce ft;
+		in
 		begin match fa with
 			| FStatic(c,cf) ->
 				mark_class dce c;
 				mark_field dce c cf true;
+			| FDynamic s
+			| FInstance({cl_kind = KTypeParameter _},_,{cf_name = s}) ->
+				dynamic_field_access s
 			| FInstance(c,_,cf) ->
 				mark_class dce c;
 				mark_field dce c cf false;
@@ -366,7 +374,10 @@ and expr dce e =
 						| Statics c ->
 							mark_class dce c;
 							field dce c n true;
-						| _ -> ())
+						| Const ->
+							()
+						| _ ->
+							dynamic_field_access n)
 					| _ -> ()
 				end;
 		end;
