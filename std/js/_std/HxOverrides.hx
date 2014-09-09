@@ -89,11 +89,7 @@ class HxOverrides {
 		return (untyped a).slice();
 	}
 
-	static function arrayInsert<T>( a: Array<T>, pos : Int, obj : T) {
-		(untyped a).splice(pos, 0, obj);
-	}
-
-	static function indexOf<T>( a : Array<T>, obj : T, i : Int) {
+	static function arrayIndexOf<T>( a : Array<T>, obj : T, i : Int) {
 		var len = a.length;
 		if (i < 0) {
 			i += len;
@@ -108,7 +104,24 @@ class HxOverrides {
 		return -1;
 	}
 
-	static function lastIndexOf<T>( a : Array<T>, obj : T, i : Int) {
+	static function arrayInsert<T>( a: Array<T>, pos : Int, obj : T) {
+		(untyped a).splice(pos, 0, obj);
+	}
+
+	static function arrayIterator<T>( a : Array<T> ) : Iterator<T> untyped {
+		return {
+			cur : 0,
+			arr : a,
+			hasNext : function() {
+				return __this__.cur < __this__.arr.length;
+			},
+			next : function() {
+				return __this__.arr[__this__.cur++];
+			}
+		};
+	}
+
+	static function arrayLastIndexOf<T>( a : Array<T>, obj : T, i : Int) {
 		var len = a.length;
 		if (i >= len)
 			i = len - 1;
@@ -130,18 +143,8 @@ class HxOverrides {
 		return true;
 	}
 
-	static function arrayIterator<T>( a : Array<T> ) : Iterator<T> untyped {
-		return {
-			cur : 0,
-			arr : a,
-			hasNext : function() {
-				return __this__.cur < __this__.arr.length;
-			},
-			next : function() {
-				return __this__.arr[__this__.cur++];
-			}
-		};
-	}
+
+	// Runtime resolvers
 
 	@:ifFeature("dynamic.insert")
 	@:runtime

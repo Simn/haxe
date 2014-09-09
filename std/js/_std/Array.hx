@@ -52,11 +52,11 @@ extern class Array<T> {
 
 #else
 	inline function indexOf( x : T, ?fromIndex:Int ) : Int {
-		return HxOverrides.indexOf(this,x,(fromIndex!=null)?fromIndex:0);
+		return HxOverrides.arrayIndexOf(this,x,(fromIndex!=null)?fromIndex:0);
 	}
 
 	inline function lastIndexOf( x : T, ?fromIndex:Int ) : Int {
-		return HxOverrides.lastIndexOf(this,x,(fromIndex!=null)?fromIndex:length-1);
+		return HxOverrides.arrayLastIndexOf(this,x,(fromIndex!=null)?fromIndex:length-1);
 	}
 #end
 
