@@ -357,14 +357,19 @@ and expr dce e =
 			| FStatic(c,cf) ->
 				mark_class dce c;
 				mark_field dce c cf true;
-			| FDynamic s
-			| FInstance({cl_kind = KTypeParameter _},_,{cf_name = s}) ->
-				dynamic_field_access s
 			| FInstance(c,_,cf) ->
 				mark_class dce c;
 				mark_field dce c cf false;
 			| _ ->
-				let n = field_name fa in
+				let n = match fa with
+					| FDynamic s
+					| FInstance({cl_kind = KTypeParameter _},_,{cf_name = s}) ->
+						dynamic_field_access s;
+						s
+					| FAnon f | FClosure (_,f) -> f.cf_name
+					| FEnum (_,f) -> f.ef_name
+					| FInstance _ | FStatic _ -> assert false
+				in
 				begin match follow e.etype with
 					| TInst(c,_) ->
 						mark_class dce c;
