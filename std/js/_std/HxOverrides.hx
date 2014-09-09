@@ -83,6 +83,12 @@ class HxOverrides {
 		return (untyped s).substr(pos, len);
 	}
 
+	// Array extensions
+
+	static function arrayCopy<T>(a:Array<T>) {
+		return (untyped a).slice();
+	}
+
 	static function arrayInsert<T>( a: Array<T>, pos : Int, obj : T) {
 		(untyped a).splice(pos, 0, obj);
 	}
@@ -137,17 +143,15 @@ class HxOverrides {
 		};
 	}
 
-	@:ifFeature("dynamic.iterator")
+	@:ifFeature("dynamic.insert")
 	@:runtime
-	static function iterator(d:Dynamic) {
+	static function copy(d:Dynamic) {
 		if (Std.is(d, Array)) {
 			return function() {
-				return HxOverrides.arrayIterator(d);
+				return arrayCopy(d);
 			}
-		} else if (untyped __js__("typeof(d.iterator) == 'function'")) {
-			return untyped __js__("$bind(d, d.iterator)");
 		} else {
-			return untyped d["iterator"];
+			return untyped d["insert"];
 		}
 	}
 
@@ -160,6 +164,20 @@ class HxOverrides {
 			}
 		} else {
 			return untyped d["insert"];
+		}
+	}
+
+	@:ifFeature("dynamic.iterator")
+	@:runtime
+	static function iterator(d:Dynamic) {
+		if (Std.is(d, Array)) {
+			return function() {
+				return HxOverrides.arrayIterator(d);
+			}
+		} else if (untyped __js__("typeof(d.iterator) == 'function'")) {
+			return untyped __js__("$bind(d, d.iterator)");
+		} else {
+			return untyped d["iterator"];
 		}
 	}
 

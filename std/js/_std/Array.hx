@@ -61,7 +61,7 @@ extern class Array<T> {
 #end
 
 	inline function copy() : Array<T> {
-		return (untyped this).slice();
+		return HxOverrides.arrayCopy(this);
 	}
 
 	function map<S>(f:T->S):Array<S>;
