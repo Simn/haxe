@@ -88,19 +88,19 @@ var i2 = new IntWrap(5);
 var i3 = new IntWrap(9);
 var i4 = new IntWrap(2);
 var a:Dynamic = [i4,i0,i1,i3,i0,i2];
-var b:Dynamic = a.slice(0);
+var b:Dynamic = a.slice(0, 6);
 b != a;
 b == [i4, i0, i1, i3, i0, i2];
-b = b.slice(1);
+b = b.slice(1, 6);
 b == [i0, i1, i3, i0, i2];
 b = b.slice(1, 3);
 b == [i1, i3];
-b = b.slice( -1);
+b = b.slice(-1, 2);
 b == [i3];
-b = b.slice(0, 4);
+b = b.slice(0, 1);
 b == [i3];
-b.slice( -3) == [i3];
-b.slice( -3, -3) == [];
+b.slice(-3, 2) == [i3];
+b.slice(-3, -3) == [];
 ([1, 2, 3] : Dynamic).slice(2, 1) == [];
 
 // sort
@@ -199,12 +199,12 @@ a.remove(null) == false;
 a == [i0, i1];
 
 // indexOf
-([] : Dynamic).indexOf(10) == -1;
-([10] : Dynamic).indexOf(10) == 0;
-([10, 10] : Dynamic).indexOf(10) == 0;
-([2, 10] : Dynamic).indexOf(10) == 1;
-([2, 5] : Dynamic).indexOf(10) == -1;
-(["foo", "bar", "bar", "baz"] : Dynamic).indexOf("bar") == 1;
+([] : Dynamic).indexOf(10, 0) == -1;
+([10] : Dynamic).indexOf(10, 0) == 0;
+([10, 10] : Dynamic).indexOf(10, 0) == 0;
+([2, 10] : Dynamic).indexOf(10, 0) == 1;
+([2, 5] : Dynamic).indexOf(10, 0) == -1;
+(["foo", "bar", "bar", "baz"] : Dynamic).indexOf("bar", 0) == 1;
 ([1, 10, 10, 1] : Dynamic).indexOf(10, 0) == 1;
 ([1, 10, 10, 1] : Dynamic).indexOf(10, 1) == 1;
 ([1, 10, 10, 1] : Dynamic).indexOf(10, 2) == 2;
@@ -216,12 +216,12 @@ a == [i0, i1];
 ([1, 10, 10, 1] : Dynamic).indexOf(10, -5) == 1;
 
 // lastIndexOf
-([] : Dynamic).lastIndexOf(10) == -1;
-([10] : Dynamic).lastIndexOf(10) == 0;
-([10, 10] : Dynamic).lastIndexOf(10) == 1;
-([2, 10] : Dynamic).lastIndexOf(10) == 1;
-([2, 5] : Dynamic).lastIndexOf(10) == -1;
-(["foo", "bar", "bar", "baz"] : Dynamic).lastIndexOf("bar") == 2;
+([] : Dynamic).lastIndexOf(10, 0) == -1;
+([10] : Dynamic).lastIndexOf(10, 0) == 0;
+([10, 10] : Dynamic).lastIndexOf(10, 1) == 1;
+([2, 10] : Dynamic).lastIndexOf(10, 1) == 1;
+([2, 5] : Dynamic).lastIndexOf(10, 1) == -1;
+(["foo", "bar", "bar", "baz"] : Dynamic).lastIndexOf("bar", 3) == 2;
 ([1, 10, 10, 1] : Dynamic).lastIndexOf(10, 4) == 2;
 ([1, 10, 10, 1] : Dynamic).lastIndexOf(10, 3) == 2;
 ([1, 10, 10, 1] : Dynamic).lastIndexOf(10, 2) == 2;
