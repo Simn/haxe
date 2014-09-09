@@ -113,7 +113,7 @@ class HxOverrides {
 		return -1;
 	}
 
-	static function remove<T>( a : Array<T>, obj : T ) {
+	static function arrayRemove<T>( a : Array<T>, obj : T ) {
 		var i = a.indexOf(obj);
 		if( i == -1 ) return false;
 		a.splice(i,1);
@@ -131,6 +131,16 @@ class HxOverrides {
 				return __this__.arr[__this__.cur++];
 			}
 		};
+	}
+
+	@:ifFeature("dynamic.remove")
+	@:runtime
+	static function remove(d:Dynamic) {
+		if (Std.is(d, Array)) {
+			return arrayRemove.bind(d);
+		} else {
+			return untyped d["remove"];
+		}
 	}
 
 	static function __init__() untyped {

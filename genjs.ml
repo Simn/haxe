@@ -133,6 +133,8 @@ let static_field s =
 	| "length" | "name" -> ".$" ^ s
 	| s -> field s
 
+let dynamic_fields = Hashtbl.create 0
+
 let has_feature ctx = Common.has_feature ctx.com
 let add_feature ctx = Common.add_feature ctx.com
 
@@ -490,6 +492,10 @@ and gen_expr ctx e =
 		gen_value ctx e1;
 		print ctx " %s " (Ast.s_binop op);
 		gen_value ctx e2;
+	| TField (e1, FDynamic s) when Hashtbl.mem dynamic_fields s ->
+		print ctx "%s.%s(" (s_type_access ctx ([],"HxOverrides")) s;
+		gen_value ctx e1;
+		spr ctx ")"
 	| TField (x,f) when field_name f = "iterator" && is_dynamic_iterator ctx e ->
 		add_feature ctx "use.$iterator";
 		print ctx "$iterator(";
@@ -1296,6 +1302,20 @@ let generate com =
 	return proto;
 }
 ";
+	end;
+	(* collect all :dynamic methods on HxOverrides *)
+	begin try
+		let rec loop = function
+			| TClassDecl ({cl_path=[],"HxOverrides"} as c) :: _ ->
+				List.iter (fun cf ->
+					if Meta.has Meta.Runtime cf.cf_meta then Hashtbl.add dynamic_fields cf.cf_name true;
+				) c.cl_ordered_statics
+			| _ :: l -> loop l
+			| [] -> ()
+		in
+		loop com.types
+	with Not_found ->
+		()
 	end;
 	List.iter (generate_type ctx) com.types;
 	let rec chk_features e =

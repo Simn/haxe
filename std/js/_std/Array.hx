@@ -42,7 +42,7 @@ extern class Array<T> {
 	}
 
 	inline function remove( x : T ) : Bool {
-		return @:privateAccess HxOverrides.remove(this,x);
+		return @:privateAccess HxOverrides.arrayRemove(this,x);
 	}
 
 #if js_es5
