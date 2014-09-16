@@ -57,18 +57,17 @@ class Lib
 
 		If equalLengthRequired is true, the result might be a copy of an array with the correct size.
 	**/
-	public static function nativeArray<T>(arr:Array<T>, equalLengthRequired:Bool):NativeArray<T>
+	inline public static function nativeArray<T>(arr:Array<T>, equalLengthRequired:Bool):NativeArray<T>
+	{
+		return p_nativeArray(arr,new cs.NativeArray(arr.length));
+	}
+
+	static function p_nativeArray<T>(arr:Array<T>, ret:NativeArray<T>):NativeArray<T>
 	{
 		var native:NativeArray<T> = untyped arr.__a;
 		var len = arr.length;
-		if (!equalLengthRequired || native.Length == len)
-		{
-			return native;
-		} else {
-			var ret = new NativeArray<T>(len);
-			cs.system.Array.Copy(native, 0, ret, 0, len);
-			return ret;
-		}
+		cs.system.Array.Copy(native, 0, ret, 0, len);
+		return ret;
 	}
 
 	/**
@@ -100,6 +99,14 @@ class Lib
 		This may change in the future, so use this function whenever you need to perform such conversion.
 	**/
 	public static inline function toNativeType(cl:Class<Dynamic>):Type
+	{
+		return untyped cl;
+	}
+
+	/**
+		Returns a System.Type equivalent to the Haxe Enum<> type.
+	**/
+	public static inline function toNativeEnum(cl:Enum<Dynamic>):Type
 	{
 		return untyped cl;
 	}

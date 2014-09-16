@@ -20,6 +20,31 @@
  * DEALINGS IN THE SOFTWARE.
  *)
 
+(*
+	Conventions:
+	- e: expression (typed or untyped)
+	- c: class
+	- en: enum
+	- td: typedef (tdef)
+	- a: abstract
+	- an: anon
+	- tf: tfunc
+	- cf: class_field
+	- ef: enum_field
+	- t: type (t)
+	- ct: complex_type
+	- v: local variable (tvar)
+	- m: module (module_def)
+	- mt: module_type
+	- p: pos
+
+	"param" refers to type parameters
+	"arg" refers to function arguments
+	leading s_ means function returns string
+	trailing l means list (but we also use natural plurals such as "metas")
+	semantic suffixes may be used freely (e.g. e1, e_if, e')
+*)
+
 open Printf
 open Ast
 open Genswf
@@ -150,9 +175,17 @@ let reserved_flags = [
 let complete_fields fields =
 	let b = Buffer.create 0 in
 	Buffer.add_string b "<list>\n";
-	List.iter (fun (n,t,d) ->
-		Buffer.add_string b (Printf.sprintf "<i n=\"%s\"><t>%s</t><d>%s</d></i>\n" n (htmlescape t) (htmlescape d))
-	) (List.sort (fun (a,_,_) (b,_,_) -> compare a b) fields);
+	List.iter (fun (n,t,k,d) ->
+		let s_kind = match k with
+			| Some k -> (match k with
+				| Typer.FKVar -> "var"
+				| Typer.FKMethod -> "method"
+				| Typer.FKType -> "type"
+				| Typer.FKPackage -> "package")
+			| None -> ""
+		in
+		Buffer.add_string b (Printf.sprintf "<i n=\"%s\" k=\"%s\"><t>%s</t><d>%s</d></i>\n" n s_kind (htmlescape t) (htmlescape d))
+	) (List.sort (fun (a,_,ak,_) (b,_,bk,_) -> compare (ak,a) (bk,b)) fields);
 	Buffer.add_string b "</list>\n";
 	raise (Completion (Buffer.contents b))
 
@@ -173,7 +206,7 @@ let make_path f =
 		| ["hx";path] -> ExtString.String.nsplit path "/"
 		| _ -> cl
 	) in
- 	let error msg =
+	let error msg =
 		let msg = "Could not process argument " ^ f ^ "\n" ^ msg in
 		failwith msg
 	in
@@ -265,30 +298,30 @@ let rec read_type_path com p =
 			loop path p
 		) (extract());
 	) com.swf_libs;
-  List.iter (fun (path,std,close,all_files,lookup) ->
-    List.iter (fun (path, name) ->
-      if path = p then classes := name :: !classes else
-      let rec loop p1 p2 =
-        match p1, p2 with
-        | [], _ -> ()
-        | x :: _, [] -> packages := x :: !packages
-        | a :: p1, b :: p2 -> if a = b then loop p1 p2
-      in
-      loop path p
-    ) (all_files())
-  ) com.java_libs;
-  List.iter (fun (path,std,all_files,lookup) ->
-    List.iter (fun (path, name) ->
-      if path = p then classes := name :: !classes else
-      let rec loop p1 p2 =
-        match p1, p2 with
-        | [], _ -> ()
-        | x :: _, [] -> packages := x :: !packages
-        | a :: p1, b :: p2 -> if a = b then loop p1 p2
-      in
-      loop path p
-    ) (all_files())
-  ) com.net_libs;
+	List.iter (fun (path,std,close,all_files,lookup) ->
+		List.iter (fun (path, name) ->
+			if path = p then classes := name :: !classes else
+			let rec loop p1 p2 =
+				match p1, p2 with
+				| [], _ -> ()
+				| x :: _, [] -> packages := x :: !packages
+				| a :: p1, b :: p2 -> if a = b then loop p1 p2
+			in
+			loop path p
+		) (all_files())
+	) com.java_libs;
+	List.iter (fun (path,std,all_files,lookup) ->
+		List.iter (fun (path, name) ->
+			if path = p then classes := name :: !classes else
+			let rec loop p1 p2 =
+				match p1, p2 with
+				| [], _ -> ()
+				| x :: _, [] -> packages := x :: !packages
+				| a :: p1, b :: p2 -> if a = b then loop p1 p2
+			in
+		loop path p
+		) (all_files())
+	) com.net_libs;
 	unique !packages, unique !classes
 
 let delete_file f = try Sys.remove f with _ -> ()
@@ -612,8 +645,8 @@ let rec process_params create pl =
 			loop [] l
 		| "--cwd" :: dir :: l ->
 			(* we need to change it immediately since it will affect hxml loading *)
-			(try Unix.chdir dir with _ -> ());
-			loop (dir :: "--cwd" :: acc) l
+			(try Unix.chdir dir with _ -> raise (Arg.Bad "Invalid directory"));
+			loop acc l
 		| "--connect" :: hp :: l ->
 			(match !global_cache with
 			| None ->
@@ -932,6 +965,7 @@ try
 	let pre_compilation = ref [] in
 	let interp = ref false in
 	let swf_version = ref false in
+	let evals = ref [] in
 	Common.define_value com Define.HaxeVer (float_repres (float_of_int version /. 1000.));
 	Common.define_value com Define.HxcppApiLevel "312";
 	Common.raw_define com "haxe3";
@@ -999,7 +1033,7 @@ try
 		("-cpp",Arg.String (fun dir ->
 			set_platform Cpp dir;
 		),"<directory> : generate C++ code into target directory");
- 		("-cs",Arg.String (fun dir ->
+		("-cs",Arg.String (fun dir ->
 			cp_libs := "hxcs" :: !cp_libs;
 			set_platform Cs dir;
 		),"<directory> : generate C# code into target directory");
@@ -1135,7 +1169,7 @@ try
 			| "classes" ->
 				pre_compilation := (fun() -> raise (Parser.TypePath (["."],None))) :: !pre_compilation;
 			| "keywords" ->
-				complete_fields (Hashtbl.fold (fun k _ acc -> (k,"","") :: acc) Lexer.keywords [])
+				complete_fields (Hashtbl.fold (fun k _ acc -> (k,"",None,"") :: acc) Lexer.keywords [])
 			| "memory" ->
 				did_something := true;
 				(try display_memory ctx with e -> prerr_endline (Printexc.get_backtrace ()));
@@ -1158,6 +1192,7 @@ try
 						activate_special_display_mode();
 						DMToplevel
 					| _ ->
+						Parser.use_parser_resume := true;
 						DMDefault
 				in
 				let pos = try int_of_string pos with _ -> failwith ("Invalid format : "  ^ pos) in
@@ -1183,9 +1218,9 @@ try
 			com.php_front <- Some f;
 		),"<filename> : select the name for the php front file");
 		("--php-lib",Arg.String (fun f ->
- 			if com.php_lib <> None then raise (Arg.Bad "Multiple --php-lib");
- 			com.php_lib <- Some f;
- 		),"<filename> : select the name for the php lib folder");
+			if com.php_lib <> None then raise (Arg.Bad "Multiple --php-lib");
+			com.php_lib <- Some f;
+		),"<filename> : select the name for the php lib folder");
 		("--php-prefix", Arg.String (fun f ->
 			if com.php_prefix <> None then raise (Arg.Bad "Multiple --php-prefix");
 			com.php_prefix <- Some f;
@@ -1205,6 +1240,10 @@ try
 			force_typing := true;
 			config_macros := e :: !config_macros
 		)," : call the given macro before typing anything else");
+		("--eval", Arg.String (fun s ->
+			force_typing := true;
+			evals := s :: !evals;
+		), " : evaluates argument as Haxe module code");
 		("--wait", Arg.String (fun hp ->
 			let host, port = (try ExtString.String.split hp ":" with _ -> "127.0.0.1", hp) in
 			wait_loop com host (try int_of_string port with _ -> raise (Arg.Bad "Invalid port"))
@@ -1213,7 +1252,7 @@ try
 			assert false
 		),"<[host:]port> : connect on the given port and run commands there)");
 		("--cwd", Arg.String (fun dir ->
-			(try Unix.chdir dir with _ -> raise (Arg.Bad "Invalid directory"))
+			assert false
 		),"<dir> : set current working directory");
 		("-version",Arg.Unit (fun() ->
 			message ctx s_version Ast.null_pos;
@@ -1400,6 +1439,7 @@ try
 		Typecore.type_expr_ref := (fun ctx e with_type -> Typer.type_expr ctx e with_type);
 		let tctx = Typer.create com in
 		List.iter (Typer.call_init_macro tctx) (List.rev !config_macros);
+		List.iter (Typer.eval tctx) !evals;
 		List.iter (fun cpath -> ignore(tctx.Typecore.g.Typecore.do_load_module tctx cpath Ast.null_pos)) (List.rev !classes);
 		Typer.finalize tctx;
 		t();
@@ -1428,7 +1468,6 @@ try
 		| Some file ->
 			Common.log com ("Generating xml : " ^ file);
 			Genxml.generate com file);
-		if com.platform = Java then List.iter (Codegen.promote_abstract_parameters com) com.types;
 		if com.platform = Flash || com.platform = Cpp then List.iter (Codegen.fix_overrides com) com.types;
 		if Common.defined com Define.Dump then Codegen.dump_types com;
 		if Common.defined com Define.DumpDependencies then Codegen.dump_dependencies com;
@@ -1516,15 +1555,15 @@ with
 		message ctx msg Ast.null_pos
 	| Typer.DisplayFields fields ->
 		let ctx = print_context() in
-		let fields = List.map (fun (name,t,doc) -> name, s_type ctx t, (match doc with None -> "" | Some d -> d)) fields in
+		let fields = List.map (fun (name,t,kind,doc) -> name, s_type ctx t, kind, (match doc with None -> "" | Some d -> d)) fields in
 		let fields = if !measure_times then begin
 			close_times();
 			let tot = ref 0. in
 			Hashtbl.iter (fun _ t -> tot := !tot +. t.total) Common.htimers;
-			let fields = ("@TOTAL", Printf.sprintf "%.3fs" (get_time() -. !start_time), "") :: fields in
+			let fields = ("@TOTAL", Printf.sprintf "%.3fs" (get_time() -. !start_time), None, "") :: fields in
 			if !tot > 0. then
 				Hashtbl.fold (fun _ t acc ->
-					("@TIME " ^ t.name, Printf.sprintf "%.3fs (%.0f%%)" t.total (t.total *. 100. /. !tot), "") :: acc
+					("@TIME " ^ t.name, Printf.sprintf "%.3fs (%.0f%%)" t.total (t.total *. 100. /. !tot), None, "") :: acc
 				) Common.htimers fields
 			else fields
 		end else
@@ -1575,7 +1614,10 @@ with
 			if packs = [] && classes = [] then
 				error ctx ("No classes found in " ^ String.concat "." p) Ast.null_pos
 			else
-				complete_fields (List.map (fun f -> f,"","") (packs @ classes))
+				complete_fields (
+					let convert k f = (f,"",Some k,"") in
+					(List.map (convert Typer.FKPackage) packs) @ (List.map (convert Typer.FKType) classes)
+				)
 		| Some (c,cur_package) ->
 			try
 				let ctx = Typer.create com in
@@ -1591,7 +1633,7 @@ with
 							raise e
 				in
 				let m = lookup p in
-				complete_fields (List.map (fun t -> snd (t_path t),"","") (List.filter (fun t -> not (t_infos t).mt_private) m.m_types))
+				complete_fields (List.map (fun t -> snd (t_path t),"",Some Typer.FKType,"") (List.filter (fun t -> not (t_infos t).mt_private) m.m_types))
 			with Completion c ->
 				raise (Completion c)
 			| _ ->

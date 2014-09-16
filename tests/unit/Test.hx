@@ -228,6 +228,10 @@ class Test #if swf_mark implements mt.Protect #end {
 	}
 
 	static function main() {
+		#if cs //"Turkey Test" - Issue #996
+		cs.system.threading.Thread.CurrentThread.CurrentCulture = new cs.system.globalization.CultureInfo('tr-TR');
+		cs.Lib.applyCultureChanges();
+		#end
 		#if neko
 		if( neko.Web.isModNeko )
 			neko.Web.setHeader("Content-Type","text/plain");
@@ -296,6 +300,21 @@ class Test #if swf_mark implements mt.Protect #end {
 			//new TestUnspecified(),
 			//new TestRemoting(),
 		];
+		// SPOD tests
+		#if ( (neko || php || java || cpp) && !macro && !interp)
+		#if (travis && !cpp)
+		if (Sys.systemName() != "Mac")
+		{
+			classes.push(new TestSpod(sys.db.Mysql.connect({
+				host : "localhost",
+				user : "travis",
+				pass : "",
+				port : 3306,
+				database : "haxe_test" })));
+		}
+		#end
+		classes.push(new TestSpod(sys.db.Sqlite.open("db.db3")));
+		#end
 		TestIssues.addIssueClasses();
 		var current = null;
 		#if (!fail_eager)
