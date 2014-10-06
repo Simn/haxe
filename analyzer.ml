@@ -386,6 +386,12 @@ module Ssa = struct
 			e
 		)
 
+	let mk_update =
+		let v_update = alloc_unbound_var "__ssa_update__" t_dynamic in
+		(fun v ekey evalue p ->
+			mk (TCall(mk_loc v_update p,[(mk_loc v p);ekey;evalue])) t_dynamic p
+		)
+
 	(* TODO: make sure this is conservative *)
 	let can_throw e =
 		let rec loop e = match e.eexpr with
@@ -462,6 +468,15 @@ module Ssa = struct
 			ctx.var_values <- IntMap.add v'.v_id e ctx.var_values;
 			v'
 		end
+
+	let fields ctx v fl p =
+		declare_var ctx v p;
+		let _ = List.fold_left (fun (i,v') (ekey,evalue) ->
+			let eupdate = mk_update v' ekey evalue evalue.epos in
+			let v = assign_var ctx v eupdate p in
+			(i + 1),v
+		) (0,v) fl in
+		()
 
 	let get_var ctx v p =
 		try
@@ -588,6 +603,24 @@ module Ssa = struct
 			ebody
 		and loop ctx e = match e.eexpr with
 			(* var declarations *)
+			| TVar(v, (Some ({eexpr = TArrayDecl el} as e1))) ->
+				let el = List.map (loop ctx) el in
+				let e1 = {e1 with eexpr = TArrayDecl el} in
+				let i = ref (-1) in
+				let fl = List.map (fun e ->
+					incr i;
+					Codegen.type_constant ctx.com (String (string_of_int !i)) e.epos,e
+				) el in
+				ctx.var_values <- IntMap.add v.v_id e1 ctx.var_values;
+				fields ctx v fl e.epos;
+				{e with eexpr = TVar(v, Some e1)}
+			| TVar(v, (Some ({eexpr = TObjectDecl fl} as e1))) ->
+				let fl = List.map (fun (s,e) -> s,loop ctx e) fl in
+				let e1 = {e1 with eexpr = TObjectDecl fl} in
+				ctx.var_values <- IntMap.add v.v_id e1 ctx.var_values;
+				let fl = List.map (fun (s,e) -> Codegen.type_constant ctx.com (String s) e.epos,e) fl in
+				fields ctx v fl e.epos;
+				{e with eexpr = TVar(v, Some e1)}
 			| TVar(v,eo) ->
 				declare_var ctx v e.epos;
 				let eo = match eo with
@@ -854,8 +887,27 @@ module ConstPropagation = struct
 			value ssa e1
 		| TLocal v ->
 			local ssa v e
+		| TArray(ebase,ekey) ->
+			field_value ssa e ebase ekey
+		| TField(ebase,FAnon cf) ->
+			field_value ssa e ebase (Codegen.type_constant ssa.com (String cf.cf_name) e.epos)
 		| _ ->
 			e
+
+	and field_value ssa e ebase ekey =
+		let rec loop2 ebase = match ebase.eexpr with
+			| TCall ({eexpr = TLocal {v_name = "__ssa_update__"}},[ebase;ekey';evalue]) ->
+				if expr_eq (value ssa ekey') ekey then value ssa evalue
+				else loop2 (value ssa ebase)
+			| _ ->
+				e
+		in
+		match ebase.eexpr with
+			| TLocal v ->
+				let e = local ssa v ebase in
+				loop2 e
+			| _ ->
+				e
 
 	let apply ssa e =
 		let had_function = ref false in
@@ -867,6 +919,18 @@ module ConstPropagation = struct
 				{e with eexpr = TFunction {tf with tf_expr = loop tf.tf_expr}}
 			| TLocal v ->
 				let e' = local ssa v e in
+				if can_be_inlined ssa.com e' then
+					e'
+				else
+					e
+			| TArray(ebase,ekey) ->
+				let e' = field_value ssa e ebase ekey in
+				if can_be_inlined ssa.com e' then
+					e'
+				else
+					e
+			| TField(ebase,FAnon cf) ->
+				let e' = field_value ssa e ebase (Codegen.type_constant ssa.com (String cf.cf_name) e.epos) in
 				if can_be_inlined ssa.com e' then
 					e'
 				else
