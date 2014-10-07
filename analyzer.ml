@@ -609,7 +609,7 @@ module Ssa = struct
 				let i = ref (-1) in
 				let fl = List.map (fun e ->
 					incr i;
-					Codegen.type_constant ctx.com (String (string_of_int !i)) e.epos,e
+					Codegen.type_constant ctx.com (Int (string_of_int !i)) e.epos,e
 				) el in
 				ctx.var_values <- IntMap.add v.v_id e1 ctx.var_values;
 				fields ctx v fl e.epos;
@@ -895,6 +895,7 @@ module ConstPropagation = struct
 			e
 
 	and field_value ssa e ebase ekey =
+		let ekey = value ssa ekey in
 		let rec loop2 ebase = match ebase.eexpr with
 			| TCall ({eexpr = TLocal {v_name = "__ssa_update__"}},[ebase;ekey';evalue]) ->
 				if expr_eq (value ssa ekey') ekey then value ssa evalue
