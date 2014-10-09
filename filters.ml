@@ -27,7 +27,7 @@ let rec blockify_ast e =
 	| TFunction tf ->
 		{e with eexpr = TFunction {tf with tf_expr = mk_block (blockify_ast tf.tf_expr)}}
 	| TTry(e1,cl) ->
-		{e with eexpr = TTry(blockify_ast e1,List.map (fun (v,e) -> v,mk_block (blockify_ast e)) cl)}
+		{e with eexpr = TTry(mk_block (blockify_ast e1),List.map (fun (v,e) -> v,mk_block (blockify_ast e)) cl)}
 	| TSwitch(e1,cases,def) ->
 		let e1 = blockify_ast e1 in
 		let cases = List.map (fun (el,e) ->
@@ -37,143 +37,6 @@ let rec blockify_ast e =
 		{e with eexpr = TSwitch(e1,cases,def)}
 	| _ ->
 		Type.map_expr blockify_ast e
-
-(*
-	Generates a block context which can be used to add temporary variables. It returns a tuple:
-
-	- a mapping function for expression lists to be used on TBlock elements
-	- the function to be called for declaring temporary variables
-	- the function to be called for closing the block, returning the block elements
-*)
-let mk_block_context com gen_temp =
-	let block_el = ref [] in
-	let push e = block_el := e :: !block_el in
-	let declare_temp t eo p =
-		let v = gen_temp t in
-		let e = mk (TVar (v,eo)) com.basic.tvoid p in
-		push e;
-		mk (TLocal v) t p
-	in
-	let push_block () =
-		let cur = !block_el in
-		block_el := [];
-		fun () ->
-			let added = !block_el in
-			block_el := cur;
-			List.rev added
-	in
-	let rec block f el =
-		let close = push_block() in
-		List.iter (fun e ->
-			push (f e)
-		) el;
-		close()
-	in
-	block,declare_temp,fun () -> !block_el
-
-(*
-	Moves expressions to temporary variables in order to ensure correct evaluation order. This effects
-
-	- call arguments (from TCall and TNew)
-	- array declaration arguments
-	- object fields
-	- binary operators (respects boolean short-circuit)
-	- array access
-*)
-let handle_side_effects com gen_temp e =
-	let block,declare_temp,close_block = mk_block_context com gen_temp in
-	let rec loop e =
-		match e.eexpr with
-		| TBlock el ->
-			{e with eexpr = TBlock (block loop el)}
-		| TCall({eexpr = TLocal v},_) when Meta.has Meta.Unbound v.v_meta ->
-			e
-		| TCall(e1,el) ->
-			let e1 = loop e1 in
-			{e with eexpr = TCall(e1,ordered_list el)}
-		| TNew(c,tl,el) ->
-			{e with eexpr = TNew(c,tl,ordered_list el)}
-		| TArrayDecl el ->
-			{e with eexpr = TArrayDecl (ordered_list el)}
-		| TObjectDecl fl ->
-			let el = ordered_list (List.map snd fl) in
-			{e with eexpr = TObjectDecl (List.map2 (fun (n,_) e -> n,e) fl el)}
-		| TBinop(OpBoolAnd | OpBoolOr as op,e1,e2) when Optimizer.has_side_effect e1 || Optimizer.has_side_effect e2 ->
-			let e1 = loop e1 in
-			let e_then = mk (TBlock (block loop [e2])) e2.etype e2.epos in
-			let e_if,e_else = if op = OpBoolOr then
-				mk (TUnop(Not,Prefix,e1)) com.basic.tbool e.epos,mk (TConst (TBool(true))) com.basic.tbool e.epos
-			else
-				e1,mk (TConst (TBool(false))) com.basic.tbool e.epos
-			in
-			mk (TIf(e_if,e_then,Some e_else)) com.basic.tbool e.epos
-		| TBinop((OpAssign | OpAssignOp _) as op,{eexpr = TArray(e11,e12)},e2) ->
-			let e1 = match ordered_list [e11;e12] with
-				| [e1;e2] ->
-					{e with eexpr = TArray(e1,e2)}
-				| _ ->
-					assert false
-			in
-			let e2 = loop e2 in
-			{e with eexpr = TBinop(op,e1,e2)}
-		| TBinop((OpAssign | OpAssignOp _) as op,e1,e2) ->
-			let e1 = loop e1 in
-			let e2 = loop e2 in
-			{e with eexpr = TBinop(op,e1,e2)}
- 		| TBinop(op,e1,e2) ->
-			begin match ordered_list [e1;e2] with
-				| [e1;e2] ->
-					{e with eexpr = TBinop(op,e1,e2)}
-				| _ ->
-					assert false
-			end
-		| TArray(e1,e2) ->
-			begin match ordered_list [e1;e2] with
-				| [e1;e2] ->
-					{e with eexpr = TArray(e1,e2)}
-				| _ ->
-					assert false
-			end
-		| TWhile(e1,e2,flag) when (match e1.eexpr with TParenthesis {eexpr = TConst(TBool true)} -> false | _ -> true) ->
-			let p = e.epos in
-			let e_break = mk TBreak t_dynamic p in
-			let e_not = mk (TUnop(Not,Prefix,Codegen.mk_parent e1)) e1.etype e1.epos in
-			let e_if eo = mk (TIf(e_not,e_break,eo)) com.basic.tvoid p in
-			let rec map_continue e = match e.eexpr with
-				| TContinue ->
-					(e_if (Some e))
-				| TWhile _ | TFor _ ->
-					e
-				| _ ->
-					Type.map_expr map_continue e
-			in
-			let e2 = if flag = NormalWhile then e2 else map_continue e2 in
-			let e_if = e_if None in
-			let e_block = if flag = NormalWhile then Type.concat e_if e2 else Type.concat e2 e_if in
-			let e_true = mk (TConst (TBool true)) com.basic.tbool p in
-			let e = mk (TWhile(Codegen.mk_parent e_true,e_block,NormalWhile)) e.etype p in
-			loop e
-		| _ ->
-			Type.map_expr loop e
-	and ordered_list el =
-		match el with
-			| [e] ->
-				el
-			| _ ->
-				let bind e =
-					declare_temp e.etype (Some (loop e)) e.epos
-				in
-				if (List.exists Optimizer.has_side_effect) el then
-					List.map bind el
-				else
-					el
-	in
-	let e = loop e in
-	match close_block() with
-		| [] ->
-			e
-		| el ->
-			mk (TBlock (List.rev (e :: el))) e.etype e.epos
 
 (*
 	Pushes complex right-hand side expression inwards.
@@ -186,7 +49,7 @@ let promote_complex_rhs ctx e =
 	let rec is_complex e = match e.eexpr with
 		| TBlock _ | TSwitch _ | TIf _ | TTry _ | TCast(_,Some _) -> true
 		| TBinop(_,e1,e2) -> is_complex e1 || is_complex e2
-		| TParenthesis e | TMeta(_,e) | TCast(e, None) -> is_complex e
+		| TParenthesis e | TMeta(_,e) | TCast(e, None) | TField(e,_) -> is_complex e
 		| _ -> false
 	in
 	let rec loop f e = match e.eexpr with
@@ -644,10 +507,6 @@ let rename_local_vars com e =
 		done;
 		v.v_name <- v.v_name ^ string_of_int !count;
 	in
-	let add_var name v =
-		vars := PMap.add name v !vars;
-		if all_scope then all_vars := PMap.add name v !all_vars;
-	in
 	let declare v p =
 		(match follow v.v_type with
 			| TAbstract ({a_path = [],"Void"},_) -> error "Arguments and variables of type Void are not allowed" p
@@ -666,7 +525,8 @@ let rename_local_vars com e =
 			rename look_vars v;
 		with Not_found ->
 			());
-		add_var v.v_name v
+		vars := PMap.add v.v_name v !vars;
+		if all_scope then all_vars := PMap.add v.v_name v !all_vars;
 	in
 	(*
 		This is quite a rare case, when a local variable would otherwise prevent
@@ -681,10 +541,10 @@ let rename_local_vars com e =
 				if v == vtemp then raise Not_found; (* ignore *)
 				rename (!vars) v;
 				rebuild_vars := true;
-				add_var v.v_name v
+				vars := PMap.add v.v_name v !vars
 			with Not_found ->
 				());
-			add_var name vtemp
+			vars := PMap.add name vtemp !vars
 	in
 	let check_type t =
 		match follow t with
@@ -697,8 +557,9 @@ let rename_local_vars com e =
 	let rec loop e =
 		match e.eexpr with
 		| TVar (v,eo) ->
+			if not cfg.pf_locals_scope then declare v e.epos;
 			(match eo with None -> () | Some e -> loop e);
-			declare v e.epos;
+			if cfg.pf_locals_scope then declare v e.epos;
 		| TFunction tf ->
 			let old = save() in
 			List.iter (fun (v,_) -> declare v e.epos) tf.tf_args;
@@ -706,6 +567,22 @@ let rename_local_vars com e =
 			old()
 		| TBlock el ->
 			let old = save() in
+			(* we have to look ahead for vars on these targets (issue #3344) *)
+			begin match com.platform with
+				| Js | Flash8 ->
+					let rec check_var e = match e.eexpr with
+						| TVar (v,eo) ->
+							(match eo with None -> () | Some e -> loop e);
+							declare v e.epos
+						| TBlock _ ->
+							()
+						| _ ->
+							Type.iter check_var e
+					in
+					List.iter check_var el
+				| _ ->
+					()
+			end;
 			List.iter loop el;
 			old()
 		| TFor (v,it,e1) ->
@@ -738,14 +615,19 @@ let rename_local_vars com e =
 	in
 	declare (alloc_var "this" t_dynamic) Ast.null_pos; (* force renaming of 'this' vars in abstract *)
 	loop e;
-	(* run the loop again on targets that have no local scoping (issue #3344) *)
-	if not cfg.pf_locals_scope then loop e;
 	e
 
 let check_unification com e t =
 	begin match follow e.etype,follow t with
 		| TEnum _,TDynamic _ ->
 			add_feature com "may_print_enum";
+		| _ ->
+			()
+	end;
+	begin match e.eexpr,t with
+		| TLocal v,TType({t_path = ["cs"],("Ref" | "Out")},_) ->
+			(* TODO: this smells of hack, but we have to deal with it somehow *)
+			v.v_capture <- true
 		| _ ->
 			()
 	end;
@@ -1020,7 +902,6 @@ let check_void_field ctx t = match t with
 
 let run_expression_filters ctx filters t =
 	let run e =
-		verify_ast e;
 		List.fold_left (fun e f -> f e) e filters
 	in
 	match t with
@@ -1059,6 +940,20 @@ let post_process ctx filters t =
 let post_process_end() =
 	incr pp_counter
 
+let iter_expressions com fl =
+	List.iter (fun mt -> match mt with
+		| TClassDecl c ->
+			let field cf = match cf.cf_expr with
+				| None -> ()
+				| Some e -> List.iter (fun f -> f e) fl
+			in
+			List.iter field c.cl_ordered_statics;
+			List.iter field c.cl_ordered_fields;
+			(match c.cl_constructor with None -> () | Some cf -> field cf)
+		| _ ->
+			()
+	) com.types
+
 let run com tctx main =
 	begin match com.display with
 		| DMUsage | DMPosition ->
@@ -1068,38 +963,71 @@ let run com tctx main =
 	end;
 	if not (Common.defined com Define.NoDeprecationWarnings) then
 		Codegen.DeprecationCheck.run com;
-	(* PASS 1: general expression filters *)
- 	let filters = [
- 		Codegen.UnificationCallback.run (check_unification com);
-		Codegen.AbstractCast.handle_abstract_casts tctx;
-		blockify_ast;
-		(match com.platform with
-			| Cpp | Flash8 -> (fun e ->
-				let save = save_locals tctx in
-				let e = handle_side_effects com (Typecore.gen_local tctx) e in
-				save();
-				e)
-			| _ -> fun e -> e);
-		if com.foptimize then (fun e -> Optimizer.reduce_expression tctx (Optimizer.inline_constructors tctx e)) else Optimizer.sanitize tctx;
-		check_local_vars_init;
-		captured_vars com;
-	] in
-	List.iter (post_process tctx filters) com.types;
-	post_process_end();
-	List.iter (fun f -> f()) (List.rev com.filters);
-	(* save class state *)
-	List.iter (save_class_state tctx) com.types;
-	(* PASS 2: destructive type and expression filters *)
-	let filters = [
-		promote_complex_rhs com;
-		if com.config.pf_add_final_return then add_final_return else (fun e -> e);
-		rename_local_vars com;
-	] in
-	List.iter (fun t ->
-		remove_generic_base tctx t;
-		remove_extern_fields tctx t;
-		run_expression_filters tctx filters t;
-	) com.types;
+	let use_static_analyzer = Common.defined com Define.Analyzer in
+	(* this part will be a bit messy until we make the analyzer the default *)
+	if use_static_analyzer then begin
+		(* PASS 1: general expression filters *)
+		let filters = [
+			Codegen.UnificationCallback.run (check_unification com);
+			Codegen.AbstractCast.handle_abstract_casts tctx;
+			Optimizer.inline_constructors tctx;
+			Optimizer.reduce_expression tctx;
+			blockify_ast;
+			captured_vars com;
+		] in
+		List.iter (post_process tctx filters) com.types;
+		Analyzer.apply com;
+		post_process_end();
+		iter_expressions com [verify_ast];
+		List.iter (fun f -> f()) (List.rev com.filters);
+		(* save class state *)
+		List.iter (save_class_state tctx) com.types;
+		(* PASS 2: destructive type and expression filters *)
+		let filters = [
+			Optimizer.sanitize com;
+			if com.config.pf_add_final_return then add_final_return else (fun e -> e);
+			rename_local_vars com;
+		] in
+		List.iter (fun t ->
+			remove_generic_base tctx t;
+			remove_extern_fields tctx t;
+			run_expression_filters tctx filters t;
+		) com.types;
+	end else begin
+		(* PASS 1: general expression filters *)
+		let filters = [
+			Codegen.UnificationCallback.run (check_unification com);
+			Codegen.AbstractCast.handle_abstract_casts tctx;
+			blockify_ast;
+			(match com.platform with
+				| Cpp | Flash8 -> (fun e ->
+					let save = save_locals tctx in
+					let e = try Analyzer.Simplifier.apply com (Typecore.gen_local tctx) e with Exit -> e in
+					save();
+					e)
+				| _ -> fun e -> e);
+			if com.foptimize then (fun e -> Optimizer.reduce_expression tctx (Optimizer.inline_constructors tctx e)) else Optimizer.sanitize com;
+			check_local_vars_init;
+			captured_vars com;
+		] in
+		List.iter (post_process tctx filters) com.types;
+		post_process_end();
+		iter_expressions com [verify_ast];
+		List.iter (fun f -> f()) (List.rev com.filters);
+		(* save class state *)
+		List.iter (save_class_state tctx) com.types;
+		(* PASS 2: destructive type and expression filters *)
+		let filters = [
+			promote_complex_rhs com;
+			if com.config.pf_add_final_return then add_final_return else (fun e -> e);
+			rename_local_vars com;
+		] in
+		List.iter (fun t ->
+			remove_generic_base tctx t;
+			remove_extern_fields tctx t;
+			run_expression_filters tctx filters t;
+		) com.types;
+	end;
 	(* update cache dependencies before DCE is run *)
 	Codegen.update_cache_dependencies com;
 	(* check @:remove metadata before DCE so it is ignored there (issue #2923) *)

@@ -133,11 +133,13 @@ class UnitBuilder {
 							el2.push(mkEq((macro $e1[$v{i}]), e2, e.pos));
 						}
 						if (el2.length == 0)
-							mkEq((macro $e1.length), (macro 0), e.pos);
+							mkEq((macro @:pos(e1.pos) $e1.length), (macro 0), e.pos);
 						else
 							macro { $a{el2}; };
 					case EBinop(OpEq, e1, e2):
 						mkEq(e1, e2, e.pos);
+					case EBinop(OpNotEq, e1, e2):
+						macro t($e1 != $e2);
 					case EBinop(OpGt | OpGte | OpLt | OpLte, _, _):
 						{
 							expr: (macro t($e)).expr,

@@ -425,7 +425,7 @@ class TestType extends Test {
 		typedAs(foo(A), "");
 		typedAs(foo(A, true), "");
 		typedAs(foo(A, A), "");
-		typeError(foo(A, A, false));
+		t(typeError(foo(A, A, false)));
 	}
 
 	function testParamConstraints()
@@ -489,7 +489,7 @@ class TestType extends Test {
 	{
 		eq(UsingChild1.test(), "FOOFOOFOO");
 		eq(UsingChild2.test(), "FOO");
-		eq(UsingUnrelated.test(), "FOOFOO");
+		eq(UsingUnrelated.test(), "trueFOOFOO");
 	}
 
 	function testInlineInit()
@@ -507,10 +507,12 @@ class TestType extends Test {
 		typedAs(inlineTest2([1]), var void:Void);
 	}
 
+	@:analyzer(no_check_has_effect)
 	inline function inlineTest1<T>(map:Array<T>) {
 		map[0];
 	}
 
+	@:analyzer(no_check_has_effect)
 	inline function inlineTest2(map:Array<Dynamic>) {
 		map[0];
 	}
@@ -665,6 +667,7 @@ class TestType extends Test {
 		eq(c.fProp(9), "test09");
 	}
 
+	@:analyzer(ignore)
 	function testVoidFunc() {
 		exc(function() { throw null; return 1; } );
 		exc(function() { throw null; return "foo"; } );

@@ -101,6 +101,7 @@
 			for( a in args )
 				cmd += " "+escapeArgument(a);
 		}
+		if (systemName() == "Windows") cmd = '"$cmd"';
 		return sys_command(cmd);
 	}
 
@@ -120,7 +121,7 @@
 		return new String(sys_exe_path());
 	}
 
-	public static function environment() : haxe.ds.StringMap<String> {
+	public static function environment() : Map<String,String> {
 		var vars:Array<String> = sys_env();
 		var result = new haxe.ds.StringMap<String>();
 		var i = 0;

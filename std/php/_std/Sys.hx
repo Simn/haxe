@@ -89,6 +89,7 @@
 			for( a in args )
 				cmd += " "+escapeArgument(a);
 		}
+		if (systemName() == "Windows") cmd = '"$cmd"';
 		var result = 0;
 		untyped __call__("system", cmd, result);
 		return result;
@@ -110,7 +111,7 @@
 		return untyped __php__("$_SERVER['SCRIPT_FILENAME']");
 	}
 
-	public static function environment() : haxe.ds.StringMap<String> {
+	public static function environment() : Map<String,String> {
 		return php.Lib.hashOfAssociativeArray(untyped __php__("$_SERVER"));
 	}
 

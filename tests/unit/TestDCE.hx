@@ -1,5 +1,6 @@
 package unit;
 
+@:analyzer(no_check_has_effect)
 class DCEClass {
 	// used statics
 	static function staticUsed() { }
@@ -110,7 +111,7 @@ class TestDCE extends Test {
 		l.x = "bar";
 		hf(c, "set_x");
 		hf(bc, "set_x");
-		nhf(ic, "set_x");
+		hf(ic, "set_x");
 		nhf(ic, "get_x");
 		nhf(c, "get_x");
 		nhf(bc, "get_x");

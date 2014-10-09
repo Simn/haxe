@@ -107,7 +107,7 @@ typedef Enumdef = {> TypeInfos,
 
 typedef Typedef = {> TypeInfos,
 	var type : CType;
-	var types : haxe.ds.StringMap<CType>; // by platform
+	var types : Map<String,CType>; // by platform
 }
 
 typedef Abstractdef = {> TypeInfos,
@@ -296,7 +296,7 @@ class CTypeTools {
 	}
 
 	static function functionArgumentName(arg:FunctionArgument) {
-		(arg.opt ? "?" : "") + arg.name + ":" + toString(arg.t) + (arg.value == null ? "" : " = " +arg.value);
+		return (arg.opt ? "?" : "") + arg.name + ":" + toString(arg.t) + (arg.value == null ? "" : " = " +arg.value);
 	}
 
 	static function classField(cf:ClassField) {

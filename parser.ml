@@ -1094,7 +1094,7 @@ and parse_array_decl = parser
 and parse_var_decl = parser
 	| [< name, _ = dollar_ident; t = parse_type_opt; s >] ->
 		match s with parser
-		| [< '(Binop OpAssign,_); e = expr >] -> (name,t,Some e)
+		| [< '(Binop OpAssign,_); s >] -> let e = try expr s with Display e -> e in (name,t,Some e)
 		| [< >] -> (name,t,None)
 
 and inline_function = parser
@@ -1265,8 +1265,13 @@ and expr_next e1 = parser
 			make_binop OpGte e1 (secure_expr s)
 		| [< e2 = secure_expr >] ->
 			make_binop OpGt e1 e2)
-	| [< '(Binop op,_); e2 = expr >] ->
-		make_binop op e1 e2
+	| [< '(Binop op,_); s >] ->
+		(try
+			(match s with parser
+			| [< e2 = expr >] -> make_binop op e1 e2
+			| [< >] -> serror())
+		with Display e2 ->
+			raise (Display (make_binop op e1 e2)))
 	| [< '(Unop op,p) when is_postfix e1 op; s >] ->
 		expr_next (EUnop (op,Postfix,e1), punion (pos e1) p) s
 	| [< '(Question,_); e2 = expr; '(DblDot,_); e3 = expr >] ->

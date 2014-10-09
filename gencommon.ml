@@ -70,15 +70,26 @@ let rec like_float t =
 	match follow t with
 		| TAbstract({ a_path = ([], "Float") },[])
 		| TAbstract({ a_path = ([], "Int") },[]) -> true
+		| TAbstract({ a_path = (["cs"], "Pointer") },_) -> false
 		| TAbstract(a, _) -> List.exists (fun t -> like_float t) a.a_from || List.exists (fun t -> like_float t) a.a_to
 		| _ -> false
 
 let rec like_int t =
 	match follow t with
 		| TAbstract({ a_path = ([], "Int") },[]) -> true
+		| TAbstract({ a_path = (["cs"], "Pointer") },_) -> false
 		| TAbstract(a, _) -> List.exists (fun t -> like_int t) a.a_from || List.exists (fun t -> like_int t) a.a_to
 		| _ -> false
 
+let rec like_i64 t =
+	match follow t with
+		| TInst({ cl_path = (["cs"], "Int64") },[])
+		| TInst({ cl_path = (["cs"], "UInt64") },[])
+		| TInst({ cl_path = (["java"], "Int64") },[])
+		| TInst({ cl_path = (["haxe"], "Int64") },[])
+		| TAbstract({ a_path = (["haxe"], "Int64") },[]) -> true
+		| TAbstract(a, _) -> List.exists (fun t -> like_i64 t) a.a_from || List.exists (fun t -> like_i64 t) a.a_to
+		| _ -> false
 
 let follow_once t =
 	match t with
@@ -239,6 +250,8 @@ let path_s path =
 	| _ -> assert false
 
 let get_cl mt = match mt with | TClassDecl cl -> cl | _ -> failwith ("Unexpected module type of '" ^ path_s (t_path mt) ^ "'")
+
+let get_abstract mt = match mt with | TAbstractDecl a -> a | _ -> failwith ("Unexpected module type of '" ^ path_s (t_path mt) ^ "'")
 
 let get_tdef mt = match mt with | TTypeDecl t -> t | _ -> assert false
 
@@ -1205,11 +1218,6 @@ let t_to_mt t =
 		| TEnum(e, _) -> TEnumDecl(e)
 		| TAbstract(a, _) -> TAbstractDecl a
 		| _ -> assert false
-
-let mk_paren e =
-	match e.eexpr with
-		| TParenthesis _ -> e
-		| _ -> { e with eexpr = TParenthesis(e) }
 
 let rec get_last_ctor cl =
 	Option.map_default (fun (super,_) -> if is_some super.cl_constructor then Some(get super.cl_constructor) else get_last_ctor super) None cl.cl_super
@@ -2260,12 +2268,12 @@ struct
 									dyn_plus_handler e (run e1) (run e2)
 							| OpGt | OpGte | OpLt | OpLte  -> (* type 2 *)
 								{ eexpr = TBinop(op, compare_handler (run e1) (run e2), { eexpr = TConst(TInt(Int32.zero)); etype = gen.gcon.basic.tint; epos = e.epos} ); etype = gen.gcon.basic.tbool; epos = e.epos }
-							| OpMult | OpDiv | OpSub -> (* always cast everything to double *)
+							| OpMult | OpDiv | OpSub | OpMod -> (* always cast everything to double *)
 								let etype, _ = get_etype_one e in
 								{ e with eexpr = TBinop(op, mk_cast etype (run e1), mk_cast etype (run e2)) }
 							| OpBoolAnd | OpBoolOr ->
 								{ e with eexpr = TBinop(op, mk_cast gen.gcon.basic.tbool (run e1), mk_cast gen.gcon.basic.tbool (run e2)) }
-							| OpAnd | OpOr | OpXor | OpShl | OpShr | OpUShr | OpMod ->
+							| OpAnd | OpOr | OpXor | OpShl | OpShr | OpUShr ->
 								{ e with eexpr = TBinop(op, mk_cast gen.gcon.basic.tint (run e1), mk_cast gen.gcon.basic.tint (run e2)) }
 							| OpAssign | OpAssignOp _ | OpInterval | OpArrow -> assert false)
 					| TUnop (Increment as op, flag, e1)
@@ -3014,7 +3022,13 @@ struct
 			| TAbstract (a, pl) when not (Meta.has Meta.CoreType a.a_meta) ->
 					get_type_params acc ( Abstract.get_underlying_type a pl)
 			| TAnon a ->
-				PMap.fold (fun cf acc -> get_type_params acc cf.cf_type) a.a_fields acc
+				PMap.fold (fun cf acc ->
+					let params = List.map (fun (_,t) -> match follow t with
+						| TInst(c,_) -> c
+						| _ -> assert false) cf.cf_params
+					in
+					List.filter (fun t -> not (List.memq t params)) (get_type_params acc cf.cf_type)
+				) a.a_fields acc
 			| TType(_, [])
 			| TAbstract (_, [])
 			| TInst(_, [])
@@ -3405,7 +3419,7 @@ struct
 			let rettype_real_to_func t = match run_follow gen t with
 				| TType({ t_path = [],"Null" }, _) ->
 					0,t_dynamic
-				| _ when like_float t ->
+				| _ when like_float t && not (like_i64 t) ->
 					(1, basic.tfloat)
 				| _ ->
 					(0, t_dynamic)
@@ -3416,10 +3430,10 @@ struct
 					[{ eexpr = TArrayDecl el; etype = basic.tarray t_dynamic; epos = pos }]
 				else begin
 					List.fold_left (fun acc e ->
-																						if like_float (gen.greal_type e.etype) then
-																							( e :: undefined e.epos :: acc )
-																						else
-																							( null basic.tfloat e.epos :: e :: acc )
+						if like_float (gen.greal_type e.etype) && not (like_i64 (gen.greal_type e.etype)) then
+							( e :: undefined e.epos :: acc )
+						else
+							( null basic.tfloat e.epos :: e :: acc )
 					) ([]) (List.rev el)
 				end
 			in
@@ -3565,8 +3579,9 @@ struct
 					| TCall(tc, params) -> (tc, params)
 					| _ -> assert false
 				in
+					let ct = gen.greal_type call_expr.etype in
 					let postfix, ret_t =
-						if like_float (gen.greal_type call_expr.etype) then
+						if like_float ct && not (like_i64 ct) then
 								"_f", gen.gcon.basic.tfloat
 						else
 							"_o", t_dynamic
@@ -3636,7 +3651,7 @@ struct
 						let vf, _ = List.nth args (i * 2) in
 						let vo, _ = List.nth args (i * 2 + 1) in
 
-						let needs_cast, is_float = match t, like_float t with
+						let needs_cast, is_float = match t, like_float t && not (like_i64 t) with
 							| TInst({ cl_path = ([], "Float") }, []), _
 							| TAbstract({ a_path = ([], "Float") },[]), _ -> false, true
 							| _, true -> true, true
@@ -3893,7 +3908,7 @@ struct
 				in
 				(* let rec loop goes here *)
 				let map_fn cur_arity fun_ret_type vars (api:(int->t->tconstant option->texpr)) =
-					let is_float = like_float fun_ret_type in
+					let is_float = like_float fun_ret_type && not (like_i64 fun_ret_type) in
 					match cur_arity with
 						| -1 ->
 							let dynargs = api (-1) (t_dynamic) None in
@@ -4379,6 +4394,11 @@ struct
 				let this = { eexpr = TConst(TThis); etype = (TInst(cl, List.map snd cl.cl_params)); epos = pos } in
 				let field_var = alloc_var "field" gen.gcon.basic.tstring in
 				let local_field = { eexpr = TLocal(field_var); etype = field_var.v_type; epos = pos } in
+				let i_var = alloc_var "i" gen.gcon.basic.tint in
+				let local_i = { eexpr = TLocal(i_var); etype = gen.gcon.basic.tint; epos = pos } in
+				let incr_i = { eexpr = TUnop(Ast.Increment, Ast.Postfix, local_i); etype = basic.tint; epos = pos } in
+				let fields_var = alloc_var "fields" (gen.gcon.basic.tarray gen.gcon.basic.tstring) in
+				let local_fields = { eexpr = TLocal(fields_var); etype = (gen.gcon.basic.tarray gen.gcon.basic.tstring); epos = pos } in
 
 				let get_path t =
 					match follow t with
@@ -4431,7 +4451,6 @@ struct
 						| _ -> assert false
 				in
 
-				let ref_fields = gen.gtools.r_fields true this in
 				let fn =
 				{
 					tf_args = [];
@@ -4449,26 +4468,60 @@ struct
 									epos = pos;
 								};
 								(* var new_me = /*special create empty with tparams construct*/ *)
-								{ eexpr = TVar(new_me_var, Some(
-									gen.gtools.rf_create_empty cl params pos
-								)); etype = gen.gcon.basic.tvoid; epos = pos };
-								{ eexpr = TFor( (* for (field in Reflect.fields(this)) *)
-									field_var,
-									mk_iterator_access gen gen.gcon.basic.tstring ref_fields,
-									(* { *)
-										(* switch(field) *)
+								{
+									eexpr = TVar(new_me_var, Some(gen.gtools.rf_create_empty cl params pos));
+									etype = gen.gcon.basic.tvoid;
+									epos = pos
+								};
+								(* var fields = Reflect.fields(this); *)
+								{
+									eexpr = TVar(fields_var, Some(gen.gtools.r_fields true this));
+									etype = gen.gcon.basic.tvoid;
+									epos = pos
+								};
+								(* var i = 0; *)
+								{
+									eexpr = TVar(i_var, Some(mk_int gen 0 pos));
+									etype = gen.gcon.basic.tvoid;
+									epos = pos
+								};
+								{
+									eexpr = TWhile( (* while (i < fields.length) *)
 										{
-											eexpr = TSwitch(local_field, fields_to_cases fields, Some(
-												(* default: Reflect.setField(new_me, field, Reflect.field(this, field)) *)
-												gen.gtools.r_set_field (gen.gcon.basic.tvoid) local_new_me local_field (gen.gtools.r_field false t_dynamic this local_field)
-											));
-											etype = t_dynamic;
-											epos = pos;
-										}
-									(* } *)
-								); etype = t_dynamic; epos = pos };
-								(* return new_me *)
-								mk_return (mk_local new_me_var pos)
+											eexpr = TBinop(Ast.OpLt,
+												local_i,
+												mk_field_access gen local_fields "length" pos);
+											etype = gen.gcon.basic.tbool;
+											epos = pos
+										},
+										{
+											eexpr = TBlock [
+												(* var field = fields[i++]; *)
+												{
+													eexpr = TVar(field_var, Some { eexpr = TArray (local_fields, incr_i); etype = gen.gcon.basic.tstring; epos = pos });
+													etype = gen.gcon.basic.tvoid;
+													epos = pos
+												};
+												(* switch(field) { ... } *)
+												{
+													eexpr = TSwitch(local_field, fields_to_cases fields, Some(
+														(* default: Reflect.setField(new_me, field, Reflect.field(this, field)) *)
+														gen.gtools.r_set_field gen.gcon.basic.tvoid local_new_me local_field (gen.gtools.r_field false gen.gcon.basic.tvoid this local_field)
+													));
+													etype = gen.gcon.basic.tvoid;
+													epos = pos;
+												}
+											];
+											etype = gen.gcon.basic.tvoid;
+											epos = pos
+										},
+										Ast.NormalWhile
+									);
+									etype = gen.gcon.basic.tvoid;
+									epos = pos;
+								};
+ 								(* return new_me *)
+								mk_return local_new_me
 							]);
 							etype = t_dynamic;
 							epos = pos;
@@ -4559,7 +4612,7 @@ struct
 
 				let rec run md =
 					match md with
-						| TClassDecl ({ cl_extern = false; cl_params = [] } as cl) ->
+						| TClassDecl ({ cl_params = [] } as cl) ->
 							(* see if we're implementing any generic interface *)
 							let rec check (iface,tl) =
 								if tl <> [] && set_hxgeneric gen (TClassDecl iface) then
@@ -4569,7 +4622,7 @@ struct
 							in
 							List.iter (check) cl.cl_implements;
 							md
-						| TClassDecl ({ cl_extern = false; cl_params = hd :: tl } as cl) when set_hxgeneric gen md ->
+						| TClassDecl ({ cl_params = hd :: tl } as cl) when set_hxgeneric gen md ->
 							let iface = mk_class cl.cl_module cl.cl_path cl.cl_pos in
 							iface.cl_array_access <- Option.map (apply_params (cl.cl_params) (List.map (fun _ -> t_dynamic) cl.cl_params)) cl.cl_array_access;
 							iface.cl_module <- cl.cl_module;
@@ -6315,7 +6368,7 @@ struct
 				| TNew (cl, tparams, eparams) -> (try
 					let is_overload, cf, sup, stl = choose_ctor gen cl tparams (List.map (fun e -> e.etype) eparams) maybe_empty_t e.epos in
 					let handle e t1 t2 =
-						if true then
+						if is_overload then
 							let ret = handle e t1 t2 in
 							match ret.eexpr with
 							| TCast _ -> ret
@@ -6751,20 +6804,41 @@ struct
 		let basic = gen.gcon.basic in
 		let pos = cl.cl_pos in
 
+		let vtmp = mk_temp gen "i" basic.tint in
+		let vlen = mk_temp gen "len" basic.tint in
+
 		let mk_for arr =
 			let t = if ctx.rcf_optimize then basic.tint else basic.tstring in
 			let convert_str e = if ctx.rcf_optimize then ctx.rcf_lookup_function e else e in
-			let var = mk_temp gen "field" t in
+			let lenlocal = mk_local vlen pos in
+			let tmpinc = { eexpr = TUnop(Ast.Increment, Ast.Postfix, mk_local vtmp pos); etype = basic.tint; epos = pos } in
 			{
-				eexpr = TFor(var, mk_iterator_access gen t arr, mk_block (when_found (convert_str (mk_local var pos))));
+				eexpr = TBlock [
+					{ eexpr = TBinop(OpAssign, mk_local vtmp pos, mk_int ctx 0 pos); etype = basic.tint; epos = pos };
+					{ eexpr = TBinop(OpAssign, lenlocal, mk_field_access gen arr "length" pos); etype = basic.tint; epos = pos };
+					{
+						eexpr = TWhile (
+							{ eexpr = TBinop(Ast.OpLt, mk_local vtmp pos, lenlocal); etype = basic.tbool; epos = pos },
+							mk_block (when_found (convert_str { eexpr = TArray (arr, tmpinc); etype = t; epos = pos })),
+							Ast.NormalWhile
+						);
+						etype = basic.tvoid;
+						epos = pos
+					}
+				];
 				etype = basic.tvoid;
 				epos = pos;
 			}
-		in
+ 		in
 
 		let this_t = TInst(cl, List.map snd cl.cl_params) in
 		let this = { eexpr = TConst(TThis); etype = this_t; epos = pos } in
 		let mk_this field t = { (mk_field_access gen this field pos) with etype = t } in
+		[
+			{ eexpr = TVar (vtmp,None); etype = basic.tvoid; epos = pos };
+			{ eexpr = TVar (vlen,None); etype = basic.tvoid; epos = pos };
+		]
+		@
 		if ctx.rcf_optimize then
 		[
 			mk_for (mk_this (gen.gmk_internal_name "hx" "hashes") (basic.tarray basic.tint));
@@ -7118,7 +7192,7 @@ struct
 						| TInst ( { cl_path = ["haxe"], "Int64" }, [] ) ->
 							loop tl ((name, gen.ghandle_cast t_dynamic real_t expr) :: acc) acc_f
 						| _ ->
-							if like_float real_t then
+							if like_float real_t && not (like_i64 real_t) then
 								loop tl acc ((name, gen.ghandle_cast basic.tfloat real_t expr) :: acc_f)
 							else
 								loop tl ((name, gen.ghandle_cast t_dynamic real_t expr) :: acc) acc_f
@@ -7633,7 +7707,7 @@ struct
 						match follow (ctx.rcf_gen.greal_type (ctx.rcf_gen.gfollow#run_f cf.cf_type)) with
 							| TDynamic _ | TMono _
 							| TInst ({ cl_kind = KTypeParameter _ }, _) -> true
-							| t when like_float t -> true
+							| t when like_float t && not (like_i64 t) -> true
 							| _ -> false
 					) ret
 				else
@@ -10241,7 +10315,7 @@ struct
 				let to_add = ref [] in
 				let fields = List.filter (fun cf ->
 					match cf.cf_kind with
-						| Var vkind ->
+						| Var vkind when not (Type.is_extern_field cf && Meta.has Meta.Property cf.cf_meta) ->
 							(match vkind.v_read with
 								| AccCall ->
 									let newcf = mk_class_field ("get_" ^ cf.cf_name) (TFun([],cf.cf_type)) true cf.cf_pos (Method MethNormal) [] in
@@ -10266,10 +10340,11 @@ struct
 				cl.cl_ordered_fields <- fields;
 
 				List.iter (fun cf ->
-					if not (PMap.mem cf.cf_name cl.cl_fields) then begin
-						cl.cl_ordered_fields <- cf :: cl.cl_ordered_fields;
-						cl.cl_fields <- PMap.add cf.cf_name cf cl.cl_fields
-					end
+					match field_access gen (TInst(cl,List.map snd cl.cl_params)) cf.cf_name with
+						| FNotFound | FDynamicField _ ->
+							cl.cl_ordered_fields <- cf :: cl.cl_ordered_fields;
+							cl.cl_fields <- PMap.add cf.cf_name cf cl.cl_fields
+						| _ -> ()
 				) !to_add;
 
 				md
@@ -10682,7 +10757,7 @@ struct
 							end
 						with | Not_found -> ()
 					in
-					List.iter loop_f iface.cl_ordered_fields
+					List.iter (fun f -> match f.cf_kind with | Var _ -> () | _ -> loop_f f) iface.cl_ordered_fields
 				in
 				List.iter (fun (iface,itl) -> loop_iface iface itl) c.cl_implements;
 				(* now go through all overrides, *)
@@ -10804,6 +10879,8 @@ struct
 	| TType(t,tl) -> TType(t,List.map filter_param tl)
 	| TInst(c,tl) -> TInst(c,List.map filter_param tl)
 	| TEnum(e,tl) -> TEnum(e,List.map filter_param tl)
+	| TAbstract(a,tl) when not (Meta.has Meta.CoreType a.a_meta) ->
+		filter_param (Abstract.get_underlying_type a tl)
 	| TAbstract(a,tl) -> TAbstract(a, List.map filter_param tl)
 	| TAnon a ->
 		TAnon {
@@ -10824,9 +10901,26 @@ struct
 		in
 		run
 
+	let default_implementation_module gen ~metas =
+		let rec run md = match md with
+			| TClassDecl cl ->
+				let rec map cf =
+					cf.cf_type <- filter_param cf.cf_type;
+					List.iter map cf.cf_overloads
+				in
+				List.iter map cl.cl_ordered_fields;
+				List.iter map cl.cl_ordered_statics;
+				Option.may map cl.cl_constructor;
+				md
+			| _ -> md
+		in
+		run
+
 	let configure gen ~metas =
 		let map e = Some(default_implementation gen e ~metas:metas) in
-		gen.gexpr_filters#add ~name:name ~priority:(PCustom priority) map
+		gen.gexpr_filters#add ~name:name ~priority:(PCustom priority) map;
+		let map md = Some(default_implementation_module gen ~metas md) in
+		gen.gmodule_filters#add ~name:name ~priority:(PCustom priority) map
 
 end;;
 

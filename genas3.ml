@@ -666,7 +666,7 @@ and gen_expr ctx e =
 			(fun() -> print ctx "}")
 		end) in
 		(match ctx.block_inits with None -> () | Some i -> i());
-		List.iter (fun e -> block_newline ctx; gen_expr ctx e) el;
+		List.iter (fun e -> gen_block_element ctx e) el;
 		bend();
 		newline ctx;
 		cb();
@@ -792,6 +792,13 @@ and gen_expr ctx e =
 		end
 	| TCast (e1,Some t) ->
 		gen_expr ctx (Codegen.default_cast ctx.inf.com e1 t e.etype e.epos)
+
+and gen_block_element ctx e = match e.eexpr with
+	| TObjectDecl fl ->
+		List.iter (fun (_,e) -> gen_block_element ctx e) fl
+	| _ ->
+		block_newline ctx;
+		gen_expr ctx e
 
 and gen_block ctx e =
 	newline ctx;
@@ -1009,20 +1016,6 @@ let generate_field ctx static f =
 					if o then print ctx " = %s" (default_value tstr);
 				) args;
 				print ctx ") : %s " (type_str ctx r p);
-			| _ when is_getset ->
-				let t = type_str ctx f.cf_type p in
-				let id = s_ident f.cf_name in
-				(match f.cf_kind with
-				| Var v ->
-					(match v.v_read with
-					| AccNormal -> print ctx "function get %s() : %s;" id t;
-					| AccCall -> print ctx "function %s() : %s;" ("get_" ^ f.cf_name) t;
-					| _ -> ());
-					(match v.v_write with
-					| AccNormal -> print ctx "function set %s( __v : %s ) : void;" id t;
-					| AccCall -> print ctx "function %s( __v : %s ) : %s;" ("set_" ^ f.cf_name) t t;
-					| _ -> ());
-				| _ -> assert false)
 			| _ -> ()
 		else
 		let gen_init () = match f.cf_expr with

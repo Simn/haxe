@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2014 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,19 +19,29 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
-package cs;
+package haxe;
 
-//FIXME this class is here due to seemingly a bug in type resolution inside _std packages.
-//Once this bug is fixed, it will be moved back to the cs.system.text package
-@:native('System.Text.StringBuilder') extern class StringBuilder
-{
-	var Length(default,never):Int;
+@:coreApi class Resource {
 
-	function new():Void;
+	@:keep static var content : Array<String>;
 
-	@:overload(function(char:cs.StdTypes.Char16):cs.StringBuilder {})
-	@:overload(function(str:String, startIndex:Int, len:Int):cs.StringBuilder {})
-	function Append(obj:Dynamic):StringBuilder;
+	public static inline function listNames() : Array<String> {
+		return content.copy();
+	}
 
-	function ToString():String;
+	public static function getString( name : String ) : String {
+		var stream = cast(Resource, java.lang.Class<Dynamic>).getResourceAsStream("/" + name);
+		if (stream == null)
+			return null;
+		var stream = new java.io.NativeInput(stream);
+		return stream.readAll().toString();
+	}
+
+	public static function getBytes( name : String ) : haxe.io.Bytes {
+		var stream = cast(Resource, java.lang.Class<Dynamic>).getResourceAsStream("/" + name);
+		if (stream == null)
+			return null;
+		var stream = new java.io.NativeInput(stream);
+		return stream.readAll();
+	}
 }

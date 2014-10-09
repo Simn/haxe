@@ -212,7 +212,7 @@ let rec follow_basic t =
 	| TType (t,tl) ->
 		follow_basic (apply_params t.t_params tl t.t_type)
 	| TAbstract (a,pl) when not (Meta.has Meta.CoreType a.a_meta) ->
-		follow_basic (Abstract.get_underlying_type a pl)
+		follow_basic (apply_params a.a_params pl a.a_this)
 	| _ -> t
 
 let rec type_id ctx t =
