@@ -1852,18 +1852,6 @@ and unify_with_variance f t1 t2 =
 			error [cannot_unify t1 t2]
 	in
 	match follow t1,follow t2 with
-	| a,((TMono x) as b) ->
-		(match !x with
-		| None -> if not (link x b a) then error [cannot_unify t1 t2]
-		| _ -> error [cannot_unify t1 t2])
-	| ((TMono x) as a),b ->
-		(match !x with
-		| None -> if not (link x a b) then error [cannot_unify t1 t2]
-		| _ -> error [cannot_unify t1 t2])
-	| TFun(args1,r1),TFun(args2,r2) ->
-		let g (_,_,t1) (_,_,t2) = (with_variance f) t1 t2 in
-		List.iter2 g args1 args2;
-		with_variance f r1 r2
 	| TInst(c1,tl1),TInst(c2,tl2) when c1 == c2 ->
 		List.iter2 f tl1 tl2
 	| TEnum(en1,tl1),TEnum(en2,tl2) when en1 == en2 ->
