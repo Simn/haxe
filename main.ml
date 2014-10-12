@@ -1487,6 +1487,7 @@ try
 		if Common.defined com Define.Dump then Codegen.dump_types com;
 		if Common.defined com Define.DumpDependencies then Codegen.dump_dependencies com;
 		t();
+		Common.mkdir_from_path (com.file ^ match com.platform with Cpp | Cs | Java | Php -> "/." | _ -> "");
 		(match com.platform with
 		| _ when !no_output ->
 			if !interp then begin
