@@ -66,3 +66,4 @@ tests/unit/unit.py.res2.bin
 tests/sys/bin/
 tests/optimization/dump/
 tests/misc/projects/Issue3102/test.n
+tests/unit/bin/
