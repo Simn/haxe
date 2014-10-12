@@ -435,12 +435,12 @@ class RunTravis {
 			case Cpp:
 				getCppDependencies();
 				runCommand("haxe", ["compile-cpp.hxml","-D","travis"]);
-				runCommand("./cpp/Test-debug", []);
+				runCommand("./bin/cpp/Test-debug", []);
 
 				runCommand("rm", ["-rf", "cpp"]);
 
 				runCommand("haxe", ["compile-cpp.hxml", "-D", "HXCPP_M64","-D","travis"]);
-				runCommand("./vin/cpp/Test-debug", []);
+				runCommand("./bin/cpp/Test-debug", []);
 
 				changeDirectory(sysDir);
 				runCommand("haxe", ["compile-cpp.hxml","-D","travis"]);
