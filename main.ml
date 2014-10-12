@@ -1487,7 +1487,11 @@ try
 		if Common.defined com Define.Dump then Codegen.dump_types com;
 		if Common.defined com Define.DumpDependencies then Codegen.dump_dependencies com;
 		t();
-		Common.mkdir_from_path (com.file ^ match com.platform with Cpp | Cs | Java | Php -> "/." | _ -> "");
+		begin match com.platform with
+			| Neko when !interp -> ()
+			| Cpp | Cs | Java | Php -> Common.mkdir_from_path (com.file ^ "/.")
+			| _ -> Common.mkdir_from_path com.file
+		end;
 		(match com.platform with
 		| _ when !no_output ->
 			if !interp then begin
