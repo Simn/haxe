@@ -432,6 +432,10 @@ class RunTravis {
 				runCommand("haxe", ["compile-python.hxml","-D","travis"]);
 				changeDirectory("bin/python");
 				runCommand("python3", ["sys.py"].concat(args));
+
+				changeDirectory(miscDir + "pythonImport");
+				runCommand("haxe", ["compile.hxml"]);
+				runCommand("python3", ["test.py"]);
 			case Cpp:
 				getCppDependencies();
 				runCommand("haxe", ["compile-cpp.hxml","-D","travis"]);
