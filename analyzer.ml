@@ -1,6 +1,7 @@
 open Ast
 open Type
 open Common
+open Typecore
 
 module IntMap = Map.Make(struct type t = int let compare a b = a - b end)
 
@@ -77,7 +78,7 @@ module Simplifier = struct
 		let push e = block_el := e :: !block_el in
 		let assign ev e =
 			let mk_assign e2 = match e2.eexpr with
-				| TBreak | TContinue | TThrow _ -> e2
+				| TBreak | TContinue | TThrow _ | TReturn _ -> e2
 				| _ -> mk (TBinop(OpAssign,ev,e2)) e2.etype e2.epos
 			in
 			let rec loop e = match e.eexpr with
@@ -173,6 +174,8 @@ module Simplifier = struct
 				| TLocal _ when allow_tlocal -> ()
 				| TParenthesis e1 | TCast(e1,None) | TEnumParameter(e1,_,_) -> Type.iter loop e
 				| TField(_,(FStatic(c,cf) | FInstance(c,_,cf))) when has_analyzer_option cf.cf_meta flag_no_simplification || has_analyzer_option c.cl_meta flag_no_simplification -> ()
+				| TField({eexpr = TLocal _},_) when allow_tlocal -> ()
+				| TCall({eexpr = TField(_,(FStatic(c,cf) | FInstance(c,_,cf)))},el) when has_analyzer_option cf.cf_meta flag_no_simplification || has_analyzer_option c.cl_meta flag_no_simplification -> ()
 				| _ -> raise Exit
 			in
 			try
@@ -184,9 +187,11 @@ module Simplifier = struct
 					| _ -> false
 				end
 		in
+		let has_unbound = ref false in
 		let rec loop e = match e.eexpr with
-			| TLocal v when Meta.has Meta.Unbound v.v_meta && v.v_name <> "`trace" ->
-				raise Exit (* nope *)
+			| TCall({eexpr = TLocal v | TField({eexpr = TLocal v},_)},_) | TField({eexpr = TLocal v},_) | TLocal v when Meta.has Meta.Unbound v.v_meta && v.v_name <> "`trace" ->
+				has_unbound := true;
+				e
 			| TBlock el ->
 				{e with eexpr = TBlock (block loop el)}
 			| TCall({eexpr = TField(_,(FStatic(c,cf) | FInstance(c,_,cf)))},el) when has_analyzer_option cf.cf_meta flag_no_simplification || has_analyzer_option c.cl_meta flag_no_simplification ->
@@ -236,7 +241,7 @@ module Simplifier = struct
 				let e2 = loop e2 in
 				{e with eexpr = TBinop(op,e1,e2)}
 			| TBinop((OpAssign | OpAssignOp _) as op,e1,e2) ->
-				let e2 = bind e2 in
+				let e2 = bind ~allow_tlocal:true e2 in
 				let e1 = loop e1 in
 				{e with eexpr = TBinop(op,e1,e2)}
 			| TBinop(op,e1,e2) ->
@@ -268,6 +273,7 @@ module Simplifier = struct
 				in
 				let e2 = if flag = NormalWhile then e2 else map_continue e2 in
 				let e_if = e_if None in
+				let e_if = mk (TMeta((Meta.Custom ":whileCond",[],e_if.epos), e_if)) e_if.etype e_if.epos in
 				let e_block = if flag = NormalWhile then Type.concat e_if e2 else Type.concat e2 e_if in
 				let e_true = mk (TConst (TBool true)) com.basic.tbool p in
 				let e = mk (TWhile(Codegen.mk_parent e_true,e_block,NormalWhile)) e.etype p in
@@ -285,20 +291,23 @@ module Simplifier = struct
 				let e1 = match e1.eexpr with
 					| TFunction _ -> loop e1
 					| TArrayDecl [{eexpr = TFunction _}] -> loop e1
-					| _ -> bind e1
+					| _ -> bind ~allow_tlocal:true e1
 				in
 				{e with eexpr = TVar(v,Some e1)}
 			| TUnop((Neg | NegBits | Not) as op,flag,e1) ->
 				let e1 = bind e1 in
 				{e with eexpr = TUnop(op,flag,e1)}
 			| TField(e1,fa) ->
-				let e1 = bind e1 in
+				let e1 = bind ~allow_tlocal:true e1 in
 				{e with eexpr = TField(e1,fa)}
 			| TReturn (Some ({eexpr = TThrow _ | TReturn _} as e1)) ->
 				loop e1 (* this is a bit hackish *)
 			| TReturn (Some e1) ->
 				let e1 = bind e1 in
 				{e with eexpr = TReturn (Some e1)}
+			| TThrow e1 ->
+				let e1 = bind e1 in
+				{e with eexpr = TThrow e1}
 			| TCast(e1,mto) ->
 				let e1 = bind ~allow_tlocal:true e1 in
 				{e with eexpr = TCast(e1,mto)}
@@ -317,27 +326,91 @@ module Simplifier = struct
 				List.map bind el
 		in
 		let e = loop e in
-		match close_block() with
+		!has_unbound,match close_block() with
 			| [] ->
 				e
 			| el ->
 				mk (TBlock (List.rev (e :: el))) e.etype e.epos
 
-	let unapply e =
+	let unapply com e =
 		let var_map = ref IntMap.empty in
+		let rec get_assignment_to v e = match e.eexpr with
+			| TBinop(OpAssign,{eexpr = TLocal v2},e2) when v == v2 -> Some e2
+			| TBlock [e] -> get_assignment_to v e
+			| _ -> None
+		in
 		let rec loop e = match e.eexpr with
 			| TBlock el ->
-				let el = ExtList.List.filter_map (fun e -> match e.eexpr with
-					| TVar(v,Some e1) when Meta.has Meta.CompilerGenerated v.v_meta ->
-						var_map := IntMap.add v.v_id (loop e1) !var_map;
-						None
-					| _ ->
-						Some (loop e)
-				) el in
+				let rec loop2 el = match el with
+					| e :: el ->
+						begin match e.eexpr with
+							| TVar(v,Some e1) when Meta.has Meta.CompilerGenerated v.v_meta ->
+								var_map := IntMap.add v.v_id (loop e1) !var_map;
+								loop2 el
+							| TVar(v,None) when not (com.platform = Php) ->
+								begin match el with
+									| {eexpr = TBinop(OpAssign,{eexpr = TLocal v2},e2)} :: el when v == v2 ->
+										let e = {e with eexpr = TVar(v,Some e2)} in
+										loop2 (e :: el)
+									| ({eexpr = TIf(e1,e2,Some e3)} as e_if) :: el ->
+										let e1 = loop e1 in
+										let e2 = loop e2 in
+										let e3 = loop e3 in
+										begin match get_assignment_to v e2,get_assignment_to v e3 with
+											| Some e2,Some e3 ->
+												let e_if = {e_if with eexpr = TIf(e1,e2,Some e3)} in
+												let e = {e with eexpr = TVar(v,Some e_if)} in
+												loop2 (e :: el)
+											| _ ->
+												let e_if = {e_if with eexpr = TIf(e1,e2,Some e3)} in
+												e :: e_if :: loop2 el
+										end
+									| _ ->
+										let e = loop e in
+										e :: loop2 el
+								end
+							| _ ->
+								let e = loop e in
+								e :: loop2 el
+						end
+					| [] ->
+						[]
+				in
+				let el = loop2 el in
 				{e with eexpr = TBlock el}
 			| TLocal v when Meta.has Meta.CompilerGenerated v.v_meta ->
 				begin try IntMap.find v.v_id !var_map
 				with Not_found -> e end
+			| TWhile(e1,e2,flag) ->
+				let e1 = loop e1 in
+				let e2 = loop e2 in
+				let extract_cond e = match e.eexpr with
+					| TIf({eexpr = TUnop(Not,_,e1)},_,_) -> e1
+					| TBreak -> raise Exit (* can happen due to optimization, not so easy to deal with because there might be other breaks/continues *)
+					| _ -> assert false
+				in
+				let e1,e2,flag = try
+					begin match e2.eexpr with
+						| TBlock el ->
+							begin match el with
+								| {eexpr = TMeta((Meta.Custom ":whileCond",_,_),e1)} :: el ->
+									let e1 = extract_cond e1 in
+									e1,{e2 with eexpr = TBlock el},NormalWhile
+								| _ ->
+									begin match List.rev el with
+										| {eexpr = TMeta((Meta.Custom ":whileCond",_,_),e1)} :: el ->
+											let e1 = extract_cond e1 in
+											e1,{e2 with eexpr = TBlock (List.rev el)},DoWhile
+										| _ ->
+											e1,e2,flag
+									end
+							end
+						| _ ->
+							e1,e2,flag
+					end with Exit ->
+						e1,e2,flag
+				in
+				{e with eexpr = TWhile(e1,e2,flag)}
 			| _ ->
 				Type.map_expr loop e
 		in
@@ -366,7 +439,6 @@ module Ssa = struct
 		com : Common.context;
 		mutable cleanup : (unit -> unit) list;
 		mutable cur_data : node_data;
-		mutable var_values : texpr IntMap.t;
 		mutable var_conds : (condition list) IntMap.t;
 		mutable loop_stack : (join_node * join_node) list;
 		mutable exception_stack : join_node list;
@@ -438,13 +510,50 @@ module Ssa = struct
 			ctx.exception_stack <- List.tl ctx.exception_stack;
 		)
 
+	let get_origin_var v = match v.v_extra with
+		| Some (_,Some {eexpr = TArrayDecl ({eexpr = TLocal v'} :: _)}) -> v'
+		| _ -> raise Not_found
+
+	let set_origin_var v v_origin p =
+		let ev = mk_loc v_origin p in
+		let create tl =
+			let e_extra = mk (TArrayDecl [
+				ev
+			]) t_dynamic p in
+			v.v_extra <- Some (tl,Some e_extra)
+		in
+		match v.v_extra with
+		| Some (tl,Some ({eexpr = TArrayDecl (_ :: el)} as ee)) ->
+			v.v_extra <- Some(tl, Some {ee with eexpr = TArrayDecl (ev :: el)})
+		| Some (tl,None) ->
+			create tl
+		| None ->
+			create []
+		| _ ->
+			assert false
+
+	let get_var_value v = match v.v_extra with
+		| Some (_,Some {eexpr = TArrayDecl (_ :: e :: _)}) -> e
+		| _ -> raise Not_found
+
+	let set_var_value v e =
+		match v.v_extra with
+		| Some (tl,Some ({eexpr = TArrayDecl (e1 :: el)} as ee)) ->
+			let el = match el with
+				| [] -> [e]
+				| _ :: el -> e :: el
+			in
+			v.v_extra <- Some (tl,Some {ee with eexpr = TArrayDecl (e1 :: el)})
+		| _ ->
+			assert false
+
 	let declare_var ctx v p =
 		let old = v.v_extra in
 		ctx.cleanup <- (fun () ->
 			v.v_extra <- old
 		) :: ctx.cleanup;
 		ctx.cur_data.nd_var_map <- IntMap.add v.v_id v ctx.cur_data.nd_var_map;
-		v.v_extra <- Some ([],(Some (mk_loc v p)))
+		set_origin_var v v p
 
 	let assign_var ctx v e p =
 		if v.v_capture then
@@ -459,9 +568,9 @@ module Ssa = struct
 			in
 			let v' = alloc_var (Printf.sprintf "%s<%i>" v.v_name i) v.v_type in
 			v'.v_meta <- [(Meta.Custom ":ssa"),[],p];
-			v'.v_extra <- Some ([],(Some (mk_loc v p)));
+			set_origin_var v' v p;
 			ctx.cur_data.nd_var_map <- IntMap.add v.v_id v' ctx.cur_data.nd_var_map;
-			ctx.var_values <- IntMap.add v'.v_id e ctx.var_values;
+			set_var_value v' e;
 			v'
 		end
 
@@ -502,7 +611,8 @@ module Ssa = struct
 				IntMap.iter (fun i vl -> match vl with
 					| [v,p] ->
 						ctx.cur_data.nd_var_map <- IntMap.add i v ctx.cur_data.nd_var_map;
-					| ({v_extra = Some (_,Some {eexpr = TLocal v})},p) :: _ ->
+					| (v',_) :: _ ->
+						let v = get_origin_var v' in
 						ignore(assign_var ctx v (mk_phi vl p) p)
 					| _ ->
 						assert false
@@ -523,7 +633,7 @@ module Ssa = struct
 		| TUnop(Not,_,e1) ->
 			invert_conds (eval_cond ctx e1)
 		| TLocal v ->
-			begin try eval_cond ctx (IntMap.find v.v_id ctx.var_values)
+			begin try eval_cond ctx (get_var_value v)
 			with Not_found -> [] end
 		| _ ->
 			[]
@@ -596,7 +706,7 @@ module Ssa = struct
 					| None -> None
 					| Some e ->
 						let e = loop ctx e in
-						ctx.var_values <- IntMap.add v.v_id e ctx.var_values;
+						set_var_value v e;
 						Some e
 				in
 				{e with eexpr = TVar(v,eo)}
@@ -746,7 +856,6 @@ module Ssa = struct
 		let ctx = {
 			com = com;
 			cur_data = mk_node_data e.epos;
-			var_values = IntMap.empty;
 			var_conds = IntMap.empty;
 			loop_stack = [];
 			exception_stack = [];
@@ -757,11 +866,11 @@ module Ssa = struct
 
 	let unapply com e =
 		let rec loop e = match e.eexpr with
-			| TFor(({v_extra = Some([],Some {eexpr = TLocal v'})} as v),e1,e2) when Meta.has (Meta.Custom ":ssa") v.v_meta ->
+			| TFor(({v_extra = Some([],Some {eexpr = TArrayDecl ({eexpr = TLocal v'} :: _)})} as v),e1,e2) when Meta.has (Meta.Custom ":ssa") v.v_meta ->
 				let e1 = loop e1 in
 				let e2 = loop e2 in
 				{e with eexpr = TFor(v',e1,e2)}
-			| TLocal ({v_extra = Some([],Some {eexpr = TLocal v'})} as v) when Meta.has (Meta.Custom ":ssa") v.v_meta ->
+			| TLocal ({v_extra = Some([],Some {eexpr = TArrayDecl ({eexpr = TLocal v'} :: _)})} as v) when Meta.has (Meta.Custom ":ssa") v.v_meta ->
 				{e with eexpr = TLocal v'}
 			| TBlock el ->
 				let rec filter e = match e.eexpr with
@@ -800,6 +909,10 @@ module ConstPropagation = struct
 		| _ ->
 			false
 
+	let is_enum_type t = match follow t with
+		| TEnum(_) -> true
+		| _ -> false
+
 	let rec local ssa v e =
 		begin try
 			if v.v_capture then raise Not_found;
@@ -808,13 +921,12 @@ module ConstPropagation = struct
 				| TDynamic _ -> raise Not_found
 				| _ -> ()
 			end;
-			let e = IntMap.find v.v_id ssa.var_values in
-			let reset() =
-				ssa.var_values <- IntMap.add v.v_id e ssa.var_values;
-			in
-			ssa.var_values <- IntMap.remove v.v_id ssa.var_values;
+			let e = Ssa.get_var_value v in
+			let old = v.v_extra in
+			v.v_extra <- None;
 			let e = value ssa e in
-			reset();
+			v.v_extra <- old;
+			Ssa.set_var_value v e;
 			e
 		with Not_found ->
 			e
@@ -842,7 +954,7 @@ module ConstPropagation = struct
 				e
 			else
 				value ssa e'
-		| TCall ({eexpr = TLocal {v_name = "__ssa_phi__"}},el) ->
+		| TCall (({eexpr = TLocal {v_name = "__ssa_phi__"}}),el) ->
 			let el = List.map (value ssa) el in
 			begin match el with
 				| [] -> assert false
@@ -850,7 +962,7 @@ module ConstPropagation = struct
 					if List.for_all (fun e2 -> expr_eq e1 e2) el then
 						value ssa e1
 					else
-						e
+						{e with eexpr = TCall(e1,el)}
 			end
 		| TParenthesis e1 | TMeta(_,e1) ->
 			value ssa e1
@@ -858,6 +970,22 @@ module ConstPropagation = struct
 			local ssa v e
 		| _ ->
 			e
+
+	(* TODO: the name is quite accurate *)
+	let awkward_get_enum_index ssa e =
+		let e = match e.eexpr with
+			| TArray(e1,{eexpr = TConst(TInt i)}) when ssa.com.platform = Js && Int32.to_int i = 1 && is_enum_type e1.etype ->
+				e1
+			| TCall({eexpr = TField(e1, FDynamic "__Index")},[]) when ssa.com.platform = Cpp && is_enum_type e1.etype ->
+				e1
+			| TField(e1,FDynamic "index") when ssa.com.platform = Neko && is_enum_type e1.etype ->
+				e1
+			| _ ->
+				raise Not_found
+		in
+		match (value ssa e).eexpr with
+			| TField(_,FEnum(_,ef)) -> TInt (Int32.of_int ef.ef_index)
+			| _ -> raise Not_found
 
 	let apply ssa e =
 		let had_function = ref false in
@@ -919,6 +1047,31 @@ module ConstPropagation = struct
 						let eo = match eo with None -> None | Some e -> Some (loop e) in
 						{e with eexpr = TIf(e1,e2,eo)}
 				end;
+			| TSwitch(e1,cases,edef) ->
+				let e1 = loop e1 in
+				let rec check_constant e = match e.eexpr with
+					| TConst ct -> ct
+					| TParenthesis e1 | TCast(e1,None) | TMeta(_,e1) -> check_constant e1
+					| _ -> awkward_get_enum_index ssa e
+				in
+				begin try
+					let ct = check_constant e1 in
+					begin try
+						let _,e = List.find (fun (el,_) ->
+							List.exists (fun e -> match e.eexpr with
+								| TConst ct2 -> ct = ct2
+								| _ -> false
+							) el
+						) cases in
+						loop e
+					with Not_found ->
+						begin match edef with None -> raise Not_found | Some e -> loop e end
+					end
+				with Not_found ->
+					let cases = List.map (fun (el,e) -> el,loop e) cases in
+					let edef = match edef with None -> None | Some e -> Some (loop e) in
+					{e with eexpr = TSwitch(e1,cases,edef)}
+				end
 			| _ ->
 				Type.map_expr loop e
 		in
@@ -933,7 +1086,7 @@ module EffectChecker = struct
 		in
 		let e = if is_var_expression then
 			(* var initialization expressions are like assignments, so let's cheat a bit here *)
-			Simplifier.apply com (alloc_var "tmp") (Codegen.binop OpAssign (mk (TConst TNull) t_dynamic e.epos) e e.etype e.epos)
+			snd (Simplifier.apply com (alloc_var "tmp") (Codegen.binop OpAssign (mk (TConst TNull) t_dynamic e.epos) e e.etype e.epos))
 		else e
 		in
 		let rec loop e = match e.eexpr with
@@ -956,7 +1109,7 @@ module Checker = struct
 			given_warnings := PMap.add p true !given_warnings
 		in
 		let resolve_value v =
-			let e' = IntMap.find v.v_id ssa.var_values in
+			let e' = Ssa.get_var_value v in
 			begin match e'.eexpr with
 				| TLocal v' when v == v' -> e'
 				| _ -> e'
@@ -1061,10 +1214,9 @@ module LocalDce = struct
 					e2
 				else
 					{e with eexpr = TBinop(OpAssign,{e1 with eexpr = TLocal v},e2)}
-			(* Cannot do that at the moment due to https://github.com/HaxeFoundation/haxe/issues/3440 *)
-(* 			| TVar(v,Some e1) when not (is_used v) ->
+			| TVar(v,Some e1) when not (is_used v) ->
 				let e1 = loop e1 in
-				e1 *)
+				e1
 			| TWhile(e1,e2,flag) ->
 				collect e2;
 				let e2 = loop e2 in
@@ -1111,7 +1263,8 @@ let run_ssa com config is_var_expression e =
 	let rec gen_local t =
 		alloc_var "tmp" t
 	in
-	let do_simplify = match com.platform with
+	let do_simplify = (not (Common.defined com Define.NoSimplify) ) && match com.platform with
+		| Cpp when Common.defined com Define.Cppia -> false
 		| Cpp | Flash8 | Python -> true
 		| _ -> false
 	in
@@ -1122,12 +1275,12 @@ let run_ssa com config is_var_expression e =
 		r
 	in
 	try
-		let e = if do_simplify || config.analyzer_use then
+		let has_unbound,e = if do_simplify || config.analyzer_use then
 			with_timer "analyzer-simplify-apply" (fun () -> Simplifier.apply com gen_local e)
 		else
-			e
+			false,e
 		in
-		let e = if config.analyzer_use then begin
+		let e = if config.analyzer_use && not has_unbound then begin
 				if config.check_has_effect then EffectChecker.run com is_var_expression e;
 				let e,ssa = with_timer "analyzer-ssa-apply" (fun () -> Ssa.apply com e) in
 				let e = if config.const_propagation then with_timer "analyzer-const-propagation" (fun () -> ConstPropagation.apply ssa e) else e in
@@ -1139,11 +1292,11 @@ let run_ssa com config is_var_expression e =
 			e
 		in
 		let e = if not do_simplify && not (Common.raw_defined com "analyzer-no-simplify-unapply") then
-			with_timer "analyzer-simplify-unapply" (fun () -> Simplifier.unapply e)
+			with_timer "analyzer-simplify-unapply" (fun () -> Simplifier.unapply com e)
 		else
 			e
 		in
-		let e = if config.local_dce then with_timer "analyzer-local-dce" (fun () -> LocalDce.apply e) else e in
+		let e = if config.local_dce && config.analyzer_use && not has_unbound then with_timer "analyzer-local-dce" (fun () -> LocalDce.apply e) else e in
 		e
 	with Exit ->
 		e
@@ -1166,7 +1319,7 @@ let update_config_from_meta config meta =
 			config
 	) config meta
 
-let run_expression_filters com config t =
+let run_expression_filters ctx config t =
 	match t with
 	| TClassDecl c when (has_analyzer_option c.cl_meta flag_ignore) ->
 		()
@@ -1178,9 +1331,9 @@ let run_expression_filters com config t =
 				| _ -> false
 			in
 			match cf.cf_expr with
-			| Some e when not (has_analyzer_option cf.cf_meta flag_ignore) && not (Meta.has Meta.Extern cf.cf_meta) (* TODO: use is_removable_field *) ->
+			| Some e when not (has_analyzer_option cf.cf_meta flag_ignore) && not (Codegen.is_removable_field ctx cf) ->
 				let config = update_config_from_meta config cf.cf_meta in
-				cf.cf_expr <- Some (run_ssa com config is_var_expression e);
+				cf.cf_expr <- Some (run_ssa ctx.com config is_var_expression e);
 			| _ -> ()
 		in
 		List.iter process_field c.cl_ordered_fields;
@@ -1192,12 +1345,13 @@ let run_expression_filters com config t =
 		| None -> ()
 		| Some e ->
 			(* never optimize init expressions (too messy) *)
-			c.cl_init <- Some (run_ssa com {config with analyzer_use = false} false e));
+			c.cl_init <- Some (run_ssa ctx.com {config with analyzer_use = false} false e));
 	| TEnumDecl _ -> ()
 	| TTypeDecl _ -> ()
 	| TAbstractDecl _ -> ()
 
-let apply com =
+let apply ctx =
+	let com = ctx.com in
 	let config = {
 		analyzer_use = true;
 		simplifier_apply = true;
@@ -1209,4 +1363,4 @@ let apply com =
 		ssa_unapply = not (Common.raw_defined com "analyzer-no-ssa-unapply");
 		simplifier_unapply = not (Common.raw_defined com "analyzer-no-simplify-unapply");
 	} in
-	List.iter (run_expression_filters com config) com.types
+	List.iter (run_expression_filters ctx config) com.types

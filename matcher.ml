@@ -110,6 +110,11 @@ type matcher = {
 	mutable is_exhaustive : bool;
 }
 
+type type_finiteness =
+	| Infinite (* type has inifite constructors (e.g. Int, String) *)
+	| CompileTimeFinite (* type is considered finite only at compile-time but has inifite possible run-time values (enum abstracts) *)
+	| RunTimeFinite (* type is truly finite (Bool, enums) *)
+
 exception Not_exhaustive of pat * st
 exception Unrecognized_pattern of Ast.expr
 
@@ -487,14 +492,14 @@ let to_pattern ctx e t =
 					error ((s_type t) ^ " has no field " ^ n ^ " that can be matched against") p;
 			in
 			pctx.pc_is_complex <- true;
-			let loop_fields fields f =
+			let loop_fields fields =
 				let sl,pl,i = PMap.foldi (fun n cf (sl,pl,i) ->
 					if not (is_matchable cf) then
 						sl,pl,i
 					else
 						let pat = try
 							if pctx.pc_reify && cf.cf_name = "pos" then raise Not_found;
-							loop pctx (List.assoc cf.cf_name fl) (f cf)
+							loop pctx (List.assoc cf.cf_name fl) cf.cf_type
 						with Not_found ->
 							(mk_any cf.cf_type p)
 						in
@@ -502,23 +507,32 @@ let to_pattern ctx e t =
 				) fields ([],[],0) in
 				mk_con_pat (CFields(i,sl)) pl t p
 			in
-			let fields,map = match follow t with
+			let fields = match follow t with
 				| TAnon {a_fields = fields} ->
-					fields,(fun cf -> cf.cf_type)
+					fields
 				| TInst(c,tl) ->
-					c.cl_fields,(fun cf -> apply_params c.cl_params tl (monomorphs cf.cf_params cf.cf_type))
+					let fields = ref PMap.empty in
+					let rec loop c tl =
+						begin match c.cl_super with
+							| Some (csup,tlsup) -> loop csup (List.map (apply_params c.cl_params tl) tlsup)
+							| None -> ()
+						end;
+						PMap.iter (fun n cf -> fields := PMap.add n {cf with cf_type = apply_params c.cl_params tl (monomorphs cf.cf_params cf.cf_type)} !fields) c.cl_fields
+					in
+					loop c tl;
+					!fields
 				| TAbstract({a_impl = Some c} as a,tl) ->
 					let fields = List.fold_left (fun acc cf ->
 						if Meta.has Meta.Impl cf.cf_meta then
 							PMap.add cf.cf_name cf acc
 						else acc
 					) PMap.empty c.cl_ordered_statics in
-					fields,(fun cf -> apply_params a.a_params tl (monomorphs cf.cf_params cf.cf_type))
+					PMap.map (fun cf -> {cf with cf_type = apply_params a.a_params tl (monomorphs cf.cf_params cf.cf_type)}) fields
 				| _ ->
 					error ((s_type t) ^ " cannot be matched against a structure") p
 			in
 			List.iter (fun (n,(_,p)) -> is_valid_field_name fields None n p) fl;
-			loop_fields fields map
+			loop_fields fields
 		| EArrayDecl [] ->
 			mk_con_pat (CArray 0) [] t p
 		| EArrayDecl el ->
@@ -790,7 +804,7 @@ let rec all_ctors mctx t =
 	| TAbstract({a_path = [],"Bool"},_) ->
 		h := PMap.add (CConst(TBool true)) Ast.null_pos !h;
 		h := PMap.add (CConst(TBool false)) Ast.null_pos !h;
-		h,false
+		h,RunTimeFinite
 	| TAbstract({a_impl = Some c} as a,pl) when Meta.has Meta.Enum a.a_meta ->
 		List.iter (fun cf ->
 			ignore(follow cf.cf_type);
@@ -798,11 +812,11 @@ let rec all_ctors mctx t =
 				| Some {eexpr = TConst c | TCast ({eexpr = TConst c},None)} -> h := PMap.add (CConst c) cf.cf_pos !h
 				| _ -> ()
 		) c.cl_ordered_statics;
-		h,false
+		h,CompileTimeFinite
 	| TAbstract(a,pl) when not (Meta.has Meta.CoreType a.a_meta) -> all_ctors mctx (Abstract.get_underlying_type a pl)
 	| TInst({cl_path=[],"String"},_)
 	| TInst({cl_path=[],"Array"},_) ->
-		h,true
+		h,Infinite
 	| TEnum(en,pl) ->
 		PMap.iter (fun _ ef ->
 			let tc = monomorphs mctx.ctx.type_params t in
@@ -811,13 +825,13 @@ let rec all_ctors mctx t =
 			with Unify_error _ ->
 				()
 		) en.e_constrs;
-		h,false
+		h,RunTimeFinite
 	| TAnon a ->
-		h,true
+		h,Infinite
 	| TInst(_,_) ->
-		h,true
+		h,Infinite
 	| _ ->
-		h,true
+		h,Infinite
 
 let rec collapse_pattern pl = match pl with
 	| pat :: [] ->
@@ -869,7 +883,7 @@ let rec compile mctx stl pmat toplevel =
 			let all,inf = all_ctors mctx st.st_type in
 			let pl = PMap.foldi (fun cd p acc -> (mk_con_pat cd [] t_dynamic p) :: acc) !all [] in
 			begin match pl,inf with
-				| _,true
+				| _,Infinite
 				| [],_ ->
 					raise (Not_exhaustive(any,st))
 				| _ ->
@@ -920,13 +934,15 @@ let rec compile mctx stl pmat toplevel =
 			let dt = match def,cases with
 			| _ when List.exists (fun (c,_) -> match c.c_def with CFields _ -> true | _ -> false) cases ->
 				switch st_head cases
-			| _ when not inf && PMap.is_empty !all ->
+			| _ when inf = RunTimeFinite && PMap.is_empty !all ->
 				switch st_head cases
-			| [],_ when inf && not mctx.need_val && toplevel ->
+			| [],_ when inf = CompileTimeFinite && PMap.is_empty !all ->
+				switch st_head cases
+			| [],_ when inf = Infinite && not mctx.need_val && toplevel ->
 				(* ignore exhaustiveness, but mark context so we do not generate @:exhaustive metadata *)
 				mctx.is_exhaustive <- false;
 				switch st_head cases
-			| [],_ when inf ->
+			| [],_ when inf = Infinite ->
 				raise (Not_exhaustive(any,st_head))
 			| [],_ ->
 				let pl = PMap.foldi (fun cd p acc -> (mk_con_pat cd [] t_dynamic p) :: acc) !all [] in

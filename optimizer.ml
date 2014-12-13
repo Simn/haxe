@@ -508,7 +508,7 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 					| TAbstract ({ a_path = [],"Void" },_) -> e
 					| _ -> raise (Unify_error []))
 				| _ -> try
-					type_eq EqStrict etype tret;
+					type_eq (if ctx.com.config.pf_static then EqDoNotFollowNull else EqStrict) etype tret;
 					e
 				with Unify_error _ when (match ctx.com.platform with Cpp -> true | Flash when Common.defined ctx.com Define.As3 -> true | _ -> false) ->
 					(* try to detect upcasts: in that case we may use a safe cast *)
@@ -573,7 +573,7 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 (* ---------------------------------------------------------------------- *)
 (* LOOPS *)
 
-let rec optimize_for_loop ctx i e1 e2 p =
+let rec optimize_for_loop ctx (i,pi) e1 e2 p =
 	let t_void = ctx.t.tvoid in
 	let t_int = ctx.t.tint in
 	let lblock el = Some (mk (TBlock el) t_void p) in
@@ -591,7 +591,7 @@ let rec optimize_for_loop ctx i e1 e2 p =
 		) in
 		let iexpr = mk (TLocal index) t_int p in
 		let e2 = type_expr ctx e2 NoValue in
-		let aget = mk (TVar (i,Some (f_get arr iexpr pt p))) t_void p in
+		let aget = mk (TVar (i,Some (f_get arr iexpr pt p))) t_void pi in
 		let incr = mk (TUnop (Increment,Prefix,iexpr)) t_int p in
 		let block = match e2.eexpr with
 			| TBlock el -> mk (TBlock (aget :: incr :: el)) t_void e2.epos
@@ -618,7 +618,7 @@ let rec optimize_for_loop ctx i e1 e2 p =
 	match e1.eexpr, follow e1.etype with
 	| TNew ({ cl_path = ([],"IntIterator") },[],[i1;i2]) , _ ->
 		let max = (match i1.eexpr , i2.eexpr with
-			| TConst (TInt a), TConst (TInt b) when Int32.compare b a < 0 -> error "Range operate can't iterate backwards" p
+			| TConst (TInt a), TConst (TInt b) when Int32.compare b a < 0 -> error "Range operator can't iterate backwards" p
 			| _, TConst _ | _ , TLocal _ -> None
 			| _ -> Some (gen_local ctx t_int)
 		) in
@@ -638,7 +638,7 @@ let rec optimize_for_loop ctx i e1 e2 p =
 		check e2;
 		let etmp = mk (TLocal tmp) t_int p in
 		let incr = mk (TUnop (Increment,Postfix,etmp)) t_int p in
-		let init = mk (TVar (i,Some incr)) t_void p in
+		let init = mk (TVar (i,Some incr)) t_void pi in
 		let block = match e2.eexpr with
 			| TBlock el -> mk (TBlock (init :: el)) t_void e2.epos
 			| _ -> mk (TBlock [init;e2]) t_void p
@@ -715,7 +715,7 @@ let rec optimize_for_loop ctx i e1 e2 p =
 		let cell = gen_local ctx tcell in
 		let cexpr = mk (TLocal cell) tcell p in
 		let e2 = type_expr ctx e2 NoValue in
-		let evar = mk (TVar (i,Some (mk (mk_field cexpr "elt") t p))) t_void p in
+		let evar = mk (TVar (i,Some (mk (mk_field cexpr "elt") t p))) t_void pi in
 		let enext = mk (TBinop (OpAssign,cexpr,mk (mk_field cexpr "next") tcell p)) tcell p in
 		let block = match e2.eexpr with
 			| TBlock el -> mk (TBlock (evar :: enext :: el)) t_void e2.epos
@@ -1142,7 +1142,7 @@ let rec make_constant_expression ctx ?(concat_strings=false) e =
 *)
 
 type inline_kind =
-	| IKCtor of tfunc * tclass_field * tclass * texpr list * texpr list
+	| IKCtor of tfunc * tclass_field * tclass * t list * texpr list * texpr list
 	| IKArray of texpr list * t
 	| IKStructure of (string * texpr) list
 	| IKNone
@@ -1167,8 +1167,8 @@ let inline_constructors ctx e =
 			false
 	in
 	let rec get_inline_ctor_info e = match e.eexpr with
-		| TNew ({ cl_constructor = Some ({ cf_kind = Method MethInline; cf_expr = Some { eexpr = TFunction f } } as cst) } as c,_,pl) ->
-			IKCtor (f,cst,c,pl,[])
+		| TNew ({ cl_constructor = Some ({ cf_kind = Method MethInline; cf_expr = Some { eexpr = TFunction f } } as cst) } as c,tl,pl) ->
+			IKCtor (f,cst,c,tl,pl,[])
 		| TObjectDecl [] | TArrayDecl [] ->
 			IKNone
 		| TArrayDecl el ->
@@ -1189,8 +1189,8 @@ let inline_constructors ctx e =
 			begin match List.rev el with
 				| e :: el ->
 					begin match get_inline_ctor_info e with
-						| IKCtor(f,cst,c,pl,e_init) ->
-							IKCtor(f,cst,c,pl,(List.rev el) @ e_init)
+						| IKCtor(f,cst,c,tl,pl,e_init) ->
+							IKCtor(f,cst,c,tl,pl,(List.rev el) @ e_init)
 						| _ ->
 							IKNone
 					end
@@ -1222,9 +1222,9 @@ let inline_constructors ctx e =
 			begin match eo with
 				| Some n ->
 					begin match get_inline_ctor_info n with
-					| IKCtor (f,cst,c,pl,el_init) ->
+					| IKCtor (f,cst,c,tl,pl,el_init) ->
 						(* inline the constructor *)
-						(match (try type_inline ctx cst f (mk (TLocal v) v.v_type n.epos) pl ctx.t.tvoid None n.epos true with Error (Custom _,_) -> None) with
+						(match (try type_inline ctx cst f (mk (TLocal v) (TInst (c,tl)) n.epos) pl ctx.t.tvoid None n.epos true with Error (Custom _,_) -> None) with
 						| None -> ()
 						| Some ecst ->
 							let assigns = ref [] in

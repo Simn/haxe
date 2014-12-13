@@ -109,6 +109,7 @@ module Meta = struct
 		| NoCompletion
 		| NoDebug
 		| NoDoc
+		| NoExpr
 		| NoImportGlobal
 		| NoPackageRestrict
 		| NoStack
@@ -124,6 +125,7 @@ module Meta = struct
 		| Public
 		| PublicFields
 		| ReadOnly
+		| ReallyUsed
 		| RealPath
 		| Remove
 		| Require
@@ -132,6 +134,7 @@ module Meta = struct
 		| Rtti
 		| Runtime
 		| RuntimeValue
+		| SelfCall
 		| Setter
 		| SkipCtor
 		| SkipReflection

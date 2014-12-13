@@ -611,7 +611,6 @@ let rec unify_min_raise ctx (el:texpr list) : t =
 			let fields = List.fold_left (fun acc e ->
 				match follow e.etype with
 				| TAnon a when !(a.a_status) = Const ->
-					a.a_status := Closed;
 					if !fcount = -1 then begin
 						fcount := field_count a;
 						PMap.map (fun f -> [expr f]) a.a_fields
@@ -778,8 +777,8 @@ let unify_field_call ctx fa el args ret p inline =
 				begin match follow t with
 					| TFun(args,ret) ->
 						let el,tf = unify_call_args' ctx el args ret p inline is_forced_inline in
-						let mk_call ethis =
-							let ef = mk (TField(ethis,mk_fa cf)) tf p in
+						let mk_call ethis p_field =
+							let ef = mk (TField(ethis,mk_fa cf)) tf p_field in
 							make_call ctx ef (List.map fst el) ret p
 						in
 						let candidate = (el,tf,mk_call) in
@@ -941,6 +940,7 @@ let make_call ctx e params t p =
 
 let mk_array_get_call ctx (cf,tf,r,e1,e2o) c ebase p = match cf.cf_expr with
 	| None ->
+		if not (Meta.has Meta.NoExpr cf.cf_meta) then display_error ctx "Recursive array get method" p;
 		mk (TArray(ebase,e1)) r p
 	| Some _ ->
 		let et = type_module_type ctx (TClassDecl c) None p in
@@ -951,6 +951,7 @@ let mk_array_set_call ctx (cf,tf,r,e1,e2o) c ebase p =
 	let evalue = match e2o with None -> assert false | Some e -> e in
 	match cf.cf_expr with
 		| None ->
+			if not (Meta.has Meta.NoExpr cf.cf_meta) then display_error ctx "Recursive array get method" p;
 			let ea = mk (TArray(ebase,e1)) r p in
 			mk (TBinop(OpAssign,ea,evalue)) r p
 		| Some _ ->
@@ -1164,6 +1165,12 @@ let field_access ctx mode f fmode t e p =
 				normal()
 		| AccCall ->
 			let m = (match mode with MSet -> "set_" | _ -> "get_") ^ f.cf_name in
+			let is_abstract_this_access () = match e.eexpr,ctx.curfun with
+				| TTypeExpr (TClassDecl ({cl_kind = KAbstractImpl _} as c)),(FunMemberAbstract | FunMemberAbstractLocal) ->
+					c == ctx.curclass
+				| _ ->
+					false
+			in
 			if m = ctx.curfield.cf_name && (match e.eexpr with TConst TThis -> true | TTypeExpr (TClassDecl c) when c == ctx.curclass -> true | _ -> false) then
 				let prefix = (match ctx.com.platform with Flash when Common.defined ctx.com Define.As3 -> "$" | _ -> "") in
 				if is_extern_field f then begin
@@ -1171,7 +1178,7 @@ let field_access ctx mode f fmode t e p =
 					display_error ctx "Add @:isVar here to enable it" f.cf_pos;
 				end;
 				AKExpr (mk (TField (e,if prefix = "" then fmode else FDynamic (prefix ^ f.cf_name))) t p)
-			else if (match e.eexpr with TTypeExpr (TClassDecl ({cl_kind = KAbstractImpl _} as c)) when c == ctx.curclass -> true | _ -> false) then begin
+			else if is_abstract_this_access() then begin
 				let this = get_this ctx p in
 				if mode = MSet then begin
 					let c,a = match ctx.curclass with {cl_kind = KAbstractImpl a} as c -> c,a | _ -> assert false in
@@ -1550,6 +1557,8 @@ and type_field ?(resume=false) ctx e i p mode =
 			let f = PMap.find i c.cl_statics in
 			if not (can_access ctx c f true) && not ctx.untyped then display_error ctx ("Cannot access private field " ^ i) p;
 			let field_type f =
+				if not (Meta.has Meta.Impl f.cf_meta) then
+					error ("Invalid call to static function " ^ i ^ " through abstract instance") p;
 				let t = field_type ctx c [] f p in
 				apply_params a.a_params pl t
 			in
@@ -1575,7 +1584,7 @@ and type_field ?(resume=false) ctx e i p mode =
 					| [] -> error (Printf.sprintf "Field %s cannot be called on %s" f.cf_name (s_type (print_context()) e.etype)) p
 					| cf :: cfl ->
 						match follow (apply_params a.a_params pl (monomorphs cf.cf_params cf.cf_type)) with
-							| TFun((_,_,t1) :: _,_) when type_iseq t1 e.etype ->
+							| TFun((_,_,t1) :: _,_) when type_iseq t1 (Abstract.get_underlying_type a pl) ->
 								cf
 							| _ ->
 								loop cfl
@@ -1742,16 +1751,17 @@ let unify_int ctx e k =
 		unify ctx e.etype ctx.t.tint e.epos;
 		true
 
-let type_generic_function ctx (e,cf) el ?(using_param=None) with_type p =
-	if cf.cf_params = [] then error "Function has no type parameters and cannot be generic" p;
-	let monos = List.map (fun _ -> mk_mono()) cf.cf_params in
-	let c,tl,stat = match follow e.etype with
-		| (TInst (c,tl)) -> c,tl,false
-		| (TAnon a) -> (match !(a.a_status) with Statics c -> c,[],true | _ -> assert false)
+ let type_generic_function ctx (e,fa) el ?(using_param=None) with_type p =
+	let c,tl,cf,stat = match fa with
+		| FInstance(c,tl,cf) -> c,tl,cf,false
+		| FStatic(c,cf) -> c,[],cf,true
 		| _ -> assert false
 	in
-	let t = apply_params cf.cf_params monos cf.cf_type in
-	add_constraint_checks ctx c.cl_params [] cf monos p;
+	if cf.cf_params = [] then error "Function has no type parameters and cannot be generic" p;
+	let monos = List.map (fun _ -> mk_mono()) cf.cf_params in
+	let map t = apply_params cf.cf_params monos t in
+	let map t = if stat then map t else apply_params c.cl_params tl (map t) in
+	let t = map cf.cf_type in
 	let args,ret = match t,using_param with
 		| TFun((_,_,ta) :: args,ret),Some e ->
 			let ta = if not (Meta.has Meta.Impl cf.cf_meta) then ta
@@ -1769,6 +1779,11 @@ let type_generic_function ctx (e,cf) el ?(using_param=None) with_type p =
 		| _ -> ()
 	end;
 	let el,_ = unify_call_args ctx el args ret p false false in
+	begin try
+		check_constraints ctx cf.cf_name cf.cf_params monos map false p
+	with Unify_error l ->
+		display_error ctx (error_msg (Unify l)) p
+	end;
 	let el = match using_param with None -> el | Some e -> e :: el in
 	(try
 		let gctx = Codegen.make_generic ctx cf.cf_params monos p in
@@ -1786,8 +1801,8 @@ let type_generic_function ctx (e,cf) el ?(using_param=None) with_type p =
 				unify_existing_field cf2.cf_type cf2.cf_pos;
 				cf2
 			else
-				let _,tcf,cf2 = class_field ctx c tl name p in
-				unify_existing_field tcf cf2.cf_pos;
+				let cf2 = PMap.find name c.cl_fields in
+				unify_existing_field cf2.cf_type cf2.cf_pos;
 				cf2
 			in
 			cf2
@@ -1797,12 +1812,13 @@ let type_generic_function ctx (e,cf) el ?(using_param=None) with_type p =
 				c.cl_statics <- PMap.add name cf2 c.cl_statics;
 				c.cl_ordered_statics <- cf2 :: c.cl_ordered_statics
 			end else begin
+				if List.memq cf c.cl_overrides then c.cl_overrides <- cf2 :: c.cl_overrides;
 				c.cl_fields <- PMap.add name cf2 c.cl_fields;
 				c.cl_ordered_fields <- cf2 :: c.cl_ordered_fields
 			end;
 			ignore(follow cf.cf_type);
 			cf2.cf_expr <- (match cf.cf_expr with
-				| None -> None
+				| None -> error "Recursive @:generic function" p
 				| Some e -> Some (Codegen.generic_substitute_expr gctx e));
 			cf2.cf_kind <- cf.cf_kind;
 			cf2.cf_public <- cf.cf_public;
@@ -1814,7 +1830,8 @@ let type_generic_function ctx (e,cf) el ?(using_param=None) with_type p =
 			cf2
 		in
 		let e = if stat then type_type ctx c.cl_path p else e in
-		let e = acc_get ctx (field_access ctx MCall cf2 (if stat then FStatic (c,cf2) else FInstance (c,tl,cf2)) cf2.cf_type e p) p in
+		let fa = if stat then FStatic (c,cf2) else FInstance (c,tl,cf2) in
+		let e = mk (TField(e,fa)) cf2.cf_type p in
 		make_call ctx e el ret p
 	with Codegen.Generic_Exception (msg,p) ->
 		error msg p)
@@ -2151,6 +2168,7 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 		let map = apply_params a.a_params tl in
 		let make op_cf cf e1 e2 tret =
 			if cf.cf_expr = None then begin
+				if not (Meta.has Meta.NoExpr cf.cf_meta) then display_error ctx "Recursive operator method" p;
 				if not (Meta.has Meta.CoreType a.a_meta) then begin
 					(* for non core-types we require that the return type is compatible to the native result type *)
 					let e' = make {e1 with etype = Abstract.follow_with_abstracts e1.etype} {e1 with etype = Abstract.follow_with_abstracts e2.etype} in
@@ -2564,6 +2582,7 @@ and type_access ctx e p mode =
 					Not_found -> loop [] path
 		in
 		let rec loop acc e =
+			let p = pos e in
 			match fst e with
 			| EField (e,s) ->
 				loop ((s,not (is_lower_ident s),p) :: acc) e
@@ -2727,7 +2746,8 @@ and format_string ctx s p =
 		let scode = String.sub s (pos + 1) slen in
 		if warn_escape then warn (pos + 1) slen;
 		min := !min + 2;
-		add (fst (parse_expr_string ctx scode { p with pmin = !pmin + pos + 2; pmax = !pmin + send + 1 } true)) slen;
+		if slen > 0 then
+			add (fst (parse_expr_string ctx scode { p with pmin = !pmin + pos + 2; pmax = !pmin + send + 1 } true)) slen;
 		min := !min + 1;
 		parse (send + 1) (send + 1)
 	in
@@ -2830,6 +2850,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 		let e = type_expr ctx e with_type in
 		mk (TParenthesis e) e.etype p
 	| EObjectDecl fl ->
+		let dynamic_parameter = ref None in
 		let a = (match with_type with
 		| WithType t | WithTypeResume t ->
 			(match follow t with
@@ -2839,6 +2860,12 @@ and type_expr ctx (e,p) (with_type:with_type) =
 					| TAnon a when not (PMap.is_empty a.a_fields) -> Some a
 					| _ -> None
 				end
+			| TDynamic t when (follow t != t_dynamic) ->
+				dynamic_parameter := Some t;
+				Some {
+					a_status = ref Closed;
+					a_fields = PMap.empty;
+				}
 			| _ -> None)
 		| _ -> None
 		) in
@@ -2866,12 +2893,13 @@ and type_expr ctx (e,p) (with_type:with_type) =
 				let n,add = Parser.unquote_ident n in
 				if PMap.mem n !fields then error ("Duplicate field in object declaration : " ^ n) p;
 				let e = try
-					let t = (PMap.find n a.a_fields).cf_type in
+					let t = (match !dynamic_parameter with Some t -> t | None -> (PMap.find n a.a_fields).cf_type) in
 					let e = type_expr ctx e (match with_type with WithTypeResume _ -> WithTypeResume t | _ -> WithType t) in
 					let e = Codegen.AbstractCast.cast_or_unify ctx t e p in
 					(try type_eq EqStrict e.etype t; e with Unify_error _ -> mk (TCast (e,None)) t e.epos)
 				with Not_found ->
-					extra_fields := n :: !extra_fields;
+					if add then
+						extra_fields := n :: !extra_fields;
 					type_expr ctx e Value
 				in
 				if add then begin
@@ -2988,7 +3016,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 					Some (get_iterable_param t)
 				with Not_found ->
 					None)
-			| _ ->
+			| t ->
 				if t == t_dynamic then Some t else None)
 		| _ ->
 			None
@@ -3016,15 +3044,15 @@ and type_expr ctx (e,p) (with_type:with_type) =
 	| EVars vl ->
 		type_vars ctx vl p false
 	| EFor (it,e2) ->
-		let i, e1 = (match it with
-			| (EIn ((EConst (Ident i),_),e),_) -> i, e
+		let i, pi, e1 = (match it with
+			| (EIn ((EConst (Ident i),pi),e),_) -> i, pi, e
 			| _ -> error "For expression should be 'v in expr'" (snd it)
 		) in
 		let e1 = type_expr ctx e1 Value in
 		let old_loop = ctx.in_loop in
 		let old_locals = save_locals ctx in
 		ctx.in_loop <- true;
-		let e = (match Optimizer.optimize_for_loop ctx i e1 e2 p with
+		let e = (match Optimizer.optimize_for_loop ctx (i,pi) e1 e2 p with
 			| Some e -> e
 			| None ->
 				let t, pt = Typeload.t_iterator ctx in
@@ -3059,7 +3087,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 					let tmp = gen_local ctx e1.etype in
 					let eit = mk (TLocal tmp) e1.etype p in
 					let ehasnext = make_call ctx (mk (TField (eit,FInstance (c, pl, fhasnext))) (TFun([],ctx.t.tbool)) p) [] ctx.t.tbool p in
-					let enext = mk (TVar (i,Some (make_call ctx (mk (TField (eit,FDynamic "next")) (TFun ([],pt)) p) [] pt p))) ctx.t.tvoid p in
+					let enext = mk (TVar (i,Some (make_call ctx (mk (TField (eit,quick_field_dynamic eit.etype "next")) (TFun ([],pt)) p) [] pt p))) ctx.t.tvoid p in
 					let eblock = (match e2.eexpr with
 						| TBlock el -> { e2 with eexpr = TBlock (enext :: el) }
 						| _ -> mk (TBlock [enext;e2]) ctx.t.tvoid p
@@ -3276,6 +3304,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 		in
 		let build_constructor_call c tl =
 			let ct, f = get_constructor ctx c tl p in
+			if (Meta.has Meta.CompilerGenerated f.cf_meta) then display_error ctx (s_type_path c.cl_path ^ " does not have a constructor") p;
 			if not (can_access ctx c f true || is_parent c ctx.curclass) && not ctx.untyped then display_error ctx "Cannot access private constructor" p;
 			(match f.cf_kind with
 			| Var { v_read = AccRequire (r,msg) } -> (match msg with Some msg -> error msg p | None -> error_require r p)
@@ -3337,9 +3366,10 @@ and type_expr ctx (e,p) (with_type:with_type) =
 						| _ -> ()
 					) args args2;
 					(* unify for top-down inference unless we are expecting Void *)
-					begin match follow tr with
-						| TAbstract({a_path = [],"Void"},_) -> ()
-						| _ -> unify ctx rt tr p
+					begin match follow tr,follow rt with
+						| TAbstract({a_path = [],"Void"},_),_ -> ()
+						| _,TMono _ -> unify ctx rt tr p
+						| _ -> ()
 					end
 				| TAbstract(a,tl) ->
 					loop (Abstract.get_underlying_type a tl)
@@ -3381,8 +3411,8 @@ and type_expr ctx (e,p) (with_type:with_type) =
 			if params <> [] || inline then v.v_extra <- Some (params,if inline then Some e else None);
 			let rec loop = function
 				| Filters.Block f | Filters.Loop f | Filters.Function f -> f loop
-				| Filters.Use v2 when v == v2 -> raise Exit
-				| Filters.Use _ | Filters.Declare _ -> ()
+				| Filters.Use v2 | Filters.Assign v2 when v == v2 -> raise Exit
+				| Filters.Use _ | Filters.Assign _ | Filters.Declare _ -> ()
 			in
 			let is_rec = (try Filters.local_usage loop e; false with Exit -> true) in
 			let decl = (if is_rec then begin
@@ -3511,6 +3541,8 @@ and handle_display ctx e_ast iscall p =
 	match ctx.com.display with
 	| DMResolve _ ->
 		assert false
+	| DMType ->
+		raise (DisplayTypes [e.etype])
 	| DMUsage | DMPosition ->
 		begin match e.eexpr with
 		| TField(_,FEnum(_,ef)) ->
@@ -3783,6 +3815,7 @@ and type_call ctx e el (with_type:with_type) p =
 		| None -> error "Current class does not have a super" p
 		| Some (c,params) ->
 			let ct, f = get_constructor ctx c params p in
+			if (Meta.has Meta.CompilerGenerated f.cf_meta) then display_error ctx (s_type_path c.cl_path ^ " does not have a constructor") p;
 			let el = (match follow ct with
 			| TFun (args,r) ->
 				let el,_,_ = unify_field_call ctx (FInstance(c,params,f)) el args r p false in
@@ -3807,20 +3840,20 @@ and build_call ctx acc el (with_type:with_type) p =
 				er,fun () -> ctx.this_stack <- List.tl ctx.this_stack
 	in
 	match acc with
-	| AKInline (ethis,f,fmode,t) when Meta.has Meta.Generic f.cf_meta ->
-		type_generic_function ctx (ethis,f) el with_type p
+ 	| AKInline (ethis,f,fmode,t) when Meta.has Meta.Generic f.cf_meta ->
+		type_generic_function ctx (ethis,fmode) el with_type p
 	| AKInline (ethis,f,fmode,t) ->
 		(match follow t with
 			| TFun (args,r) ->
 				let _,_,mk_call = unify_field_call ctx fmode el args r p true in
-				mk_call ethis
+				mk_call ethis p
 			| _ ->
 				error (s_type (print_context()) t ^ " cannot be called") p
 		)
 	| AKUsing (et,cl,ef,eparam) when Meta.has Meta.Generic ef.cf_meta ->
 		(match et.eexpr with
-		| TField(ec,_) ->
-			type_generic_function ctx (ec,ef) el ~using_param:(Some eparam) with_type p
+		| TField(ec,fa) ->
+			type_generic_function ctx (ec,fa) el ~using_param:(Some eparam) with_type p
 		| _ -> assert false)
 	| AKUsing (et,cl,ef,eparam) ->
 		begin match ef.cf_kind with
@@ -3911,10 +3944,10 @@ and build_call ctx acc el (with_type:with_type) p =
 				| TField(e1,fa) when not (match fa with FEnum _ -> true | _ -> false) ->
 					begin match fa with
 						| FInstance(_,_,cf) | FStatic(_,cf) when Meta.has Meta.Generic cf.cf_meta ->
-							type_generic_function ctx (e1,cf) el with_type p
+							type_generic_function ctx (e1,fa) el with_type p
 						| _ ->
 							let _,_,mk_call = unify_field_call ctx fa el args r p false in
-							mk_call e1
+							mk_call e1 e.epos
 					end
 				| _ ->
 					let el, tfunc = unify_call_args ctx el args r p false false in
@@ -4459,7 +4492,7 @@ and flush_macro_context mint ctx =
 		mint
 	end else mint in
 	(* we should maybe ensure that all filters in Main are applied. Not urgent atm *)
-	let expr_filters = [Codegen.AbstractCast.handle_abstract_casts mctx; Filters.captured_vars mctx.com; Filters.rename_local_vars mctx.com] in
+	let expr_filters = [Codegen.AbstractCast.handle_abstract_casts mctx; Filters.captured_vars mctx.com; Filters.rename_local_vars mctx] in
 	let type_filters = [Filters.add_field_inits mctx] in
 	let ready = fun t ->
 		Filters.post_process mctx expr_filters t;
@@ -4834,18 +4867,18 @@ let rec create com =
 			| "Null" ->
 				let mk_null t =
 					try
-						if not (is_nullable ~no_lazy:true t) then TType (td,[t]) else t
+						if not (is_null ~no_lazy:true t) then TType (td,[t]) else t
 					with Exit ->
 						(* don't force lazy evaluation *)
 						let r = ref (fun() -> assert false) in
 						r := (fun() ->
-							let t = (if not (is_nullable t) then TType (td,[t]) else t) in
+							let t = (if not (is_null t) then TType (td,[t]) else t) in
 							r := (fun() -> t);
 							t
 						);
 						TLazy r
 				in
-				ctx.t.tnull <- if not com.config.pf_static then (fun t -> t) else mk_null;
+				ctx.t.tnull <- mk_null;
 			| _ -> ());
 	) ctx.g.std.m_types;
 	let m = Typeload.load_module ctx ([],"String") null_pos in

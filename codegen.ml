@@ -114,6 +114,13 @@ let add_property_field com c =
 		c.cl_statics <- PMap.add cf.cf_name cf c.cl_statics;
 		c.cl_ordered_statics <- cf :: c.cl_ordered_statics
 
+let is_removable_field ctx f =
+	Meta.has Meta.Extern f.cf_meta || Meta.has Meta.Generic f.cf_meta
+	|| (match f.cf_kind with
+		| Var {v_read = AccRequire (s,_)} -> true
+		| Method MethMacro -> not ctx.in_macro
+		| _ -> false)
+
 (* -------------------------------------------------------------------------- *)
 (* REMOTING PROXYS *)
 
@@ -267,9 +274,12 @@ let generic_substitute_expr gctx e =
 	in
 	let rec build_expr e =
 		match e.eexpr with
-		| TField(e1, FInstance({cl_kind = KGeneric},_,cf)) ->
-			build_expr {e with eexpr = TField(e1,quick_field_dynamic (generic_substitute_type gctx (e1.etype)) cf.cf_name)}
-		| _ -> map_expr_type build_expr (generic_substitute_type gctx) build_var e
+		| TField(e1, FInstance({cl_kind = KGeneric} as c,tl,cf)) ->
+			let _, _, f = gctx.ctx.g.do_build_instance gctx.ctx (TClassDecl c) gctx.p in
+			let t = f (List.map (generic_substitute_type gctx) tl) in
+			build_expr {e with eexpr = TField(e1,quick_field t cf.cf_name)}
+		| _ ->
+			map_expr_type build_expr (generic_substitute_type gctx) build_var e
 	in
 	build_expr e
 
@@ -899,9 +909,9 @@ module PatternMatchConversion = struct
 				if is_declared cctx v then
 					vl, (mk (TBinop(OpAssign,mk (TLocal v) v.v_type p,e)) e.etype e.epos) :: el
 				else
-					((v,Some e) :: vl), el
+					((v,p,Some e) :: vl), el
 			) ([],[e]) bl in
-			let el_v = List.map (fun (v,eo) -> mk (TVar (v,eo)) cctx.ctx.t.tvoid e.epos) vl in
+			let el_v = List.map (fun (v,p,eo) -> mk (TVar (v,eo)) cctx.ctx.t.tvoid p) vl in
 			mk (TBlock (el_v @ el)) e.etype e.epos
 		| DTGoto i ->
 			convert_dt cctx (cctx.dt_lookup.(i))
@@ -1649,8 +1659,8 @@ module UnificationCallback = struct
 			| TBinop((OpAssign | OpAssignOp _ as op),e1,e2) ->
 				let e2 = f e2 e1.etype in
 				{e with eexpr = TBinop(op,e1,e2)}
-			| TVar(v,Some e) ->
-				let eo = Some (f e v.v_type) in
+			| TVar(v,Some ev) ->
+				let eo = Some (f ev v.v_type) in
 				{ e with eexpr = TVar(v,eo) }
 			| TCall(e1,el) ->
 				let el = check_call f el e1.etype in
