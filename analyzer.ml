@@ -67,6 +67,22 @@ let type_has_analyzer_option t s =
 	with Not_found ->
 		false
 
+let is_enum_type t = match follow t with
+	| TEnum(_) -> true
+	| _ -> false
+
+let rec awkward_get_enum_index com e = match e.eexpr with
+	| TArray(e1,{eexpr = TConst(TInt i)}) when com.platform = Js && Int32.to_int i = 1 && is_enum_type e1.etype ->
+		e1
+	| TCall({eexpr = TField(e1, FDynamic "__Index")},[]) when com.platform = Cpp && is_enum_type e1.etype ->
+		e1
+	| TField(e1,FDynamic "index") when com.platform = Neko && is_enum_type e1.etype ->
+		e1
+	| TParenthesis e1 | TCast(e1,None) | TMeta(_,e1) ->
+		awkward_get_enum_index com e1
+	| _ ->
+		raise Not_found
+
 (*
 	This module simplifies the AST by introducing temporary variables for complex expressions in many places.
 	In particular, it ensures that no branching can occur in value-places so that we can later insert SSA PHI
@@ -108,14 +124,14 @@ module Simplifier = struct
 						v,e
 					) catches in
 					{e with eexpr = TTry(e1,catches)}
+				| TParenthesis e1 | TMeta(_,e1) ->
+					loop e1 (* this is still weird, have to review *)
 (* 				| TBinop(OpAssign,({eexpr = TLocal _} as e1),e2) ->
 					push e;
 					mk_assign e1 *)
 (* 				| TBinop(OpAssignOp op,({eexpr = TLocal _} as e1),e2) ->
 					push e;
 					mk_assign e1 *)
-				| TParenthesis e1 | TMeta(_, e1) ->
-					loop e1 (* this is weird *)
 				| _ ->
 					mk_assign e
 			in
@@ -129,14 +145,24 @@ module Simplifier = struct
 				let e = mk (TVar (v,e_init)) com.basic.tvoid p in
 				push e;
 			in
-			begin match eo with
+			let e_v = match eo with
 				| None ->
-					declare None
+					declare None;
+					e_v
 				| Some e1 ->
 					begin match e1.eexpr with
 						| TThrow _ | TReturn _ | TBreak | TContinue ->
-							()
+							e1
 						| _ ->
+							let rec loop e_v e = match e.eexpr with
+								| TParenthesis e1 ->
+									loop {e_v with eexpr = TParenthesis e_v} e1
+								| TMeta(m,e1) ->
+									loop {e_v with eexpr = TMeta(m,e_v)} e1
+								| _ ->
+									e_v,e
+							in
+							let e_v',e1 = loop e_v e1 in
 							let e1 = assign e_v e1 in
 							begin match e1.eexpr with
 								| TBinop(OpAssign,{eexpr = TLocal v1},e2) when v == v1 ->
@@ -144,9 +170,10 @@ module Simplifier = struct
 								| _ ->
 									declare None;
 									push e1
-							end
+							end;
+							e_v'
 					end
-			end;
+			in
 			e_v
 		in
 		let rec push_block () =
@@ -172,10 +199,13 @@ module Simplifier = struct
 				match e.eexpr with
 				| TConst _ | TTypeExpr _ | TFunction _ -> ()
 				| TLocal _ when allow_tlocal -> ()
-				| TParenthesis e1 | TCast(e1,None) | TEnumParameter(e1,_,_) -> Type.iter loop e
+				| TParenthesis e1 | TCast(e1,None) -> Type.iter loop e
 				| TField(_,(FStatic(c,cf) | FInstance(c,_,cf))) when has_analyzer_option cf.cf_meta flag_no_simplification || has_analyzer_option c.cl_meta flag_no_simplification -> ()
 				| TField({eexpr = TLocal _},_) when allow_tlocal -> ()
 				| TCall({eexpr = TField(_,(FStatic(c,cf) | FInstance(c,_,cf)))},el) when has_analyzer_option cf.cf_meta flag_no_simplification || has_analyzer_option c.cl_meta flag_no_simplification -> ()
+				| TField(_,FEnum _) -> ()
+				| TField(_,FDynamic _) -> ()
+				| _ when (try ignore(awkward_get_enum_index com e); true with Not_found -> false) -> ()
 				| _ -> raise Exit
 			in
 			try
@@ -199,7 +229,19 @@ module Simplifier = struct
 			| TField(_,(FStatic(c,cf) | FInstance(c,_,cf))) when has_analyzer_option cf.cf_meta flag_no_simplification || has_analyzer_option c.cl_meta flag_no_simplification ->
 				e
 			| TCall(e1,el) ->
-				let e1 = loop e1 in
+				let rec is_valid_call_target e = match e.eexpr with
+					| TFunction _ | TField _ | TLocal _  ->
+						true
+					| TParenthesis e1 | TCast(e1,None) | TMeta(_,e1) ->
+						is_valid_call_target e1
+					| _ ->
+						false
+				in
+				let e1 = if is_valid_call_target e1 then
+					loop e1
+				else
+					bind e1
+				in
 				let check e t =
 					if type_has_analyzer_option t flag_no_simplification then e
 					else bind e
@@ -238,7 +280,7 @@ module Simplifier = struct
 					| _ ->
 						assert false
 				in
-				let e2 = loop e2 in
+				let e2 = bind e2 in
 				{e with eexpr = TBinop(op,e1,e2)}
 			| TBinop((OpAssign | OpAssignOp _) as op,e1,e2) ->
 				let e2 = bind ~allow_tlocal:true e2 in
@@ -287,6 +329,15 @@ module Simplifier = struct
 				let e2 = loop e2 in
 				let eo = match eo with None -> None | Some e -> Some (loop e) in
 				{e with eexpr = TIf(e1,e2,eo)}
+			| TSwitch (e1,cases,eo) ->
+				let e1 = bind e1 in
+				let cases = List.map (fun (el,e) ->
+					let el = List.map loop el in
+					let e = loop e in
+					el,e
+				) cases in
+				let eo = match eo with None -> None | Some e -> Some (loop e) in
+				{e with eexpr = TSwitch(e1,cases,eo)}
 			| TVar(v,Some e1) ->
 				let e1 = match e1.eexpr with
 					| TFunction _ -> loop e1
@@ -728,9 +779,9 @@ module Ssa = struct
 				{e with eexpr = TBinop(OpAssign,e1,e2)}
 			| TBinop(OpAssignOp op,({eexpr = TLocal v} as e1),e2) ->
 				let e1 = loop ctx e1 in
+				let e2 = loop ctx e2 in
 				let e_op = mk (TBinop(op,e1,e2)) e.etype e.epos in
 				let _ = assign_var ctx v e_op e1.epos in
-				let e2 = loop ctx e2 in
 				{e with eexpr = TBinop(OpAssignOp op,e1,e2)}
 			| TUnop((Increment | Decrement as op),flag,({eexpr = TLocal v} as e1)) ->
 				let op = match op with Increment -> OpAdd | Decrement -> OpSub | _ -> assert false in
@@ -909,9 +960,9 @@ module ConstPropagation = struct
 		| _ ->
 			false
 
-	let is_enum_type t = match follow t with
-		| TEnum(_) -> true
-		| _ -> false
+	let semi_awkward_enum_value ssa e i = match e.eexpr with
+		| TCall({eexpr = TField(_,FEnum _)},el) -> (try List.nth el i with Failure _ -> raise Not_found)
+		| _ -> raise Not_found
 
 	let rec local ssa v e =
 		begin try
@@ -968,23 +1019,20 @@ module ConstPropagation = struct
 			value ssa e1
 		| TLocal v ->
 			local ssa v e
+ 		| TEnumParameter(e1,ef,i) ->
+			let ev = value ssa e1 in
+			begin try semi_awkward_enum_value ssa ev i
+			with Not_found -> e end
 		| _ ->
 			e
 
 	(* TODO: the name is quite accurate *)
 	let awkward_get_enum_index ssa e =
-		let e = match e.eexpr with
-			| TArray(e1,{eexpr = TConst(TInt i)}) when ssa.com.platform = Js && Int32.to_int i = 1 && is_enum_type e1.etype ->
-				e1
-			| TCall({eexpr = TField(e1, FDynamic "__Index")},[]) when ssa.com.platform = Cpp && is_enum_type e1.etype ->
-				e1
-			| TField(e1,FDynamic "index") when ssa.com.platform = Neko && is_enum_type e1.etype ->
-				e1
-			| _ ->
-				raise Not_found
-		in
-		match (value ssa e).eexpr with
+		let e = awkward_get_enum_index ssa.com e in
+		let ev = (value ssa e) in
+		match ev.eexpr with
 			| TField(_,FEnum(_,ef)) -> TInt (Int32.of_int ef.ef_index)
+			| TCall({eexpr = TField(_,FEnum(_,ef))},_) -> TInt (Int32.of_int ef.ef_index)
 			| _ -> raise Not_found
 
 	let apply ssa e =
@@ -1196,11 +1244,14 @@ module LocalDce = struct
 			| TVar(v,None) -> is_used v
 			| TVar(v,Some e1) -> is_used v || Optimizer.has_side_effect e1
 			| TBinop(OpAssign,{eexpr = TLocal v},e2) -> is_used v || Optimizer.has_side_effect e2
-			| _ -> true
+			| _ -> Optimizer.has_side_effect e
 		in
 		let rec collect e = match e.eexpr with
 			| TLocal v ->
 				use v
+			| TVar(v,_) when not (is_used v) ->
+				(* TODO: this is probably dangerous *)
+				()
 			| _ ->
 				Type.iter collect e
 		in
@@ -1291,12 +1342,12 @@ let run_ssa com config is_var_expression e =
 		end else
 			e
 		in
+		let e = if config.local_dce && config.analyzer_use && not has_unbound && not is_var_expression then with_timer "analyzer-local-dce" (fun () -> LocalDce.apply e) else e in
 		let e = if not do_simplify && not (Common.raw_defined com "analyzer-no-simplify-unapply") then
 			with_timer "analyzer-simplify-unapply" (fun () -> Simplifier.unapply com e)
 		else
 			e
 		in
-		let e = if config.local_dce && config.analyzer_use && not has_unbound then with_timer "analyzer-local-dce" (fun () -> LocalDce.apply e) else e in
 		e
 	with Exit ->
 		e
