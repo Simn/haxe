@@ -131,6 +131,7 @@ module Meta = struct
 		| Remove
 		| Require
 		| RequiresAssign
+		(* | Resolve *)
 		| ReplaceReflection
 		| Rtti
 		| Runtime
@@ -156,6 +157,7 @@ module Meta = struct
 		| Unsafe
 		| Usage
 		| Used
+		| Value
 		| Void
 		| Last
 		(* do not put any custom metadata after Last *)
@@ -736,3 +738,12 @@ let rec s_expr (e,_) =
 	| ECall (e,el) -> s_expr e ^ "(" ^ (String.concat ", " (List.map s_expr el)) ^ ")"
 	| EField (e,f) -> s_expr e ^ "." ^ f
 	| _ -> "'???'"
+
+let get_value_meta meta =
+	try
+		begin match Meta.get Meta.Value meta with
+			| (_,[EObjectDecl values,_],_) -> List.fold_left (fun acc (s,e) -> PMap.add s e acc) PMap.empty values
+			| _ -> raise Not_found
+		end
+	with Not_found ->
+		PMap.empty

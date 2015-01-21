@@ -422,7 +422,7 @@ class RunCi {
 			case TravisCI:
 				[Sys.getEnv("TEST")];
 			case AppVeyor:
-				[Macro, Neko, Cs];
+				[Neko, Cs, Macro];
 		}
 		Sys.println('Going to test: $tests');
 
@@ -450,7 +450,12 @@ class RunCi {
 					changeDirectory(getHaxelibPath("dox"));
 					runCommand("haxe", ["run.hxml"]);
 					runCommand("haxe", ["gen.hxml"]);
-					haxelibRun(["dox", "-o", "bin/api.zip", "-i", "bin/xml"]);
+					switch (ci) {
+						case AppVeyor:
+							//do not build zip to save time
+						case _:
+							haxelibRun(["dox", "-o", "bin/api.zip", "-i", "bin/xml"]);
+					}
 
 					//BYTECODE
 					switch (ci) {
@@ -517,14 +522,14 @@ class RunCi {
 
 					if (Sys.getEnv("TRAVIS_SECURE_ENV_VARS") == "true" && systemName == "Linux") {
 						//https://saucelabs.com/opensource/travis
-						runCommand("npm", ["install", "wd"], true);
+						runCommand("npm", ["install", "wd", "q"], true);
 						runCommand("wget", ["-nv", "https://gist.github.com/santiycr/5139565/raw/sauce_connect_setup.sh"], true);
 						runCommand("chmod", ["a+x", "sauce_connect_setup.sh"]);
 						runCommand("./sauce_connect_setup.sh", []);
 						haxelibInstallGit("dionjwa", "nodejs-std", "master", "src", true, "nodejs");
 						runCommand("haxe", ["compile-saucelabs-runner.hxml"]);
 						var server = new Process("nekotools", ["server"]);
-						runCommand("node", ["bin/RunSauceLabs.js"]);
+						runCommand("node", ["bin/RunSauceLabs.js", "unit-js.html"]);
 						server.close();
 					}
 

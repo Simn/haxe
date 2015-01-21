@@ -291,6 +291,13 @@ let has_ctor_constraint c = match c.cl_kind with
 		) tl;
 	| _ -> false
 
+let get_short_name =
+	let i = ref (-1) in
+	(fun () ->
+		incr i;
+		Printf.sprintf "__hx_type_%i" !i
+	)
+
 let rec build_generic ctx c p tl =
 	let pack = fst c.cl_path in
 	let recurse = ref false in
@@ -360,28 +367,42 @@ let rec build_generic ctx c p tl =
 			List.iter loop tl
 		in
 		List.iter loop tl;
-		let delays = ref [] in
-		let build_field f =
-			let t = generic_substitute_type gctx f.cf_type in
-			let f = { f with cf_type = t} in
-			(* delay the expression mapping to make sure all cf_type fields are set correctly first *)
-			(delays := (fun () ->
-				try (match f.cf_expr with
+		let build_field cf_old =
+			let cf_new = {cf_old with cf_pos = cf_old.cf_pos} in (* copy *)
+			let f () =
+				let t = generic_substitute_type gctx cf_old.cf_type in
+				ignore (follow t);
+				begin try (match cf_old.cf_expr with
 					| None ->
-						begin match f.cf_kind with
+						begin match cf_old.cf_kind with
 							| Method _ when not c.cl_interface && not c.cl_extern ->
-								display_error ctx (Printf.sprintf "Field %s has no expression (possible typing order issue)" f.cf_name) f.cf_pos;
+								display_error ctx (Printf.sprintf "Field %s has no expression (possible typing order issue)" cf_new.cf_name) cf_new.cf_pos;
 								display_error ctx (Printf.sprintf "While building %s" (s_type_path cg.cl_path)) p;
 							| _ ->
 								()
 						end
-					| Some e -> f.cf_expr <- Some (generic_substitute_expr gctx e)
+					| Some e ->
+						cf_new.cf_expr <- Some (generic_substitute_expr gctx e)
 				) with Unify_error l ->
-					error (error_msg (Unify l)) f.cf_pos) :: !delays);
-			f
+					error (error_msg (Unify l)) cf_new.cf_pos
+				end;
+				t
+			in
+			let r = exc_protect ctx (fun r ->
+				let t = mk_mono() in
+				r := (fun() -> t);
+				unify_raise ctx (f()) t p;
+				t
+			) "build_generic" in
+			delay ctx PForce (fun() -> ignore ((!r)()));
+			cf_new.cf_type <- TLazy r;
+			cf_new
 		in
 		if c.cl_init <> None || c.cl_dynamic <> None then error "This class can't be generic" p;
-		if c.cl_ordered_statics <> [] then error "A generic class can't have static fields" p;
+		List.iter (fun cf -> match cf.cf_kind with
+			| Method MethMacro when not ctx.in_macro -> ()
+			| _ -> error "A generic class can't have static fields" cf.cf_pos
+		) c.cl_ordered_statics;
 		cg.cl_super <- (match c.cl_super with
 			| None -> None
 			| Some (cs,pl) ->
@@ -396,7 +417,12 @@ let rec build_generic ctx c p tl =
 						let t = loop subst in
 						(* extended type parameter: concrete type must have a constructor, but generic base class must not have one *)
 						begin match follow t,c.cl_constructor with
-							| TInst({cl_constructor = None} as cs,_),None -> error ("Cannot use " ^ (s_type_path cs.cl_path) ^ " as type parameter because it is extended and has no constructor") p
+							| TInst(cs,_),None ->
+								cs.cl_build();
+								begin match cs.cl_constructor with
+									| None -> error ("Cannot use " ^ (s_type_path cs.cl_path) ^ " as type parameter because it is extended and has no constructor") p
+									| _ -> ()
+								end;
 							| _,Some cf -> error "Generics extending type parameters cannot have constructors" cf.cf_pos
 							| _ -> ()
 						end;
@@ -417,7 +443,7 @@ let rec build_generic ctx c p tl =
 		cg.cl_kind <- KGenericInstance (c,tl);
 		cg.cl_interface <- c.cl_interface;
 		cg.cl_constructor <- (match cg.cl_constructor, c.cl_constructor, c.cl_super with
-			| _, Some c, _ -> Some (build_field c)
+			| _, Some cf, _ -> Some (build_field cf)
 			| Some ctor, _, _ -> Some ctor
 			| None, None, None -> None
 			| _ -> error "Please define a constructor for this class in order to use it as generic" c.cl_pos
@@ -432,7 +458,12 @@ let rec build_generic ctx c p tl =
 			cg.cl_fields <- PMap.add f.cf_name f cg.cl_fields;
 			f
 		) c.cl_ordered_fields;
-		List.iter (fun f -> f()) !delays;
+		(* In rare cases the class name can become too long, so let's shorten it (issue #3090). *)
+		if String.length (snd cg.cl_path) > 254 then begin
+			let n = get_short_name () in
+			let tp = fst cg.cl_path,n in
+			cg.cl_meta <- (Meta.Native,[EConst(String (s_type_path tp)),p],p) :: cg.cl_meta;
+		end;
 		TInst (cg,[])
 	end
 
@@ -1345,7 +1376,11 @@ let rec create_dumpfile acc = function
 let dump_types com =
 	let s_type = s_type (Type.print_context()) in
 	let params = function [] -> "" | l -> Printf.sprintf "<%s>" (String.concat "," (List.map (fun (n,t) -> n ^ " : " ^ s_type t) l)) in
-	let s_expr = try if Common.defined_value com Define.Dump = "pretty" then Type.s_expr_pretty "\t" else Type.s_expr with Not_found -> Type.s_expr in
+	let s_expr = match Common.defined_value_safe com Define.Dump with
+		| "pretty" -> Type.s_expr_pretty "\t"
+		| "legacy" ->  Type.s_expr
+		| _ -> Type.s_expr_ast (not (Common.defined com Define.DumpIgnoreVarIds)) "\t"
+	in
 	List.iter (fun mt ->
 		let path = Type.t_path mt in
 		let buf,close = create_dumpfile [] ("dump" :: (Common.platform_name com.platform) :: fst path @ [snd path]) in
@@ -1358,7 +1393,7 @@ let dump_types com =
 				(match f.cf_expr with
 				| None -> ()
 				| Some e -> print "\n\n\t = %s" (s_expr s_type e));
-				print ";\n\n";
+				print "\n\n";
 				List.iter (fun f -> print_field stat f) f.cf_overloads
 			in
 			print "%s%s%s %s%s" (if c.cl_private then "private " else "") (if c.cl_extern then "extern " else "") (if c.cl_interface then "interface" else "class") (s_type_path path) (params c.cl_params);
@@ -1759,7 +1794,7 @@ module DeprecationCheck = struct
 					| FAnon cf ->
 						check_cf com cf e.epos
 					| FClosure(co,cf) ->
-						(match co with None -> () | Some c -> check_class com c e.epos);
+						(match co with None -> () | Some (c,_) -> check_class com c e.epos);
 						check_cf com cf e.epos
 					| FEnum(en,ef) ->
 						check_enum com en e.epos;

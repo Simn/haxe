@@ -90,6 +90,14 @@ class Compiler {
 	}
 
 	/**
+		Adds an argument to be passed to the native compiler (eg : -javac-arg for Java)
+	 **/
+	public static function addNativeArg( argument : String )
+	{
+		untyped load("add_native_arg",1)(argument.__s);
+	}
+
+	/**
 		Includes all modules in package `pack` in the compilation.
 
 		In order to include single modules, their paths can be listed directly
@@ -266,6 +274,9 @@ class Compiler {
 		including the containing module has to be used
 		(e.g. msignal.Signal.Signal0).
 
+		This operation has no effect if the type has already been loaded, e.g.
+		through `Context.getType`.
+
 		@param path A package, module or sub-type dot path to keep.
 		@param paths An Array of package, module or sub-type dot paths to keep.
 		@param recursive If true, recurses into sub-packages for package paths.
@@ -280,6 +291,20 @@ class Compiler {
 		}
 	}
 
+	/**
+		Adds metadata `meta` to all types (if `toTypes = true`) or fields (if
+		`toFields = true`) whose dot-path matches `pathFilter`.
+
+		If `recursive` is true a dot-path is considered matched if it starts
+		with `pathFilter`. This automatically applies to path filters of
+		packages. Otherwise an exact match is required.
+
+		If `pathFilter` is the empty String `""` it matches everything (if
+		`recursive = true`) or only top-level types (if `recursive = false`).
+
+		This operation has no effect if the type has already been loaded, e.g.
+		through `Context.getType`.
+	**/
 	public static function addGlobalMetadata(pathFilter:String, meta:String, ?recursive:Bool = true, ?toTypes:Bool = true, ?toFields:Bool = false) {
 		untyped load("add_global_metadata",5)(untyped pathFilter.__s, meta.__s, recursive, toTypes, toFields);
 	}

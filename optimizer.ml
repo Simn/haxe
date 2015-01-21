@@ -285,10 +285,14 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 			if v.v_type != t_dynamic && follow e.etype == t_dynamic then (local v).i_write <- true;
 			(match e.eexpr, opt with
 			| TConst TNull , Some c -> mk (TConst c) v.v_type e.epos
-			(* we have to check for abstract casts here because we can't do that later. However, we have to skip the check for the
-			   first argument of abstract implementation functions. *)
-			(* actually we don't because unify_call_args takes care of that anyway *)
-			(* | _ when not (first && Meta.has Meta.Impl cf.cf_meta && cf.cf_name <> "_new") -> (!cast_or_unify_ref) ctx (map_type v.v_type) e e.epos *)
+			(*
+				This is really weird and should be reviewed again. The problem is that we cannot insert a TCast here because
+				the abstract `this` value could be written to, which is not possible if it is wrapped in a cast.
+
+				The original problem here is that we do not generate a temporary variable and thus mute the type of the
+				`this` variable, which leads to unification errors down the line. See issues #2236 and #3713.
+			*)
+			(* | _ when first && (Meta.has Meta.Impl cf.cf_meta) -> {e with etype = v.v_type} *)
 			| _ -> e) :: loop pl al false
 		| [], (v,opt) :: al ->
 			(mk (TConst (match opt with None -> TNull | Some c -> c)) v.v_type p) :: loop [] al false
@@ -502,7 +506,7 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 			let etype = if has_params then map_type e.etype else e.etype in
 			(* if the expression is "untyped" and we don't want to unify it accidentally ! *)
 			try (match follow e.etype with
-			| TMono _ ->
+			| TMono _ | TInst ({cl_kind = KTypeParameter _ },_) ->
 				(match follow tret with
 				| TAbstract ({ a_path = [],"Void" },_) -> e
 				| _ -> raise (Unify_error []))
@@ -533,7 +537,7 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 		if not has_params then
 			Some e
 		else
-			let mt = map_type cf.cf_type in
+ 			let mt = map_type cf.cf_type in
 			let unify_func () = unify_raise ctx mt (TFun (List.map (fun e -> "",false,e.etype) params,tret)) p in
 			(match follow ethis.etype with
 			| TAnon a -> (match !(a.a_status) with
@@ -722,6 +726,24 @@ let rec optimize_for_loop ctx (i,pi) e1 e2 p =
 		]
 	| _ ->
 		None
+
+let optimize_for_loop_iterator ctx v e1 e2 p =
+	let c,tl = (match follow e1.etype with TInst (c,pl) -> c,pl | _ -> raise Exit) in
+	let _, _, fhasnext = (try raw_class_field (fun cf -> apply_params c.cl_params tl cf.cf_type) c tl "hasNext" with Not_found -> raise Exit) in
+	if fhasnext.cf_kind <> Method MethInline then raise Exit;
+	let tmp = gen_local ctx e1.etype in
+	let eit = mk (TLocal tmp) e1.etype p in
+	let ehasnext = make_call ctx (mk (TField (eit,FInstance (c, tl, fhasnext))) (TFun([],ctx.t.tbool)) p) [] ctx.t.tbool p in
+	let enext = mk (TVar (v,Some (make_call ctx (mk (TField (eit,quick_field_dynamic eit.etype "next")) (TFun ([],v.v_type)) p) [] v.v_type p))) ctx.t.tvoid p in
+	let eblock = (match e2.eexpr with
+		| TBlock el -> { e2 with eexpr = TBlock (enext :: el) }
+		| _ -> mk (TBlock [enext;e2]) ctx.t.tvoid p
+	) in
+	mk (TBlock [
+		mk (TVar (tmp,Some e1)) ctx.t.tvoid p;
+		mk (TWhile (ehasnext,eblock,NormalWhile)) ctx.t.tvoid p
+	]) ctx.t.tvoid p
+
 
 (* ---------------------------------------------------------------------- *)
 (* SANITIZE *)
@@ -1081,7 +1103,7 @@ let rec reduce_loop ctx e =
 		| None -> reduce_expr ctx e
 		| Some e -> reduce_loop ctx e)
 	| TCall ({ eexpr = TField (o,FClosure (c,cf)) } as f,el) ->
-		let fmode = (match c with None -> FAnon cf | Some c -> FInstance (c,[],cf)) in (* TODO *)
+		let fmode = (match c with None -> FAnon cf | Some (c,tl) -> FInstance (c,tl,cf)) in
 		{ e with eexpr = TCall ({ f with eexpr = TField (o,fmode) },el) }
 	| TSwitch (e1,[[{eexpr = TConst (TBool true)}],{eexpr = TConst (TBool true)}],Some ({eexpr = TConst (TBool false)})) ->
 		(* introduced by extractors in some cases *)

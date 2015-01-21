@@ -741,6 +741,18 @@ and wait_loop boot_com host port =
 				if m.m_extra.m_mark <= start_mark then begin
 					(match m.m_extra.m_kind with
 					| MFake | MSub -> () (* don't get classpath *)
+					| MExtern ->
+						(* if we have a file then this will override our extern type *)
+						let has_file = (try ignore(Typeload.resolve_module_file com2 m.m_path (ref[]) p); true with Not_found -> false) in
+						if has_file then raise Not_found;
+						let rec loop = function
+							| [] -> raise Not_found (* no extern registration *)
+							| load :: l ->
+								match load m.m_path p with
+								| None -> loop l
+								| Some (file,_) -> if Common.unique_full_path file <> m.m_extra.m_file then raise Not_found
+						in
+						loop com2.load_extern_type
 					| MCode -> if not (check_module_path com2 m p) then raise Not_found;
 					| MMacro when ctx.Typecore.in_macro -> if not (check_module_path com2 m p) then raise Not_found;
 					| MMacro ->
@@ -973,7 +985,7 @@ try
 	let swf_version = ref false in
 	let evals = ref [] in
 	Common.define_value com Define.HaxeVer (float_repres (float_of_int version /. 1000.));
-	Common.define_value com Define.HxcppApiLevel "312";
+	Common.define_value com Define.HxcppApiLevel "313";
 	Common.raw_define com "haxe3";
 	Common.define_value com Define.Dce "std";
 	com.warning <- (fun msg p -> message ctx ("Warning : " ^ msg) p);
@@ -1019,6 +1031,7 @@ try
 		| [] -> ()
 		| args -> (!process_ref) args
 	in
+	let arg_delays = ref [] in
 	let basic_args_spec = [
 		("-cp",Arg.String (fun path ->
 			process_libs();
@@ -1111,7 +1124,7 @@ try
 			Genswf.add_swf_lib com file true
 		),"<file> : use the SWF library for type checking");
 		("-java-lib",Arg.String (fun file ->
-			Genjava.add_java_lib com file false
+			arg_delays := (fun () -> Genjava.add_java_lib com file false) :: !arg_delays;
 		),"<file> : add an external JAR or class directory library");
 		("-net-lib",Arg.String (fun file ->
 			let file, is_std = match ExtString.String.nsplit file "@" with
@@ -1121,11 +1134,14 @@ try
 					file,true
 				| _ -> raise Exit
 			in
-			Gencs.add_net_lib com file is_std
+			arg_delays := (fun () -> Gencs.add_net_lib com file is_std) :: !arg_delays;
 		),"<file>[@std] : add an external .NET DLL file");
 		("-net-std",Arg.String (fun file ->
 			Gencs.add_net_std com file
 		),"<file> : add a root std .NET DLL search path");
+		("-c-arg",Arg.String (fun arg ->
+			com.c_args <- arg :: com.c_args
+		),"<arg> : pass option <arg> to the native Java/C# compiler");
 		("-x", Arg.String (fun file ->
 			let neko_file = file ^ ".n" in
 			set_platform Neko neko_file;
@@ -1336,8 +1352,9 @@ try
 	let all_args_spec = basic_args_spec @ adv_args_spec in
 	let process args =
 		let current = ref 0 in
-		try
-			Arg.parse_argv ~current (Array.of_list ("" :: List.map expand_env args)) all_args_spec args_callback usage
+		(try
+			Arg.parse_argv ~current (Array.of_list ("" :: List.map expand_env args)) all_args_spec args_callback usage;
+			List.iter (fun fn -> fn()) !arg_delays
 		with (Arg.Bad msg) as exc ->
 			let r = Str.regexp "unknown option `\\([-A-Za-z]+\\)'" in
 			try
@@ -1347,7 +1364,8 @@ try
 				let msg = Typecore.string_error_raise s sl (Printf.sprintf "Invalid command: %s" s) in
 				raise (Arg.Bad msg)
 			with Not_found ->
-				raise exc
+				raise exc);
+		arg_delays := []
 	in
 	process_ref := process;
 	process ctx.com.args;
