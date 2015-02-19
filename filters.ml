@@ -338,13 +338,13 @@ let captured_vars com e =
 			method captured_type t = TInst (cnativearray,[t])
 
 			method mk_ref v ve p =
-				let earg = match ve with
-					| None ->
-						let t = match v.v_type with TInst (_, [t]) -> t | _ -> assert false in
-						mk (TConst TNull) t p (* generator will do the right thing for the non-nullable types *)
-					| Some e -> e
-				in
-				{ (Optimizer.mk_untyped_call "__array__" p [earg]) with etype = v.v_type }
+				match ve with
+				| None ->
+					let eone = mk (TConst (TInt (Int32.of_int 1))) t.tint p in
+					let t = match v.v_type with TInst (_, [t]) -> t | _ -> assert false in
+					mk (TNew (cnativearray,[t],[eone])) v.v_type p
+				| Some e ->
+					{ (Optimizer.mk_untyped_call "__array__" p [e]) with etype = v.v_type }
 
 			method mk_ref_access e v =
 				mk (TArray ({ e with etype = v.v_type }, mk (TConst (TInt 0l)) t.tint e.epos)) e.etype e.epos
@@ -955,6 +955,22 @@ let check_void_field ctx t = match t with
 	| _ ->
 		()
 
+(* Interfaces have no 'super', but can extend many other interfaces.
+   This makes the first extended (implemented) interface the super for efficiency reasons (you can get one for 'free')
+   and leaves the remaining ones as 'implemented' *)
+let promote_first_interface_to_super ctx t = match t with
+	| TClassDecl c when c.cl_interface ->
+		begin match c.cl_implements with
+		| ({ cl_path = ["cpp";"rtti"],_ },_ ) :: _ -> ()
+		| first_interface  :: remaining ->
+			c.cl_super <- Some first_interface;
+			c.cl_implements <- remaining
+		| _ -> ()
+		end
+	| _ ->
+		()
+
+
 (* PASS 3 end *)
 
 let run_expression_filters ctx filters t =
@@ -1056,7 +1072,9 @@ let run com tctx main =
 				else
 					fun e ->
 						let save = save_locals tctx in
-						let e = try snd (Analyzer.Simplifier.apply com (Typecore.gen_local tctx) e) with Exit -> e in
+						let timer = timer "analyzer-simplify-apply" in
+						let e = try snd (Analyzer.Simplifier.apply com e) with Exit -> e in
+						timer();
 						save();
 					e );
 			if com.foptimize then (fun e -> Optimizer.reduce_expression tctx (Optimizer.inline_constructors tctx e)) else Optimizer.sanitize com;
@@ -1113,5 +1131,6 @@ let run com tctx main =
 		(match com.platform with | Java | Cs -> (fun _ _ -> ()) | _ -> add_field_inits);
 		add_meta_field;
 		check_void_field;
+		(match com.platform with | Cpp -> promote_first_interface_to_super | _ -> (fun _ _ -> ()) );
 	] in
 	List.iter (fun t -> List.iter (fun f -> f tctx t) type_filters) com.types

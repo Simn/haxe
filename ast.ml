@@ -59,6 +59,7 @@ module Meta = struct
 		| Delegate
 		| Depend
 		| Deprecated
+		| DirectlyUsed
 		| DynamicObject
 		| Enum
 		| EnumConstructorParam
@@ -80,6 +81,7 @@ module Meta = struct
 		| GenericInstance
 		| Getter
 		| Hack
+		| HasUntyped
 		| HaxeGeneric
 		| HeaderClassCode
 		| HeaderCode
@@ -126,7 +128,6 @@ module Meta = struct
 		| Public
 		| PublicFields
 		| ReadOnly
-		| ReallyUsed
 		| RealPath
 		| Remove
 		| Require

@@ -169,7 +169,16 @@ let new_source_file common_ctx base_dir sub_dir extension class_path =
    cached_source_writer common_ctx (full_dir ^ "/" ^ ((snd class_path) ^ extension));;
 
 
-let new_cpp_file common_ctx base_dir = new_source_file common_ctx base_dir "src" ".cpp";;
+
+let source_file_extension common_ctx =
+   try
+     "." ^ (Common.defined_value common_ctx Define.FileExtension)
+   with
+     Not_found -> ".cpp"
+;;
+
+
+let new_cpp_file common_ctx base_dir = new_source_file common_ctx base_dir "src" (source_file_extension common_ctx);;
 
 let new_header_file common_ctx base_dir =
    new_source_file common_ctx base_dir "include" ".h";;
@@ -321,7 +330,9 @@ let remap_class_path class_path =
 ;;
 
 let join_class_path_remap path separator =
-   join_class_path (remap_class_path path) separator
+   match join_class_path (remap_class_path path) separator with
+   | "Class" -> "hx::Class"
+   | x -> x
 ;;
 
 let get_meta_string meta key =
@@ -449,6 +460,7 @@ let is_interface_type t =
    | _ -> false
 ;;
 
+
 let is_cpp_function_instance haxe_type =
    match follow haxe_type with
    | TInst (klass,params) ->
@@ -540,7 +552,7 @@ let rec class_string klass suffix params =
    | _ when is_dynamic_type_param klass.cl_kind -> "Dynamic"
    |  ([],"#Int") -> "/* # */int"
    |  (["haxe";"io"],"Unsigned_char__") -> "unsigned char"
-   |  ([],"Class") -> "::Class"
+   |  ([],"Class") -> "hx::Class"
    |  ([],"EnumValue") -> "Dynamic"
    |  ([],"Null") -> (match params with
          | [t] ->
@@ -566,10 +578,6 @@ and type_string_suff suffix haxe_type =
    | TAbstract ({ a_path = ([],"Float") },[]) -> "Float"
    | TAbstract ({ a_path = ([],"Int") },[]) -> "int"
    | TAbstract( { a_path = ([], "EnumValue") }, _  ) -> "Dynamic"
-   | TEnum ({ e_path = ([],"Void") },[]) -> "Void"
-   | TEnum ({ e_path = ([],"Bool") },[]) -> "bool"
-   | TInst ({ cl_path = ([],"Float") },[]) -> "Float"
-   | TInst ({ cl_path = ([],"Int") },[]) -> "int"
    | TEnum (enum,params) ->  "::" ^ (join_class_path_remap enum.e_path "::") ^ suffix
    | TInst (klass,params) ->  (class_string klass suffix params)
    | TType (type_def,params) ->
@@ -1243,7 +1251,7 @@ and is_dynamic_member_lookup_in_cpp ctx field_object field =
    ctx.ctx_dbgout ("/* ts:"^tstr^"*/");
    match tstr with
       (* Internal classes have no dynamic members *)
-      | "::String" | "Null" | "::Class" | "::Enum" | "::Math" | "::ArrayAccess" -> ctx.ctx_dbgout ("/* ok:" ^ (type_string field_object.etype)  ^ " */"); false
+      | "::String" | "Null" | "::hx::Class" | "::Enum" | "::Math" | "::ArrayAccess" -> ctx.ctx_dbgout ("/* ok:" ^ (type_string field_object.etype)  ^ " */"); false
       | "Dynamic" -> true
       | name ->
             let full_name = name ^ "." ^ member in
@@ -1268,7 +1276,7 @@ and is_dynamic_member_return_in_cpp ctx field_object field =
       let tstr = type_string field_object.etype in
       (match tstr with
          (* Internal classes have no dynamic members *)
-         | "::String" | "Null" | "::Class" | "::Enum" | "::Math" | "::ArrayAccess" -> false
+         | "::String" | "Null" | "::hx::Class" | "::Enum" | "::Math" | "::ArrayAccess" -> false
          | "Dynamic" -> ctx.ctx_dbgout "/*D*/"; true
          | name ->
                let full_name = name ^ "." ^ member in
@@ -1283,6 +1291,15 @@ let cast_if_required ctx expr to_type =
    if (is_dynamic_in_cpp ctx expr) then
       ctx.ctx_output (".Cast< " ^ to_type ^ " >()" )
 ;;
+
+
+let is_matching_interface_type t0 t1 =
+    (match (follow t0),(follow t1) with
+    | TInst (k0,_), TInst(k1,_) -> k0==k1
+    | _ -> false
+    )
+;;
+
 
 
 let default_value_string = function
@@ -2409,15 +2426,8 @@ let gen_field ctx class_def class_name ptr_name dot_name is_static is_interface 
    let decl = get_meta_string field.cf_meta Meta.Decl in
    let has_decl = decl <> "" in
    if (is_interface) then begin
-      (* Just the dynamic glue ... *)
-      match follow field.cf_type, field.cf_kind  with
-      | _, Method MethDynamic  -> ()
-      | TFun (args,result), Method _  ->
-         if (is_static) then output "STATIC_";
-         let ret = if ((type_string result ) = "Void" ) then "" else "return " in
-         output ("HX_DEFINE_DYNAMIC_FUNC" ^ (string_of_int (List.length args)) ^
-            "(" ^ class_name ^ "," ^ remap_name ^ "," ^ ret ^ ")\n\n");
-      | _ -> ()
+      (* Just the dynamic glue  - not even that ... *)
+      ()
    end else (match  field.cf_expr with
    (* Function field *)
    | Some { eexpr = TFunction function_def } ->
@@ -2567,12 +2577,12 @@ let gen_member_def ctx class_def is_static is_interface field =
       match follow field.cf_type, field.cf_kind with
       | _, Method MethDynamic  -> ()
       | TFun (args,return_type), Method _  ->
-         output ( (if (not is_static) then "virtual " else "" ) ^ type_string return_type);
+         output ( (if (not is_static) then "		virtual " else "		" ) ^ type_string return_type);
          output (" " ^ remap_name ^ "( " );
          output (gen_tfun_interface_arg_list args);
          output (if (not is_static) then ")=0;\n" else ");\n");
          output (if is_static then "\t\tstatic " else "\t\t");
-         output ("Dynamic " ^ remap_name ^ "_dyn();\n" );
+         output ("virtual Dynamic " ^ remap_name ^ "_dyn()=0;\n" );
       | _  ->  ( )
    end else begin
    let decl = get_meta_string field.cf_meta Meta.Decl in
@@ -2665,8 +2675,6 @@ let find_referenced_types ctx obj super_deps constructor_deps header_only for_de
          visited := in_type :: !visited;
          begin match follow in_type with
          | TMono r -> (match !r with None -> () | Some t -> visit_type t)
-         (*| TEnum ({ e_path = ([],"Void") },[]) -> ()
-         | TEnum ({ e_path = ([],"Bool") },[]) -> () *)
          | TEnum (enum,params) -> add_type enum.e_path
          (* If a class has a template parameter, then we treat it as dynamic - except
             for the Array, Class, FastIterator or Pointer classes, for which we do a fully typed object *)
@@ -2828,13 +2836,14 @@ let generate_dummy_main common_ctx =
    generate_startup "__lib__" false
    ;;
 
-let generate_boot common_ctx boot_classes nonboot_classes init_classes =
+let generate_boot common_ctx boot_enums boot_classes nonboot_classes init_classes =
    (* Write boot class too ... *)
    let base_dir = common_ctx.file in
    let boot_file = new_cpp_file common_ctx base_dir ([],"__boot__") in
    let output_boot = (boot_file#write) in
    output_boot "#include <hxcpp.h>\n\n";
-   List.iter ( fun class_path -> boot_file#add_include class_path ) (boot_classes @ nonboot_classes);
+   List.iter ( fun class_path -> boot_file#add_include class_path )
+      (boot_enums @ boot_classes @ nonboot_classes);
 
    output_boot "\nvoid __files__boot();\n";
    output_boot "\nvoid __boot_all()\n{\n";
@@ -2842,12 +2851,17 @@ let generate_boot common_ctx boot_classes nonboot_classes init_classes =
    output_boot "hx::RegisterResources( hx::GetResources() );\n";
    List.iter ( fun class_path ->
       output_boot ("::" ^ ( join_class_path_remap class_path "::" ) ^ "_obj::__register();\n") )
-         (boot_classes @ nonboot_classes);
+         (boot_enums @ boot_classes @ nonboot_classes);
+
+   let dump_boot =
+      List.iter ( fun class_path ->
+         output_boot ("::" ^ ( join_class_path_remap class_path "::" ) ^ "_obj::__boot();\n") ) in
+
+   dump_boot boot_enums;
+
    List.iter ( fun class_path ->
       output_boot ("::" ^ ( join_class_path_remap class_path "::" ) ^ "_obj::__init__();\n") ) (List.rev init_classes);
-   let dump_boot =
-   List.iter ( fun class_path ->
-      output_boot ("::" ^ ( join_class_path_remap class_path "::" ) ^ "_obj::__boot();\n") ) in
+
    dump_boot (List.filter  (fun path -> is_cpp_class path )  (List.rev boot_classes));
    dump_boot (List.filter  (fun path -> not (is_cpp_class path) )  (List.rev boot_classes));
 
@@ -2919,7 +2933,7 @@ let new_placed_cpp_file common_ctx class_path =
       make_class_directories base_dir ("src"::[]);
       cached_source_writer common_ctx
          ( base_dir ^ "/src/" ^ ( String.concat "-" (fst class_path) ) ^ "-" ^
-         (snd class_path) ^ ".cpp")
+         (snd class_path) ^ (source_file_extension common_ctx) )
    end else
       new_cpp_file common_ctx common_ctx.file class_path;;
 
@@ -3048,7 +3062,7 @@ let generate_enum_files common_ctx enum_def super_deps meta file_info =
 
    output_cpp "static ::String sMemberFields[] = { ::String(null()) };\n";
 
-   output_cpp ("Class " ^ class_name ^ "::__mClass;\n\n");
+   output_cpp ("hx::Class " ^ class_name ^ "::__mClass;\n\n");
 
    output_cpp ("Dynamic __Create_" ^ class_name ^ "() { return new " ^ class_name ^ "; }\n\n");
 
@@ -3731,7 +3745,7 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
       let name = keyword_remap field.cf_name in
       let vtable =  "__scriptVTable[" ^ (string_of_int (idx+1) ) ^ "] " in
       let args_varray = (List.fold_left (fun l n -> l ^ ".Add(" ^ n ^ ")") "Array<Dynamic>()" names) in
-      output_cpp ("   " ^ return_type ^ " " ^ name ^ "( " ^ args ^ " ) { ");
+      output_cpp ("	" ^ return_type ^ " " ^ name ^ "( " ^ args ^ " ) { ");
       output_cpp ("\n\tif (" ^ vtable ^ ") {\n" );
       output_cpp ("\t\thx::CppiaCtx *__ctx = hx::CppiaCtx::getCurrent();\n" );
       output_cpp ("\t\thx::AutoStack __as(__ctx);\n" );
@@ -3750,7 +3764,11 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
             output_cpp ("->__Run(" ^ args_varray ^ ");");
       end else
          output_cpp (class_name ^ "::" ^ name ^ "(" ^ (String.concat "," names)^ ");");
-      output_cpp ("return null(); }\n\n");
+      output_cpp ("return null(); }\n");
+      if (class_def.cl_interface) then begin
+      output_cpp ("	Dynamic " ^ name ^ "_dyn() { return mDelegate->__Field(HX_CSTRING(\"" ^ field.cf_name ^ "\"), hx::paccNever); }\n\n");
+
+      end
       in
 
       let not_toString = fun (field,args,_) -> field.cf_name<>"toString" || class_def.cl_interface in
@@ -3799,7 +3817,7 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
       let class_name_text = match class_path with
          | path -> join_class_path path "." in
 
-      output_cpp ("Class " ^ class_name ^ "::__mClass;\n\n");
+      output_cpp ("hx::Class " ^ class_name ^ "::__mClass;\n\n");
       if (scriptable) then begin
          (match class_def.cl_constructor with
             | Some field  ->
@@ -3835,7 +3853,7 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
    end else begin
       let class_name_text = join_class_path class_path "." in
 
-      output_cpp ("Class " ^ class_name ^ "::__mClass;\n\n");
+      output_cpp ("hx::Class " ^ class_name ^ "::__mClass;\n\n");
 
       output_cpp ("void " ^ class_name ^ "::__register()\n{\n");
       output_cpp ("\thx::Static(__mClass) = hx::RegisterClass(" ^ (str class_name_text)  ^
@@ -3971,7 +3989,6 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
       match follow field.cf_type, field.cf_kind  with
       | _, Method MethDynamic -> ()
       | TFun (args,return_type), Method _ ->
-         (* TODO : virtual ? *)
          let remap_name = keyword_remap field.cf_name in
          output_h ( "virtual "  ^ (type_string return_type) ^ " " ^ remap_name ^ "( " );
          output_h (gen_tfun_interface_arg_list args);
@@ -4048,7 +4065,7 @@ let write_build_data common_ctx filename classes main_deps build_extra exe_name 
    let add_class_to_buildfile class_def =
       let class_path = fst class_def in
       let deps = snd class_def in
-      let cpp = (join_class_path class_path "/") ^ ".cpp" in
+      let cpp = (join_class_path class_path "/") ^ (source_file_extension common_ctx) in
       output_string buildfile ( "  <file name=\"src/" ^ cpp ^ "\">\n" );
       let project_deps = List.filter (fun path -> not (is_internal_class path) ) deps in
       List.iter (fun path-> output_string buildfile ("   <depend name=\"" ^
@@ -4179,7 +4196,6 @@ let rec s_type t =
 and s_fun t void =
    match follow t with
    | TFun _ -> "(" ^ s_type t ^ ")"
-   | TEnum ({ e_path = ([],"Void") },[]) when void -> "(" ^ s_type t ^ ")"
    | TAbstract ({ a_path = ([],"Void") },[]) when void -> "(" ^ s_type t ^ ")"
    | TMono r -> (match !r with | None -> s_type t | Some t -> s_fun t void)
    | TLazy f -> s_fun (!f()) void
@@ -4382,6 +4398,12 @@ let is_template_type t =
    false
 ;;
 
+let rec is_dynamic_in_cppia ctx expr =
+   match expr.eexpr with
+   | TCast(_,None) -> true
+   | _ -> is_dynamic_in_cpp ctx expr
+;;
+
 
 class script_writer common_ctx ctx filename =
    object(this)
@@ -4531,11 +4553,16 @@ class script_writer common_ctx ctx filename =
       true;
    in
    let was_cast =
-      if (is_interface_type toType) && not (is_interface_type expr.etype) then begin
-         write_cast ("TOINTERFACE " ^ (this#typeText toType) ^ " " ^ (this#typeText expr.etype) )
+      if (is_interface_type toType) then begin
+         if (is_dynamic_in_cppia ctx expr) then begin
+            write_cast ("TOINTERFACE " ^ (this#typeText toType) ^ " " ^ (this#typeTextString "Dynamic") )
+         end else if (not (is_matching_interface_type toType expr.etype)) then begin
+            write_cast ("TOINTERFACE " ^ (this#typeText toType) ^ " " ^ (this#typeText expr.etype) )
+         end else
+            false
       end else begin
         let get_array_expr_type expr =
-            if is_dynamic_in_cpp ctx expr then
+            if is_dynamic_in_cppia ctx expr then
                ArrayNone
             else
                this#get_array_type expr.etype
@@ -4568,6 +4595,13 @@ class script_writer common_ctx ctx filename =
       this#gen_expression expr;
    end
    method gen_expression expr =
+   (* Redefine to allow different interpretation of cast *)
+   let rec remove_parens expression =
+      match expression.eexpr with
+      | TParenthesis e -> remove_parens e
+      | TMeta(_,e) -> remove_parens e
+      | _ -> expression
+   in
    let expression = remove_parens expr in
    this#begin_expr;
    this#write ( (this#fileText expression.epos.pfile) ^ "\t" ^ (string_of_int (Lexer.get_error_line expression.epos) ) ^ indent);
@@ -4577,7 +4611,7 @@ class script_writer common_ctx ctx filename =
             this#write (indent ^ indent_str );
             this#writeVar arg;
             match init with
-            | Some const when const <> TNull -> this#write ("1 " ^ (this#constText const) ^ "\n")
+            | Some const -> this#write ("1 " ^ (this#constText const) ^ "\n")
             | _ -> this#write "0\n";
          ) function_def.tf_args;
          let pop = this#pushReturn function_def.tf_type in
@@ -4803,7 +4837,7 @@ class script_writer common_ctx ctx filename =
             this#write "\n";
             this#gen_expression catch_expr;
          ) catches;
-   | TCast (cast,None) -> error "Unexpected cast" expression.epos
+   | TCast (cast,None) -> this#checkCast expression.etype cast true true;
    | TCast (cast,Some _) -> this#checkCast expression.etype cast true true;
    | TParenthesis _ -> error "Unexpected parens" expression.epos
    | TMeta(_,_) -> error "Unexpected meta" expression.epos
@@ -4963,6 +4997,7 @@ let generate_source common_ctx =
    let debug = 1 in
    let exe_classes = ref [] in
    let boot_classes = ref [] in
+   let boot_enums = ref [] in
    let nonboot_classes = ref [] in
    let init_classes = ref [] in
    let file_info = ref PMap.empty in
@@ -5004,7 +5039,7 @@ let generate_source common_ctx =
             let meta = Codegen.build_metadata common_ctx object_def in
             if (enum_def.e_extern) then
                (if (debug>1) then print_endline ("external enum " ^ name ));
-            boot_classes := enum_def.e_path :: !boot_classes;
+            boot_enums := enum_def.e_path :: !boot_enums;
             let deps = generate_enum_files common_ctx enum_def super_deps meta file_info in
             exe_classes := (enum_def.e_path, deps) :: !exe_classes;
          end
@@ -5022,7 +5057,7 @@ let generate_source common_ctx =
       generate_main common_ctx member_types super_deps class_def file_info
    );
 
-   generate_boot common_ctx !boot_classes !nonboot_classes !init_classes;
+   generate_boot common_ctx !boot_enums !boot_classes !nonboot_classes !init_classes;
 
    generate_files common_ctx file_info;
 

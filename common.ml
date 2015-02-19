@@ -183,6 +183,7 @@ module Define = struct
 		| DumpDependencies
 		| DumpIgnoreVarIds
 		| Fdb
+		| FileExtension
 		| FlashStrict
 		| FlashUseStage
 		| FormatWarning
@@ -197,6 +198,7 @@ module Define = struct
 		| JsEs5
 		| JsFlatten
 		| KeepOldOutput
+		| LoopUnrollMaxCost
 		| Macro
 		| MacroTimes
 		| NekoSource
@@ -263,6 +265,7 @@ module Define = struct
 		| DumpDependencies -> ("dump_dependencies","Dump the classes dependencies")
 		| DumpIgnoreVarIds -> ("dump_ignore_var_ids","Dump files do not contain variable IDs (helps with diff)")
 		| Fdb -> ("fdb","Enable full flash debug infos for FDB interactive debugging")
+		| FileExtension -> ("file_extension","Output filename extension for cpp source code")
 		| FlashStrict -> ("flash_strict","More strict typing for flash target")
 		| FlashUseStage -> ("flash_use_stage","Keep the SWF library initial stage")
 		| FormatWarning -> ("format_warning","Print a warning for each formated string, for 2.x compatibility")
@@ -277,6 +280,7 @@ module Define = struct
 		| JsEs5 -> ("js_es5","Generate JS for ES5-compliant runtimes")
 		| JsFlatten -> ("js_flatten","Generate classes to use fewer object property lookups")
 		| KeepOldOutput -> ("keep_old_output","Keep old source files in the output directory (for C#/Java)")
+		| LoopUnrollMaxCost -> ("loop_unroll_max_cost","Maximum cost (number of expressions * iterations) before loop unrolling is canceled (default 250)")
 		| Macro -> ("macro","Defined when we compile code in the macro context")
 		| MacroTimes -> ("macro_times","Display per-macro timing when used with --times")
 		| NetVer -> ("net_ver", "<version:20-45> Sets the .NET version to be targeted")
@@ -377,6 +381,7 @@ module MetaInfo = struct
 		| Delegate -> ":delegate",("Automatically added by -net-lib on delegates",[Platform Cs; UsedOn TAbstract])
 		| Depend -> ":depend",("",[Platform Cpp])
 		| Deprecated -> ":deprecated",("Automatically added by -java-lib on class fields annotated with @Deprecated annotation. Has no effect on types compiled by Haxe.",[Platform Java; UsedOnEither [TClass;TEnum;TClassField]])
+		| DirectlyUsed -> ":directlyUsed",("Marks types that are directly referenced by non-extern code",[Internal])
 		| DynamicObject -> ":dynamicObject",("Used internally to identify the Dynamic Object implementation",[Platforms [Java;Cs]; UsedOn TClass; Internal])
 		| Enum -> ":enum",("Used internally to annotate a class that was generated from an enum",[Platforms [Java;Cs]; UsedOn TClass; Internal])
 		| EnumConstructorParam -> ":enumConstructorParam",("Used internally to annotate GADT type parameters",[UsedOn TClass; Internal])
@@ -398,6 +403,7 @@ module MetaInfo = struct
 		| GenericInstance -> ":genericInstance",("Internally used to mark instances of @:generic methods",[UsedOn TClassField;Internal])
 		| Getter -> ":getter",("Generates a native getter function on the given field",[HasParam "Class field name";UsedOn TClassField;Platform Flash])
 		| Hack -> ":hack",("Allows extending classes marked as @:final",[UsedOn TClass])
+		| HasUntyped -> (":has_untyped",("Used by the typer to mark fields that have untyped expressions",[Internal]))
 		| HaxeGeneric -> ":haxeGeneric",("Used internally to annotate non-native generic classes",[Platform Cs; UsedOnEither[TClass;TEnum]; Internal])
 		| HeaderClassCode -> ":headerClassCode",("",[Platform Cpp])
 		| HeaderCode -> ":headerCode",("",[Platform Cpp])
@@ -444,7 +450,6 @@ module MetaInfo = struct
 		| Protected -> ":protected",("Marks a class field as being protected",[UsedOn TClassField])
 		| Property -> ":property",("Marks a property field to be compiled as a native C# property",[UsedOn TClassField;Platform Cs])
 		| ReadOnly -> ":readOnly",("Generates a field with the 'readonly' native keyword",[Platform Cs; UsedOn TClassField])
-		| ReallyUsed -> ":reallyUsed",("Marks types that are directly referenced by non-extern code",[Internal])
 		| RealPath -> ":realPath",("Internally used on @:native types to retain original path information",[Internal])
 		| Remove -> ":remove",("Causes an interface to be removed from all implementing classes before generation",[UsedOn TClass])
 		| Require -> ":require",("Allows access to a field only if the specified compiler flag is set",[HasParam "Compiler flag to check";UsedOn TClassField])
@@ -865,6 +870,17 @@ let add_feature com f =
 
 let has_dce com =
 	(try defined_value com Define.Dce <> "no" with Not_found -> false)
+
+(*
+	TODO: The has_dce check is there because we mark types with @:directlyUsed in the DCE filter,
+	which is not run in dce=no and thus we can't know if a type is used directly or not,
+	so we just assume that they are.
+
+	If we had dce filter always running (even with dce=no), we would have types marked with @:directlyUsed
+	and we wouldn't need to generate unnecessary imports in dce=no, but that's good enough for now.
+*)
+let is_directly_used_class com c =
+	not (has_dce com) || Ast.Meta.has Ast.Meta.DirectlyUsed c.cl_meta
 
 let rec has_feature com f =
 	try

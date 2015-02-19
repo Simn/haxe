@@ -985,7 +985,7 @@ try
 	let swf_version = ref false in
 	let evals = ref [] in
 	Common.define_value com Define.HaxeVer (float_repres (float_of_int version /. 1000.));
-	Common.define_value com Define.HxcppApiLevel "313";
+	Common.define_value com Define.HxcppApiLevel "320";
 	Common.raw_define com "haxe3";
 	Common.define_value com Define.Dce "std";
 	com.warning <- (fun msg p -> message ctx ("Warning : " ^ msg) p);
@@ -1124,7 +1124,8 @@ try
 			Genswf.add_swf_lib com file true
 		),"<file> : use the SWF library for type checking");
 		("-java-lib",Arg.String (fun file ->
-			arg_delays := (fun () -> Genjava.add_java_lib com file false) :: !arg_delays;
+			let std = file = "lib/hxjava-std.jar" in
+			arg_delays := (fun () -> Genjava.add_java_lib com file std) :: !arg_delays;
 		),"<file> : add an external JAR or class directory library");
 		("-net-lib",Arg.String (fun file ->
 			let file, is_std = match ExtString.String.nsplit file "@" with
@@ -1182,6 +1183,14 @@ try
 				List.iter (fun (_,_,extract) ->
 					Hashtbl.iter (fun n _ -> classes := n :: !classes) (extract())
 				) com.swf_libs;
+				List.iter (fun (_,std,_,all_files,_) ->
+					if not std then
+						List.iter (fun path -> classes := path :: !classes) (all_files())
+				) com.java_libs;
+				List.iter (fun (_,std,all_files,_) ->
+					if not std then
+						List.iter (fun path -> classes := path :: !classes) (all_files())
+				) com.net_libs;
 			) :: !pre_compilation;
 			xml_out := Some "hx"
 		),": generate hx headers for all input classes");
@@ -1557,8 +1566,8 @@ try
 		);
 	end;
 	Sys.catch_break false;
+	List.iter (fun f -> f()) (List.rev com.final_filters);
 	if not !no_output then begin
-		List.iter (fun f -> f()) (List.rev com.final_filters);
 		List.iter (fun c ->
 			let r = run_command ctx c in
 			if r <> 0 then failwith ("Command failed with error " ^ string_of_int r)

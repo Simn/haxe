@@ -853,6 +853,7 @@ let check_overriding ctx c =
 		| [] -> ()
 		| i :: _ ->
 			display_error ctx ("Field " ^ i.cf_name ^ " is declared 'override' but doesn't override any field") i.cf_pos)
+	| _ when c.cl_extern && Meta.has Meta.CsNative c.cl_meta -> () (* -net-lib specific: do not check overrides on extern CsNative classes *)
 	| Some (csup,params) ->
 		PMap.iter (fun i f ->
 			let p = f.cf_pos in
@@ -992,6 +993,7 @@ let rec check_interface ctx c intf params =
 let check_interfaces ctx c =
 	match c.cl_path with
 	| "Proxy" :: _ , _ -> ()
+	| _ when c.cl_extern && Meta.has Meta.CsNative c.cl_meta -> ()
 	| _ ->
 	List.iter (fun (intf,params) -> check_interface ctx c intf params) c.cl_implements
 
@@ -1742,6 +1744,24 @@ let init_class ctx c p context_init herits fields =
 			PMap.exists f c.cl_fields || has_field f c.cl_super || List.exists (fun i -> has_field f (Some i)) c.cl_implements
 	in
 
+	let rec get_declared f = function
+		| None -> None
+		| Some (c,a) when PMap.exists f c.cl_fields ->
+			Some (c,a)
+		| Some (c,_) ->
+			let ret = get_declared f c.cl_super in
+			match ret with
+				| Some r -> Some r
+				| None ->
+					let rec loop ifaces = match ifaces with
+						| [] -> None
+						| i :: ifaces -> match get_declared f (Some i) with
+							| Some r -> Some r
+							| None -> loop ifaces
+					in
+					loop c.cl_implements
+	in
+
 	(match c.cl_super with None -> () | Some _ -> delay ctx PForce (fun() -> check_overriding ctx c));
 	if ctx.com.config.pf_overload then delay ctx PForce (fun() -> check_overloads ctx c);
 
@@ -1796,7 +1816,13 @@ let init_class ctx c p context_init herits fields =
 
 	let bind_var ctx cf e stat inline =
 		let p = cf.cf_pos in
-		if not stat && has_field cf.cf_name c.cl_super then error ("Redefinition of variable " ^ cf.cf_name ^ " in subclass is not allowed") p;
+		if not stat then begin match get_declared cf.cf_name c.cl_super with
+				| None -> ()
+				| Some (csup,_) ->
+					(* this can happen on -net-lib generated classes if a combination of explicit interfaces and variables with the same name happens *)
+					if not (csup.cl_interface && Meta.has Meta.CsNative c.cl_meta) then
+						error ("Redefinition of variable " ^ cf.cf_name ^ " in subclass is not allowed. Previously declared at " ^ (Ast.s_type_path csup.cl_path) ) p
+		end;
 		let t = cf.cf_type in
 
 		match e with
@@ -2216,7 +2242,38 @@ let init_class ctx c p context_init herits fields =
 			let check_method m t req_name =
 				if ctx.com.display <> DMNone then () else
 				try
-					let _, t2, f2 = (if stat then let f = PMap.find m c.cl_statics in None, f.cf_type, f else class_field c (List.map snd c.cl_params) m) in
+					let overloads =
+						(* on pf_overload platforms, the getter/setter may have been defined as an overloaded function; get all overloads *)
+						if ctx.com.config.pf_overload then
+							if stat then
+								let f = PMap.find m c.cl_statics in
+								(f.cf_type, f) :: (List.map (fun f -> f.cf_type, f) f.cf_overloads)
+							else
+								get_overloads c m
+						else
+							[ if stat then
+								let f = PMap.find m c.cl_statics in
+								f.cf_type, f
+							else match class_field c (List.map snd c.cl_params) m with
+								| _, t,f -> t,f ]
+					in
+					(* choose the correct overload if and only if there is more than one overload found *)
+					let rec get_overload overl = match overl with
+						| [tf] -> tf
+						| (t2,f2) :: overl ->
+							if type_iseq t t2 then
+								(t2,f2)
+							else
+								get_overload overl
+						| [] ->
+							if c.cl_interface then
+								raise Not_found
+							else
+								raise (Error (Custom
+									(Printf.sprintf "No overloaded method named %s was compatible with the property %s with expected type %s" m name (s_type (print_context()) t)
+								), p))
+					in
+					let t2, f2 = get_overload overloads in
 					(* accessors must be public on As3 (issue #1872) *)
 					if Common.defined ctx.com Define.As3 then f2.cf_meta <- (Meta.Public,[],p) :: f2.cf_meta;
 					(match f2.cf_kind with
@@ -2587,7 +2644,8 @@ let rec init_module_type ctx context_init do_init (decl,p) =
 		let build() =
 			c.cl_build <- (fun()->());
 			set_heritance ctx c herits p;
-			init_class ctx c p do_init d.d_flags d.d_data
+			init_class ctx c p do_init d.d_flags d.d_data;
+			List.iter (fun (_,t) -> ignore(follow t)) c.cl_params;
 		in
 		ctx.pass <- PBuildClass;
 		ctx.curclass <- c;
@@ -2742,15 +2800,23 @@ let rec init_module_type ctx context_init do_init (decl,p) =
 		let is_type = ref false in
 		let load_type t from =
 			let t = load_complex_type ctx p t in
-			if not (Meta.has Meta.CoreType a.a_meta) then begin
+			let t = if not (Meta.has Meta.CoreType a.a_meta) then begin
 				if !is_type then begin
-					delay ctx PFinal (fun () ->
+					let r = exc_protect ctx (fun r ->
+						r := (fun() -> t);
 						let at = monomorphs a.a_params a.a_this in
-						(try (if from then Type.unify t at else Type.unify at t) with Unify_error _ -> error "You can only declare from/to with compatible types" p)
-					);
+						(try (if from then Type.unify t at else Type.unify at t) with Unify_error _ -> error "You can only declare from/to with compatible types" p);
+						t
+					) "constraint" in
+					delay ctx PForce (fun () -> ignore(!r()));
+					TLazy r
 				end else
 					error "Missing underlying type declaration or @:coreType declaration" p;
-			end;
+			end else begin
+				if Meta.has Meta.Callable a.a_meta then
+					error "@:coreType abstracts cannot be @:callable" p;
+				t
+			end in
 			t
 		in
 		List.iter (function
@@ -2791,7 +2857,7 @@ let type_module ctx m file ?(is_extern=false) tdecls p =
 		meta = [];
 		this_stack = [];
 		with_type_stack = [];
-		constructor_argument_stack = [];
+		call_argument_stack = [];
 		pass = PBuildModule;
 		on_error = (fun ctx msg p -> ctx.com.error msg p);
 		macro_depth = ctx.macro_depth;

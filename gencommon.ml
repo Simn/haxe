@@ -263,7 +263,6 @@ let get_tdef mt = match mt with | TTypeDecl t -> t | _ -> assert false
 let mk_mt_access mt pos = { eexpr = TTypeExpr(mt); etype = anon_of_mt mt; epos = pos }
 
 let is_void t = match follow t with
-	| TEnum({ e_path = ([], "Void") }, [])
 	| TAbstract ({ a_path = ([], "Void") },[]) ->
 			true
 	| _ -> false
@@ -3706,7 +3705,6 @@ struct
 					in
 
 					let may_cast = match follow call_expr.etype with
-						| TEnum({ e_path = ([], "Void")}, [])
 						| TAbstract ({ a_path = ([], "Void") },[]) -> (fun e -> e)
 						| _ -> mk_cast call_expr.etype
 					in
@@ -3757,7 +3755,6 @@ struct
 						let vo, _ = List.nth args (i * 2 + 1) in
 
 						let needs_cast, is_float = match t, like_float t && not (like_i64 t) with
-							| TInst({ cl_path = ([], "Float") }, []), _
 							| TAbstract({ a_path = ([], "Float") },[]), _ -> false, true
 							| _, true -> true, true
 							| _ -> false,false
@@ -5253,7 +5250,6 @@ struct
 
 	let add_assign gen add_statement expr =
 		match expr.eexpr, follow expr.etype with
-			| _, TEnum({ e_path = ([],"Void") },[])
 			| _, TAbstract ({ a_path = ([],"Void") },[])
 			| TThrow _, _ ->
 				add_statement expr;
@@ -5290,7 +5286,6 @@ struct
 				right
 			| _ ->
 				match follow right.etype with
-					| TEnum( { e_path = ([], "Void") }, [] )
 					| TAbstract ({ a_path = ([], "Void") },[]) ->
 						right
 					| _ -> trace (debug_expr right); assert false (* a statement is required *)
@@ -6436,6 +6431,10 @@ struct
 					let e1 = run ~just_type:true e1 in
 					let e2 = handle (run e2) e1.etype e2.etype in
 					{ e with eexpr = TBinop(op, clean_cast e1, e2) }
+				| TBinop ( (Ast.OpShl | Ast.OpShr | Ast.OpUShr as op), e1, e2 ) ->
+					let e1 = run e1 in
+					let e2 = handle (run e2) (gen.gcon.basic.tint) e2.etype in
+					{ e with eexpr = TBinop(op, e1, e2) }
 				| TField(ef, f) ->
 					handle_type_parameter gen None e (run ef) ~clean_ef:ef ~overloads_cast_to_base:overloads_cast_to_base f [] calls_parameters_explicitly
 				| TArrayDecl el ->
@@ -8377,7 +8376,6 @@ struct
 			(* as Array<Dynamic> *)
 			let args, ret = get_args t in
 			let ret = match follow ret with
-				| TEnum({ e_path = ([], "Void") }, [])
 				| TAbstract ({ a_path = ([], "Void") },[]) -> ret
 				| _ -> ret
 			in
@@ -9059,6 +9057,37 @@ struct
 			cl.cl_ordered_statics <- constructs_cf :: cfs @ cl.cl_ordered_statics ;
 			cl.cl_statics <- PMap.add "constructs" constructs_cf cl.cl_statics;
 
+			let getTag_cf_type = tfun [] basic.tstring in
+			let getTag_cf = mk_class_field "getTag" getTag_cf_type true pos (Method MethNormal) [] in
+			getTag_cf.cf_meta <- [(Meta.Final, [], pos)];
+			getTag_cf.cf_expr <- Some {
+				eexpr = TFunction {
+					tf_args = [];
+					tf_type = basic.tstring;
+					tf_expr = {
+						eexpr = TReturn (Some (
+							let e_constructs = mk_static_field_access_infer cl "constructs" pos [] in
+							let e_this = mk (TConst TThis) (TInst (cl,[])) pos in
+							let e_index = mk_field_access gen e_this "index" pos in
+							let e_unsafe_get = mk_field_access gen e_constructs "__unsafe_get" pos in
+							{
+								eexpr = TCall (e_unsafe_get, [e_index]);
+								etype = basic.tstring;
+								epos = pos;
+							}
+						));
+						epos = pos;
+						etype = basic.tvoid;
+					}
+				};
+				etype = getTag_cf_type;
+				epos = pos;
+			};
+
+			cl.cl_ordered_fields <- getTag_cf :: cl.cl_ordered_fields ;
+			cl.cl_fields <- PMap.add "getTag" getTag_cf cl.cl_fields;
+			cl.cl_overrides <- getTag_cf :: cl.cl_overrides;
+
 			(if should_be_hxgen then
 				cl.cl_meta <- (Meta.HxGen,[],cl.cl_pos) :: cl.cl_meta
 			else begin
@@ -9144,55 +9173,31 @@ struct
 
 		let priority = solve_deps name [DBefore TArrayTransform.priority]
 
-		let ensure_local gen cond =
-			let exprs_before, new_cond = match cond.eexpr with
-				| TLocal v ->
-					[], cond
-				| _ ->
-					let v = mk_temp gen "cond" cond.etype in
-					[ { eexpr = TVar(v, Some cond); etype = gen.gcon.basic.tvoid; epos = cond.epos } ], mk_local v cond.epos
-			in
-			exprs_before, new_cond
-
-		let get_index gen cond cls tparams =
-			{ (mk_field_access gen { cond with etype = TInst(cls, tparams) } "index" cond.epos) with etype = gen.gcon.basic.tint }
-
-		(* stolen from Hugh's hxcpp sources *)
-		let tmatch_params_to_vars params =
-			(match params with
-			| None | Some [] -> []
-			| Some l ->
-				let n = ref (-1) in
-				List.fold_left
-					(fun acc v -> incr n; match v with None -> acc | Some v -> (v,!n) :: acc) [] l)
-
-(*		 let tmatch_params_to_exprs gen params cond_local =
-			let vars = tmatch_params_to_vars params in
-			let cond_array = { (mk_field_access gen cond_local "params" cond_local.epos) with etype = gen.gcon.basic.tarray t_empty } in
-			let tvars = List.map (fun (v, n) ->
-				(v, Some({ eexpr = TArray(cond_array, mk_int gen n cond_array.epos); etype = t_dynamic; epos = cond_array.epos }))
-			) vars in
-			match vars with
-				| [] ->
-						[]
-				| _ ->
-						[ { eexpr = TVar(tvars); etype = gen.gcon.basic.tvoid; epos = cond_local.epos } ]
- *)
 		let traverse gen t opt_get_native_enum_tag =
 			let rec run e =
+				let get_converted_enum_type et =
+					let en, eparams = match follow (gen.gfollow#run_f et) with
+						| TEnum(en,p) -> en, p
+						| _ -> raise Not_found
+					in
+					let cl = Hashtbl.find t.ec_tbl en.e_path in
+					TInst(cl, eparams)
+				in
+
 				match e.eexpr with
+					| TCall (({eexpr = TField(_, FStatic({cl_path=[],"Type"},{cf_name="enumIndex"}))} as left), [f]) ->
+						let f = run f in
+						(try
+							mk_field_access gen {f with etype = get_converted_enum_type f.etype} "index" e.epos
+						with Not_found ->
+							{ e with eexpr = TCall(left, [f]) })
 					| TEnumParameter(f, _,i) ->
 						let f = run f in
 						(* check if en was converted to class *)
 						(* if it was, switch on tag field and change cond type *)
 						let f = try
-							let en, eparams = match follow (gen.gfollow#run_f f.etype) with
-								| TEnum(en,p) -> en, p
-								| _ -> raise Not_found
-							in
-							let cl = Hashtbl.find t.ec_tbl en.e_path in
-							{ f with etype = TInst(cl, eparams) }
-						with | Not_found ->
+							{ f with etype = get_converted_enum_type f.etype }
+						with Not_found ->
 							f
 						in
 						let cond_array = { (mk_field_access gen f "params" f.epos) with etype = gen.gcon.basic.tarray t_empty } in
@@ -9277,7 +9282,7 @@ struct
 		let conforms_cfs has_next next =
 			try (match follow has_next.cf_type with
 				| TFun([],ret) when
-					(match follow ret with | TEnum({ e_path = ([], "Bool") }, []) -> () | _ -> raise Not_found) ->
+					(match follow ret with | TAbstract({ a_path = ([], "Bool") }, []) -> () | _ -> raise Not_found) ->
 						()
 				| _ -> raise Not_found);
 			(match follow next.cf_type with
@@ -10466,6 +10471,8 @@ struct
 				let to_add = ref [] in
 				let fields = List.filter (fun cf ->
 					match cf.cf_kind with
+						| Var _ when gen.gcon.platform = Cs && Meta.has Meta.Event cf.cf_meta ->
+							true
 						| Var vkind when not (Type.is_extern_field cf && Meta.has Meta.Property cf.cf_meta) ->
 							(match vkind.v_read with
 								| AccCall ->

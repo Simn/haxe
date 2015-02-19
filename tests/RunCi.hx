@@ -526,7 +526,7 @@ class RunCi {
 						runCommand("wget", ["-nv", "https://gist.github.com/santiycr/5139565/raw/sauce_connect_setup.sh"], true);
 						runCommand("chmod", ["a+x", "sauce_connect_setup.sh"]);
 						runCommand("./sauce_connect_setup.sh", []);
-						haxelibInstallGit("dionjwa", "nodejs-std", "master", "src", true, "nodejs");
+						haxelibInstallGit("dionjwa", "nodejs-std", "master", null, true, "nodejs");
 						runCommand("haxe", ["compile-saucelabs-runner.hxml"]);
 						var server = new Process("nekotools", ["server"]);
 						runCommand("node", ["bin/RunSauceLabs.js", "unit-js.html"]);
@@ -570,8 +570,8 @@ class RunCi {
 					setupFlashPlayerDebugger();
 
 					//setup flex sdk
-					var flexVersion = "4.13.0";
-					runCommand("wget", ['http://mirror.cc.columbia.edu/pub/software/apache/flex/${flexVersion}/binaries/apache-flex-sdk-${flexVersion}-bin.tar.gz'], true);
+					var flexVersion = "4.14.0";
+					runCommand("wget", ['http://archive.apache.org/dist/flex/${flexVersion}/binaries/apache-flex-sdk-${flexVersion}-bin.tar.gz'], true);
 					runCommand("tar", ["-xf", 'apache-flex-sdk-${flexVersion}-bin.tar.gz', "-C", Sys.getEnv("HOME")]);
 					var flexsdkPath = Sys.getEnv("HOME") + '/apache-flex-sdk-${flexVersion}-bin';
 					Sys.putEnv("PATH", Sys.getEnv("PATH") + ":" + flexsdkPath + "/bin");
@@ -592,7 +592,7 @@ class RunCi {
 					getCppDependencies();
 					//getOpenFLDependencies();
 
-					testPolygonalDs();
+					//testPolygonalDs();
 					// if (systemName == "Linux") testFlambe(); //#3439
 					testHxTemplo();
 					testMUnit();

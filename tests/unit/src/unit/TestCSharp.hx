@@ -4,10 +4,14 @@ import haxe.test.Base;
 import haxe.test.Base.Base_InnerClass;
 import haxe.test.TEnum;
 import haxe.test.TEnumWithValue;
+import haxe.test.IEditableTextBuffer;
+import haxe.test.LowerCaseClass;
+
 import NoPackage;
 #if unsafe
 import cs.Pointer;
 #end
+import cs.system.Action_1;
 
 //C#-specific tests, like unsafe code
 class TestCSharp extends Test
@@ -23,6 +27,60 @@ class TestCSharp extends Test
 		eq(Base._untyped, 45);
 		Base._untyped = 40;
 		eq(Base._untyped, 40);
+	}
+
+	function testIssue3474()
+	{
+		var a:IEditableTextBuffer = null;
+		eq(a,null);
+		var didRun = false;
+		try
+		{
+			eq(a.Property, "should not succeed");
+		}
+		catch(e:Dynamic)
+		{
+			didRun = true;
+		}
+
+		t(didRun);
+	}
+
+	function testLowerCase()
+	{
+		var l = new LowerCaseClass();
+		t(l.works);
+	}
+
+	function testGetItem()
+	{
+		var b = new Base();
+		eq(b[1], 20);
+		eq(b.get_Item(2,3), 6);
+		var dyn:Dynamic = b;
+		eq(dyn[1], 20);
+		eq(dyn.get_Item(2,3), 6);
+
+		var b:Base = new Base_InnerClass();
+		eq(b[1], 20);
+		eq(b.get_Item(2,3), 6);
+		var dyn:Dynamic = b;
+		eq(dyn[1], 20);
+		eq(dyn.get_Item(2,3), 6);
+	}
+
+	// function testOptional()
+	// {
+	// 	eq(new Base().optional(), 420);
+	// 	eq(new Base().optional(10), 100);
+	// }
+
+	function testProp()
+	{
+		var b = new Base();
+		eq(b.prop, "SomeValue");
+		var dyn:Dynamic = b;
+		eq(dyn.prop, "SomeValue");
 	}
 
 #if unsafe
@@ -295,6 +353,11 @@ class TestCSharp extends Test
 		i *= 2;
 	}
 
+	@:skipReflection private function refTestAssign(i:cs.Ref<Int>):Void
+	{
+		i = 2;
+	}
+
 	@:skipReflection private function outTest(out:cs.Out<Int>, x:Int):Void
 	{
 		out = x * 2;
@@ -317,6 +380,10 @@ class TestCSharp extends Test
 
 	public function testRef()
 	{
+		var i = 10;
+		refTestAssign(i);
+		eq(i, 2);
+
 		var i = 10;
 		refTest(i);
 		eq(i, 20);
@@ -417,6 +484,50 @@ class TestCSharp extends Test
 		haxe.test.MyClass.remove_voidvoid2( fn );
 		haxe.test.MyClass.dispatch2();
 		f(hasFired);
+	}
+
+	function testHaxeEvents() {
+		var c = new EventClass();
+		var sum = 0;
+		var cb:Action_1<Int> = function(x) sum += x;
+		c.add_Event1(cb);
+		c.invokeEvent1(1);
+		c.invokeEvent1(2);
+		c.remove_Event1(cb);
+		c.invokeEvent1(3);
+		eq(sum, 3);
+
+		c.add_Event2(cb);
+		eq(c.event2Counter, 1);
+		c.remove_Event2(cb);
+		eq(c.event2Counter, 0);
+
+		sum = 0;
+		EventClass.add_SEvent1(cb);
+		EventClass.invokeSEvent1(1);
+		EventClass.invokeSEvent1(2);
+		EventClass.remove_SEvent1(cb);
+		EventClass.invokeSEvent1(3);
+		eq(sum, 3);
+
+		EventClass.add_SEvent2(cb);
+		eq(EventClass.sEvent2Counter, 1);
+		EventClass.remove_SEvent2(cb);
+		eq(EventClass.sEvent2Counter, 0);
+
+		var i:IEventIface = c;
+		sum = 0;
+		i.add_IfaceEvent1(cb);
+		c.invokeIfaceEvent1(1);
+		c.invokeIfaceEvent1(2);
+		i.remove_IfaceEvent1(cb);
+		c.invokeIfaceEvent1(3);
+		eq(sum, 3);
+
+		i.add_IfaceEvent2(cb);
+		eq(c.ifaceEvent2Counter, 1);
+		i.remove_IfaceEvent2(cb);
+		eq(c.ifaceEvent2Counter, 0);
 	}
 
 #if unsafe
@@ -580,4 +691,51 @@ private class TestMyClass extends haxe.test.MyClass
 		this.int = i;
 		this.float = f;
 	}
+}
+
+private interface IEventIface {
+	@:keep
+    @:event private var IfaceEvent1:Action_1<Int>;
+    function add_IfaceEvent1(cb:Action_1<Int>):Void;
+    function remove_IfaceEvent1(cb:Action_1<Int>):Void;
+
+    @:keep
+    @:event private var IfaceEvent2:Action_1<Int>;
+    function add_IfaceEvent2(cb:Action_1<Int>):Void;
+    function remove_IfaceEvent2(cb:Action_1<Int>):Void;
+}
+
+@:publicFields
+private class EventClass implements IEventIface {
+	function new() {}
+
+    @:event private var Event1:Action_1<Int>;
+    function add_Event1(cb:Action_1<Int>) {}
+    function remove_Event1(cb:Action_1<Int>) {}
+    function invokeEvent1(i) if (Event1 != null) Event1.Invoke(i);
+
+    @:event private var Event2:Action_1<Int>;
+    var event2Counter = 0;
+    function add_Event2(cb:Action_1<Int>) event2Counter++;
+    function remove_Event2(cb:Action_1<Int>) event2Counter--;
+
+    @:event private static var SEvent1:Action_1<Int>;
+    static function add_SEvent1(cb:Action_1<Int>) {}
+    static function remove_SEvent1(cb:Action_1<Int>) {}
+    static function invokeSEvent1(i) if (SEvent1 != null) SEvent1.Invoke(i);
+
+    @:event private static var SEvent2:Action_1<Int>;
+    static var sEvent2Counter = 0;
+    static function add_SEvent2(cb:Action_1<Int>) sEvent2Counter++;
+    static function remove_SEvent2(cb:Action_1<Int>) sEvent2Counter--;
+
+    @:event private var IfaceEvent1:Action_1<Int>;
+    function add_IfaceEvent1(cb:Action_1<Int>) {}
+    function remove_IfaceEvent1(cb:Action_1<Int>) {}
+    function invokeIfaceEvent1(i) if (IfaceEvent1 != null) IfaceEvent1.Invoke(i);
+
+    @:event private var IfaceEvent2:Action_1<Int>;
+    var ifaceEvent2Counter = 0;
+    function add_IfaceEvent2(cb:Action_1<Int>) ifaceEvent2Counter++;
+    function remove_IfaceEvent2(cb:Action_1<Int>) ifaceEvent2Counter--;
 }

@@ -672,7 +672,7 @@ let is_forced_inline c cf =
 	| _ when Meta.has Meta.Extern cf.cf_meta -> true
 	| _ -> false
 
-let rec unify_call_args' ctx el args r p inline force_inline =
+let rec unify_call_args' ctx el args r callp inline force_inline =
 	let call_error err p =
 		raise (Error (Call_error err,p))
 	in
@@ -681,26 +681,26 @@ let rec unify_call_args' ctx el args r p inline force_inline =
 		call_error (Could_not_unify err) p
 	in
 	let mk_pos_infos t =
-		let infos = mk_infos ctx p [] in
+		let infos = mk_infos ctx callp [] in
 		type_expr ctx infos (WithType t)
 	in
 	let rec default_value name t =
 		if is_pos_infos t then
 			mk_pos_infos t
 		else
-			null (ctx.t.tnull t) p
+			null (ctx.t.tnull t) callp
 	in
 	let skipped = ref [] in
 	let skip name ul t =
 		if not ctx.com.config.pf_can_skip_non_nullable_argument && not (is_nullable t) then
-			call_error (Cannot_skip_non_nullable name) p;
+			call_error (Cannot_skip_non_nullable name) callp;
 		skipped := (name,ul) :: !skipped;
 		default_value name t
 	in
 	(* let force_inline, is_extern = match cf with Some(TInst(c,_),f) -> is_forced_inline (Some c) f, c.cl_extern | _ -> false, false in *)
 	let type_against t e =
 		let e = type_expr ctx e (WithTypeResume t) in
-		(try Codegen.AbstractCast.cast_or_unify_raise ctx t e p with Error (Unify l,p) -> raise (WithTypeError (l,p)));
+		(try Codegen.AbstractCast.cast_or_unify_raise ctx t e e.epos with Error (Unify l,p) -> raise (WithTypeError (l,p)));
 	in
 	let rec loop el args = match el,args with
 		| [],[] ->
@@ -713,7 +713,7 @@ let rec unify_call_args' ctx el args r p inline force_inline =
 					assert false
 			end
 		| [],(_,false,_) :: _ ->
-			call_error Not_enough_arguments p
+			call_error Not_enough_arguments callp
 		| [],(name,true,t) :: args ->
 			begin match loop [] args with
 				| [] when not (inline && (ctx.g.doinline || force_inline)) && not ctx.com.config.pf_pad_nulls ->
@@ -816,12 +816,6 @@ let unify_field_call ctx fa el args ret p inline =
 let fast_enum_field e ef p =
 	let et = mk (TTypeExpr (TEnumDecl e)) (TAnon { a_fields = PMap.empty; a_status = ref (EnumStatics e) }) p in
 	TField (et,FEnum (e,ef))
-
-let type_of_module_type = function
-	| TClassDecl c -> TInst (c,List.map snd c.cl_params)
-	| TEnumDecl e -> TEnum (e,List.map snd e.e_params)
-	| TTypeDecl t -> TType (t,List.map snd t.t_params)
-	| TAbstractDecl a -> TAbstract (a,List.map snd a.a_params)
 
 let rec type_module_type ctx t tparams p =
 	match t with
@@ -955,7 +949,7 @@ let mk_array_set_call ctx (cf,tf,r,e1,e2o) c ebase p =
 	let evalue = match e2o with None -> assert false | Some e -> e in
 	match cf.cf_expr with
 		| None ->
-			if not (Meta.has Meta.NoExpr cf.cf_meta) then display_error ctx "Recursive array get method" p;
+			if not (Meta.has Meta.NoExpr cf.cf_meta) then display_error ctx "Recursive array set method" p;
 			let ea = mk (TArray(ebase,e1)) r p in
 			mk (TBinop(OpAssign,ea,evalue)) r p
 		| Some _ ->
@@ -2255,6 +2249,8 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 							check_constraints ctx "" cf.cf_params monos (apply_params a.a_params tl) false cf.cf_pos;
 							let e = if not swapped then
 								make e1 e2
+							else if not (Optimizer.has_side_effect e1) && not (Optimizer.has_side_effect e2) then
+								make e1 e2
 							else
 								let v1,v2 = gen_local ctx t1, gen_local ctx t2 in
 								let ev1,ev2 = mk (TVar(v1,Some e1)) ctx.t.tvoid p,mk (TVar(v2,Some e2)) ctx.t.tvoid p in
@@ -2336,7 +2332,7 @@ and type_unop ctx op flag e p =
 							if type_iseq (tfun [e.etype] m) tcf then cf,tcf,m else loop opl
 					| _ :: opl -> loop opl
 				in
-				let cf,t,r = try loop a.a_unops with Not_found -> error "Invalid operation" p in
+				let cf,t,r = try loop a.a_unops with Not_found -> raise Not_found in
 				(match cf.cf_expr with
 				| None ->
 					let e = {e with etype = apply_params a.a_params pl a.a_this} in
@@ -3294,9 +3290,9 @@ and type_expr ctx (e,p) (with_type:with_type) =
 				error "Constructor is not a function" p
 		in
 		let t = try
-			ctx.constructor_argument_stack <- el :: ctx.constructor_argument_stack;
+			ctx.call_argument_stack <- el :: ctx.call_argument_stack;
 			let t = follow (Typeload.load_instance ctx t p true) in
-			ctx.constructor_argument_stack <- List.tl ctx.constructor_argument_stack;
+			ctx.call_argument_stack <- List.tl ctx.call_argument_stack;
 			(* Try to properly build @:generic classes here (issue #2016) *)
 			begin match t with
 				| TInst({cl_kind = KGeneric } as c,tl) -> follow (Codegen.build_generic ctx c p tl)
@@ -3358,8 +3354,14 @@ and type_expr ctx (e,p) (with_type:with_type) =
 			if with_type <> NoValue then error "Type parameters are not supported for rvalue functions" p
 		end;
 		List.iter (fun tp -> if tp.tp_constraints <> [] then display_error ctx "Type parameter constraints are not supported for local functions" p) f.f_params;
-		let old = ctx.type_params in
+		let inline, v = (match name with
+			| None -> false, None
+			| Some v when ExtString.String.starts_with v "inline_" -> true, Some (String.sub v 7 (String.length v - 7))
+			| Some v -> false, Some v
+		) in
+		let old_tp,old_in_loop = ctx.type_params,ctx.in_loop in
 		ctx.type_params <- params @ ctx.type_params;
+		if not inline then ctx.in_loop <- false;
 		let rt = Typeload.load_type_opt ctx p f.f_type in
 		let args = List.map (fun (s,opt,t,c) ->
 			let t = Typeload.load_type_opt ctx p t in
@@ -3392,11 +3394,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 		| _ ->
 			());
 		let ft = TFun (fun_args args,rt) in
-		let inline, v = (match name with
-			| None -> false, None
-			| Some v when ExtString.String.starts_with v "inline_" -> true, Some (String.sub v 7 (String.length v - 7))
-			| Some v -> false, Some v
-		) in
+
 		let v = (match v with
 			| None -> None
 			| Some v ->
@@ -3409,7 +3407,8 @@ and type_expr ctx (e,p) (with_type:with_type) =
 			| _ -> FunMemberClassLocal
 		in
 		let e , fargs = Typeload.type_function ctx args rt curfun f false p in
-		ctx.type_params <- old;
+		ctx.type_params <- old_tp;
+		ctx.in_loop <- old_in_loop;
 		let f = {
 			tf_args = fargs;
 			tf_type = rt;
@@ -3443,6 +3442,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 	| EUntyped e ->
 		let old = ctx.untyped in
 		ctx.untyped <- true;
+		if not (Meta.has Meta.HasUntyped ctx.curfield.cf_meta) then ctx.curfield.cf_meta <- (Meta.HasUntyped,[],p) :: ctx.curfield.cf_meta;
 		let e = type_expr ctx e with_type in
 		ctx.untyped <- old;
 		{
@@ -3729,9 +3729,12 @@ and handle_display ctx e_ast iscall p =
 		let fields = PMap.fold (fun f acc -> PMap.add f.cf_name f acc) fields use_methods in
 		let fields = PMap.fold (fun f acc -> if Meta.has Meta.NoCompletion f.cf_meta then acc else f :: acc) fields [] in
 		let t = if iscall then
-			match follow e.etype with
-			| TFun _ -> e.etype
-			| _ -> t_dynamic
+			let rec loop t = match follow t with
+				| TFun _ -> t
+				| TAbstract(a,tl) when Meta.has Meta.Callable a.a_meta -> loop (Abstract.get_underlying_type a tl)
+				| _ -> t_dynamic
+			in
+			loop e.etype
 		else
 			let get_field acc f =
 				List.fold_left (fun acc f ->
@@ -4369,8 +4372,8 @@ let make_macro_api ctx p =
 				| (WithType t | WithTypeResume t) :: _ -> Some t
 				| _ -> None
 		);
-		Interp.get_constructor_arguments = (fun() ->
-			match ctx.constructor_argument_stack with
+		Interp.get_call_arguments = (fun() ->
+			match ctx.call_argument_stack with
 				| [] -> None
 				| el :: _ -> Some el
 		);
@@ -4834,7 +4837,7 @@ let rec create com =
 		meta = [];
 		this_stack = [];
 		with_type_stack = [];
-		constructor_argument_stack = [];
+		call_argument_stack = [];
 		pass = PBuildModule;
 		macro_depth = 0;
 		untyped = false;

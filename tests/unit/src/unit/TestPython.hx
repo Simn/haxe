@@ -11,7 +11,7 @@ import python.NativeArrayTools;
 import python.NativeStringTools;
 
 import python.lib.Codecs;
-import python.lib.FuncTools;
+import python.lib.Functools;
 import python.lib.Glob;
 import python.lib.Inspect;
 import python.lib.Json;
@@ -19,11 +19,11 @@ import python.lib.Json;
 import python.lib.Math;
 import python.lib.Msvcrt;
 import python.lib.Os;
-import python.lib.PPrint;
+import python.lib.Pprint;
 import python.lib.Random;
 import python.lib.Re;
 import python.lib.Set;
-import python.lib.ShUtil;
+import python.lib.Shutil;
 import python.lib.Subprocess;
 import python.lib.Sys;
 import python.lib.Tempfile;
@@ -34,10 +34,10 @@ import python.lib.Traceback;
 import python.lib.Tty;
 import python.lib.Tuple;
 
-import python.lib.datetime.DateTime;
-import python.lib.datetime.TimeDelta;
+import python.lib.datetime.Datetime;
+import python.lib.datetime.Timedelta;
 import python.lib.datetime.Timezone;
-import python.lib.datetime.TzInfo;
+import python.lib.datetime.Tzinfo;
 
 import python.lib.io.BufferedIOBase;
 import python.lib.io.BufferedRWPair;
@@ -216,7 +216,7 @@ class TestPython extends Test {
 	}
 
 	function testKwArgsAfterVarArgs () {
-		function test (va:VarArgs, kw:KwArgs) {
+		function test (va:VarArgs, kw:KwArgs<Dynamic>) {
 			var a = va.toArray();
 
 			eq(1,a[0]);
@@ -229,7 +229,7 @@ class TestPython extends Test {
 	}
 
 	function testOptionalVarArgs () {
-		function test (?va:VarArgs, ?kw:KwArgs) {
+		function test (?va:VarArgs, ?kw:KwArgs<Dynamic>) {
 			var a = va.toArray();
 
 			eq(0,a.length);
@@ -238,12 +238,12 @@ class TestPython extends Test {
 	}
 
 	function testOptionalKwArgs () {
-		function test (?kw:KwArgs) eq(0,kw.toDict().length());
+		function test (?kw:KwArgs<Dynamic>) eq(0,kw.toDict().length());
 		test();
 	}
 
 	function testOptionalKwArgsAfterOptionalVarArgs () {
-		function test (?va:VarArgs, ?kw:KwArgs) {
+		function test (?va:VarArgs, ?kw:KwArgs<Dynamic>) {
 			var a = va.toArray();
 
 			eq(1,a[0]);
@@ -254,7 +254,7 @@ class TestPython extends Test {
 		var x = [1,2];
 		test(x);
 
-		function test (?va:VarArgs, ?kw:KwArgs) {
+		function test (?va:VarArgs, ?kw:KwArgs<Dynamic>) {
 			var a = va.toArray();
 			eq(0,a.length);
 			eq(1, kw.get("a",null));
@@ -266,7 +266,7 @@ class TestPython extends Test {
 	}
 
 	function testKwArgs () {
-		function x (args:KwArgs) {
+		function x (args:KwArgs<Dynamic>) {
 			var a = args.get("a", 0);
 			var b = args.get("b", 0);
 			return a + b;
@@ -280,6 +280,23 @@ class TestPython extends Test {
 		var res2 = python.Syntax.callNamedUntyped(x, { a : 3, b : 5});
 
 		eq(8, res2);
+	}
+
+	function testTypedKwArgs () {
+		function x (args:KwArgs<{ a : Int, b : Int}>) {
+			var x = args.typed();
+
+			return x.a + x.b;
+		}
+
+		var a = { a : 1, b : 2};
+		var res = x( a );
+
+		eq(3, res);
+
+		var res = x( { a : 1, b : 2} );
+
+		eq(3, res);
 	}
 
 	function testNonLocal() {
@@ -358,6 +375,33 @@ class TestPython extends Test {
 		eq(t._1, 1);
 		eq(t._2, 2);
 		eq(t.length, 2);
+
+		var t = Tup3.create(1, 2, 3);
+		eq(t._1, 1);
+		eq(t._2, 2);
+		eq(t._3, 3);
+		eq(t.length, 3);
+
+		var t = Tup4.create(1, 2, 3, 4);
+		eq(t._1, 1);
+		eq(t._2, 2);
+		eq(t._3, 3);
+		eq(t._4, 4);
+		eq(t.length, 4);
+
+		var t = Tup5.create(1, 2, 3, 4, 5);
+		eq(t._1, 1);
+		eq(t._2, 2);
+		eq(t._3, 3);
+		eq(t._4, 4);
+		eq(t._5, 5);
+		eq(t.length, 5);
+
+		var t = new Tuple([1,2,3]);
+		eq(t[0], 1);
+		eq(t[1], 2);
+		eq(t[2], 3);
+		eq(t.length, 3);
 	}
 
 }

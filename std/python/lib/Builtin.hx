@@ -37,7 +37,7 @@ extern class Builtin {
 	@:overload(function (f:Dict<Dynamic, Dynamic>):Int {})
 	@:overload(function (f:Bytes):Int {})
 	@:overload(function (f:DictView<Dynamic>):Int {})
-	@:overload(function (f:ByteArray):Int {})
+	@:overload(function (f:Bytearray):Int {})
 	@:overload(function (f:Tuple<Dynamic>):Int {})
 	public static function len(x:String):Int;
 
@@ -70,20 +70,22 @@ extern class Builtin {
 	//public static function property():Void;
 
 
-
+	/*
 	@:overload(function <X>():Tuple<X> {})
 	public static function tuple<X>(a:Array<X>):Tuple<X>;
-
+	*/
 
 
 
 	//public static function range():Void;
 
 	public static function type():Void;
+	/*
 	@:overload(function (it:Array<Int>):python.lib.ByteArray {})
 	@:overload(function (it:NativeIterable<Int>):python.lib.ByteArray {})
 	@:overload(function (size:Int):python.lib.ByteArray {})
 	public static function bytearray(source:String,encoding:String,?errors:Dynamic):python.lib.ByteArray;
+	*/
 	public static function float(x:Dynamic):Float;
 
 	@:overload(function <T>(f:Array<T>):Array<T> {})

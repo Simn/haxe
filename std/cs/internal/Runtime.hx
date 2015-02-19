@@ -278,7 +278,7 @@ import cs.system.Object;
 
 		System.Type t = obj as System.Type;
 		System.Reflection.BindingFlags bf;
-        if (t == null)
+    if (t == null)
 		{
 			string s = obj as string;
 			if (s != null)
@@ -302,10 +302,26 @@ import cs.system.Object;
 			if (prop == null)
 			{
 				System.Reflection.MemberInfo[] m = t.GetMember(field, bf);
+				if (m.Length == 0 && (field == "__get" || field == "__set"))
+					m = t.GetMember(field == "__get" ? "get_Item" : "set_Item", bf);
+
 				if (m.Length > 0)
 				{
 					return new haxe.lang.Closure(obj != null ? obj : t, field, 0);
 				} else {
+					// COM object handling
+					if (t.IsCOMObject)
+					{
+						try
+						{
+							return t.InvokeMember(field, System.Reflection.BindingFlags.GetProperty, null, obj, new object[0]);
+						}
+						catch (System.Exception e)
+						{
+							//Closures of COM objects not supported currently
+						}
+					}
+
 					if (throwErrors)
 						throw HaxeException.wrap("Cannot access field \'" + field + "\'.");
 					else
@@ -353,7 +369,7 @@ import cs.system.Object;
 
 		System.Type t = obj as System.Type;
 		System.Reflection.BindingFlags bf;
-        if (t == null)
+		if (t == null)
 		{
 			t = obj.GetType();
 			bf = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.FlattenHierarchy;
@@ -376,6 +392,18 @@ import cs.system.Object;
 			System.Reflection.PropertyInfo prop = t.GetProperty(field, bf);
 			if (prop == null)
 			{
+				// COM object handling
+				if (t.IsCOMObject)
+				{
+					try
+					{
+						return t.InvokeMember(field, System.Reflection.BindingFlags.SetProperty, null, obj, new object[] { value });
+					}
+					catch (System.Exception e)
+					{
+						//Closures of COM objects not supported currently
+					}
+				}
 				throw haxe.lang.HaxeException.wrap("Field \'" + field + "\' not found for writing from Class " + t);
 			}
 
@@ -566,10 +594,34 @@ import cs.system.Object;
 		int last = 0;
 		for (int i = 0; i < mis.Length; i++)
 		{
-			if (mis[i].Name.Equals(field))
+			string name = mis[i].Name;
+			if (name.Equals(field))
 			{
 				mis[last++] = mis[i];
 			}
+		}
+
+		if (last == 0 && (field == "__get" || field == "__set"))
+		{
+			field = field == "__get" ? "get_Item" : "set_Item";
+			for (int i = 0; i < mis.Length; i++)
+			{
+				string name = mis[i].Name;
+				if (name.Equals(field))
+				{
+					mis[last++] = mis[i];
+				}
+			}
+		}
+
+		if (last == 0 && t.IsCOMObject)
+		{
+			object[] oargs = new object[arrLen(args)];
+			for (int i = 0; i < oargs.Length; i++)
+			{
+				oargs[i] = args[i];
+			}
+			return t.InvokeMember(field, System.Reflection.BindingFlags.InvokeMethod, null, obj, oargs);
 		}
 
 		if (last == 0)
@@ -582,6 +634,11 @@ import cs.system.Object;
 	public static function slowCallField(obj:Dynamic, field:String, args:Array<Dynamic>):Dynamic
 	{
 		throw "not implemented";
+	}
+
+	@:private static function arrLen(arr:Array<Dynamic>):Int
+	{
+		return arr.length;
 	}
 
 	@:functionCode('
