@@ -284,12 +284,12 @@ class TestTypeConstructor extends Test {
 	}
 
 	public function testTypeConstructorWithMoreThanTwoTypeParameters () {
-		var e:FourTypeParameters<Int, String, Float, Array<Int>> = {
-			a : 1,
-			b : "a",
-			c : 1.1,
-			d : [1]
-		}
+		var e:FourTypeParameters<Int, String, Float, Array<Int>> = new FourTypeParameters<Int, String, Float, Array<Int>> (
+			1,
+			"a",
+			1.1,
+			[1]
+		);
 
 		var x = passFour(e);
 		t(x == e);
@@ -382,9 +382,27 @@ class TestTypeConstructor extends Test {
 
 typedef Of4<M,A,B,C,D> = Of<Of<Of<Of<M,A>,B>,C>,D>;
 
-typedef FourTypeParameters<A,B,C,D> = {
+class FourTypeParameters<A,B,C,D> {
 	var a:A;
 	var b:B;
 	var c:C;
 	var d:D;
+
+	public function new (a,b,c,d) {
+		this.a = a;
+		this.b = b;
+		this.c = c;
+		this.d = d;
+	}
 }
+
+class TestUnificationBetweenNestedOfTypesAndTypedef {
+	function main <M, X,Y>() {
+
+		var z : Of<Of<M, X>, Y> = null;
+		next1.bind(z, _);
+	}
+	public static function next1 <A,B,C, Cat>(f:OfOf<Cat, A, B>, g:OfOf<Cat, B, C>, cat:Monad<Cat>):OfOf<Cat,A, C> return null;
+}
+
+typedef OfOf<M,A,B> = Of<Of<M, A>, B>;

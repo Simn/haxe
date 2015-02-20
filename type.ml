@@ -1664,6 +1664,28 @@ and unify a b =
 		(match !t with
 		| None -> if not (link t b a) then error [cannot_unify a b]
 		| Some t -> unify a t)
+	| TType (t,tl) , _ ->
+		if not (List.exists (fun (a2,b2) -> fast_eq a a2 && fast_eq b b2) (!unify_stack)) then begin
+			try
+				unify_stack := (a,b) :: !unify_stack;
+				unify (apply_params t.t_params tl t.t_type) b;
+				unify_stack := List.tl !unify_stack;
+			with
+				Unify_error l ->
+					unify_stack := List.tl !unify_stack;
+					error (cannot_unify a b :: l)
+		end
+	| _ , TType (t,tl) ->
+		if not (List.exists (fun (a2,b2) -> fast_eq a a2 && fast_eq b b2) (!unify_stack)) then begin
+			try
+				unify_stack := (a,b) :: !unify_stack;
+				unify a (apply_params t.t_params tl t.t_type);
+				unify_stack := List.tl !unify_stack;
+			with
+				Unify_error l ->
+					unify_stack := List.tl !unify_stack;
+					error (cannot_unify a b :: l)
+		end
 	| TAbstract({a_path = [],"Of"},[tm1;ta1]),TAbstract({a_path = [],"Of"},[tm2;ta2]) ->
 		(*
 			unify the reduced Of types
@@ -1690,28 +1712,6 @@ and unify a b =
 		(* first reduce the Of type, same as in the case above. *)
 		let t = reduce_of b in
 		if is_of_type t then unify_of tm ta a else unify a t
-	| TType (t,tl) , _ ->
-		if not (List.exists (fun (a2,b2) -> fast_eq a a2 && fast_eq b b2) (!unify_stack)) then begin
-			try
-				unify_stack := (a,b) :: !unify_stack;
-				unify (apply_params t.t_params tl t.t_type) b;
-				unify_stack := List.tl !unify_stack;
-			with
-				Unify_error l ->
-					unify_stack := List.tl !unify_stack;
-					error (cannot_unify a b :: l)
-		end
-	| _ , TType (t,tl) ->
-		if not (List.exists (fun (a2,b2) -> fast_eq a a2 && fast_eq b b2) (!unify_stack)) then begin
-			try
-				unify_stack := (a,b) :: !unify_stack;
-				unify a (apply_params t.t_params tl t.t_type);
-				unify_stack := List.tl !unify_stack;
-			with
-				Unify_error l ->
-					unify_stack := List.tl !unify_stack;
-					error (cannot_unify a b :: l)
-		end
 	| TEnum (ea,tl1) , TEnum (eb,tl2) ->
 		if ea != eb then error [cannot_unify a b];
 		unify_type_params a b tl1 tl2
