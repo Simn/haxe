@@ -1,5 +1,6 @@
 package unit;
 
+using unit.TestTypeConstructor;
 using unit.MyTypeConstructor;
 
 class TestTypeConstructor extends Test {
@@ -95,6 +96,19 @@ class TestTypeConstructor extends Test {
 		t(r.toEither().match(Left("hello world")));
 	}
 
+	function mapTwice <M:Mappable<M,In>,A,B,C>(m:Mappable<M,A>, f:A->B, f2:B->C):M<C> {
+		return m.map(f).map(f2);
+	}
+
+	public function testMapTwice ()
+	{
+		var x = new MyArray([1]);
+
+		var r = mapTwice(x, function (x) return x+1, function (x) return x+1);
+
+		t(r.a[0] == 3);
+	}
+
 
 	public function testMappable() {
 
@@ -110,11 +124,13 @@ class TestTypeConstructor extends Test {
 
 		var l = new List();
 		l.add(1);
+
 		var x = new MyList(l);
 
 		var r = mapMappable(x, function (y) return y+1);
 
 		t(r.a.first() == 2);
+
 
 	}
 
