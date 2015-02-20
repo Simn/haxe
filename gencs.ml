@@ -762,7 +762,11 @@ let configure gen =
 		ns
 	in
 
-	let change_field = change_id in
+	let change_field s =
+		(* let fname = String.nsplit s "." in (* explicit interfaces *) *)
+		(* let name = List.hd (List.rev fname) in *)
+		change_id s
+	in
 	let write_id w name = write w (change_id name) in
 	let write_field w name = write w (change_field name) in
 
@@ -1192,6 +1196,19 @@ let configure gen =
 						expr_s w v
 					end else
 						do_call w e [v]
+				| TField (e, (FInstance(_, _, cf))) when String.contains cf.cf_name '.' ->
+					let fname = String.nsplit cf.cf_name "." in (* explicit interfaces *)
+					let name, rest = match List.rev fname with
+						| hd :: tl ->
+							name, String.concat "." (List.rev tl)
+						| _ -> assert false
+					in
+					let name = List.hd (List.rev fname) in
+					write w ("((" ^ rest ^ ")");
+					expr_s w e;
+					write w ")";
+					write w ".";
+					write_field w name
 				| TField (e, (FStatic(_, cf) | FInstance(_, _, cf))) when Meta.has Meta.Native cf.cf_meta ->
 					let rec loop meta = match meta with
 						| (Meta.Native, [EConst (String s), _],_) :: _ ->
