@@ -1002,7 +1002,7 @@ let rec s_type_kind t =
 	| TLazy _ -> "TLazy"
 
 let rec s_type ctx t =
-	match reduce_of t with
+	match t with
 	| TMono r ->
 		(match !r with
 		| None -> Printf.sprintf "Unknown<%d>" (try List.assq t (!ctx) with Not_found -> let n = List.length !ctx in ctx := (t,n) :: !ctx; n)
@@ -1720,10 +1720,8 @@ and unify a b =
 		end
 	| TAbstract({a_path = [],"-Of"},[tm1;ta1]),TAbstract({a_path = [],"-Of"},[tm2;ta2]) ->
 		(*
-			unify the reduced Of types
-			example:
-			unify Of<In->A, B> Of<B->In, A> becomes
-			unify B->A B->A
+			unify the reduced Of types, example:
+			unify Of<B->In, A>, B->A becomes unify B->A, B->A
 		*)
 		(match reduce_of a, reduce_of b with
 			| _, TAbstract({a_path = [],"-Of"},[_;_])
@@ -1733,10 +1731,8 @@ and unify a b =
 			| ta,tb -> unify ta tb)
 	| TAbstract({a_path = [],"-Of"},[tm;ta]),b ->
 		(*
-			try to unify with the reduced Of type first
-			example:
-			unify Of<In->B, A> A->B becomes
-			unify A->B A->B
+			try to unify with the reduced Of type first, example:
+			unify Of<A->In, B>, A->B becomes unify A->B, A->B
 		*)
 		let t = reduce_of a in
 		if is_of_type t then unify_of tm ta b else unify t b
