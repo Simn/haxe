@@ -1157,7 +1157,16 @@ let rec make_constant_expression ctx ?(concat_strings=false) e =
 		(match make_constant_expression ctx e1 with
 		| None -> None
 		| Some e1 -> Some {e with eexpr = TCast(e1,None)})
-	| TParenthesis e | TMeta(_,e) -> Some e
+	| TParenthesis e1 ->
+		begin match make_constant_expression ctx ~concat_strings e1 with
+			| None -> None
+			| Some e1 -> Some {e with eexpr = TParenthesis e1}
+		end
+	| TMeta(m,e1) ->
+		begin match make_constant_expression ctx ~concat_strings e1 with
+			| None -> None
+			| Some e1 -> Some {e with eexpr = TMeta(m,e1)}
+		end
 	| TTypeExpr _ -> Some e
 	(* try to inline static function calls *)
 	| TCall ({ etype = TFun(_,ret); eexpr = TField (_,FStatic (c,cf)) },el) ->
@@ -1549,6 +1558,8 @@ let optimize_completion_expr e =
 					with Not_found ->
 						(* not found locals are most likely to be member/static vars *)
 						e)
+				| EFunction (_,f) ->
+					Ast.map_expr (subst_locals { r = PMap.foldi (fun n i acc -> if List.exists (fun (a,_,_,_) -> a = n) f.f_args then acc else PMap.add n i acc) locals.r PMap.empty }) e
 				| _ ->
 					Ast.map_expr (subst_locals locals) e
 			in

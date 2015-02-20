@@ -30,6 +30,7 @@ type dce = {
 	std_dirs : string list;
 	debug : bool;
 	follow_expr : dce -> texpr -> unit;
+	mutable curclass : tclass;
 	mutable added_fields : (tclass * tclass_field * bool) list;
 	mutable marked_fields : tclass_field list;
 	mutable marked_maybe_fields : tclass_field list;
@@ -321,7 +322,7 @@ and expr dce e =
 			mark_t dce e.epos v.v_type;
 		) vl;
 	| TCall ({eexpr = TLocal ({v_name = "__define_feature__"})},[{eexpr = TConst (TString ft)};e]) ->
-		Common.add_feature dce.com ft;
+		Hashtbl.replace dce.curclass.cl_module.m_extra.m_features ft true;
 		check_feature dce ft;
 		expr dce e
 	(* keep toString method when the class is argument to Std.string or haxe.Log.trace *)
@@ -416,6 +417,7 @@ let run com main full =
 		t_stack = [];
 		ts_stack = [];
 		features = Hashtbl.create 0;
+		curclass = null_class;
 	} in
 	begin match main with
 		| Some {eexpr = TCall({eexpr = TField(e,(FStatic(c,cf)))},_)} ->
@@ -427,7 +429,7 @@ let run com main full =
 		List.iter (fun (s,v) ->
 			if Hashtbl.mem dce.features s then Hashtbl.replace dce.features s (v :: Hashtbl.find dce.features s)
 			else Hashtbl.add dce.features s [v]
-		) m.m_extra.m_features;
+		) m.m_extra.m_if_feature;
 	) com.modules;
 	(* first step: get all entry points, which is the main method and all class methods which are marked with @:keep *)
 	List.iter (fun t -> match t with
@@ -477,7 +479,8 @@ let run com main full =
 				mark_t dce cf.cf_pos cf.cf_type
 			) cfl;
 			(* follow expressions to new types/fields *)
-			List.iter (fun (_,cf,_) ->
+			List.iter (fun (c,cf,_) ->
+				dce.curclass <- c;
 				opt (expr dce) cf.cf_expr;
 				List.iter (fun cf -> if cf.cf_expr <> None then opt (expr dce) cf.cf_expr) cf.cf_overloads
 			) cfl;

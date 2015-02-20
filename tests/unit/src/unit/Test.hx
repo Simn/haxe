@@ -315,7 +315,8 @@ class Test #if swf_mark implements mt.Protect #end {
 		#end
 		classes.push(new TestSpod(sys.db.Sqlite.open("db.db3")));
 		#end
-		TestIssues.addIssueClasses();
+		TestIssues.addIssueClasses("src/unit/issues", "unit.issues");
+		TestIssues.addIssueClasses("src/unit/hxcpp_issues", "unit.hxcpp_issues");
 		var current = null;
 		#if (!fail_eager)
 		try

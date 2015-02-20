@@ -981,11 +981,14 @@ let rec acc_get ctx g p =
 			let tcallb = TFun (args,ret) in
 			let twrap = TFun ([("_e",false,e.etype)],tcallb) in
 			(* arguments might not have names in case of variable fields of function types, so we generate one (issue #2495) *)
-			let args = List.map (fun (n,_,t) -> if n = "" then gen_local ctx t else alloc_var n t) args in
+			let args = List.map (fun (n,o,t) ->
+				let t = if o then ctx.t.tnull t else t in
+				o,if n = "" then gen_local ctx t else alloc_var n t
+			) args in
 			let ve = alloc_var "_e" e.etype in
-			let ecall = make_call ctx et (List.map (fun v -> mk (TLocal v) v.v_type p) (ve :: args)) ret p in
+			let ecall = make_call ctx et (List.map (fun v -> mk (TLocal v) v.v_type p) (ve :: List.map snd args)) ret p in
 			let ecallb = mk (TFunction {
-				tf_args = List.map (fun v -> v,None) args;
+				tf_args = List.map (fun (o,v) -> v,if o then Some TNull else None) args;
 				tf_type = ret;
 				tf_expr = mk (TReturn (Some ecall)) t_dynamic p;
 			}) tcallb p in
@@ -2209,14 +2212,10 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 		in
 		(* special case for == and !=: if the second type is a monomorph, assume that we want to unify
 		   it with the first type to preserve comparison semantics. *)
-		begin match op with
-			| (OpEq | OpNotEq) ->
-				begin match follow e1.etype,follow e2.etype with
-					| TMono _,_ | _,TMono _ ->
-						Type.unify e1.etype e2.etype
-					| _ ->
-						()
-				end
+		let is_eq_op = match op with OpEq | OpNotEq -> true | _ -> false in
+		if is_eq_op then begin match follow e1.etype,follow e2.etype with
+			| TMono _,_ | _,TMono _ ->
+				Type.unify e1.etype e2.etype
 			| _ ->
 				()
 		end;
@@ -2247,6 +2246,16 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 								Codegen.AbstractCast.cast_or_unify_raise ctx t1 e1 p,e2
 							end in
 							check_constraints ctx "" cf.cf_params monos (apply_params a.a_params tl) false cf.cf_pos;
+							let check_null e t = if is_eq_op then match e.eexpr with
+								| TConst TNull when not (is_explicit_null t) -> raise (Unify_error [])
+								| _ -> ()
+							in
+							(* If either expression is `null` we only allow operator resolving if the argument type
+							   is explicitly Null<T> (issue #3376) *)
+							if is_eq_op then begin
+								check_null e2 t2;
+								check_null e1 t1;
+							end;
 							let e = if not swapped then
 								make e1 e2
 							else if not (Optimizer.has_side_effect e1) && not (Optimizer.has_side_effect e2) then
@@ -2637,6 +2646,8 @@ and type_access ctx e p mode =
 				apply_params pl tl (loop (TInst (c,stl)))
 			| TInst ({ cl_path = [],"ArrayAccess" },[t]) ->
 				t
+			| TInst ({ cl_path = [],"Array"},[t]) when t == t_dynamic ->
+				t_dynamic
 			| TAbstract(a,tl) when Meta.has Meta.ArrayAccess a.a_meta ->
 				loop (apply_params a.a_params tl a.a_this)
 			| _ ->
@@ -4523,7 +4534,7 @@ let create_macro_interp ctx mctx =
 			let mint = Interp.create com2 (make_macro_api ctx Ast.null_pos) in
 			mint, (fun() -> init_macro_interp ctx mctx mint)
 		| Some mint ->
-			Interp.do_reuse mint;
+			Interp.do_reuse mint (make_macro_api ctx Ast.null_pos);
 			mint, (fun() -> ())
 	) in
 	let on_error = com2.error in

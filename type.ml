@@ -290,7 +290,8 @@ and module_def_extra = {
 	mutable m_kind : module_kind;
 	mutable m_binded_res : (string, string) PMap.t;
 	mutable m_macro_calls : string list;
-	mutable m_features : (string *(tclass * tclass_field * bool)) list;
+	mutable m_if_feature : (string *(tclass * tclass_field * bool)) list;
+	mutable m_features : (string,bool) Hashtbl.t;
 }
 
 and module_kind =
@@ -389,7 +390,8 @@ let module_extra file sign time kind =
 		m_kind = kind;
 		m_binded_res = PMap.empty;
 		m_macro_calls = [];
-		m_features = [];
+		m_if_feature = [];
+		m_features = Hashtbl.create 0;
 	}
 
 
