@@ -364,7 +364,7 @@ let rec load_instance ctx t p allow_no_params =
 				let t = { t with tparams = [p1] } in
 				load_instance ctx t p allow_no_params
 			| tps ->
-				let mk_of tm ta = { tpackage=[]; tname="StdTypes"; tsub=Some("Of"); tparams = [TPType (CTPath tm); ta]} in
+				let mk_of tm ta = { tpackage=[]; tname="-Of"; tsub=Some("-Of"); tparams = [TPType (CTPath tm); ta]} in
 				let rec loop tps =
 					match tps with
 					| [tp] -> mk_of { t with tparams = []} tp
@@ -375,13 +375,24 @@ let rec load_instance ctx t p allow_no_params =
 				load_instance ctx t p allow_no_params
 		end
 	with Not_found ->
-		let mt = load_type_def ctx p t in
-		let is_generic,is_generic_build = match mt with
-			| TClassDecl {cl_kind = KGeneric} -> true,false
-			| TClassDecl {cl_kind = KGenericBuild _} -> false,true
-			| _ -> false,false
+
+		let types, path, f, is_generic, is_generic_build = match t with
+			| {tname = "-Of"; tsub = Some("-Of"); tpackage = []} ->
+				let a = of_type in
+				let build_of params =
+					TAbstract (a, params)
+				in
+				a.a_params, a.a_path, build_of, false, false
+			| _ ->
+				let mt = load_type_def ctx p t in
+				let is_generic,is_generic_build = match mt with
+					| TClassDecl {cl_kind = KGeneric} -> true,false
+					| TClassDecl {cl_kind = KGenericBuild _} -> false,true
+					| _ -> false,false
+				in
+				let t,p,f = ctx.g.do_build_instance ctx mt p in
+				t, p, f, is_generic, is_generic_build
 		in
-		let types , path , f = ctx.g.do_build_instance ctx mt p in
 		let is_rest = is_generic_build && (match types with ["Rest",_] -> true | _ -> false) in
 		if allow_no_params && t.tparams = [] && not is_rest then begin
 			let pl = ref [] in

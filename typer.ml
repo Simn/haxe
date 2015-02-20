@@ -1605,7 +1605,7 @@ and type_field ?(resume=false) ctx e i p mode =
 				error "This operation is unsupported" p)
 		with Not_found -> try
 			match a,pl with
-			| {a_path=[], "Of"},[tm;ta] ->
+			| {a_path=[], "-Of"},[tm;ta] ->
 				let t = unapply_in_constraints tm ta in
 				if is_of_type t then raise Not_found else type_field ~resume:true ctx {e with etype = t} i p mode
 			| _ -> raise Not_found
@@ -3640,7 +3640,7 @@ and handle_display ctx e_ast iscall p =
 					PMap.map (fun f -> { f with cf_type = apply_params c.cl_params params (opt_type f.cf_type); cf_public = true; }) m
 				in
 				loop c params
-			| TAbstract({a_path=[], "Of"},[tm;ta]) ->
+			| TAbstract({a_path=[], "-Of"},[tm;ta]) ->
 				let t = unapply_in_constraints tm ta in
 				if is_of_type t then PMap.empty else get_fields t
 			| TAbstract({a_impl = Some c} as a,pl) ->

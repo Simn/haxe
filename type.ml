@@ -439,6 +439,18 @@ let null_abstract = {
 	a_array = [];
 }
 
+let of_type =
+	let mk_tp x =
+		let c = { null_class with
+			cl_kind = KTypeParameter [];
+			cl_path = (["-Of"],x);
+		} in
+		x, TInst (c, [])
+	in
+	let a_path = ([], "-Of") in
+	let a_params = [mk_tp "M"; mk_tp "A"] in
+	{ null_abstract with a_path = a_path; a_params = a_params; a_private = false }
+
 let add_dependency m mdep =
 	if m != null_module && m != mdep then m.m_extra.m_deps <- PMap.add mdep.m_id mdep m.m_extra.m_deps
 
@@ -584,7 +596,7 @@ let rec follow t =
 		(match !r with
 		| Some t -> follow t
 		| _ -> t)
-	| TAbstract({a_path=[],"Of"},[_;_]) ->
+	| TAbstract({a_path=[],"-Of"},[_;_]) ->
 		let t = reduce_of t in
 		if is_of_type t then t else follow t
 	| TLazy f ->
@@ -607,7 +619,7 @@ and is_in_type t = match follow t with
 	| t -> false
 
 and is_of_type t = match t with
-	| TAbstract({ a_path = [], "Of"},_) -> true
+	| TAbstract({ a_path = [], "-Of"},_) -> true
 	| TLazy f -> is_of_type (!f())
 	| TMono r ->
 		(match !r with
@@ -676,11 +688,11 @@ and unapply_in t ta =
 			(match unapply_left tl with
 			| true, x -> TType(tt,x), true
 			| _ -> t, false)
-		| TAbstract({a_path=[],"Of"},[tm;tx]) ->
+		| TAbstract({a_path=[],"-Of"},[tm;tx]) ->
 			(* unapply In types in nested Ofs like Of<Of<In->In>, A, B> *)
 			(match unapply_in tm (reduce_of tx) with
 			| _, false -> t, false
-			| TAbstract({a_path=[],"Of"},[_;_]), _ -> t, false (* cannot unapply In in this Of type *)
+			| TAbstract({a_path=[],"-Of"},[_;_]), _ -> t, false (* cannot unapply In in this Of type *)
 			| x, _ -> unapply_in x ta)
 		| TAbstract(a,tl) ->
 			let d, x = unapply_left tl in
@@ -711,7 +723,7 @@ and unapply_in t ta =
 and unapply_in_constraints tm ta =
 	let rec loop t =
 		match follow t with
-		| TAbstract ({a_path=[],"Of"},[tm1; ta1]) ->
+		| TAbstract ({a_path=[],"-Of"},[tm1; ta1]) ->
 			loop (unapply_in_constraints tm1 ta1)
 		| TInst (c,params) ->
 			let new_kind = match c.cl_kind with
@@ -751,7 +763,7 @@ and unapply_in_constraints tm ta =
 
 and reduce_of t =
 	match t with
-	| TAbstract({a_path=[],"Of"},[tm;tr]) ->
+	| TAbstract({a_path=[],"-Of"},[tm;tr]) ->
 		let x, applied = unapply_in tm (reduce_of tr) in
 		if applied then x else t
 	| TMono r ->
@@ -1706,7 +1718,7 @@ and unify a b =
 					unify_stack := List.tl !unify_stack;
 					error (cannot_unify a b :: l)
 		end
-	| TAbstract({a_path = [],"Of"},[tm1;ta1]),TAbstract({a_path = [],"Of"},[tm2;ta2]) ->
+	| TAbstract({a_path = [],"-Of"},[tm1;ta1]),TAbstract({a_path = [],"-Of"},[tm2;ta2]) ->
 		(*
 			unify the reduced Of types
 			example:
@@ -1714,12 +1726,12 @@ and unify a b =
 			unify B->A B->A
 		*)
 		(match reduce_of a, reduce_of b with
-			| _, TAbstract({a_path = [],"Of"},[_;_])
-			| TAbstract({a_path = [],"Of"},[_;_]), _ ->
+			| _, TAbstract({a_path = [],"-Of"},[_;_])
+			| TAbstract({a_path = [],"-Of"},[_;_]), _ ->
 				unify tm1 tm2;
 				unify ta1 ta2;
 			| ta,tb -> unify ta tb)
-	| TAbstract({a_path = [],"Of"},[tm;ta]),b ->
+	| TAbstract({a_path = [],"-Of"},[tm;ta]),b ->
 		(*
 			try to unify with the reduced Of type first
 			example:
@@ -1728,7 +1740,7 @@ and unify a b =
 		*)
 		let t = reduce_of a in
 		if is_of_type t then unify_of tm ta b else unify t b
-	| a,TAbstract({a_path = [],"Of"},[tm;ta]) ->
+	| a,TAbstract({a_path = [],"-Of"},[tm;ta]) ->
 		(* first reduce the Of type, same as in the case above. *)
 		let t = reduce_of b in
 		if is_of_type t then unify_of tm ta a else unify a t
@@ -2060,19 +2072,19 @@ and unify_with_variance f t1 t2 =
 		List.iter2 f tl1 tl2
 	| TEnum(en1,tl1),TEnum(en2,tl2) when en1 == en2 ->
 		List.iter2 f tl1 tl2
-	| (TAbstract(({ a_path = [],"Of"}) as a1,pl1) as a), (TAbstract(({ a_path = [],"Of"}) as b2,pl2) as b) ->
+	| (TAbstract(({ a_path = [],"-Of"}) as a1,pl1) as a), (TAbstract(({ a_path = [],"-Of"}) as b2,pl2) as b) ->
 		let a = follow a in
 		let b = follow b in
 		if is_of_type a && is_of_type b then
 			abstract_variance a1 pl1 b2 pl2
 		else
 			(with_variance f) a b
-	| (TAbstract({ a_path = [],"Of"},pl1) as a),b ->
+	| (TAbstract({ a_path = [],"-Of"},pl1) as a),b ->
 		let a = follow a in
 		if is_of_type a
 		then error [cannot_unify t1 t2]
 		else (with_variance f) a b
-	| a,(TAbstract({ a_path = [],"Of"},_) as b) ->
+	| a,(TAbstract({ a_path = [],"-Of"},_) as b) ->
 		let b = follow b in
 		if is_of_type b
 		then error [cannot_unify t1 t2]
@@ -2182,7 +2194,7 @@ module Abstract = struct
 			if Meta.has Meta.CoreType a.a_meta then
 				t_dynamic
 			else match a.a_path,pl with
-				| ([],"Of"),[tm;ta] ->
+				| ([],"-Of"),[tm;ta] ->
 					let x, applied = unapply_in tm (reduce_of ta) in
 					if applied then
 						follow x
