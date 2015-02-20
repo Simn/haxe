@@ -2059,36 +2059,11 @@ and unify_to_field ab tl b ?(allow_transitive_cast=true) (t,cf) =
 
 and unify_with_variance f t1 t2 =
 	let allows_variance_to t tf = type_iseq tf t in
-	let abstract_variance a1 pl1 a2 pl2 =
-		let ta1 = apply_params a1.a_params pl1 a1.a_this in
-		let ta2 = apply_params a2.a_params pl2 a2.a_this in
-		if (Meta.has Meta.CoreType a1.a_meta) && (Meta.has Meta.CoreType a2.a_meta) then
-			type_eq EqStrict ta1 ta2;
-		if not (List.exists (allows_variance_to ta2) a1.a_to) && not (List.exists (allows_variance_to ta1) a2.a_from) then
-			error [cannot_unify t1 t2]
-	in
 	match follow t1,follow t2 with
 	| TInst(c1,tl1),TInst(c2,tl2) when c1 == c2 ->
 		List.iter2 f tl1 tl2
 	| TEnum(en1,tl1),TEnum(en2,tl2) when en1 == en2 ->
 		List.iter2 f tl1 tl2
-	| (TAbstract(({ a_path = [],"-Of"}) as a1,pl1) as a), (TAbstract(({ a_path = [],"-Of"}) as b2,pl2) as b) ->
-		let a = follow a in
-		let b = follow b in
-		if is_of_type a && is_of_type b then
-			abstract_variance a1 pl1 b2 pl2
-		else
-			(with_variance f) a b
-	| (TAbstract({ a_path = [],"-Of"},pl1) as a),b ->
-		let a = follow a in
-		if is_of_type a
-		then error [cannot_unify t1 t2]
-		else (with_variance f) a b
-	| a,(TAbstract({ a_path = [],"-Of"},_) as b) ->
-		let b = follow b in
-		if is_of_type b
-		then error [cannot_unify t1 t2]
-		else (with_variance f) a b
 	| TAbstract(a1,tl1),TAbstract(a2,tl2) when a1 == a2 && Meta.has Meta.CoreType a1.a_meta ->
 		List.iter2 f tl1 tl2
 	| TAbstract(a1,pl1),TAbstract(a2,pl2) ->
