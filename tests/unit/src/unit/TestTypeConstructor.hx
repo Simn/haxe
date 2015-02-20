@@ -47,45 +47,7 @@ class TestTypeConstructor extends Test {
 
 	}
 
-	/*
-	public function testReversedTypedef()
-	{
-		var x : Of<ReversedEitherAlias<Int, In>, String> = Left("hello");
 
-		var r = x.fmap(function (x) return x+" world", new EitherLeftMonad());
-
-		t(r.match(Left("hello world")));
-
-		var r = x.flatMap(function (x) return Left(x+" world"), new EitherLeftMonad());
-
-		t(r.match(Left("hello world")));
-
-	}
-	*/
-
-	/*
-	public function testStructure()
-	{
-		// explicit right lifted Of type
-
-		var z:Of<Tup2<String,In>, Int> = { _1 : "hey", _2 : 20};
-
-		var r = z.fmap(function (x) return x + 20, new Tup2RightFunctor());
-
-		t(r._1 == "hey" && r._2 == 40);
-
-
-		// implicit Of type: always the right type parameter is lifted
-
-		var z:Tup2<String,Int> = { _1 : "hey", _2 : 20};
-
-		var r = z.fmap(function (x) return x + 20, new Tup2RightFunctor());
-
-		t(r._1 == "hey" && r._2 == 40);
-
-
-	}
-	*/
 
 	public function testReversedAbstract()
 	{
@@ -335,39 +297,41 @@ class TestTypeConstructor extends Test {
 		t(r(1) == "foo5");
 	}
 
+
+
 	public function testUnification () {
 		var x1  : FourTypeParameters<Int, String, Float, Array<Int>> = null;
-		var x2  : Of<Of<Of<Of<FourTypeParameters<In, In, In, In>, Int>, String>, Float>, Array<Int>> = null;
-		var x3  : Of<Of<Of<FourTypeParameters<Int, In, In, In>, String>, Float>, Array<Int>> = null;
+		//var x2  : Of<Of<Of<Of<FourTypeParameters<In, In, In, In>, Int>, String>, Float>, Array<Int>> = null;
+		//var x3  : Of<Of<Of<FourTypeParameters<Int, In, In, In>, String>, Float>, Array<Int>> = null;
 		//var x4  : Of<Of<Of<FourTypeParameters<In, String, In, In>, Int>, Float>, Array<Int>> = null;
 		//var x5  : Of<Of<Of<FourTypeParameters<In, In, Float, In>, Int>, String>, Array<Int>> = null;
-		var x6  : Of<Of<FourTypeParameters<Int, String, In, In>, Float>, Array<Int>> = null;
-		var x7  : Of<FourTypeParameters<Int, String, Float, In>, Array<Int>> = null;
+		//var x6  : Of<Of<FourTypeParameters<Int, String, In, In>, Float>, Array<Int>> = null;
+		//var x7  : Of<FourTypeParameters<Int, String, Float, In>, Array<Int>> = null;
 		//var x8  : Of<Of<FourTypeParameters<In, String, In, Array<Int>>, Int>, Float> = null;
 		//var x9  : Of<Of<FourTypeParameters<Int, In, In, Array<Int>>, String>, Float> = null;
-		var x10 : Of4<FourTypeParameters<In, In, In, In>, Int, String, Float, Array<Int>> = null;
+		//var x10 : Of4<FourTypeParameters<In, In, In, In>, Int, String, Float, Array<Int>> = null;
 
 
 
-		x1  = x2; x1  = x3; x1  = x6; x1  = x7; x1  = x10;
-		x2  = x1; x2  = x3; x2  = x6; x2  = x7; x2  = x10;
-		x3  = x1; x3  = x2; x3  = x6; x3  = x7; x3  = x10;
-		x6  = x1; x6  = x2; x6  = x3; x6  = x7; x6  = x10;
-		x7  = x1; x7  = x2; x7  = x3; x7  = x6; x7  = x10;
-		x10 = x1; x10 = x2; x10 = x3; x10 = x6; x10 = x7;
+		//x1  = x2; x1  = x3; x1  = x6; x1  = x7; x1  = x10;
+		//x2  = x1; x2  = x3; x2  = x6; x2  = x7; x2  = x10;
+		//x3  = x1; x3  = x2; x3  = x6; x3  = x7; x3  = x10;
+		//x6  = x1; x6  = x2; x6  = x3; x6  = x7; x6  = x10;
+		//x7  = x1; x7  = x2; x7  = x3; x7  = x6; x7  = x10;
+		//x10 = x1; x10 = x2; x10 = x3; x10 = x6; x10 = x7;
 
 
 		// variance unification
-		var a1 = [x1,x2,x3,x6,x7,x10];
-		var a2 = [x2,x3,x6,x7,x10];
-		var a3 = a1.concat(a2);
-		var a3:Array<FourTypeParameters<Int, String, Float, Array<Int>>> = a2;
+		//var a1 = [x1,x2,x3,x6,x7,x10];
+		//var a2 = [x2,x3,x6,x7,x10];
+		//var a3 = a1.concat(a2);
+		//var a3:Array<FourTypeParameters<Int, String, Float, Array<Int>>> = a2;
 
-		var a1 : List<Array<Array<Int>>> = null;
-		var a2 : List<Of<Array<In>, Of<Array<In>, Int>>> = null;
+		//var a1 : List<Array<Array<Int>>> = null;
+		//var a2 : List<Of<Array<In>, Of<Array<In>, Int>>> = null;
 
-		a1 = a2;
-		a2 = a1;
+		//a1 = a2;
+		//a2 = a1;
 
 	}
 
@@ -396,7 +360,7 @@ class TestTypeConstructor extends Test {
 	}
 }
 
-typedef Of4<M,A,B,C,D> = Of<Of<Of<Of<M,A>,B>,C>,D>;
+typedef Of4<M,A,B,C,D> = M<A,B,C,D>;
 
 class FourTypeParameters<A,B,C,D> {
 	var a:A;
@@ -415,10 +379,10 @@ class FourTypeParameters<A,B,C,D> {
 class TestUnificationBetweenNestedOfTypesAndTypedef {
 	function main <M, X,Y>() {
 
-		var z : Of<Of<M, X>, Y> = null;
+		var z : M<X,Y> = null;
 		next1.bind(z, _);
 	}
-	public static function next1 <A,B,C, Cat>(f:OfOf<Cat, A, B>, g:OfOf<Cat, B, C>, cat:Monad<Cat>):OfOf<Cat,A, C> return null;
+	public static function next1 <A,B,C, Cat>(f:Cat<A, B>, g:Cat<B, C>, cat:Monad<Cat>):Cat<A, C> return null;
 }
 
-typedef OfOf<M,A,B> = Of<Of<M, A>, B>;
+typedef OfOf<M,A,B> = M<A,B>;
