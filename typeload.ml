@@ -359,8 +359,8 @@ let rec load_instance ctx t p allow_no_params =
 		let pt = List.assoc t.tname ctx.type_params in
 		begin match t.tparams with
 			| [] -> pt
-			| [TPType (CTPath {tpackage=[]; tname="In"; tsub=None})] ->
-				let p1 = TPType (CTPath {tpackage=[]; tname="StdTypes"; tparams=[]; tsub=Some("In")}) in
+			| [TPType (CTPath {tpackage=[]; tname="-In"; tsub=None})] ->
+				let p1 = TPType (CTPath {tpackage=[]; tname="-In"; tparams=[]; tsub=Some("-In")}) in
 				let t = { t with tparams = [p1] } in
 				load_instance ctx t p allow_no_params
 			| tps ->
@@ -375,92 +375,93 @@ let rec load_instance ctx t p allow_no_params =
 				load_instance ctx t p allow_no_params
 		end
 	with Not_found ->
-
-		let types, path, f, is_generic, is_generic_build = match t with
-			| {tname = "-Of"; tsub = Some("-Of"); tpackage = []} ->
-				let a = of_type in
-				let build_of params =
-					TAbstract (a, params)
-				in
-				a.a_params, a.a_path, build_of, false, false
-			| _ ->
-				let mt = load_type_def ctx p t in
-				let is_generic,is_generic_build = match mt with
-					| TClassDecl {cl_kind = KGeneric} -> true,false
-					| TClassDecl {cl_kind = KGenericBuild _} -> false,true
-					| _ -> false,false
-				in
-				let t,p,f = ctx.g.do_build_instance ctx mt p in
-				t, p, f, is_generic, is_generic_build
-		in
-		let is_rest = is_generic_build && (match types with ["Rest",_] -> true | _ -> false) in
-		if allow_no_params && t.tparams = [] && not is_rest then begin
-			let pl = ref [] in
-			pl := List.map (fun (name,t) ->
-				match follow t with
-				| TInst (c,_) ->
-					let t = mk_mono() in
-					if c.cl_kind <> KTypeParameter [] || is_generic then delay ctx PCheckConstraint (fun() -> check_param_constraints ctx types t (!pl) c p);
-					t;
-				| _ -> assert false
-			) types;
-			f (!pl)
-		end else if path = ([],"In") then
+		if t.tname = "-In" then
 			!t_in
-		else if path = ([],"Dynamic") then
-			match t.tparams with
-			| [] -> t_dynamic
-			| [TPType t] -> TDynamic (load_complex_type ctx p t)
-			| _ -> error "Too many parameters for Dynamic" p
 		else begin
-			if not is_rest && List.length types <> List.length t.tparams then error ("Invalid number of type parameters for " ^ s_type_path path) p;
-			let tparams = List.map (fun t ->
-				match t with
-				| TPExpr e ->
-					let name = (match fst e with
-						| EConst (String s) -> "S" ^ s
-						| EConst (Int i) -> "I" ^ i
-						| EConst (Float f) -> "F" ^ f
-						| _ -> "Expr"
-					) in
-					let c = mk_class null_module ([],name) p in
-					c.cl_kind <- KExpr e;
-					TInst (c,[])
-				| TPType t -> load_complex_type ctx p t
-			) t.tparams in
-			let rec loop tl1 tl2 is_rest = match tl1,tl2 with
-				| t :: tl1,(name,t2) :: tl2 ->
-					let isconst = (match t with TInst ({ cl_kind = KExpr _ },_) -> true | _ -> false) in
-					if isconst <> (name = "Const") && t != t_dynamic && name <> "Rest" then error (if isconst then "Constant value unexpected here" else "Constant value excepted as type parameter") p;
-					let is_rest = is_rest || name = "Rest" && is_generic_build in
-					let t = match follow t2 with
-						| TInst ({ cl_kind = KTypeParameter [] }, []) when not is_generic ->
-							t
-						| TInst (c,[]) ->
-							let r = exc_protect ctx (fun r ->
-								r := (fun() -> t);
-								delay ctx PCheckConstraint (fun() -> check_param_constraints ctx types t tparams c p);
-								t
-							) "constraint" in
-							delay ctx PForce (fun () -> ignore(!r()));
-							TLazy r
-						| _ -> assert false
+			let types, path, f, is_generic, is_generic_build = match t with
+				| {tname = "-Of"; tsub = Some("-Of"); tpackage = []} ->
+					let a = of_type in
+					let build_of params =
+						TAbstract (a, params)
 					in
-					t :: loop tl1 tl2 is_rest
-				| [],[] ->
-					[]
-				| [],["Rest",_] when is_generic_build ->
-					[]
-				| [],_ ->
-					error ("Not enough type parameters for " ^ s_type_path path) p
-				| t :: tl,[] ->
-					if is_rest then
-						t :: loop tl [] true
-					else
-						error ("Too many parameters for " ^ s_type_path path) p
+					a.a_params, a.a_path, build_of, false, false
+				| _ ->
+					let mt = load_type_def ctx p t in
+					let is_generic,is_generic_build = match mt with
+						| TClassDecl {cl_kind = KGeneric} -> true,false
+						| TClassDecl {cl_kind = KGenericBuild _} -> false,true
+						| _ -> false,false
+					in
+					let t,p,f = ctx.g.do_build_instance ctx mt p in
+					t, p, f, is_generic, is_generic_build
 			in
-			let params = loop tparams types false in
-			f params
+			let is_rest = is_generic_build && (match types with ["Rest",_] -> true | _ -> false) in
+			if allow_no_params && t.tparams = [] && not is_rest then begin
+				let pl = ref [] in
+				pl := List.map (fun (name,t) ->
+					match follow t with
+					| TInst (c,_) ->
+						let t = mk_mono() in
+						if c.cl_kind <> KTypeParameter [] || is_generic then delay ctx PCheckConstraint (fun() -> check_param_constraints ctx types t (!pl) c p);
+						t;
+					| _ -> assert false
+				) types;
+				f (!pl)
+			end else if path = ([],"Dynamic") then
+				match t.tparams with
+				| [] -> t_dynamic
+				| [TPType t] -> TDynamic (load_complex_type ctx p t)
+				| _ -> error "Too many parameters for Dynamic" p
+			else begin
+				if not is_rest && List.length types <> List.length t.tparams then error ("Invalid number of type parameters for " ^ s_type_path path) p;
+				let tparams = List.map (fun t ->
+					match t with
+					| TPExpr e ->
+						let name = (match fst e with
+							| EConst (String s) -> "S" ^ s
+							| EConst (Int i) -> "I" ^ i
+							| EConst (Float f) -> "F" ^ f
+							| _ -> "Expr"
+						) in
+						let c = mk_class null_module ([],name) p in
+						c.cl_kind <- KExpr e;
+						TInst (c,[])
+					| TPType t -> load_complex_type ctx p t
+				) t.tparams in
+				let rec loop tl1 tl2 is_rest = match tl1,tl2 with
+					| t :: tl1,(name,t2) :: tl2 ->
+						let isconst = (match t with TInst ({ cl_kind = KExpr _ },_) -> true | _ -> false) in
+						if isconst <> (name = "Const") && t != t_dynamic && name <> "Rest" then error (if isconst then "Constant value unexpected here" else "Constant value excepted as type parameter") p;
+						let is_rest = is_rest || name = "Rest" && is_generic_build in
+						let t = match follow t2 with
+							| TInst ({ cl_kind = KTypeParameter [] }, []) when not is_generic ->
+								t
+							| TInst (c,[]) ->
+								let r = exc_protect ctx (fun r ->
+									r := (fun() -> t);
+									delay ctx PCheckConstraint (fun() -> check_param_constraints ctx types t tparams c p);
+									t
+								) "constraint" in
+								delay ctx PForce (fun () -> ignore(!r()));
+								TLazy r
+							| _ -> assert false
+						in
+						t :: loop tl1 tl2 is_rest
+					| [],[] ->
+						[]
+					| [],["Rest",_] when is_generic_build ->
+						[]
+					| [],_ ->
+						error ("Not enough type parameters for " ^ s_type_path path) p
+					| t :: tl,[] ->
+						if is_rest then
+							t :: loop tl [] true
+						else
+							error ("Too many parameters for " ^ s_type_path path) p
+				in
+				let params = loop tparams types false in
+				f params
+			end
 		end
 (*
 	build an instance from a complex type
@@ -1165,7 +1166,7 @@ let rec add_constructor ctx c force_constructor p =
 		()
 
 let set_heritance ctx c herits p =
-	let ctx = { ctx with curclass = c; type_params = ("In", !t_in) :: c.cl_params; } in
+	let ctx = { ctx with curclass = c; type_params = ("-In", !t_in) :: c.cl_params; } in
 	let old_meta = c.cl_meta in
 	let process_meta csup =
 		List.iter (fun m ->

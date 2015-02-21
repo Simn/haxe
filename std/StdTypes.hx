@@ -114,5 +114,3 @@ typedef Iterable<T> = {
 	The type parameter represents the type of the elements stored.
 **/
 extern interface ArrayAccess<T> { }
-
-abstract In(Dynamic) {}

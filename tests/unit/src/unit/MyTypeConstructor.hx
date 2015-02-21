@@ -20,7 +20,7 @@ interface Monad<M> extends Functor<M> {
 
 
 
-class EitherMonad<L> implements Monad<Either<L, In>>
+class EitherMonad<L> implements Monad<Either<L, _>>
 {
      public function new () {}
      public function fmap<A,B>(x:Either<L, A>, f:A->B):Either<L, B> {
@@ -40,7 +40,7 @@ class EitherMonad<L> implements Monad<Either<L, In>>
 
 
 
-class ReversedEitherMonad<R> implements Monad<ReversedEither<R, In>>
+class ReversedEitherMonad<R> implements Monad<ReversedEither<R, _>>
 {
      public function new () {}
      public function fmap<A,B>(x:ReversedEither<R, A>, f:A->B):ReversedEither<R, B> {
@@ -59,7 +59,7 @@ class ReversedEitherMonad<R> implements Monad<ReversedEither<R, In>>
 
 
 
-class ArrayMonad implements Monad<Array<In>> {
+class ArrayMonad implements Monad<Array<_>> {
   public function new () {}
   public inline function fmap<S,T>(a:Array<S>, f:S->T):Array<T> {
     return a.map(f);
@@ -109,7 +109,7 @@ abstract EitherT<M,L,A>(M<Either<L,A>>)
 }
 
 
-class ArrayTFunctor<M> implements Functor<ArrayT<M,In>>
+class ArrayTFunctor<M> implements Functor<ArrayT<M,_>>
 {
   var functorM:Functor<M>;
 
@@ -127,7 +127,7 @@ class ArrayTFunctor<M> implements Functor<ArrayT<M,In>>
 
 }
 
-class EitherTFunctor<M,L> implements Functor<EitherT<M,L,In>>
+class EitherTFunctor<M,L> implements Functor<EitherT<M,L,_>>
 {
   var functorM:Functor<M>;
 
@@ -177,7 +177,7 @@ abstract ReversedEither<R,L>(Either<L,R>)
 
 typedef Tup2<A,B> = { var _1 : A; var _2 : B; }
 
-class Tup2RightFunctor<T> implements Functor<Tup2<T, In>> {
+class Tup2RightFunctor<T> implements Functor<Tup2<T, _>> {
   public function new () {}
   public inline function fmap<A,B>(a:Tup2<T, A>, f:A->B):Tup2<T, B>
   {
@@ -203,7 +203,7 @@ interface FlatMappable<M,T> extends Mappable<M,T> {
 }
 
 
-class MyArray<T> implements FlatMappable<MyArray<In>, T> {
+class MyArray<T> implements FlatMappable<MyArray<_>, T> {
   public var a:Array<T>;
   public function new (a:Array<T>) {
     this.a = a;
@@ -217,7 +217,7 @@ class MyArray<T> implements FlatMappable<MyArray<In>, T> {
 }
 
 
-class MyList<T> implements FlatMappable<MyList<In>, T> {
+class MyList<T> implements FlatMappable<MyList<_>, T> {
   public var a:List<T>;
   public function new (a:List<T>) {
     this.a = a;
@@ -239,12 +239,12 @@ typedef Filterable<M, T> = {
 }
 
 
-typedef BetterFilterable<M:BetterFilterable<M,In>, T> = {
+typedef BetterFilterable<M:BetterFilterable<M,_>, T> = {
   public function filter (f:T->Bool):M<T>;
 }
 
 
-interface Category<Cat:Category<Cat, In, In>, A, B>
+interface Category<Cat:Category<Cat, _, _>, A, B>
 {
   public function create<A,B> (f:A->B):Cat<A,B>;
 
@@ -257,7 +257,7 @@ interface Category<Cat:Category<Cat, In, In>, A, B>
 
 }
 
-interface Arrow<Arr:Arrow<Arr, In, In>,A,B> extends Category<Arr, A, B>
+interface Arrow<Arr:Arrow<Arr, _, _>,A,B> extends Category<Arr, A, B>
 {
 
 
@@ -269,7 +269,7 @@ interface Arrow<Arr:Arrow<Arr, In, In>,A,B> extends Category<Arr, A, B>
 
 }
 
-class FunctionArrow<A,B> implements Arrow<FunctionArrow<In,In>, A, B>
+class FunctionArrow<A,B> implements Arrow<FunctionArrow<_,_>, A, B>
 {
   var a : A->B;
 

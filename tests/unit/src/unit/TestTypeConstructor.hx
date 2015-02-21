@@ -58,7 +58,7 @@ class TestTypeConstructor extends Test {
 		t(r.toEither().match(Left("hello world")));
 	}
 
-	function mapTwice <M:Mappable<M,In>,A,B,C>(m:Mappable<M,A>, f:A->B, f2:B->C):M<C> {
+	function mapTwice <M:Mappable<M,_>,A,B,C>(m:Mappable<M,A>, f:A->B, f2:B->C):M<C> {
 		return m.map(f).map(f2);
 	}
 
@@ -197,7 +197,7 @@ class TestTypeConstructor extends Test {
 	}
 
 
- 	private static function typeConstructorWithConstraints <M:(Filterable<M,In>, MappableTD<M,In>, { var length(default, null):Int;}), T> (m:M<Int>):M<Int>
+ 	private static function typeConstructorWithConstraints <M:(Filterable<M,_>, MappableTD<M,_>, { var length(default, null):Int;}), T> (m:M<Int>):M<Int>
  	{
  		return m.map(function (x) return x+1).filter(function (x) return x > 2);
 	}
@@ -222,7 +222,7 @@ class TestTypeConstructor extends Test {
 	public function testTypeConstructorClassConstraints ()
 	{
 		#if !as3
-		var x : BetterFilterable<Array<In>, Int> = [1,2,3,4];
+		var x : BetterFilterable<Array<_>, Int> = [1,2,3,4];
 
 		var r = x.filter(function (x) return x < 3).filter(function (x) return x > 1);
 
@@ -232,7 +232,7 @@ class TestTypeConstructor extends Test {
 		t(r[0] == 2);
 		#end
 
-		var x : BetterFilterable<List<In>, Int> = { var l = new List(); l.add(1); l.add(2); l.add(3); l.add(4); l; }
+		var x : BetterFilterable<List<_>, Int> = { var l = new List(); l.add(1); l.add(2); l.add(3); l.add(4); l; }
 
 
 		var r = x.filter(function (x) return x < 3).filter(function (x) return x > 1);
@@ -282,7 +282,7 @@ class TestTypeConstructor extends Test {
 		t(r.run(1) == "foo3");
 	}
 
-	static function withArrow <Arr:(Arrow<Arr,In,In>)> (a:Arr<Int,String>):Int->String
+	static function withArrow <Arr:(Arrow<Arr,_,_>)> (a:Arr<Int,String>):Int->String
 	{
 		return a.dot(a.create(function (y) return y+2))
 			.dot(a.create(function (y) return y+2)).run;
@@ -335,7 +335,7 @@ class TestTypeConstructor extends Test {
 
 	}
 
-	private function miscHelper1 <M:M<In>,X> (mk:X->M<X>, v:X) {
+	private function miscHelper1 <M:M<_>,X> (mk:X->M<X>, v:X) {
 
 		var z:M<X> = mk(v);
 		return z;
