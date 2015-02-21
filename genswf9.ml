@@ -199,7 +199,7 @@ let rec follow_basic t =
 		t
 	| TType (t,tl) ->
 		follow_basic (apply_params t.t_params tl t.t_type)
-	| TAbstract( ({a_path=[],"Of"} as a) ,([_;_] as tl)) ->
+	| TAbstract( ({a_path=[],"-Of"} as a) ,([_;_] as tl)) ->
 		follow (Abstract.get_underlying_type a tl)
 	| TAbstract (a,pl) when not (Meta.has Meta.CoreType a.a_meta) ->
 		follow_basic (apply_params a.a_params pl a.a_this)
