@@ -2166,8 +2166,17 @@ module Abstract = struct
 		with Not_found ->
 			if Meta.has Meta.CoreType a.a_meta then
 				t_dynamic
-			else
-				maybe_recurse (apply_params a.a_params pl a.a_this)
+			else match a.a_path,pl with
+				| ([],"-Of"),[tm;ta] ->
+					let x, applied = unapply_in tm (reduce_of ta) in
+					if applied then
+						follow x
+					else
+						(* not reducible Of type like Of<M, Int> or Of<Of<M, A>, B>, fall
+						   back to dynamic *)
+						t_dynamic
+				| _ ->
+					maybe_recurse (apply_params a.a_params pl a.a_this)
 
 	let rec follow_with_abstracts t = match follow t with
 		| TAbstract(a,tl) when not (Meta.has Meta.CoreType a.a_meta) ->
