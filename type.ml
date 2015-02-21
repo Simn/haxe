@@ -1009,6 +1009,8 @@ let rec s_type ctx t =
 		(match !r with
 		| None -> Printf.sprintf "Unknown<%d>" (try List.assq t (!ctx) with Not_found -> let n = List.length !ctx in ctx := (t,n) :: !ctx; n)
 		| Some t -> s_type ctx t)
+	| t when is_in_type t ->
+		"_"
 	| TEnum (e,tl) ->
 		Ast.s_type_path e.e_path ^ s_type_params ctx tl
 	| TInst (c,tl) ->
@@ -1017,6 +1019,9 @@ let rec s_type ctx t =
 		| _ -> Ast.s_type_path c.cl_path ^ s_type_params ctx tl)
 	| TType (t,tl) ->
 		Ast.s_type_path t.t_path ^ s_type_params ctx tl
+	| (TAbstract({a_path = [],"-Of"},[tm1;ta1]) as a) ->
+		let r = reduce_of a in
+		if is_of_type r then "-Of<" ^ (s_type ctx tm1) ^ "," ^ (s_type ctx ta1) ^ ">" else (s_type ctx r)
 	| TAbstract (a,tl) ->
 		Ast.s_type_path a.a_path ^ s_type_params ctx tl
 	| TFun ([],t) ->
@@ -1627,6 +1632,12 @@ let abstract_cast_stack = ref []
 let unify_new_monos = ref []
 
 let rec unify_of tm ta b =
+	let err str =
+		let params = [tm; ta] in
+		let of_t = TAbstract(of_type, params) in
+		let st = s_type (print_context ()) in
+		error [Unify_custom (str ^ "\ncannot unify " ^ (st b) ^ " with " ^ (st of_t)) ]
+	in
 	let rec apply_left tl =
 		let rec loop tl = match tl with
 			| t :: tl ->
@@ -1636,7 +1647,7 @@ let rec unify_of tm ta b =
 				else
 					t,!t_in :: tl
 			| [] ->
-				error [Unify_custom "Invalid Of-unification"]
+				err "Invalid Of-unification"
 		in
 		let t, tl = loop (tl) in
 		t, tl
@@ -1676,9 +1687,9 @@ let rec unify_of tm ta b =
 		| TDynamic _ ->
 			t_dynamic,t_dynamic
 		| TAnon _ ->
-			error [Unify_custom "Invalid Of-unification cannot unify structures with Of types"]
+			err "Invalid Of-unification cannot unify structures with Of types"
 		| _ ->
-			error [Unify_custom "Invalid Of-unification"]
+			err "Invalid Of-unification"
 	in
 	let tl,tr = loop b in
 	unify tm tl;
@@ -1720,26 +1731,33 @@ and unify a b =
 					unify_stack := List.tl !unify_stack;
 					error (cannot_unify a b :: l)
 		end
-	| TAbstract({a_path = [],"-Of"},[tm1;ta1]),TAbstract({a_path = [],"-Of"},[tm2;ta2]) ->
+	| (TAbstract({a_path = [],"-Of"},[tm1;ta1]) as a),(TAbstract({a_path = [],"-Of"},[tm2;ta2]) as b) ->
 		(*
 			unify the reduced Of types, example:
 			unify Of<B->In, A>, B->A becomes unify B->A, B->A
 		*)
+
+		(* let st = s_type (print_context ()) in
+		Printf.printf "unify %s => %s\n" (st a) (st b); *)
 		(match reduce_of a, reduce_of b with
 			| _, TAbstract({a_path = [],"-Of"},[_;_])
 			| TAbstract({a_path = [],"-Of"},[_;_]), _ ->
 				unify tm1 tm2;
 				unify ta1 ta2;
 			| ta,tb -> unify ta tb)
-	| TAbstract({a_path = [],"-Of"},[tm;ta]),b ->
+	| (TAbstract({a_path = [],"-Of"},[tm;ta]) as a),b ->
 		(*
 			try to unify with the reduced Of type first, example:
 			unify Of<A->In, B>, A->B becomes unify A->B, A->B
 		*)
+		(* let st = s_type (print_context ()) in
+		Printf.printf "unify %s => %s\n" (st a) (st b); *)
 		let t = reduce_of a in
 		if is_of_type t then unify_of tm ta b else unify t b
-	| a,TAbstract({a_path = [],"-Of"},[tm;ta]) ->
+	| a,(TAbstract({a_path = [],"-Of"},[tm;ta]) as b) ->
 		(* first reduce the Of type, same as in the case above. *)
+		(* let st = s_type (print_context ()) in
+		Printf.printf "unify %s => %s\n" (st a) (st b); *)
 		let t = reduce_of b in
 		if is_of_type t then unify_of tm ta a else unify a t
 	| TEnum (ea,tl1) , TEnum (eb,tl2) ->
