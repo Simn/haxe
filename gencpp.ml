@@ -629,7 +629,7 @@ and type_string_suff suffix haxe_type =
       *)
    | TDynamic haxe_type -> "Dynamic" ^ suffix
    | TLazy func -> type_string_suff suffix ((!func)())
-   | TAbstract (abs,pl) when abs.a_impl <> None ->
+   | TAbstract (abs,pl) when not (Meta.has Meta.CoreType abs.a_meta) ->
       type_string_suff suffix (Abstract.get_underlying_type abs pl)
    | TAbstract (abs,pl) ->
       "::" ^ (join_class_path_remap abs.a_path "::") ^ suffix
