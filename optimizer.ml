@@ -253,8 +253,9 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 			Hashtbl.add locals i.i_subst.v_id i;
 			i
 	in
+	let in_local_fun = ref false in
 	let read_local v =
-		try
+		let l = try
 			Hashtbl.find locals v.v_id
 		with Not_found ->
 			(* make sure to duplicate unbound inline variable to prevent dependency leak when unifying monomorph *)
@@ -267,6 +268,9 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 				i_force_temp = false;
 				i_read = 0;
 			}
+		in
+		if !in_local_fun then l.i_captured <- true;
+		l
 	in
 	(* use default values for null/unset arguments *)
 	let rec loop pl al first =
@@ -321,7 +325,6 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 	in
 	let has_vars = ref false in
 	let in_loop = ref false in
-	let in_local_fun = ref false in
 	let cancel_inlining = ref false in
 	let has_return_value = ref false in
 	let ret_val = (match follow f.tf_type with TAbstract ({ a_path = ([],"Void") },[]) -> false | _ -> true) in
@@ -332,7 +335,6 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 		match e.eexpr with
 		| TLocal v ->
 			let l = read_local v in
-			if !in_local_fun then l.i_captured <- true;
 			l.i_read <- l.i_read + (if !in_loop then 2 else 1);
 			(* never inline a function which contain a delayed macro because its bound
 				to its variables and not the calling method *)
@@ -427,6 +429,20 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 			l.i_write <- true;
 			let e2 = map false e2 in
 			{e with eexpr = TBinop(op,{e1 with eexpr = TLocal l.i_subst},e2)}
+(* 		| TCall({eexpr = TLocal v} as e1,el) ->
+			let el = List.map (map false) el in
+			let l = read_local v in
+			let edef() = {e with eexpr = TCall({e1 with eexpr = TLocal l.i_subst},el)} in
+			begin try
+				begin match List.assq l inlined_vars with
+				| {eexpr = TField(_, (FStatic(_,cf) | FInstance(_,_,cf)))} as e' when cf.cf_kind = Method MethInline ->
+					make_call ctx e' el e.etype e.epos
+				| _ ->
+					edef()
+				end
+			with Not_found ->
+				edef()
+			end *)
 		| TFunction f ->
 			(match f.tf_args with [] -> () | _ -> has_vars := true);
 			let old = save_locals ctx and old_fun = !in_local_fun in

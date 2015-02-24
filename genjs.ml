@@ -112,7 +112,7 @@ let kwds2 =
 	h
 
 let valid_js_ident s =
-	try
+	String.length s > 0 && try
 		for i = 0 to String.length s - 1 do
 			match String.unsafe_get s i with
 			| 'a'..'z' | 'A'..'Z' | '$' | '_' -> ()
@@ -627,7 +627,11 @@ and gen_expr ctx e =
 		handle_break();
 	| TObjectDecl fields ->
 		spr ctx "{ ";
-		concat ctx ", " (fun (f,e) -> print ctx "%s : " (anon_field f); gen_value ctx e) fields;
+		concat ctx ", " (fun (f,e) -> (match e.eexpr with
+			| TMeta((Meta.QuotedField,_,_),e) -> print ctx "'%s' : " f;
+			| _ -> print ctx "%s : " (anon_field f));
+			gen_value ctx e
+		) fields;
 		spr ctx "}";
 		ctx.separator <- true
 	| TFor (v,it,e) ->

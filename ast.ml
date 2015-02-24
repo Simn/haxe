@@ -128,6 +128,7 @@ module Meta = struct
 		| Protected
 		| Public
 		| PublicFields
+		| QuotedField
 		| ReadOnly
 		| RealPath
 		| Remove
@@ -435,6 +436,8 @@ type type_def =
 type type_decl = type_def * pos
 
 type package = string list * type_decl list
+
+exception Error of string * pos
 
 let is_lower_ident i =
 	let rec loop p =

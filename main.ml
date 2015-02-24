@@ -1589,6 +1589,8 @@ try
 with
 	| Abort ->
 		()
+	| Ast.Error (m,p) ->
+		error ctx m p
 	| Typecore.Fatal_error (m,p) ->
 		error ctx m p
 	| Common.Abort (m,p) ->
@@ -1713,7 +1715,7 @@ with
 							statics := Some c.cl_ordered_statics
 						| _ -> ()
 					end;
-					snd tinfos.mt_path <> s_module && not tinfos.mt_private
+					not tinfos.mt_private
 				) m.m_types in
 				let types = if c <> s_module then [] else List.map (fun t -> snd (t_path t),"",Some Typer.FKType,"") public_types in
 				let ctx = print_context() in

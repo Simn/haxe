@@ -1316,7 +1316,11 @@ let rec s_expr_ast print_var_ids tabs s_type e =
 	| TArrayDecl el -> tag "ArrayDecl" (List.map loop el)
 	| TCall (e1,el) -> tag "Call" (loop e1 :: (List.map loop el))
 	| TNew (c,tl,el) -> tag "New" ((s_type (TInst(c,tl))) :: (List.map loop el))
-	| TFunction f -> tag "Function" [loop f.tf_expr]
+	| TFunction f ->
+		let arg (v,cto) =
+			tag "Arg" ~t:(Some v.v_type) ~extra_tabs:"\t" (match cto with None -> [local v] | Some ct -> [local v;const ct])
+		in
+		tag "Function" ((List.map arg f.tf_args) @ [loop f.tf_expr])
 	| TVar (v,eo) -> var v (match eo with None -> [] | Some e -> [loop e])
 	| TBlock el -> tag "Block" (List.map loop el)
 	| TIf (e,e1,e2) -> tag "If" (loop e :: (Printf.sprintf "[Then:%s] %s" (s_type e1.etype) (loop e1)) :: (match e2 with None -> [] | Some e -> [Printf.sprintf "[Else:%s] %s" (s_type e.etype) (loop e)]))
@@ -2163,10 +2167,8 @@ module Abstract = struct
 				let t = match follow t with
 					| TAbstract(a,tl) when not (Meta.has Meta.CoreType a.a_meta) ->
 						if List.mem a !underlying_type_stack then begin
-							(* let s = String.concat " -> " (List.map (fun a -> s_type_path a.a_path) (List.rev (a :: !underlying_type_stack))) in *)
-							(* technically this should be done at type declaration level *)
-							(* error ("Abstract chain detected: " ^ s) a.a_pos *)
-							assert false
+							let s = String.concat " -> " (List.map (fun a -> s_type_path a.a_path) (List.rev (a :: !underlying_type_stack))) in
+							raise (Error("Abstract chain detected: " ^ s,a.a_pos))
 						end;
 						get_underlying_type a tl
 					| _ ->

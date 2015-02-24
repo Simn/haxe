@@ -50,7 +50,14 @@ let display_error : (error_msg -> pos -> unit) ref = ref (fun _ _ -> assert fals
 let quoted_ident_prefix = "@$__hx__"
 
 let quote_ident s =
-	try
+	quoted_ident_prefix ^ s
+
+let unquote_ident f =
+	let pf = quoted_ident_prefix in
+	let pflen = String.length pf in
+	let is_quoted = String.length f >= pflen && String.sub f 0 pflen = pf in
+	let s = if is_quoted then String.sub f pflen (String.length f - pflen) else f in
+	let is_valid = not is_quoted || try
 		for i = 0 to String.length s - 1 do
 			match String.unsafe_get s i with
 			| 'a'..'z' | 'A'..'Z' | '_' -> ()
@@ -58,14 +65,11 @@ let quote_ident s =
 			| _ -> raise Exit
 		done;
 		if Hashtbl.mem Lexer.keywords s then raise Exit;
-		s
+		true
 	with Exit ->
-		quoted_ident_prefix ^ s
-
-let unquote_ident f =
-	let pf = quoted_ident_prefix in
-	let pflen = String.length pf in
-	if String.length f >= pflen && String.sub f 0 pflen = pf then String.sub f pflen (String.length f - pflen), false else f, true
+		false
+	in
+	s,is_quoted,is_valid
 
 let cache = ref (DynArray.create())
 let last_doc = ref None
@@ -1080,10 +1084,8 @@ and block acc s =
 			block acc s
 
 and parse_block_elt = parser
-	| [< '(Kwd Var,p1); vl = psep Comma parse_var_decl; p2 = semicolon >] ->
-		(match vl with
-			| [] -> error (Custom "Missing variable identifier") p1
-			| _ -> (EVars vl,punion p1 p2))
+	| [< '(Kwd Var,p1); vl = parse_var_decls p1; p2 = semicolon >] ->
+		(EVars vl,punion p1 p2)
 	| [< e = expr; _ = semicolon >] -> e
 
 and parse_obj_decl = parser
@@ -1102,11 +1104,38 @@ and parse_array_decl = parser
 	| [< >] ->
 		[]
 
+and parse_var_decl_head = parser
+	| [< name, _ = dollar_ident; t = parse_type_opt >] -> (name,t)
+
+and parse_var_assignment = parser
+	| [< '(Binop OpAssign,p1); s >] ->
+		begin match s with parser
+		| [< e = expr >] -> Some e
+		| [< >] -> error (Custom "expression expected after =") p1
+		end
+	| [< >] -> None
+
+and parse_var_decls_next vl = parser
+	| [< '(Comma,p1); name,t = parse_var_decl_head; s >] ->
+		begin try
+			let eo = parse_var_assignment s in
+			parse_var_decls_next ((name,t,eo) :: vl) s
+		with Display e ->
+			let v = (name,t,Some e) in
+			let e = (EVars(List.rev (v :: vl)),punion p1 (pos e)) in
+			display e
+		end
+	| [< >] ->
+		vl
+
+and parse_var_decls p1 = parser
+	| [< name,t = parse_var_decl_head; s >] ->
+		let eo = parse_var_assignment s in
+		List.rev (parse_var_decls_next [name,t,eo] s)
+	| [< s >] -> error (Custom "Missing variable identifier") p1
+
 and parse_var_decl = parser
-	| [< name, _ = dollar_ident; t = parse_type_opt; s >] ->
-		match s with parser
-		| [< '(Binop OpAssign,_); s >] -> let e = try expr s with Display e -> e in (name,t,Some e)
-		| [< >] -> (name,t,None)
+	| [< name,t = parse_var_decl_head; eo = parse_var_assignment >] -> (name,t,eo)
 
 and inline_function = parser
 	| [< '(Kwd Inline,_); '(Kwd Function,p1) >] -> true, p1

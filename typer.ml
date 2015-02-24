@@ -2885,11 +2885,12 @@ and type_expr ctx (e,p) (with_type:with_type) =
 		| WithType t | WithTypeResume t ->
 			(match follow t with
 			| TAnon a when not (PMap.is_empty a.a_fields) -> Some a
-			| TAbstract (a,tl) when not (Meta.has Meta.CoreType a.a_meta) && a.a_from <> [] ->
+			(* issues with https://github.com/HaxeFoundation/haxe/issues/3437 *)
+(* 			| TAbstract (a,tl) when not (Meta.has Meta.CoreType a.a_meta) && a.a_from <> [] ->
 				begin match follow (Abstract.get_underlying_type a tl) with
 					| TAnon a when not (PMap.is_empty a.a_fields) -> Some a
 					| _ -> None
-				end
+				end *)
 			| TDynamic t when (follow t != t_dynamic) ->
 				dynamic_parameter := Some t;
 				Some {
@@ -2899,15 +2900,19 @@ and type_expr ctx (e,p) (with_type:with_type) =
 			| _ -> None)
 		| _ -> None
 		) in
+		let wrap_quoted_meta e =
+			mk (TMeta((Meta.QuotedField,[],e.epos),e)) e.etype e.epos
+		in
 		(match a with
 		| None ->
 			let rec loop (l,acc) (f,e) =
-				let f,add = Parser.unquote_ident f in
+				let f,is_quoted,is_valid = Parser.unquote_ident f in
 				if PMap.mem f acc then error ("Duplicate field in object declaration : " ^ f) p;
 				let e = type_expr ctx e Value in
 				(match follow e.etype with TAbstract({a_path=[],"Void"},_) -> error "Fields of type Void are not allowed in structures" e.epos | _ -> ());
 				let cf = mk_field f e.etype e.epos in
-				((f,e) :: l, if add then begin
+				let e = if is_quoted then wrap_quoted_meta e else e in
+				((f,e) :: l, if is_valid then begin
 					if f.[0] = '$' then error "Field names starting with a dollar are not allowed" p;
 					PMap.add f cf acc
 				end else acc)
@@ -2920,7 +2925,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 			let fields = ref PMap.empty in
 			let extra_fields = ref [] in
 			let fl = List.map (fun (n, e) ->
-				let n,add = Parser.unquote_ident n in
+				let n,is_quoted,is_valid = Parser.unquote_ident n in
 				if PMap.mem n !fields then error ("Duplicate field in object declaration : " ^ n) p;
 				let e = try
 					let t = (match !dynamic_parameter with Some t -> t | None -> (PMap.find n a.a_fields).cf_type) in
@@ -2928,15 +2933,16 @@ and type_expr ctx (e,p) (with_type:with_type) =
 					let e = Codegen.AbstractCast.cast_or_unify ctx t e p in
 					(try type_eq EqStrict e.etype t; e with Unify_error _ -> mk (TCast (e,None)) t e.epos)
 				with Not_found ->
-					if add then
+					if is_valid then
 						extra_fields := n :: !extra_fields;
 					type_expr ctx e Value
 				in
-				if add then begin
+				if is_valid then begin
 					if n.[0] = '$' then error "Field names starting with a dollar are not allowed" p;
 					let cf = mk_field n e.etype e.epos in
 					fields := PMap.add n cf !fields;
 				end;
+				let e = if is_quoted then wrap_quoted_meta e else e in
 				(n,e)
 			) fl in
 			let t = (TAnon { a_fields = !fields; a_status = ref Const }) in
@@ -3945,9 +3951,14 @@ and build_call ctx acc el (with_type:with_type) p =
 		ctx.with_type_stack <- List.tl ctx.with_type_stack;
 		let old = ctx.on_error in
 		ctx.on_error <- (fun ctx msg ep ->
-			old ctx msg ep;
 			(* display additional info in the case the error is not part of our original call *)
-			if ep.pfile <> p.pfile || ep.pmax < p.pmin || ep.pmin > p.pmax then old ctx "Called from macro here" p
+			if ep.pfile <> p.pfile || ep.pmax < p.pmin || ep.pmin > p.pmax then begin
+				Typeload.locate_macro_error := false;
+				old ctx msg ep;
+				Typeload.locate_macro_error := true;
+				ctx.com.error "Called from macro here" p;
+			end else
+				old ctx msg ep;
 		);
 		let e = try
 			f()

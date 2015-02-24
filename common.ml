@@ -447,6 +447,7 @@ module MetaInfo = struct
 		| Overload -> ":overload",("Allows the field to be called with different argument types",[HasParam "Function specification (no expression)";UsedOn TClassField])
 		| Public -> ":public",("Marks a class field as being public",[UsedOn TClassField])
 		| PublicFields -> ":publicFields",("Forces all class fields of inheriting classes to be public",[UsedOn TClass])
+		| QuotedField -> ":quotedField",("Used internally to mark structure fields which are quoted in syntax",[Internal])
 		| PrivateAccess -> ":privateAccess",("Allow private access to anything for the annotated expression",[UsedOn TExpr])
 		| Protected -> ":protected",("Marks a class field as being protected",[UsedOn TClassField])
 		| Property -> ":property",("Marks a property field to be compiled as a native C# property",[UsedOn TClassField;Platform Cs])
@@ -934,16 +935,17 @@ let find_file ctx f =
 	with Exit ->
 		raise Not_found
 	| Not_found ->
-		let rec loop = function
-			| [] -> raise Not_found
+		let rec loop had_empty = function
+			| [] when had_empty -> raise Not_found
+			| [] -> loop true [""]
 			| p :: l ->
 				let file = p ^ f in
 				if Sys.file_exists file then
 					file
 				else
-					loop l
+					loop (had_empty || p = "") l
 		in
-		let r = (try Some (loop ctx.class_path) with Not_found -> None) in
+		let r = (try Some (loop false ctx.class_path) with Not_found -> None) in
 		Hashtbl.add ctx.file_lookup_cache f r;
 		(match r with
 		| None -> raise Not_found

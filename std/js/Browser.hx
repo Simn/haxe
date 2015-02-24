@@ -25,10 +25,10 @@ import js.html.Storage;
 import js.html.XMLHttpRequest;
 
 class Browser {
-	public static var window(get, never):js.html.DOMWindow;
+	public static var window(get, never):js.html.Window;
 	inline static function get_window() return untyped __js__("window");
 
-	public static var document(get, never):js.html.Document;
+	public static var document(get, never):js.html.HTMLDocument;
 	inline static function get_document() return untyped __js__("window.document");
 
 	public static var location(get, never):js.html.Location;
@@ -44,7 +44,7 @@ class Browser {
 	 * environment such as node.js.
 	 */
 	public static var supported(get, never):Bool;
-	public static function get_supported() return untyped __js__("typeof window != \"undefined\"");
+	inline static function get_supported() return untyped __typeof__(window) != "undefined";
 
 	/**
 	 * Safely gets the browser's local storage, or returns null if localStorage is unsupported or
