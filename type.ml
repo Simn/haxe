@@ -607,7 +607,14 @@ let rec follow t =
 		follow (apply_params t.t_params tl t.t_type)
 	| _ -> t
 
-and t_in = ref t_dynamic
+and t_in_abstract =
+	let a_path = ([], "-In") in
+	let a_params = [] in
+	TAbstract ({ null_abstract with a_path = a_path; a_params = a_params; a_private = false }, [])
+
+and t_in = ref t_in_abstract
+
+
 
 and is_in_type t = match follow t with
 	| TLazy f -> is_in_type (!f())
