@@ -40,7 +40,7 @@ let rec is_cs_basic_type t =
 		| TInst( { cl_path = (["haxe"], "Int32") }, [] )
 		| TInst( { cl_path = (["haxe"], "Int64") }, [] )
 		| TAbstract ({ a_path = (["cs"], "Int64") },[])
-		| TAbstract ({ a_path = (["cs"], "UInt64") },[]) 
+		| TAbstract ({ a_path = (["cs"], "UInt64") },[])
 		| TAbstract ({ a_path = ([], "Int") },[])
 		| TAbstract ({ a_path = ([], "Float") },[])
 		| TAbstract ({ a_path = ([], "Bool") },[]) ->
@@ -107,15 +107,15 @@ let is_tparam t =
 		| TInst( { cl_kind = KTypeParameter _ }, [] ) -> true
 		| _ -> false
 
-let rec is_int_float t =
-	match follow t with
+let rec is_int_float gen t =
+	match follow (gen.greal_type t) with
 		| TInst( { cl_path = (["haxe"], "Int32") }, [] )
 		| TAbstract ({ a_path = ([], "Int") },[])
 		| TAbstract ({ a_path = ([], "Float") },[]) ->
 			true
 		| TAbstract _ when like_float t && not (like_i64 t) ->
 			true
-		| TInst( { cl_path = (["haxe"; "lang"], "Null") }, [t] ) -> is_int_float t
+		| TInst( { cl_path = (["haxe"; "lang"], "Null") }, [t] ) -> is_int_float gen t
 		| _ -> false
 
 let is_bool t =
@@ -485,7 +485,7 @@ struct
 						etype = basic.tbool;
 						epos = e.epos
 					}
-				| TCast(expr, _) when is_int_float e.etype && not (is_cs_basic_type expr.etype) && not (is_null e.etype) && name() <> "haxe.lang.Runtime" ->
+				| TCast(expr, _) when is_int_float gen e.etype && not (is_cs_basic_type (gen.greal_type expr.etype)) && ( Common.defined gen.gcon Define.EraseGenerics || not (is_null e.etype) ) && name() <> "haxe.lang.Runtime" ->
 					let needs_cast = match gen.gfollow#run_f e.etype with
 						| TInst _ -> false
 						| _ -> true
@@ -516,7 +516,7 @@ struct
 						}, [ run e1; run e2 ])
 					}
 
-				| TCast(expr, _) when is_tparam e.etype && name() <> "haxe.lang.Runtime" ->
+				| TCast(expr, _) when is_tparam e.etype && name() <> "haxe.lang.Runtime" && not (Common.defined gen.gcon Define.EraseGenerics) ->
 					let static = mk_static_field_access_infer (runtime_cl) "genericCast" e.epos [e.etype] in
 					{ e with eexpr = TCall(static, [mk_local (alloc_var "$type_param" e.etype) expr.epos; run expr]); }
 
@@ -550,119 +550,122 @@ struct
 
 end;;
 
+let add_cast_handler gen =
+	let basic = gen.gcon.basic in
+	(*
+		starting to set gtparam_cast.
+	*)
+
+	(* NativeArray: the most important. *)
+
+	(*
+		var new_arr = new NativeArray<TO_T>(old_arr.Length);
+		var i = -1;
+		while( i < old_arr.Length )
+		{
+			new_arr[i] = (TO_T) old_arr[i];
+		}
+	*)
+
+	let native_arr_cl = get_cl ( get_type gen (["cs"], "NativeArray") ) in
+
+	let get_narr_param t = match follow t with
+		| TInst({ cl_path = (["cs"], "NativeArray") }, [param]) -> param
+		| _ -> assert false
+	in
+
+	let gtparam_cast_native_array e to_t =
+		let old_param = get_narr_param e.etype in
+		let new_param = get_narr_param to_t in
+
+		let new_v = mk_temp gen "new_arr" to_t in
+		let i = mk_temp gen "i" basic.tint in
+		let old_len = mk_field_access gen e "Length" e.epos in
+		let obj_v = mk_temp gen "obj" t_dynamic in
+		let check_null = {eexpr = TBinop(Ast.OpNotEq, e, null e.etype e.epos); etype = basic.tbool; epos = e.epos} in
+		let block = [
+			{
+				eexpr = TVar(
+					new_v, Some( {
+						eexpr = TNew(native_arr_cl, [new_param], [old_len] );
+						etype = to_t;
+						epos = e.epos
+					} )
+				);
+				etype = basic.tvoid;
+				epos = e.epos
+			};
+			{
+				eexpr = TVar(i, Some( mk_int gen (-1) e.epos ));
+				etype = basic.tvoid;
+				epos = e.epos
+			};
+			{
+				eexpr = TWhile(
+					{
+						eexpr = TBinop(
+							Ast.OpLt,
+							{ eexpr = TUnop(Ast.Increment, Ast.Prefix, mk_local i e.epos); etype = basic.tint; epos = e.epos },
+							old_len
+						);
+						etype = basic.tbool;
+						epos = e.epos
+					},
+					{ eexpr = TBlock [
+						{
+							eexpr = TVar(obj_v, Some (mk_cast t_dynamic { eexpr = TArray(e, mk_local i e.epos); etype = old_param; epos = e.epos }));
+							etype = basic.tvoid;
+							epos = e.epos
+						};
+						{
+							eexpr = TIf({
+								eexpr = TBinop(Ast.OpNotEq, mk_local obj_v e.epos, null e.etype e.epos);
+								etype = basic.tbool;
+								epos = e.epos
+							},
+							{
+								eexpr = TBinop(
+									Ast.OpAssign,
+									{ eexpr = TArray(mk_local new_v e.epos, mk_local i e.epos); etype = new_param; epos = e.epos },
+									mk_cast new_param (mk_local obj_v e.epos)
+								);
+								etype = new_param;
+								epos = e.epos
+							},
+							None);
+							etype = basic.tvoid;
+							epos = e.epos
+						}
+					]; etype = basic.tvoid; epos = e.epos },
+					Ast.NormalWhile
+				);
+				etype = basic.tvoid;
+				epos = e.epos;
+			};
+			mk_local new_v e.epos
+		] in
+		{
+			eexpr = TIf(
+				check_null,
+				{
+					eexpr = TBlock(block);
+					etype = to_t;
+					epos = e.epos;
+				},
+				Some(null new_v.v_type e.epos)
+			);
+			etype = to_t;
+			epos = e.epos;
+		}
+	in
+
+	Hashtbl.add gen.gtparam_cast (["cs"], "NativeArray") gtparam_cast_native_array
+	(* end set gtparam_cast *)
+
+
 (* Type Parameters Handling *)
 let handle_type_params gen ifaces base_generic =
-	let basic = gen.gcon.basic in
-		(*
-			starting to set gtparam_cast.
-		*)
-
-		(* NativeArray: the most important. *)
-
-		(*
-			var new_arr = new NativeArray<TO_T>(old_arr.Length);
-			var i = -1;
-			while( i < old_arr.Length )
-			{
-				new_arr[i] = (TO_T) old_arr[i];
-			}
-		*)
-
-		let native_arr_cl = get_cl ( get_type gen (["cs"], "NativeArray") ) in
-
-		let get_narr_param t = match follow t with
-			| TInst({ cl_path = (["cs"], "NativeArray") }, [param]) -> param
-			| _ -> assert false
-		in
-
-		let gtparam_cast_native_array e to_t =
-			let old_param = get_narr_param e.etype in
-			let new_param = get_narr_param to_t in
-
-			let new_v = mk_temp gen "new_arr" to_t in
-			let i = mk_temp gen "i" basic.tint in
-			let old_len = mk_field_access gen e "Length" e.epos in
-			let obj_v = mk_temp gen "obj" t_dynamic in
-			let check_null = {eexpr = TBinop(Ast.OpNotEq, e, null e.etype e.epos); etype = basic.tbool; epos = e.epos} in
-			let block = [
-				{
-					eexpr = TVar(
-						new_v, Some( {
-							eexpr = TNew(native_arr_cl, [new_param], [old_len] );
-							etype = to_t;
-							epos = e.epos
-						} )
-					);
-					etype = basic.tvoid;
-					epos = e.epos
-				};
-				{
-					eexpr = TVar(i, Some( mk_int gen (-1) e.epos ));
-					etype = basic.tvoid;
-					epos = e.epos
-				};
-				{
-					eexpr = TWhile(
-						{
-							eexpr = TBinop(
-								Ast.OpLt,
-								{ eexpr = TUnop(Ast.Increment, Ast.Prefix, mk_local i e.epos); etype = basic.tint; epos = e.epos },
-								old_len
-							);
-							etype = basic.tbool;
-							epos = e.epos
-						},
-						{ eexpr = TBlock [
-							{
-								eexpr = TVar(obj_v, Some (mk_cast t_dynamic { eexpr = TArray(e, mk_local i e.epos); etype = old_param; epos = e.epos }));
-								etype = basic.tvoid;
-								epos = e.epos
-							};
-							{
-								eexpr = TIf({
-									eexpr = TBinop(Ast.OpNotEq, mk_local obj_v e.epos, null e.etype e.epos);
-									etype = basic.tbool;
-									epos = e.epos
-								},
-								{
-									eexpr = TBinop(
-										Ast.OpAssign,
-										{ eexpr = TArray(mk_local new_v e.epos, mk_local i e.epos); etype = new_param; epos = e.epos },
-										mk_cast new_param (mk_local obj_v e.epos)
-									);
-									etype = new_param;
-									epos = e.epos
-								},
-								None);
-								etype = basic.tvoid;
-								epos = e.epos
-							}
-						]; etype = basic.tvoid; epos = e.epos },
-						Ast.NormalWhile
-					);
-					etype = basic.tvoid;
-					epos = e.epos;
-				};
-				mk_local new_v e.epos
-			] in
-			{
-				eexpr = TIf(
-					check_null,
-					{
-						eexpr = TBlock(block);
-						etype = to_t;
-						epos = e.epos;
-					},
-					Some(null new_v.v_type e.epos)
-				);
-				etype = to_t;
-				epos = e.epos;
-			}
-		in
-
-		Hashtbl.add gen.gtparam_cast (["cs"], "NativeArray") gtparam_cast_native_array;
-		(* end set gtparam_cast *)
-
+	add_cast_handler gen;
 	TypeParams.RealTypeParams.default_config gen (fun e t -> gen.gcon.warning ("Cannot cast to " ^ (debug_type t)) e.epos; mk_cast t e) ifaces base_generic
 
 let connecting_string = "?" (* ? see list here http://www.fileformat.info/info/unicode/category/index.htm and here for C# http://msdn.microsoft.com/en-us/library/aa664670.aspx *)
@@ -710,10 +713,16 @@ let rec get_fun_modifiers meta access modifiers =
 (* this was the way I found to pass the generator context to be accessible across all functions here *)
 (* so 'configure' is almost 'top-level' and will have all functions needed to make this work *)
 let configure gen =
+	let native_arr_cl = get_cl ( get_type gen (["cs"], "NativeArray") ) in
+	gen.gclasses.nativearray <- (fun t -> TInst(native_arr_cl,[t]));
+	gen.gclasses.nativearray_type <- (function TInst(_,[t]) -> t | _ -> assert false);
+	gen.gclasses.nativearray_len <- (fun e p -> mk_field_access gen e "Length" p);
+
 	let basic = gen.gcon.basic in
 
+	let erase_generics = Common.defined gen.gcon Define.EraseGenerics in
 	let fn_cl = get_cl (get_type gen (["haxe";"lang"],"Function")) in
-	let null_t = (get_cl (get_type gen (["haxe";"lang"],"Null")) ) in
+	let null_t = if erase_generics then null_class else (get_cl (get_type gen (["haxe";"lang"],"Null")) ) in
 	let runtime_cl = get_cl (get_type gen (["haxe";"lang"],"Runtime")) in
 	let no_root = Common.defined gen.gcon Define.NoRoot in
 	let change_id name = try
@@ -749,6 +758,7 @@ let configure gen =
 			| [] when is_hxgen md -> ["haxe";"root"], params
 			| [] -> (match md with
 				| TClassDecl { cl_path = ([],"Std" | [],"Math") } -> ["haxe";"root"], params
+				| TClassDecl { cl_meta = m } when Meta.has Meta.Enum m -> ["haxe";"root"], params
 				| _ -> [], params)
 			| ns when params = [] -> List.map change_id ns, params
 			| ns ->
@@ -777,6 +787,18 @@ let configure gen =
 			get_abstract (get_type gen (["cs"],"Pointer"))
 		else
 			null_abstract
+	in
+
+	let is_hxgeneric md =
+		TypeParams.RealTypeParams.is_hxgeneric md
+	in
+
+	let rec field_is_hxgeneric e = match e.eexpr with
+		| TParenthesis e | TMeta(_,e) -> field_is_hxgeneric e
+		| TField(_, (FStatic(cl,_) | FInstance(cl,_,_)) ) ->
+			(* print_endline ("is_hxgeneric " ^ path_s cl.cl_path ^ " : " ^ string_of_bool (is_hxgeneric (TClassDecl cl))); *)
+			is_hxgeneric (TClassDecl cl)
+		| _ -> true
 	in
 
 	gen.gfollow#add ~name:"follow_basic" (fun t -> match t with
@@ -848,12 +870,18 @@ let configure gen =
 		let ret = match t with
 			| TAbstract (a, pl) when not (Meta.has Meta.CoreType a.a_meta) ->
 				real_type (Abstract.get_underlying_type a pl)
+			| TAbstract ({ a_path = (["cs";"_Flags"], "EnumUnderlying") }, [t]) ->
+				real_type t
+			| TInst( { cl_path = (["cs";"system"], "String") }, [] ) ->
+				gen.gcon.basic.tstring;
 			| TInst( { cl_path = (["haxe"], "Int32") }, [] ) -> gen.gcon.basic.tint
 			| TInst( { cl_path = (["haxe"], "Int64") }, [] ) -> ti64
 			| TAbstract( { a_path = [],"Class" }, _ )
 			| TAbstract( { a_path = [],"Enum" }, _ )
 			| TInst( { cl_path = ([], "Class") }, _ )
 			| TInst( { cl_path = ([], "Enum") }, _ ) -> TInst(ttype,[])
+			| TInst( ({ cl_kind = KTypeParameter _ } as cl), _ ) when erase_generics && not (Meta.has Meta.NativeGeneric cl.cl_meta) ->
+				t_dynamic
 			| TEnum(_, [])
 			| TInst(_, []) -> t
 			| TInst(cl, params) when
@@ -872,10 +900,16 @@ let configure gen =
 					It works on cases such as Hash<T> returning Null<T> since cast_detect will invoke real_type at the original type,
 					Null<T>, which will then return the type haxe.lang.Null<>
 				*)
-				(match real_type t with
-					| TInst( { cl_kind = KTypeParameter _ }, _ ) -> TInst(null_t, [t])
-					| _ when is_cs_basic_type t -> TInst(null_t, [t])
-					| _ -> real_type t)
+				if erase_generics then
+					if is_cs_basic_type t then
+						t_dynamic
+					else
+						real_type t
+				else
+					(match real_type t with
+						| TInst( { cl_kind = KTypeParameter _ }, _ ) -> TInst(null_t, [t])
+						| _ when is_cs_basic_type t -> TInst(null_t, [t])
+						| _ -> real_type t)
 			| TAbstract _
 			| TType _ -> t
 			| TAnon (anon) when (match !(anon.a_status) with | Statics _ | EnumStatics _ | AbstractStatics _ -> true | _ -> false) -> t
@@ -918,7 +952,7 @@ let configure gen =
 			| true, x ->
 				dynamic_anon
 		in
-		if is_hxgeneric && List.exists (fun t -> match follow t with | TDynamic _ -> true | _ -> false) tl then
+		if is_hxgeneric && (erase_generics || List.exists (fun t -> match follow t with | TDynamic _ -> true | _ -> false) tl) then
 			List.map (fun _ -> t_dynamic) tl
 		else
 			List.map ret tl
@@ -1003,6 +1037,8 @@ let configure gen =
 	and path_param_s md path params =
 			match params with
 				| [] -> "global::" ^ module_s md
+				| _ when erase_generics && is_hxgeneric md ->
+					"global::" ^ module_s md
 				| _ ->
 					let params = (List.map (fun t -> t_s t) (change_param_type md params)) in
 					let str,params = module_s_params md params in
@@ -1608,8 +1644,7 @@ let configure gen =
 			expr_s w e;
 
 			(match params with
-				| [] -> ()
-				| params ->
+				| _ :: _ when not (erase_generics && field_is_hxgeneric e) ->
 					let md = match e.eexpr with
 						| TField(ef, _) ->
 							t_to_md (run_follow gen ef.etype)
@@ -1622,6 +1657,7 @@ let configure gen =
 						acc + 1
 					) 0 (change_param_type md params));
 					write w ">"
+				| _ -> ()
 			);
 
 			let rec loop acc elist tlist =
@@ -1759,11 +1795,10 @@ let configure gen =
 			ret
 	in
 
-	let get_string_params hxgen cl_params =
+	let get_string_params cl cl_params =
+		let hxgen = is_hxgen (TClassDecl cl) in
 		match cl_params with
-			| [] ->
-				("","")
-			| _ ->
+			| (_ :: _) when not (erase_generics && is_hxgeneric (TClassDecl cl)) ->
 				let get_param_name t = match follow t with TInst(cl, _) -> snd cl.cl_path | _ -> assert false in
 				let params = sprintf "<%s>" (String.concat ", " (List.map (fun (_, tcl) -> get_param_name tcl) cl_params)) in
 				let params_extends =
@@ -1803,6 +1838,7 @@ let configure gen =
 								| _ -> acc
 						) [] cl_params in
 				(params, String.concat " " params_extends)
+			| _ -> ("","")
 	in
 
 	let gen_field_decl w visibility v_n modifiers t n =
@@ -1986,7 +2022,7 @@ let configure gen =
 				(* public static void funcName *)
 				gen_field_decl w visibility v_n modifiers (if not is_new then (rett_s (run_follow gen ret_type)) else "") (change_field name);
 
-				let params, params_ext = get_string_params (is_hxgen (TClassDecl cl)) cf.cf_params in
+				let params, params_ext = get_string_params cl cf.cf_params in
 				(* <T>(string arg1, object arg2) with T : object *)
 				(match cf.cf_expr with
 				| Some { eexpr = TFunction tf } ->
@@ -2309,7 +2345,7 @@ let configure gen =
 		let modifiers = [access] @ modifiers in
 		print w "%s %s %s" (String.concat " " modifiers) clt (change_clname (snd cl.cl_path));
 		(* type parameters *)
-		let params, params_ext = get_string_params (is_hxgen (TClassDecl cl)) cl.cl_params in
+		let params, params_ext = get_string_params cl cl.cl_params in
 		let extends_implements = (match cl.cl_super with | None -> [] | Some (cl,p) -> [path_param_s (TClassDecl cl) cl.cl_path p]) @ (List.map (fun (cl,p) -> path_param_s (TClassDecl cl) cl.cl_path p) cl.cl_implements) in
 		(match extends_implements with
 			| [] -> print w "%s%s " params params_ext
@@ -2610,7 +2646,7 @@ let configure gen =
 				{ ecall with eexpr = TCall(efield, (List.map (fun t -> mk_tp t ecall.epos ) params) @ elist) }
 	);
 
-	HardNullableSynf.configure gen (HardNullableSynf.traverse gen
+	if not erase_generics then HardNullableSynf.configure gen (HardNullableSynf.traverse gen
 		(fun e ->
 			match real_type e.etype with
 				| TInst({ cl_path = (["haxe";"lang"], "Null") }, [t]) ->
@@ -2659,6 +2695,7 @@ let configure gen =
 	let explicit_fn_name c tl fname =
 		path_param_s (TClassDecl c) c.cl_path tl ^ "." ^ fname
 	in
+
 	FixOverrides.configure ~explicit_fn_name:explicit_fn_name gen;
 	Normalize.configure gen ~metas:(Hashtbl.create 0);
 
@@ -2670,7 +2707,9 @@ let configure gen =
 
 	ClosuresToClass.configure gen (ClosuresToClass.default_implementation closure_t (get_cl (get_type gen (["haxe";"lang"],"Function")) ));
 
-	EnumToClass.configure gen (Some (fun e -> mk_cast gen.gcon.basic.tint e)) false true (get_cl (get_type gen (["haxe";"lang"],"Enum")) ) true false;
+	let enum_base = (get_cl (get_type gen (["haxe";"lang"],"Enum")) ) in
+	let param_enum_base = (get_cl (get_type gen (["haxe";"lang"],"ParamEnum")) ) in
+	EnumToClass.configure gen (Some (fun e -> mk_cast gen.gcon.basic.tint e)) true true enum_base param_enum_base false false;
 
 	InterfaceVarsDeleteModf.configure gen;
 	InterfaceProps.configure gen;
@@ -2693,6 +2732,20 @@ let configure gen =
 
 	let rcf_static_find = mk_static_field_access_infer (get_cl (get_type gen (["haxe";"lang"], "FieldLookup"))) "findHash" Ast.null_pos [] in
 	let rcf_static_lookup = mk_static_field_access_infer (get_cl (get_type gen (["haxe";"lang"], "FieldLookup"))) "lookupHash" Ast.null_pos [] in
+
+	let rcf_static_insert, rcf_static_remove =
+		if erase_generics then begin
+			let get_specialized_postfix t = match t with
+				| TAbstract({a_path = [],("Float" | "Int" as name)}, _) -> name
+				| TAnon _ | TDynamic _ -> "Dynamic"
+				| _ -> print_endline (debug_type t); assert false
+			in
+			(fun t -> mk_static_field_access_infer (get_cl (get_type gen (["haxe";"lang"], "FieldLookup"))) ("insert" ^ get_specialized_postfix t) Ast.null_pos []),
+			(fun t -> mk_static_field_access_infer (get_cl (get_type gen (["haxe";"lang"], "FieldLookup"))) ("remove" ^ get_specialized_postfix t) Ast.null_pos [])
+		end else
+			(fun t -> mk_static_field_access_infer (get_cl (get_type gen (["haxe";"lang"], "FieldLookup"))) "insert" Ast.null_pos [t]),
+			(fun t -> mk_static_field_access_infer (get_cl (get_type gen (["haxe";"lang"], "FieldLookup"))) "remove" Ast.null_pos [t])
+	in
 
 	let can_be_float = like_float in
 
@@ -2747,11 +2800,33 @@ let configure gen =
 		mk_cast ecall.etype { ecall with eexpr = TCall(infer, call_args) }
 	in
 
-	handle_type_params gen ifaces (get_cl (get_type gen (["haxe";"lang"], "IGenericObject")));
+	if not erase_generics then
+		handle_type_params gen ifaces (get_cl (get_type gen (["haxe";"lang"], "IGenericObject")))
+	else begin
+		add_cast_handler gen;
+		TypeParams.RealTypeParams.RealTypeParamsModf.configure gen (TypeParams.RealTypeParams.RealTypeParamsModf.set_only_hxgeneric gen)
+	end;
 
-	let rcf_ctx = ReflectionCFs.new_ctx gen closure_t object_iface true rcf_on_getset_field rcf_on_call_field (fun hash hash_array ->
-		{ hash with eexpr = TCall(rcf_static_find, [hash; hash_array]); etype=basic.tint }
-	) (fun hash -> { hash with eexpr = TCall(rcf_static_lookup, [hash]); etype = gen.gcon.basic.tstring } ) false in
+	let rcf_ctx =
+		ReflectionCFs.new_ctx
+			gen
+			closure_t
+			object_iface
+			true
+			rcf_on_getset_field
+			rcf_on_call_field
+			(fun hash hash_array length -> { hash with eexpr = TCall(rcf_static_find, [hash; hash_array; length]); etype=basic.tint })
+			(fun hash -> { hash with eexpr = TCall(rcf_static_lookup, [hash]); etype = gen.gcon.basic.tstring })
+			(fun hash_array length pos value ->
+				let ecall = mk (TCall(rcf_static_insert value.etype, [hash_array; length; pos; value])) (if erase_generics then hash_array.etype else basic.tvoid) hash_array.epos in
+				if erase_generics then { ecall with eexpr = TBinop(OpAssign, hash_array, ecall) } else ecall
+			)
+			(fun hash_array length pos ->
+				let t = gen.gclasses.nativearray_type hash_array.etype in
+				{ hash_array with eexpr = TCall(rcf_static_remove t, [hash_array; length; pos]); etype = gen.gcon.basic.tvoid }
+			)
+			false
+	in
 
 	ReflectionCFs.UniversalBaseClass.default_config gen (get_cl (get_type gen (["haxe";"lang"],"HxObject")) ) object_iface dynamic_object;
 
@@ -2788,9 +2863,14 @@ let configure gen =
 	fun e binop ->
 		match e.eexpr with
 			| TArray(e1, e2) ->
-				( match follow e1.etype with
+				(match follow e1.etype with
 					| TDynamic _ | TAnon _ | TMono _ -> true
 					| TInst({ cl_kind = KTypeParameter _ }, _) -> true
+					| TInst(c,p) when erase_generics && is_hxgeneric (TClassDecl c) && is_hxgen (TClassDecl c) -> (match c.cl_path with
+						| [],"String"
+						| ["cs"],"NativeArray" -> false
+						| _ ->
+							true)
 					| _ -> match binop, change_param_type (t_to_md e1.etype) [e.etype] with
 						| Some(Ast.OpAssignOp _), ([TDynamic _] | [TAnon _]) ->
 							true
@@ -2800,8 +2880,13 @@ let configure gen =
 
 	let field_is_dynamic t field =
 		match field_access_esp gen (gen.greal_type t) field with
-			| FEnumField _
-			| FClassField _ -> false
+			| FEnumField _ -> false
+			| FClassField (cl,p,_,_,_,t,_) ->
+				if not erase_generics then
+					false
+				else
+					let p = change_param_type (TClassDecl cl) p in
+					is_dynamic (apply_params cl.cl_params p t)
 			| _ -> true
 	in
 
@@ -2853,6 +2938,11 @@ let configure gen =
 		| _ -> assert false
 	in
 
+	let is_undefined e = match e.eexpr with
+		| TLocal { v_name = "__undefined__" } | TField(_,FStatic({cl_path=["haxe";"lang"],"Runtime"},{cf_name="undefined"})) -> true
+		| _ -> false
+	in
+
 	DynamicOperators.configure gen
 		(DynamicOperators.abstract_implementation gen (fun e -> match e.eexpr with
 			| TBinop (Ast.OpEq, e1, e2)
@@ -2864,7 +2954,7 @@ let configure gen =
 						false
 					| _, TConst(TNull) when (not (is_tparam e1.etype) && is_dynamic e1.etype) || is_null_expr e1 ->
 						false
-					| _, TLocal { v_name = "__undefined__" } ->
+					| _ when is_undefined e1 || is_undefined e2 ->
 						false
 					| _ ->
 						should_handle_opeq e1.etype || should_handle_opeq e2.etype
@@ -2978,7 +3068,7 @@ let configure gen =
 		get_typeof e
 	));
 
-	CastDetect.configure gen (CastDetect.default_implementation gen (Some (TEnum(empty_e, []))) true ~native_string_cast:false ~overloads_cast_to_base:true);
+	CastDetect.configure gen (CastDetect.default_implementation gen (Some (TEnum(empty_e, []))) (not erase_generics) ~native_string_cast:false ~overloads_cast_to_base:true);
 
 	(*FollowAll.configure gen;*)
 
@@ -3004,7 +3094,6 @@ let configure gen =
 
 	UnreachableCodeEliminationSynf.configure gen (UnreachableCodeEliminationSynf.traverse gen false true true false);
 
-	let native_arr_cl = get_cl ( get_type gen (["cs"], "NativeArray") ) in
 	ArrayDeclSynf.configure gen (ArrayDeclSynf.default_implementation gen native_arr_cl);
 
 	let goto_special = alloc_var "__goto__" t_dynamic in
@@ -3020,6 +3109,7 @@ let configure gen =
 	);
 
 	DefaultArguments.configure gen (DefaultArguments.traverse gen);
+	InterfaceMetas.configure gen;
 
 	CSharpSpecificSynf.configure gen (CSharpSpecificSynf.traverse gen runtime_cl);
 	CSharpSpecificESynf.configure gen (CSharpSpecificESynf.traverse gen runtime_cl);
@@ -3035,6 +3125,7 @@ let configure gen =
 				gen.gcon.file ^ "/src/Resources"
 		in
 		Hashtbl.iter (fun name v ->
+			let name = Codegen.escape_res_name name true in
 			let full_path = src ^ "/" ^ name in
 			mkdir_from_path full_path;
 
@@ -3147,6 +3238,10 @@ type net_lib_ctx = {
 	ncom : Common.context;
 	nil : IlData.ilctx;
 }
+
+let is_haxe_keyword = function
+	| "callback" | "cast" | "extern" | "function" | "in" | "typedef" | "using" | "var" | "untyped" | "inline" -> true
+	| _ -> false
 
 let hxpath_to_net ctx path =
 	try
@@ -3286,8 +3381,38 @@ let ilpath_s = function
 let get_cls = function
 	| _,_,c -> c
 
-let convert_ilenum ctx p ilcls =
-	let meta = ref [Meta.Native, [EConst (String (ilpath_s ilcls.cpath) ), p], p ] in
+(* TODO: When possible on Haxe, use this to detect flag enums, and make an abstract with @:op() *)
+(* that behaves like an enum, and with an enum as its underlying type *)
+let enum_is_flag ilcls =
+	let check_flag name ns = name = "FlagsAttribute" && ns = ["System"] in
+	List.exists (fun a ->
+		match a.ca_type with
+			| TypeRef r ->
+				check_flag r.tr_name r.tr_namespace
+			| TypeDef d ->
+				check_flag d.td_name d.td_namespace
+			| Method m ->
+				(match m.m_declaring with
+					| Some d ->
+						check_flag d.td_name d.td_namespace
+					| _ -> false)
+			| MemberRef r ->
+				(match r.memr_class with
+					| TypeRef r ->
+						check_flag r.tr_name r.tr_namespace
+					| TypeDef d ->
+						check_flag d.td_name d.td_namespace
+					| _ -> false)
+			| _ ->
+				false
+	) ilcls.cattrs
+
+let convert_ilenum ctx p ?(is_flag=false) ilcls =
+	let meta = ref [
+		Meta.Native, [EConst (String (ilpath_s ilcls.cpath) ), p], p;
+		Meta.CsNative, [], p;
+	] in
+
 	let data = ref [] in
 	List.iter (fun f -> match f.fname with
 		| "value__" -> ()
@@ -3311,8 +3436,9 @@ let convert_ilenum ctx p ilcls =
 	let data = List.stable_sort (fun (_,i1) (_,i2) -> Int64.compare i1 i2) (List.rev !data) in
 
 	let _, c = netpath_to_hx ctx.nstd ilcls.cpath in
+	let name = netname_to_hx c in
 	EEnum {
-		d_name = netname_to_hx c;
+		d_name = if is_flag then name ^ "_FlagsEnum" else name;
 		d_doc = None;
 		d_params = []; (* enums never have type parameters *)
 		d_meta = !meta;
@@ -3408,6 +3534,7 @@ let convert_ilevent ctx p ev =
 
 let convert_ilmethod ctx p m is_explicit_impl =
 	if not (Common.defined ctx.ncom Define.Unsafe) && has_unmanaged m.msig.snorm then raise Exit;
+	let force_check = Common.defined ctx.ncom Define.ForceLibCheck in
 	let p = { p with pfile =	p.pfile ^" (" ^m.mname ^")" } in
 	let cff_doc = None in
 	let cff_pos = p in
@@ -3443,6 +3570,12 @@ let convert_ilmethod ctx p m is_explicit_impl =
 		Printf.printf "\t%smethod %s : %s\n" (if !is_static then "static " else "") cff_name (IlMetaDebug.ilsig_s m.msig.ssig);
 
 	let meta = [Meta.Overload, [], p] in
+	let meta = match is_final with
+		| None | Some true when not force_check ->
+			(Meta.Final,[],p) :: meta
+		| _ ->
+			meta
+	in
 	let meta = if is_explicit_impl then
 			(Meta.NoCompletion,[],p) :: (Meta.SkipReflection,[],p) :: meta
 		else
@@ -3760,6 +3893,9 @@ let convert_ilclass ctx p ?(delegate=false) ilcls = match ilcls.csuper with
 			print_endline ("converting " ^ ilpath_s ilcls.cpath ^ " : " ^ (String.concat ", " sup))
 		end;
 		let meta = ref [Meta.CsNative, [], p; Meta.Native, [EConst (String (ilpath_s ilcls.cpath) ), p], p] in
+		let force_check = Common.defined ctx.ncom Define.ForceLibCheck in
+		if not force_check then
+			meta := (Meta.LibType,[],p) :: !meta;
 
 		let is_interface = ref false in
 		List.iter (fun f -> match f with
@@ -3800,8 +3936,8 @@ let convert_ilclass ctx p ?(delegate=false) ilcls = match ilcls.csuper with
 			) ilcls.cimplements;
 			(* this is needed because of explicit interfaces. see http://msdn.microsoft.com/en-us/library/aa288461(v=vs.71).aspx *)
 			(* explicit interfaces can't be mapped into Haxe in any way - since their fields can't be accessed directly, but they still implement that interface *)
-			if !has_explicit_ifaces then
-				meta := (Meta.Custom "$do_not_check_interf",[],p) :: !meta;
+			if !has_explicit_ifaces && force_check then (* do not check on this specific case *)
+				meta := (Meta.LibType,[],p) :: !meta;
 
 			(* ArrayAccess *)
 			ignore (List.exists (function
@@ -3988,6 +4124,7 @@ let get_all_fields cls =
 	all_fields
 
 let normalize_ilcls ctx cls =
+	let force_check = Common.defined ctx.ncom Define.ForceLibCheck in
 	(* first filter out overloaded fields of same signature *)
 	let rec loop acc = function
 		| [] -> acc
@@ -4023,7 +4160,7 @@ let normalize_ilcls ctx cls =
 		| Some s ->
 			let cls, params = ilcls_from_ilsig ctx s.snorm in
 			let cls = ilcls_with_params ctx cls params in
-			no_overrides := List.filter (fun v ->
+			if force_check then no_overrides := List.filter (fun v ->
 				let m = !v in
 				let is_override_here = List.exists (fun m2 ->
 					m2.mname = m.mname && not (List.mem CMStatic m2.mflags.mf_contract) && compatible_methods m.msig.snorm m2.msig.snorm
@@ -4042,7 +4179,7 @@ let normalize_ilcls ctx cls =
 	loop cls;
 
 	add_cls_events_collision cls;
-	List.iter (fun v -> v := { !v with moverride = None }) !no_overrides;
+	if force_check then List.iter (fun v -> v := { !v with moverride = None }) !no_overrides;
 	let added = ref [] in
 
 	let current_all = ref (get_all_fields cls @ !all_fields) in
@@ -4078,55 +4215,68 @@ let normalize_ilcls ctx cls =
 	in
 	List.iter (loop_interface cls) cls.cimplements;
 	let added = List.map (function
-		| (IlMethod m,a,name,b) ->
+		| (IlMethod m,a,name,b) when m.mflags.mf_access <> FAPublic ->
 			(IlMethod { m with mflags = { m.mflags with mf_access = FAPublic } },a,name,b)
-		| (IlField f,a,name,b) ->
+		| (IlField f,a,name,b) when f.fflags.ff_access <> FAPublic ->
 			(IlField { f with fflags = { f.fflags with ff_access = FAPublic } },a,name,b)
 		| s -> s
 	) !added in
 
 	(* filter out properties that were already declared *)
-	let props = List.filter (function
-		| p ->
-			let static = is_static (IlProp p) in
-			let name = p.pname in
-			not (List.exists (function (IlProp _,_,n,s) -> s = static && name = n | _ -> false) !all_fields)
-		(* | _ -> false *)
-	) cls.cprops in
+	let props = if force_check then List.filter (function
+			| p ->
+				let static = is_static (IlProp p) in
+				let name = p.pname in
+				not (List.exists (function (IlProp _,_,n,s) -> s = static && name = n | _ -> false) !all_fields)
+			(* | _ -> false *)
+		) cls.cprops
+		else
+			cls.cprops
+	in
 	let cls = { cls with cmethods = List.map (fun v -> !v) meths; cprops = props } in
 
-	let clsfields = added @ (get_all_fields cls) in
+	let clsfields = (get_all_fields cls) @ added in
 	let super_fields = !all_fields in
 	all_fields := clsfields @ !all_fields;
 	let refclsfields = (List.map (fun v -> ref v) clsfields) in
 	(* search static / non-static name clash *)
 	(* change field name to not collide with haxe keywords *)
-	let iter_field v =
+	let fold_field acc v =
 		let f, p, name, is_static = !v in
-		let change = match name with
-		| "callback" | "cast" | "extern" | "function" | "in" | "typedef" | "using" | "var" | "untyped" | "inline" -> true
+		let change, copy = match name with
+		| _ when is_haxe_keyword name ->
+			true, false
 		| _ ->
-			(is_static && List.exists (function | (f,_,n,false) -> name = n | _ -> false) !all_fields) ||
-			not is_static && match f with (* filter methods that have the same name as fields *)
+			((is_static && List.exists (function | (f,_,n,false) -> name = n | _ -> false) !all_fields) ||
+			(not is_static && match f with (* filter methods that have the same name as fields *)
 			| IlMethod _ ->
 				List.exists (function | ( (IlProp _ | IlField _),_,n,false) -> name = n | _ -> false) super_fields ||
 				List.exists (function | ( (IlProp _ | IlField _),_,n,s) -> name = n | _ -> false) clsfields
-			| _ -> false
+			| _ -> false)), true
 		in
-		if change then
+		if change then begin
 			let name = "%" ^ name in
-			v := change_name name f, p, name, is_static
+			let changed = change_name name f, p, name, is_static in
+			if not copy then
+				v := changed;
+			if copy then
+				v :: ref changed :: acc
+			else
+				v :: acc
+		end else
+			v :: acc
 	in
-	List.iter iter_field refclsfields;
+	let refclsfields = List.fold_left fold_field [] refclsfields in
 
-	let clsfields = List.map (fun v -> !v) refclsfields in
-	let fields = List.filter (function | (IlField _,_,_,_) -> true | _ -> false) clsfields in
-	let methods = List.filter (function | (IlMethod _,_,_,_) -> true | _ -> false) clsfields in
-	let props = List.filter (function | (IlProp _,_,_,_) -> true | _ -> false) clsfields in
-	let methods = List.map (function | (IlMethod f,_,_,_) -> f | _ -> assert false) methods in
+	let rec fold (fields,methods,props) f = match !f with
+		| IlField f,_,_,_ -> f :: fields,methods,props
+		| IlMethod m,_,_,_ -> fields,m :: methods,props
+		| IlProp p,_,_,_ -> fields,methods,p :: props
+	in
+	let fields, methods, props = List.fold_left fold ([],[],[]) refclsfields in
 	{ cls with
-		cfields = List.map (function | (IlField f,_,_,_) -> f | _ -> assert false) fields;
-		cprops = List.map (function | (IlProp f,_,_,_) -> f | _ -> assert false) props;
+		cfields = fields;
+		cprops = props;
 		cmethods = methods;
 		cevents = List.filter (fun ev -> not (Hashtbl.mem all_events_name ev.ename)) cls.cevents;
 	}

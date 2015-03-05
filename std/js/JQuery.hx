@@ -74,7 +74,7 @@ extern class JQueryHelper {
 	public static var JTHIS(get, null) : JQuery;
 
 	static inline function get_JTHIS() : JQuery {
-		return untyped __js__("$(this)");
+		return new JQuery(js.Lib.nativeThis);
 	}
 
 }
@@ -85,6 +85,7 @@ extern class JQuery implements ArrayAccess<Element> {
 	var context(default,null) : Element;
 	var length(default, null) : Int;
 
+	@:selfCall
 	@:overload(function(j:JQuery):Void{})
 	@:overload(function(j:Window):Void{})
 	@:overload(function(j:Element):Void{})
@@ -391,7 +392,7 @@ extern class JQuery implements ArrayAccess<Element> {
 	//static function is*, makeArray, map, merge, noop, now, param, proxy, sub, trim, type, unique
 
 	private static inline function get_cur() : JQuery {
-		return untyped js.JQuery(__js__("this"));
+		return new js.JQuery(js.Lib.nativeThis);
 	}
 
 	private static function __init__() : Void untyped {

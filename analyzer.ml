@@ -3,8 +3,6 @@ open Type
 open Common
 open Typecore
 
-module IntMap = Map.Make(struct type t = int let compare a b = a - b end)
-
 let s_expr = s_expr (s_type (print_context()))
 let s_expr_pretty = s_expr_pretty "" (s_type (print_context()))
 let debug e = print_endline (s_expr e)
@@ -412,7 +410,17 @@ module Simplifier = struct
 		let rec get_assignment_to v e = match e.eexpr with
 			| TBinop(OpAssign,{eexpr = TLocal v2},e2) when v == v2 -> Some e2
 			| TBlock [e] -> get_assignment_to v e
+			| TIf(e1,e2,Some e3) ->
+				begin match get_assignment_to v e2,get_assignment_to v e3 with
+				| Some e2,Some e3 -> Some ({e with eexpr = TIf(e1,e2,Some e3)})
+				| _ -> None
+				end
 			| _ -> None
+		in
+		let if_or_op e e1 e2 e3 = match e1.eexpr,e3.eexpr with
+			| TUnop(Not,Prefix,e1),TConst (TBool true) -> {e with eexpr = TBinop(OpBoolOr,e1,e2)}
+			| _,TConst (TBool false) -> {e with eexpr = TBinop(OpBoolAnd,e1,e2)}
+			| _ -> {e with eexpr = TIf(e1,e2,Some e3)}
 		in
 		let rec loop e = match e.eexpr with
 			| TBlock el ->
@@ -437,7 +445,7 @@ module Simplifier = struct
 										let e3 = loop e3 in
 										begin match get_assignment_to v e2,get_assignment_to v e3 with
 											| Some e2,Some e3 ->
-												let e_if = {e_if with eexpr = TIf(e1,e2,Some e3)} in
+												let e_if = if_or_op e_if (loop e1) (loop e2) (loop e3) in
 												let e = {e with eexpr = TVar(v,Some e_if)} in
 												loop2 (e :: el)
 											| _ ->
@@ -494,6 +502,11 @@ module Simplifier = struct
 						e1,e2,flag
 				in
 				{e with eexpr = TWhile(e1,e2,flag)}
+			| TIf(e1,e2,Some e3) ->
+				let e1 = loop e1 in
+				let e2 = loop e2 in
+				let e3 = loop e3 in
+				if_or_op e e1 e2 e3
 			| _ ->
 				Type.map_expr loop e
 		in
@@ -695,7 +708,7 @@ module Ssa = struct
 			IntMap.find v.v_id ctx.cur_data.nd_var_map
 		with Not_found ->
 			if not (has_meta Meta.Unbound v.v_meta) then
-				ctx.com.warning (Printf.sprintf "Unbound variable %s" v.v_name) p;
+				error (Printf.sprintf "Unbound variable %s" v.v_name) p;
 			v
 
 	let close_join_node ctx node p =
@@ -775,7 +788,7 @@ module Ssa = struct
 		apply_cond ctx (NotEqual(v,(mk (TConst TNull) t_dynamic p))) *)
 
 	let apply com e =
-		let rec handle_if ctx e econd eif eelse =
+		let rec handle_if ctx f econd eif eelse =
 			let econd = loop ctx econd in
 			(* let cond = eval_cond ctx econd in *)
 			let join = mk_join_node() in
@@ -798,8 +811,7 @@ module Ssa = struct
 					Some eelse
 			in
 			close_join_node ctx join e.epos;
-			let e = {e with eexpr = TIf(econd,eif,eelse)} in
-			e
+			f econd eif eelse
 		and handle_loop_body ctx e =
 			let join_top = mk_join_node() in
 			let join_bottom = mk_join_node() in
@@ -861,7 +873,8 @@ module Ssa = struct
 				{e with eexpr = TLocal v}
 			(* control flow *)
 			| TIf(econd,eif,eelse) ->
-				handle_if ctx e econd eif eelse
+				let f econd eif eelse = {e with eexpr = TIf(econd,eif,eelse)} in
+				handle_if ctx f econd eif eelse
 			| TSwitch(e1,cases,edef) ->
 				let e1 = loop ctx e1 in
 				let join = mk_join_node() in
@@ -1028,7 +1041,7 @@ module ConstPropagation = struct
 		with Not_found ->
 			-1
 
-	let can_be_inlined com v0 e = match e.eexpr with
+	let can_be_inlined com v0 e = type_iseq v0.v_type e.etype && match e.eexpr with
 		| TConst ct ->
 			begin match ct with
 				| TThis | TSuper -> false
@@ -1167,6 +1180,15 @@ module ConstPropagation = struct
 				in
 				let el = Codegen.UnificationCallback.check_call check el e1.etype in
 				{e with eexpr = TCall(e1,el)}
+(* 			| TField(e1,fa) ->
+				let e1' = loop e1 in
+				let fa = if e1' != e1 then
+					begin try quick_field e1'.etype (field_name fa)
+					with Not_found -> fa end
+				else
+					fa
+				in
+				{e with eexpr = TField(e1',fa)} *)
 			| TUnop((Increment | Decrement),_,_) ->
 				e
 			| TBinop(OpAssignOp op,e1,e2) ->

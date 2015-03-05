@@ -26,6 +26,8 @@ type pos = {
 	pmax : int;
 }
 
+module IntMap = Map.Make(struct type t = int let compare a b = a - b end)
+
 module Meta = struct
 	type strict_meta =
 		| Abstract
@@ -101,6 +103,7 @@ module Meta = struct
 		| Keep
 		| KeepInit
 		| KeepSub
+		| LibType
 		| Meta
 		| Macro
 		| MaybeUsed
@@ -110,6 +113,7 @@ module Meta = struct
 		| NativeChildren
 		| NativeGen
 		| NativeGeneric
+		| NativeProperty
 		| NoCompletion
 		| NoDebug
 		| NoDoc
@@ -144,6 +148,8 @@ module Meta = struct
 		| SkipCtor
 		| SkipReflection
 		| Sound
+		| StoredTypedExpr
+		| Strict
 		| Struct
 		| StructAccess
 		| SuppressWarnings
@@ -752,3 +758,9 @@ let get_value_meta meta =
 		end
 	with Not_found ->
 		PMap.empty
+
+let rec string_list_of_expr_path_raise (e,p) =
+	match e with
+	| EConst (Ident i) -> [i]
+	| EField (e,f) -> f :: string_list_of_expr_path_raise e
+	| _ -> raise Exit

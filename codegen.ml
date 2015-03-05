@@ -47,6 +47,13 @@ let binop op a b t p =
 let index com e index t p =
 	mk (TArray (e,mk (TConst (TInt (Int32.of_int index))) com.basic.tint p)) t p
 
+let maybe_cast e t =
+	try
+		type_eq EqDoNotFollowNull e.etype t;
+		e
+	with
+		Unify_error _ -> mk (TCast(e,None)) t e.epos
+
 let type_constant com c p =
 	let t = com.basic in
 	match c with
@@ -120,6 +127,15 @@ let is_removable_field ctx f =
 		| Var {v_read = AccRequire (s,_)} -> true
 		| Method MethMacro -> not ctx.in_macro
 		| _ -> false)
+
+let escape_res_name name allow_dirs =
+	ExtString.String.replace_chars (fun chr ->
+		if (chr >= 'a' && chr <= 'z') || (chr >= 'A' && chr <= 'Z') || (chr >= '0' && chr <= '9') || chr = '_' || chr = '.' then
+			Char.escaped chr
+		else if chr = '/' && allow_dirs then
+			"/"
+		else
+			"-x" ^ (string_of_int (Char.code chr))) name
 
 (* -------------------------------------------------------------------------- *)
 (* REMOTING PROXYS *)
@@ -441,6 +457,7 @@ let rec build_generic ctx c p tl =
 		);
 		Typeload.add_constructor ctx cg false p;
 		cg.cl_kind <- KGenericInstance (c,tl);
+		cg.cl_meta <- (Meta.NoDoc,[],p) :: cg.cl_meta;
 		cg.cl_interface <- c.cl_interface;
 		cg.cl_constructor <- (match cg.cl_constructor, c.cl_constructor, c.cl_super with
 			| _, Some cf, _ -> Some (build_field cf)
@@ -543,7 +560,7 @@ let build_metadata com t =
 			if Hashtbl.mem h f then error ("Duplicate metadata '" ^ f ^ "'") p;
 			Hashtbl.add h f ();
 			f, mk (match el with [] -> TConst TNull | _ -> TArrayDecl (List.map (type_constant_value com) el)) (api.tarray t_dynamic) p
-		) ml)) (api.tarray t_dynamic) p
+		) ml)) t_dynamic p
 	in
 	let make_meta l =
 		mk (TObjectDecl (List.map (fun (f,ml) -> f,make_meta_field ml) l)) t_dynamic p
@@ -589,7 +606,6 @@ let build_macro_type ctx pl p =
 	let path, field, args = (match pl with
 		| [TInst ({ cl_kind = KExpr (ECall (e,args),_) },_)]
 		| [TInst ({ cl_kind = KExpr (EArrayDecl [ECall (e,args),_],_) },_)] ->
-			ctx.com.warning ("haxe.macro.MacroType is deprecated, consider using @:genericBuild instead") p;
 			get_macro_path ctx e args p
 		| _ ->
 			error "MacroType requires a single expression call parameter" p
@@ -955,10 +971,10 @@ module PatternMatchConversion = struct
 			| tmp -> ((tmp,ldt) :: cases)
 
 	let replace_locals e =
-		let v_known = ref [] in
+		let v_known = ref IntMap.empty in
 		let copy v =
 			let v' = alloc_var v.v_name v.v_type in
-			v_known := (v,v') :: !v_known;
+			v_known := IntMap.add v.v_id v' !v_known;
 			v'
 		in
 		let rec loop e = match e.eexpr with
@@ -980,7 +996,7 @@ module PatternMatchConversion = struct
 				) catches in
 				{e with eexpr = TTry(e1,catches)}
 			| TLocal v ->
-				let v' = try List.assq v !v_known with Not_found -> v in
+				let v' = try IntMap.find v.v_id !v_known with Not_found -> v in
 				{e with eexpr = TLocal v'}
 			| _ ->
 				Type.map_expr loop e
@@ -1013,7 +1029,14 @@ module PatternMatchConversion = struct
 		| DTSwitch(e_st,cl,dto) ->
 			let def = match dto with None -> None | Some dt -> Some (convert_dt cctx dt) in
 			let cases = group_cases cl in
-			let cases = List.map (fun (cl,dt) -> cl,replace_locals (convert_dt cctx dt)) cases in
+			let cases = List.map (fun (cl,dt) ->
+				let e = convert_dt cctx dt in
+				(* The macro interpreter does not care about unique locals and
+				   we don't run the analyzer on the output, so let's save some
+				   time here (issue #3937) *)
+				let e = if cctx.ctx.in_macro then e else replace_locals e in
+				cl,e
+			) cases in
 			mk (TSwitch(e_st,cases,def)) (mk_mono()) e_st.epos
 
 	let to_typed_ast ctx dt p =

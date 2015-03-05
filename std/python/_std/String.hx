@@ -1,4 +1,3 @@
-package;
 /*
  * Copyright (C)2005-2012 Haxe Foundation
  *
@@ -37,16 +36,10 @@ import python.internal.StringImpl;
 @:pythonImport("builtins", "str")
 @:coreApi
 extern class String {
-
-
 	/**
 		The number of characters in [this] String.
 	**/
 	var length(default,null) : Int;
-
-	private inline function get_length ():Int {
-		return StringImpl.get_length(this);
-	}
 
 	/**
 		Creates a copy from a given String.

@@ -8,7 +8,7 @@ open Typecore
 let rec verify_ast e = match e.eexpr with
 	| TField(_) ->
 		()
-	| TTypeExpr(TClassDecl {cl_kind = KAbstractImpl _}) ->
+	| TTypeExpr(TClassDecl {cl_kind = KAbstractImpl a}) when not (Meta.has Meta.RuntimeValue a.a_meta) ->
 		error "Cannot use abstract as value" e.epos
 	| _ ->
 		Type.iter verify_ast e
@@ -977,6 +977,11 @@ let commit_features ctx t =
 		Common.add_feature ctx.com k;
 	) m.m_extra.m_features
 
+let check_reserved_type_paths ctx t =
+	let m = t_infos t in
+	if List.mem m.mt_path ctx.com.config.pf_reserved_type_paths then
+		ctx.com.warning ("Type path " ^ (s_type_path m.mt_path) ^ " is reserved on this target") m.mt_pos
+
 (* PASS 3 end *)
 
 let run_expression_filters ctx filters t =
@@ -1105,7 +1110,7 @@ let run com tctx main =
 	(* check @:remove metadata before DCE so it is ignored there (issue #2923) *)
 	List.iter (check_remove_metadata tctx) com.types;
 	(* DCE *)
-	let dce_mode = if Common.defined com Define.As3 || Common.defined com Define.DocGen then
+	let dce_mode = if Common.defined com Define.As3 then
 		"no"
 	else
 		(try Common.defined_value com Define.Dce with _ -> "no")
@@ -1139,5 +1144,6 @@ let run com tctx main =
 		check_void_field;
 		(match com.platform with | Cpp -> promote_first_interface_to_super | _ -> (fun _ _ -> ()) );
 		commit_features;
+		(if com.config.pf_reserved_type_paths <> [] then check_reserved_type_paths else (fun _ _ -> ()));
 	] in
 	List.iter (fun t -> List.iter (fun f -> f tctx t) type_filters) com.types

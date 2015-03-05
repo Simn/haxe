@@ -243,7 +243,7 @@ class Context {
 		The resolution follows the usual class path rules where the last
 		declared class path has priority.
 
-		If no type can be found, null is returned.
+		If no type can be found, an exception of type `String` is thrown.
 	**/
 	public static function getType( name : String ) : Type {
 		return load("get_type", 1)(untyped name.__s);
@@ -463,6 +463,24 @@ class Context {
 	**/
 	public static function getTypedExpr( t : Type.TypedExpr ) : Expr {
 		return load("get_typed_expr",1)(t);
+	}
+
+
+	/**
+		Store typed expression `t` internally and give a syntax-level expression
+		that can be returned from a macro and will be replaced by the stored
+		typed expression.
+
+		If `t` is null or invalid, an exception is thrown.
+
+		NOTE: the returned value references an internally stored typed expression
+		that is reset between compilations, so care should be taken when storing
+		the expression returned by this method in a static variable and using the
+		compilation server.
+	**/
+	@:require(haxe_ver >= 3.2)
+	public static function storeTypedExpr( t : Type.TypedExpr ) : Expr {
+		return load("store_typed_expr",1)(t);
 	}
 
 	/**

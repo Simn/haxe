@@ -21,11 +21,7 @@
  */
 package haxe.io;
 
-#if js
-import js.html.compat.Float32Array;
-#end
-
-typedef Float32ArrayData = #if js js.html.Float32Array #else ArrayBufferView.ArrayBufferViewData #end
+typedef Float32ArrayData = ArrayBufferView.ArrayBufferViewData;
 
 abstract Float32Array(Float32ArrayData) {
 
@@ -34,73 +30,56 @@ abstract Float32Array(Float32ArrayData) {
 	public var view(get,never) : ArrayBufferView;
 
 	public inline function new( elements : Int ) {
-		#if js
-		this = new Float32ArrayData(elements);
-		#else
 		this = new ArrayBufferView(elements * BYTES_PER_ELEMENT).getData();
-		#end
 	}
-		
+
 	inline function get_length() {
-		#if js
-		return this.length;
-		#else
 		return this.byteLength >> 2;
-		#end
 	}
 
 	public inline function get_view() : ArrayBufferView {
 		return ArrayBufferView.fromData(this);
 	}
-	
+
 	@:arrayAccess public inline function get( index : Int ) : Float {
-		#if js
-		return this[index];
-		#else
 		return this.bytes.getFloat((index<<2) + this.byteOffset);
-		#end
 	}
-	
+
 	@:arrayAccess public inline function set( index : Int, value : Float ) : Float {
-		#if js
-		return this[index] = value;
-		#else
 		if( index >= 0 && index < length ) {
 			this.bytes.setFloat((index<<2) + this.byteOffset, value);
 			return value;
 		}
 		return 0;
-		#end
 	}
-	
-	public inline function sub( begin : Int, ?length : Int ) {
-		#if js
-		return fromData(this.subarray(begin, length == null ? null : begin+length));
-		#else
-		return fromData(this.sub(begin<<2,length<<2));
-		#end
+
+	public inline function sub( begin : Int, ?length : Int ) : Float32Array {
+		return fromData(this.sub(begin<<2,length == null ? null : length<<2));
 	}
-	
+
+	public inline function subarray( ?begin : Int, ?end : Int ) : Float32Array {
+		return fromData(this.subarray(begin==null?null:begin<<2,end==null?null:end<<2));
+	}
+
 	public inline function getData() : Float32ArrayData {
 		return this;
 	}
-	
+
 	public static function fromData( d : Float32ArrayData ) : Float32Array {
 		return cast d;
 	}
-	
-	public static function fromArray( a : Array<Float>, pos = 0, ?length ) : Float32Array {
+
+	public static function fromArray( a : Array<Float>, pos = 0, ?length : Int ) : Float32Array {
 		if( length == null ) length = a.length - pos;
 		if( pos < 0 || length < 0 || pos + length > a.length ) throw Error.OutsideBounds;
-		#if js
-		if( pos == 0 && length == a.length )
-			return fromData(new Float32ArrayData(a));
-		#end
 		var i = new Float32Array(a.length);
 		for( idx in 0...length )
 			i[idx] = a[idx + pos];
 		return i;
 	}
-	
+
+	public static function fromBytes( bytes : haxe.io.Bytes, bytePos = 0, ?length : Int ) : Float32Array {
+		return fromData(ArrayBufferView.fromBytes(bytes,bytePos,(length == null ? (bytes.length - bytePos)>>2 : length)<<2).getData());
+	}
 }
 

@@ -62,7 +62,7 @@ class FPHelper {
 	public static function i32ToFloat( i : Int ) : Float {
 		#if neko
 			#if neko_v21
-			return untyped $itof(i);
+			return untyped $itof(i,false);
 			#else
 			var helper = helperf.value;
 			if( helper == null )
@@ -86,7 +86,7 @@ class FPHelper {
 
 			return helper.f;
 		#elseif java
-			return java.lang.Float.intBitsToFloat(i);
+			return java.lang.Float.FloatClass.intBitsToFloat(i);
 		#elseif php
 			return untyped  __call__('unpack', 'f', __call__('pack', 'l', i))[1];
 		#elseif flash9
@@ -109,7 +109,7 @@ class FPHelper {
 	public static function floatToI32( f : Float ) : Int {
 		#if neko
 			#if neko_v21
-			return untyped $ftoi(f);
+			return untyped $ftoi(f,false);
 			#else
 			var r = _float_bytes(f,false);
 			return untyped $sget(r,0) | ($sget(r,1)<<8) | ($sget(r,2)<<16) | ($sget(r,3)<<24);
@@ -126,7 +126,7 @@ class FPHelper {
 				return ((i >>> 24) & 0xFF) | (((i >> 16) & 0xFF) << 8) | (((i >> 8) & 0xFF) << 16) | ((i & 0xFF) << 24);
 			}
 		#elseif java
-			return java.lang.Float.floatToRawIntBits(f);
+			return java.lang.Float.FloatClass.floatToRawIntBits(f);
 		#elseif flash9
 			var helper = helper;
 			helper.position = 0;
@@ -138,9 +138,9 @@ class FPHelper {
 		#else
 			if( f == 0 ) return 0;
 			var af = f < 0 ? -f : f;
-			var exp = Math.round(Math.log(af) / LN2);
+			var exp = Math.floor(Math.log(af) / LN2);
 			if( exp < -127 ) exp = -127 else if( exp > 128 ) exp = 128;
-			var sig = Math.round(af / Math.pow(2, exp) * 0x800000) & 0x7FFFFF;
+			var sig = Math.round((af / Math.pow(2, exp) - 1) * 0x800000) & 0x7FFFFF;
 			return (f < 0 ? 0x80000000 : 0) | ((exp + 127) << 23) | sig;
 		#end
 	}
@@ -149,7 +149,7 @@ class FPHelper {
 	public static function i64ToDouble( low : Int, high : Int ) : Float {
 		#if neko
 			#if neko_v21
-			return untyped $itod(low,high);
+			return untyped $itod(low,high,false);
 			#else
 			var helper = helperd.value;
 			if( helper == null )
@@ -180,7 +180,7 @@ class FPHelper {
 			}
 			return helper.f;
 		#elseif java
-			return java.lang.Double.longBitsToDouble( Int64.make(high,low) );
+			return java.lang.Double.DoubleClass.longBitsToDouble( Int64.make(high,low) );
 		#elseif flash9
 			var helper = helper;
 			helper.position = 0;
@@ -215,10 +215,10 @@ class FPHelper {
 				helper[1] = haxe.Int64.ofInt(0);
 			}
 			var i64 : haxe.Int64 = helper[1], int2 = helper[0];
-			untyped $dtoi(v,int2);
+			untyped $dtoi(v,int2,false);
 			@:privateAccess {
-				i64.low = int2[0];
-				i64.high = int2[1];
+				i64.set_low(int2[0]);
+				i64.set_high(int2[1]);
 			}
 			return i64;
 			#else
@@ -226,8 +226,8 @@ class FPHelper {
 			if( i64 == null )
 				i64 = i64tmp.value = haxe.Int64.ofInt(0);
 			@:privateAccess {
-				i64.low = untyped $sget(r,0) | ($sget(r,1)<<8) | ($sget(r,2)<<16) | ($sget(r,3)<<24);
-				i64.high =  untyped $sget(r,4) | ($sget(r,5)<<8) | ($sget(r,6)<<16) | ($sget(r,7)<<24);
+				i64.set_low(untyped $sget(r,0) | ($sget(r,1)<<8) | ($sget(r,2)<<16) | ($sget(r,3)<<24));
+				i64.set_high(untyped $sget(r,4) | ($sget(r,5)<<8) | ($sget(r,6)<<16) | ($sget(r,7)<<24));
 			}
 			return i64;
 			#end
@@ -235,7 +235,7 @@ class FPHelper {
 			return Int64.make(untyped __global__.__hxcpp_reinterpret_float64_as_le_int32_high(v),
 				               untyped __global__.__hxcpp_reinterpret_float64_as_le_int32_low(v) );
 		#elseif java
-			return java.lang.Double.doubleToRawLongBits(v);
+			return java.lang.Double.DoubleClass.doubleToRawLongBits(v);
 		#elseif cs
 			var helper = new FloatHelper(v);
 			if( cs.system.BitConverter.IsLittleEndian )
@@ -257,34 +257,34 @@ class FPHelper {
 			helper.position = 0;
 			var i64 = i64tmp;
 			@:privateAccess {
-				i64.low = cast helper.readUnsignedInt();
-				i64.high = cast helper.readUnsignedInt();
+				i64.set_low(cast helper.readUnsignedInt());
+				i64.set_high(cast helper.readUnsignedInt());
 			}
 			return i64;
 		#elseif php
 			var a = untyped __call__('unpack',isLittleEndian ? 'V2' : 'N2',__call__('pack', 'd', v));
 			var i64 = i64tmp;
 			@:privateAccess {
-				i64.low = a[isLittleEndian ? 1 : 2];
-				i64.high = a[isLittleEndian ? 2 : 1];
+				i64.set_low(a[isLittleEndian ? 1 : 2]);
+				i64.set_high(a[isLittleEndian ? 2 : 1]);
 			}
 			return i64;
 		#else
 			var i64 = i64tmp;
 			if( v == 0 ) {
 				@:privateAccess {
-					i64.low = 0;
-					i64.high = 0;
+					i64.set_low(0);
+					i64.set_high(0);
 				}
 			} else {
 				var av = v < 0 ? -v : v;
-				var exp = Math.round(Math.log(av) / LN2);
-				var sig = Math.fround((av / Math.pow(2, exp)) * 4503599627370496.); // 2^52
+				var exp = Math.floor(Math.log(av) / LN2);
+				var sig = Math.fround(((av / Math.pow(2, exp)) - 1) * 4503599627370496.); // 2^52
 				var sig_l = Std.int(sig);
 				var sig_h = Std.int(sig / 4294967296.0);
 				@:privateAccess {
-					i64.low = sig_l;
-					i64.high = (v < 0 ? 0x80000000 : 0) | ((exp + 1023) << 20) | sig_h;
+					i64.set_low(sig_l);
+					i64.set_high((v < 0 ? 0x80000000 : 0) | ((exp + 1023) << 20) | sig_h);
 				}
 			}
 			return i64;

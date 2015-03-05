@@ -2204,7 +2204,9 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 								error (Printf.sprintf "The result of this operation (%s) is not compatible with declared return type %s" (st t_expected) (st tret)) p
 					end;
 				end;
-				mk_cast (Codegen.binop op e1 e2 tret p) tret p
+				let e = Codegen.binop op e1 e2 tret p in
+				mk_cast e tret p
+				(* Codegen.maybe_cast e tret *)
 			end else begin
 				let e = make_static_call ctx c cf map [e1;e2] tret p in
 				e
@@ -2913,7 +2915,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 				let cf = mk_field f e.etype e.epos in
 				let e = if is_quoted then wrap_quoted_meta e else e in
 				((f,e) :: l, if is_valid then begin
-					if f.[0] = '$' then error "Field names starting with a dollar are not allowed" p;
+					if String.length f > 0 && f.[0] = '$' then error "Field names starting with a dollar are not allowed" p;
 					PMap.add f cf acc
 				end else acc)
 			in
@@ -2938,7 +2940,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 					type_expr ctx e Value
 				in
 				if is_valid then begin
-					if n.[0] = '$' then error "Field names starting with a dollar are not allowed" p;
+					if String.length n > 0 && n.[0] = '$' then error "Field names starting with a dollar are not allowed" p;
 					let cf = mk_field n e.etype e.epos in
 					fields := PMap.add n cf !fields;
 				end;
@@ -3219,6 +3221,14 @@ and type_expr ctx (e,p) (with_type:with_type) =
 			| [] ->
 				()
 		in
+		let check_catch_type path params =
+			List.iter (fun pt ->
+				if pt != t_dynamic then error "Catch class parameter must be Dynamic" p;
+			) params;
+			(match path with
+			| x :: _ , _ -> x
+			| [] , name -> name)
+		in
 		let catches = List.fold_left (fun acc (v,t,e) ->
 			let t = Typeload.load_complex_type ctx (pos e) t in
 			let rec loop t = match follow t with
@@ -3226,12 +3236,9 @@ and type_expr ctx (e,p) (with_type:with_type) =
 					error "Cannot catch non-generic type parameter" p
 				| TInst ({ cl_path = path },params)
 				| TEnum ({ e_path = path },params) ->
-					List.iter (fun pt ->
-						if pt != t_dynamic then error "Catch class parameter must be Dynamic" p;
-					) params;
-					(match path with
-					| x :: _ , _ -> x
-					| [] , name -> name),t
+					check_catch_type path params,t
+				| TAbstract(a,params) when Meta.has Meta.RuntimeValue a.a_meta ->
+					check_catch_type a.a_path params,t
 				| TAbstract(a,tl) when not (Meta.has Meta.CoreType a.a_meta) ->
 					loop (Abstract.get_underlying_type a tl)
 				| TDynamic _ -> "",t
@@ -3530,10 +3537,65 @@ and type_expr ctx (e,p) (with_type:with_type) =
 			| (Meta.Analyzer,_,_) ->
 				let e = e() in
 				{e with eexpr = TMeta(m,e)}
+			| (Meta.MergeBlock,_,_) ->
+				begin match fst e1 with
+				| EBlock el -> type_block ctx el with_type p
+				| _ -> e()
+				end
+			| (Meta.StoredTypedExpr,_,_) ->
+				let id = match e1 with (EConst (Int s),_) -> int_of_string s | _ -> assert false in
+				get_stored_typed_expr ctx.com id
 			| _ -> e()
 		in
 		ctx.meta <- old;
 		e
+
+and get_next_stored_typed_expr_id =
+	let uid = ref 0 in
+	(fun() -> incr uid; !uid)
+
+and get_stored_typed_expr com id =
+	let vars = Hashtbl.create 0 in
+	let copy_var v =
+		let v2 = alloc_var v.v_name v.v_type in
+		v2.v_meta <- v.v_meta;
+		Hashtbl.add vars v.v_id v2;
+		v2;
+	in
+	let rec build_expr e =
+		match e.eexpr with
+		| TVar (v,eo) ->
+			let v2 = copy_var v in
+			{e with eexpr = TVar(v2, Option.map build_expr eo)}
+		| TFor (v,e1,e2) ->
+			let v2 = copy_var v in
+			{e with eexpr = TFor(v2, build_expr e1, build_expr e2)}
+		| TTry (e1,cl) ->
+			let cl = List.map (fun (v,e) ->
+				let v2 = copy_var v in
+				v2, build_expr e
+			) cl in
+			{e with eexpr = TTry(build_expr e1, cl)}
+		| TFunction f ->
+			let args = List.map (fun (v,c) -> copy_var v, c) f.tf_args in
+			let f = {
+				tf_args = args;
+				tf_type = f.tf_type;
+				tf_expr = build_expr f.tf_expr;
+			} in
+			{e with eexpr = TFunction f}
+		| TLocal v ->
+			(try
+				let v2 = Hashtbl.find vars v.v_id in
+				{e with eexpr = TLocal v2}
+			with _ ->
+				e)
+		| _ ->
+			map_expr build_expr e
+	in
+	let e = PMap.find id com.stored_typed_exprs in
+	build_expr  e
+
 
 and handle_display ctx e_ast iscall p =
 	let old = ctx.in_display in
@@ -3761,7 +3823,7 @@ and handle_display ctx e_ast iscall p =
 			in
 			let fields = List.fold_left get_field [] fields in
 			let fields = try
-				let sl = Typeload.string_list_of_expr_path_raise e_ast in
+				let sl = string_list_of_expr_path_raise e_ast in
 				fields @ get_submodule_fields (List.tl sl,List.hd sl)
 			with Exit | Not_found ->
 				fields
@@ -3789,7 +3851,7 @@ and type_call ctx e el (with_type:with_type) p =
 		else
 		let params = (match el with [] -> [] | _ -> ["customParams",(EArrayDecl el , p)]) in
 		let infos = mk_infos ctx p params in
-		if platform ctx.com Js && el = [] && has_dce ctx.com then
+		if (platform ctx.com Js || platform ctx.com Python) && el = [] && has_dce ctx.com then
 			let e = type_expr ctx e Value in
 			let infos = type_expr ctx infos Value in
 			let e = match follow e.etype with
@@ -4253,6 +4315,13 @@ let make_macro_api ctx p =
 		Interp.parse_string = parse_expr_string;
 		Interp.type_expr = (fun e ->
 			typing_timer ctx (fun() -> (type_expr ctx e Value))
+		);
+		Interp.store_typed_expr = (fun te ->
+			let p = te.epos in
+			let id = get_next_stored_typed_expr_id() in
+			ctx.com.stored_typed_exprs <- PMap.add id te ctx.com.stored_typed_exprs;
+			let eid = (EConst (Int (string_of_int id))), p in
+			(EMeta ((Meta.StoredTypedExpr,[],p), eid)), p
 		);
 		Interp.get_display = (fun s ->
 			let is_displaying = ctx.com.display <> DMNone in

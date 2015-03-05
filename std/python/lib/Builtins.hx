@@ -1,14 +1,35 @@
-
+/*
+ * Copyright (C)2005-2015 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 package python.lib;
 
 
 import python.lib.io.FileIO;
 import python.lib.Dict;
+import python.lib.io.IOBase;
 import python.NativeIterable;
 import python.NativeIterator;
 
 @:pythonImport("builtins")
-extern class Builtin {
+extern class Builtins {
 
 
 
@@ -41,7 +62,7 @@ extern class Builtin {
 	@:overload(function (f:Tuple<Dynamic>):Int {})
 	public static function len(x:String):Int;
 
-	public static function open(file:String, mode:String, ?buffering:Int = -1, ?encoding:String = null, ?errors : String, ?newline:String, ?closefd:Bool, ?opener:String->Int->FileDescriptor):FileIO;
+	public static function open(file:String, mode:String, ?buffering:Int = -1, ?encoding:String = null, ?errors : String, ?newline:String, ?closefd:Bool, ?opener:String->Int->FileDescriptor):IOBase;
 
 	//public static function divmod():Void;
 	//public static function input():Void;
@@ -59,9 +80,7 @@ extern class Builtin {
 	//public static function basestring():Void;
 	//public static function execfile():Void;
 
-	public static inline function print(o:Dynamic):Void {
-		python.Syntax.field(Builtin, "print")(o);
-	}
+	public static function print(o:Dynamic):Void;
 
 	//public static function super():Void;
 	//public static function bin():Void;

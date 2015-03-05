@@ -217,13 +217,14 @@ class RunCi {
 		Sys.exit(1);
 	}
 
-	static function runExe(exe:String):Void {
+	static function runExe(exe:String, ?args:Array<String>):Void {
+		if (args == null) args = [];
 		exe = FileSystem.fullPath(exe);
 		switch (systemName) {
 			case "Linux", "Mac":
-				runCommand("mono", [exe]);
+				runCommand("mono", [exe].concat(args));
 			case "Windows":
-				runCommand(exe, []);
+				runCommand(exe, args);
 		}
 	}
 
@@ -385,15 +386,33 @@ class RunCi {
 		gotOpenFLDependencies = true;
 	}
 
-	static function getPythonDependencies() {
+	/**
+		Install python and return the names of the installed pythons.
+	*/
+	static function getPythonDependencies():Array<String> {
 		switch (systemName) {
 			case "Linux":
 				runCommand("sudo", ["apt-get", "install", "python3", "-qq"], true);
+				runCommand("python3", ["-V"]);
+
+				var pypyVersion = "pypy3-2.4.0-linux64";
+				runCommand("wget", ['https://bitbucket.org/pypy/pypy/downloads/${pypyVersion}.tar.bz2'], true);
+				runCommand("tar", ["-xf", '${pypyVersion}.tar.bz2']);
+				var pypy = FileSystem.fullPath('${pypyVersion}/bin/pypy3');
+				runCommand(pypy, ["-V"]);
+
+				return ["python3", pypy];
 			case "Mac":
 				runCommand("brew", ["install", "python3"], true);
+				runCommand("python3", ["-V"]);
+
+				runCommand("brew", ["install", "pypy3"], true);
+				runCommand("pypy3", ["-V"]);
+
+				return ["python3", "pypy3"];
 		}
 
-		runCommand("python3", ["-V"]);
+		return [];
 	}
 
 	static var ci(default, never):Null<Ci> =
@@ -457,6 +476,9 @@ class RunCi {
 							haxelibRun(["dox", "-o", "bin/api.zip", "-i", "bin/xml"]);
 					}
 
+					changeDirectory(sysDir);
+					runCommand("haxe", ["compile-macro.hxml"]);
+
 					//BYTECODE
 					switch (ci) {
 						case null:
@@ -486,18 +508,25 @@ class RunCi {
 					runCommand("haxe", ["compile-php.hxml"]);
 					runCommand("php", ["bin/php/index.php"]);
 				case Python:
-					getPythonDependencies();
+					var pys = getPythonDependencies();
+
 					runCommand("haxe", ["compile-python.hxml"]);
-					runCommand("python3", ["bin/unit.py"]);
+					for (py in pys) {
+						runCommand(py, ["bin/unit.py"]);
+					}
 
 					changeDirectory(sysDir);
 					runCommand("haxe", ["compile-python.hxml"]);
 					changeDirectory("bin/python");
-					runCommand("python3", ["sys.py"].concat(args));
+					for (py in pys) {
+						runCommand(py, ["sys.py"].concat(args));
+					}
 
 					changeDirectory(miscDir + "pythonImport");
 					runCommand("haxe", ["compile.hxml"]);
-					runCommand("python3", ["test.py"]);
+					for (py in pys) {
+						runCommand(py, ["test.py"]);
+					}
 				case Cpp:
 					getCppDependencies();
 					runCommand("haxe", ["compile-cpp.hxml"]);
@@ -521,16 +550,28 @@ class RunCi {
 					}
 
 					if (Sys.getEnv("TRAVIS_SECURE_ENV_VARS") == "true" && systemName == "Linux") {
-						//https://saucelabs.com/opensource/travis
+						var scVersion = "sc-4.3-linux";
+						runCommand("wget", ['https://saucelabs.com/downloads/${scVersion}.tar.gz'], true);
+						runCommand("tar", ["-xf", '${scVersion}.tar.gz']);
+
+						//start sauce-connect
+						var scReadyFile = "sauce-connect-ready-" + Std.random(100);
+						var sc = new Process('${scVersion}/bin/sc', [
+							"-i", Sys.getEnv("TRAVIS_JOB_NUMBER"),
+							"-f", scReadyFile
+						]);
+						while(!FileSystem.exists(scReadyFile)) {
+							Sys.sleep(0.5);
+						}
+
 						runCommand("npm", ["install", "wd", "q"], true);
-						runCommand("wget", ["-nv", "https://gist.github.com/santiycr/5139565/raw/sauce_connect_setup.sh"], true);
-						runCommand("chmod", ["a+x", "sauce_connect_setup.sh"]);
-						runCommand("./sauce_connect_setup.sh", []);
 						haxelibInstallGit("dionjwa", "nodejs-std", "master", null, true, "nodejs");
 						runCommand("haxe", ["compile-saucelabs-runner.hxml"]);
 						var server = new Process("nekotools", ["server"]);
 						runCommand("node", ["bin/RunSauceLabs.js", "unit-js.html"]);
+
 						server.close();
+						sc.close();
 					}
 
 					infoMsg("Test optimization:");
@@ -540,24 +581,60 @@ class RunCi {
 					getJavaDependencies();
 					runCommand("haxe", ["compile-java.hxml"]);
 					runCommand("java", ["-jar", "bin/java/Test-Debug.jar"]);
+
+					changeDirectory(sysDir);
+					runCommand("haxe", ["compile-java.hxml"]);
+					changeDirectory("bin/java");
+					runCommand("java", ["-jar", "Main-Debug.jar"].concat(args));
+
+					infoMsg("Testing java-lib extras");
+					changeDirectory('$unitDir/bin');
+					runCommand("git", ["clone", "https://github.com/waneck/java-lib-tests.git", "--depth", "1"], true);
+					for (dir in FileSystem.readDirectory('java-lib-tests'))
+					{
+						var path = 'java-lib-tests/$dir';
+						if (FileSystem.isDirectory(path)) for (file in FileSystem.readDirectory(path))
+						{
+							if (file.endsWith('.hxml'))
+							{
+								runCommand("haxe", ["--cwd",'java-lib-tests/$dir',file]);
+							}
+						}
+					}
+
 				case Cs:
 					getCsDependencies();
 
-					switch [ci, systemName] {
+					var compl = switch [ci, systemName] {
 						case [TravisCI, "Linux"]:
-							runCommand("haxe", ["compile-cs-travis.hxml"]);
-							runExe("bin/cs/bin/Test-Debug.exe");
-
-							runCommand("haxe", ["compile-cs-unsafe-travis.hxml"]);
-							runExe("bin/cs_unsafe/bin/Test-Debug.exe");
+							"-travis";
 						case _:
-							runCommand("haxe", ["compile-cs.hxml"]);
-							runExe("bin/cs/bin/Test-Debug.exe");
+							"";
+					};
 
-							runCommand("haxe", ["compile-cs-unsafe.hxml"]);
-							runExe("bin/cs_unsafe/bin/Test-Debug.exe");
-					}
-					
+					runCommand("haxe", ['compile-cs$compl.hxml']);
+					runExe("bin/cs/bin/Test-Debug.exe");
+
+					runCommand("haxe", ['compile-cs-unsafe$compl.hxml']);
+					runExe("bin/cs_unsafe/bin/Test-Debug.exe");
+
+					runCommand("haxe", ['compile-cs$compl.hxml',"-D","erase_generics"]);
+					runExe("bin/cs/bin/Test-Debug.exe");
+
+					runCommand("haxe", ['compile-cs-unsafe$compl.hxml',"-D","erase_generics"]);
+					runExe("bin/cs_unsafe/bin/Test-Debug.exe");
+
+					runCommand("haxe", ['compile-cs$compl.hxml',"-D","no_root"]);
+					runExe("bin/cs/bin/Test-Debug.exe");
+
+					runCommand("haxe", ['compile-cs-unsafe$compl.hxml',"-D","no_root","-D","erase_generics"]);
+					runExe("bin/cs_unsafe/bin/Test-Debug.exe");
+
+					changeDirectory(sysDir);
+					runCommand("haxe", ["compile-cs.hxml"]);
+					changeDirectory("bin/cs");
+					runExe("bin/Main-Debug.exe", args);
+
 				case Flash9:
 					setupFlashPlayerDebugger();
 					runCommand("haxe", ["compile-flash9.hxml", "-D", "fdb"]);

@@ -88,6 +88,10 @@ let do_resume() = !resume_display <> null_pos
 
 let display e = raise (Display e)
 
+let type_path sl in_import = match sl with
+	| n :: l when n.[0] >= 'A' && n.[0] <= 'Z' -> raise (TypePath (List.rev l,Some (n,false),in_import));
+	| _ -> raise (TypePath (List.rev sl,None,in_import))
+
 let is_resuming p =
 	let p2 = !resume_display in
 	p.pmax = p2.pmin && !use_parser_resume && Common.unique_full_path p.pfile = p2.pfile
@@ -648,9 +652,7 @@ and parse_import s p1 =
 		match s with parser
 		| [< '(Dot,p) >] ->
 			let resume() =
-				match acc with
-				| (n,_) :: l when n.[0] >= 'A' && n.[0] <= 'Z' -> raise (TypePath (List.rev (List.map fst l),Some (n,false),true));
-				| _ -> raise (TypePath (List.rev (List.map fst acc),None,true));
+				type_path (List.map fst acc) true
 			in
 			if is_resuming p then resume();
 			(match s with parser
@@ -773,8 +775,21 @@ and parse_common_flags = parser
 	| [< '(Kwd Extern,_); l = parse_common_flags >] -> (HExtern, EExtern) :: l
 	| [< >] -> []
 
+and parse_meta_argument_expr s =
+	try
+		expr s
+	with Display e -> match fst e with
+		| EDisplay(e,_) ->
+			begin try
+				type_path (string_list_of_expr_path_raise e) false
+			with Exit ->
+				e
+			end
+		| _ ->
+			e
+
 and parse_meta_params pname s = match s with parser
-	| [< '(POpen,p) when p.pmin = pname.pmax; params = psep Comma expr; '(PClose,_); >] -> params
+	| [< '(POpen,p) when p.pmin = pname.pmax; params = psep Comma parse_meta_argument_expr; '(PClose,_); >] -> params
 	| [< >] -> []
 
 and parse_meta_entry = parser
@@ -878,6 +893,7 @@ and type_name = parser
 			error (Custom "Type name should start with an uppercase letter") p
 		else
 			name
+	| [< '(Dollar name,_) >] -> "$" ^ name
 
 and parse_type_path_or_const = parser
 	(* we can't allow (expr) here *)
@@ -1086,6 +1102,7 @@ and block acc s =
 and parse_block_elt = parser
 	| [< '(Kwd Var,p1); vl = parse_var_decls p1; p2 = semicolon >] ->
 		(EVars vl,punion p1 p2)
+	| [< '(Kwd Inline,p1); '(Kwd Function,_); e = parse_function p1 true; _ = semicolon >] -> e
 	| [< e = expr; _ = semicolon >] -> e
 
 and parse_obj_decl = parser
@@ -1159,6 +1176,22 @@ and parse_macro_expr p = parser
 	| [< e = secure_expr >] ->
 		reify_expr e
 
+and parse_function p1 inl = parser
+	| [< name = popt dollar_ident; pl = parse_constraint_params; '(POpen,_); al = psep Comma parse_fun_param; '(PClose,_); t = parse_type_opt; s >] ->
+		let make e =
+			let f = {
+				f_params = pl;
+				f_type = t;
+				f_args = al;
+				f_expr = Some e;
+			} in
+			EFunction ((match name with None -> None | Some (name,_) -> Some (if inl then "inline_" ^ name else name)),f), punion p1 (pos e)
+		in
+		(try
+			expr_next (make (secure_expr s)) s
+		with
+			Display e -> display (make e))
+
 and expr = parser
 	| [< (name,params,p) = parse_meta_entry; s >] ->
 		(try
@@ -1183,6 +1216,9 @@ and expr = parser
 		| [< '(POpen,pp); e = expr; s >] ->
 			(match s with parser
 			| [< '(Comma,_); t = parse_complex_type; '(PClose,p2); s >] -> expr_next (ECast (e,Some t),punion p1 p2) s
+			| [< t = parse_type_hint; '(PClose,p2); s >] ->
+				let ep = EParenthesis (ECheckType(e,t),punion p1 p2), punion p1 p2 in
+				expr_next (ECast (ep,None),punion p1 (pos ep)) s
 			| [< '(PClose,p2); s >] ->
 				let ep = expr_next (EParenthesis(e),punion pp p2) s in
 				expr_next (ECast (ep,None),punion p1 (pos ep)) s
@@ -1199,20 +1235,7 @@ and expr = parser
 		| [< t = parse_type_hint; '(PClose,p2); s >] -> expr_next (EParenthesis (ECheckType(e,t),punion p1 p2), punion p1 p2) s
 		| [< >] -> serror())
 	| [< '(BkOpen,p1); l = parse_array_decl; '(BkClose,p2); s >] -> expr_next (EArrayDecl l, punion p1 p2) s
-	| [< inl, p1 = inline_function; name = popt dollar_ident; pl = parse_constraint_params; '(POpen,_); al = psep Comma parse_fun_param; '(PClose,_); t = parse_type_opt; s >] ->
-		let make e =
-			let f = {
-				f_params = pl;
-				f_type = t;
-				f_args = al;
-				f_expr = Some e;
-			} in
-			EFunction ((match name with None -> None | Some (name,_) -> Some (if inl then "inline_" ^ name else name)),f), punion p1 (pos e)
-		in
-		(try
-			expr_next (make (secure_expr s)) s
-		with
-			Display e -> display (make e))
+	| [< '(Kwd Function,p1); e = parse_function p1 false; >] -> e
 	| [< '(Unop op,p1) when is_prefix op; e = expr >] -> make_unop op e p1
 	| [< '(Binop OpSub,p1); e = expr >] ->
 		let neg s =

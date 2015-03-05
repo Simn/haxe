@@ -21,6 +21,7 @@
  */
 package haxe.io;
 import js.html.compat.Uint8Array;
+import js.html.compat.DataView;
 
 @:coreApi
 class Bytes {
@@ -94,17 +95,26 @@ class Bytes {
 		initData();
 		data.setFloat32(pos, v, true);
 	}
-	
-	public function getI32( pos : Int ) : Int {
+
+	public function getInt32( pos : Int ) : Int {
 		initData();
-		return data.getInt32(pos);
+		return data.getInt32(pos, true);
 	}
 
-	public function setI32( pos : Int, value : Int ) : Void {
+	public function setInt32( pos : Int, v : Int ) : Void {
 		initData();
-		data.setInt32(pos, value);
+		data.setInt32(pos, v, true);
 	}
-	
+
+	public function getInt64( pos : Int ) : haxe.Int64 {
+		return Int64.make(getInt32(pos + 4),getInt32(pos));
+	}
+
+	public function setInt64( pos : Int, v : haxe.Int64 ) : Void {
+		setInt32(pos, v.low);
+		setInt32(pos + 4, v.high);
+	}
+
 	public function getString( pos : Int, len : Int ) : String {
 		if( pos < 0 || len < 0 || pos + len > length ) throw Error.OutsideBounds;
 		var s = "";
