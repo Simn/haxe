@@ -1140,6 +1140,7 @@ let configure gen =
 		match e.eexpr with
 			| TLocal { v_name = "__fallback__" }
 			| TCall ({ eexpr = TLocal( { v_name = "__label__" } ) }, [ { eexpr = TConst(TInt _) } ] ) -> false
+			| TCall ({ eexpr = TLocal( { v_name = "__lock__" } ) }, _ ) -> false
 			| TBlock _ | TFor _ | TSwitch _ | TTry _ | TIf _ -> false
 			| TWhile (_,_,flag) when flag = Ast.NormalWhile -> false
 			| _ -> true
@@ -1173,6 +1174,13 @@ let configure gen =
 		| _ -> t
 	in
 
+	let rec extract_tparams params el =
+		match el with
+			| ({ eexpr = TLocal({ v_name = "$type_param" }) } as tp) :: tl ->
+				extract_tparams (tp.etype :: params) tl
+			| _ -> (params, el)
+	in
+
 	let line_directive =
 		if Common.defined gen.gcon Define.RealPosition then
 			fun w p -> ()
@@ -1180,6 +1188,45 @@ let configure gen =
 			let cur_line = Lexer.get_error_line p in
 			let file = Common.get_full_path p.pfile in
 			print w "//line %d \"%s\"" cur_line (Ast.s_escape file); newline w
+	in
+
+	let extract_statements expr =
+		let ret = ref [] in
+		let rec loop expr = match expr.eexpr with
+			| TCall ({ eexpr = TLocal {
+					v_name = "__is__" | "__typeof__" | "__array__"
+				} }, el) ->
+				List.iter loop el
+			| TNew ({ cl_path = (["java"], "NativeArray") }, params, [ size ]) ->
+				()
+			| TUnop (Ast.Increment, _, _)
+			| TUnop (Ast.Decrement, _, _)
+			| TBinop (Ast.OpAssign, _, _)
+			| TBinop (Ast.OpAssignOp _, _, _)
+			| TLocal { v_name = "__fallback__" }
+			| TLocal { v_name = "__sbreak__" } ->
+				ret := expr :: !ret
+			| TConst _
+			| TLocal _
+			| TArray _
+			| TBinop _
+			| TField _
+			| TEnumParameter _
+			| TTypeExpr _
+			| TObjectDecl _
+			| TArrayDecl _
+			| TCast _
+			| TMeta _
+			| TParenthesis _
+			| TUnop _ ->
+				Type.iter loop expr
+			| TFunction _ -> () (* do not extract parameters from inside of it *)
+			| _ ->
+				ret := expr :: !ret
+		in
+		loop expr;
+		(* [expr] *)
+		List.rev !ret
 	in
 
 	let expr_s w e =
@@ -1260,7 +1307,9 @@ let configure gen =
 				| TMeta (_,e) ->
 					expr_s w e
 				| TCall ({ eexpr = TLocal { v_name = "__array__" } }, el)
+				| TCall ({ eexpr = TField(_, FStatic({ cl_path = (["java"],"NativeArray") }, { cf_name = "make" })) }, el)
 				| TArrayDecl el when t_has_type_param e.etype ->
+					let _, el = extract_tparams [] el in
 					print w "( (%s) (new %s " (t_s e.epos e.etype) (t_s e.epos (replace_type_param e.etype));
 					write w "{";
 					ignore (List.fold_left (fun acc e ->
@@ -1270,7 +1319,9 @@ let configure gen =
 					) 0 el);
 					write w "}) )"
 				| TCall ({ eexpr = TLocal { v_name = "__array__" } }, el)
+				| TCall ({ eexpr = TField(_, FStatic({ cl_path = (["java"],"NativeArray") }, { cf_name = "make" })) }, el)
 				| TArrayDecl el ->
+					let _, el = extract_tparams [] el in
 					print w "new %s" (param_t_s e.epos (transform_nativearray_t e.etype));
 					let is_double = match follow e.etype with
 					 | TInst(_,[ t ]) -> if like_float t && not (like_int t) then Some t else None
@@ -1303,7 +1354,16 @@ let configure gen =
 					Codegen.interpolate_code gen.gcon s tl (write w) (expr_s w) e.epos
 				| TCall ({ eexpr = TLocal( { v_name = "__lock__" } ) }, [ eobj; eblock ] ) ->
 					write w "synchronized(";
-					expr_s w eobj;
+					let rec loop eobj = match eobj.eexpr with
+						| TTypeExpr md ->
+							expr_s w eobj;
+							write w ".class"
+						| TMeta(_,e) | TParenthesis(e) ->
+							loop e
+						| _ ->
+							expr_s w eobj
+					in
+					loop eobj;
 					write w ")";
 					(match eblock.eexpr with
 					| TBlock(_ :: _) ->
@@ -1322,12 +1382,6 @@ let configure gen =
 					expr_s w expr;
 					write w ".class"
 				| TCall (e, el) ->
-					let rec extract_tparams params el =
-						match el with
-							| ({ eexpr = TLocal({ v_name = "$type_param" }) } as tp) :: tl ->
-								extract_tparams (tp.etype :: params) tl
-							| _ -> (params, el)
-					in
 					let params, el = extract_tparams [] el in
 
 					expr_s w e;
@@ -1416,22 +1470,14 @@ let configure gen =
 					expr_s w e
 				| TBlock el ->
 					begin_block w;
-					(*let last_line = ref (-1) in
-					let line_directive p =
-						let cur_line = Lexer.get_error_line p in
-						let is_relative_path = (String.sub p.pfile 0 1) = "." in
-						let file = if is_relative_path then "../" ^ p.pfile else p.pfile in
-						if cur_line <> ((!last_line)+1) then begin print w "//#line %d \"%s\"" cur_line (Ast.s_escape file); newline w end;
-						last_line := cur_line in*)
 					List.iter (fun e ->
-						in_value := false;
-						(match e.eexpr with
-						| TConst _ -> ()
-						| _ ->
+						List.iter (fun e ->
+							in_value := false;
 							line_directive w e.epos;
 							expr_s w e;
-							(if has_semicolon e then write w ";");
-							newline w);
+							if has_semicolon e then write w ";";
+							newline w;
+						) (extract_statements e)
 					) el;
 					end_block w
 				| TIf (econd, e1, Some(eelse)) when was_in_value ->

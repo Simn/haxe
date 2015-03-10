@@ -234,8 +234,13 @@ class TestSpod extends Test
 		eq(scls.relationNullable,null);
 		eq(scls.abstractType,null);
 		eq(scls.anEnum,null);
-		scls.delete();
+		Manager.cleanup();
 
+		scls = new NullableSpodClass();
+		scls.theId = id;
+		t( untyped NullableSpodClass.manager.getUpdateStatement( scls ) != null );
+
+		scls.delete();
 	}
 
 	public function testSpodTypes()
@@ -326,6 +331,10 @@ class TestSpod extends Test
 			c.delete();
 		for (c in OtherSpodClass.manager.all())
 			c.delete();
+
+		//issue #3598
+		var inexistent = MySpodClass.manager.get(1000,false);
+		eq(inexistent,null);
 	}
 
 	public function testDateQuery()

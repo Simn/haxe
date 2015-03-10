@@ -108,7 +108,7 @@ class source_writer common_ctx write_func close_func =
 
    method add_include class_path =
       ( match class_path with
-         | (["@verbatim"],file) -> this#write ("#include <" ^ file ^ ">\n");
+         | (["@verbatim"],file) -> this#write ("#include \"" ^ file ^ "\"\n");
          | _ ->
             let prefix = if should_prefix_include class_path then "" else get_include_prefix common_ctx true in
             this#write ("#ifndef INCLUDED_" ^ (join_class_path class_path "_") ^ "\n");
@@ -340,6 +340,28 @@ let get_meta_string meta key =
    let rec loop = function
       | [] -> ""
       | (k,[Ast.EConst (Ast.String name),_],_) :: _  when k=key-> name
+      | _ :: l -> loop l
+      in
+   loop meta
+;;
+
+
+
+let get_meta_string_path ctx meta key =
+   let rec loop = function
+      | [] -> ""
+      | (k,[Ast.EConst (Ast.String name),_], pos) :: _  when k=key->
+           (try
+           if (String.sub name 0 2) = "./" then begin
+              let base = if (Filename.is_relative pos.pfile) then
+                 Filename.concat (Sys.getcwd()) pos.pfile
+              else
+                 pos.pfile
+              in
+              Gencommon.normalize (Filename.concat (Filename.dirname base) (String.sub name 2 ((String.length name) -2)  ))
+           end else
+              name
+           with Invalid_argument _ -> name)
       | _ :: l -> loop l
       in
    loop meta
@@ -2680,7 +2702,7 @@ let find_referenced_types ctx obj super_deps constructor_deps header_only for_de
       end
    in
    let add_extern_class klass =
-      let include_file = get_meta_string klass.cl_meta (if for_depends then Meta.Depend else Meta.Include) in
+      let include_file = get_meta_string_path ctx klass.cl_meta (if for_depends then Meta.Depend else Meta.Include) in
       if (include_file<>"") then
          add_type ( path_of_string include_file )
       else if (not for_depends) && (has_meta_key klass.cl_meta Meta.Include) then
@@ -3402,6 +3424,9 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
       output_cpp "#include <hx/Scriptable.h>\n";
 
    output_cpp ( get_class_code class_def Meta.CppFileCode );
+   let inc = get_meta_string_path ctx class_def.cl_meta Meta.CppInclude in
+   if (inc<>"") then
+      output_cpp ("#include \"" ^ inc ^ "\"\n");
 
    gen_open_namespace output_cpp class_path;
    output_cpp "\n";
@@ -3960,6 +3985,8 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
       output_cpp ("#ifdef HXCPP_SCRIPTABLE\n\t__mClass->mMemberStorageInfo = sMemberStorageInfo;\n#endif\n");
       output_cpp ("#ifdef HXCPP_SCRIPTABLE\n\t__mClass->mStaticStorageInfo = sStaticStorageInfo;\n#endif\n");
       output_cpp ("\thx::RegisterClass(__mClass->mName, __mClass);\n");
+      if (scriptable) then
+         output_cpp ("  HX_SCRIPTABLE_REGISTER_CLASS(\""^class_name_text^"\"," ^ class_name ^ ");\n");
       output_cpp ("}\n\n");
 
    end else begin
@@ -4023,6 +4050,9 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
    List.iter ( gen_forward_decl h_file ) referenced;
 
    output_h ( get_class_code class_def Meta.HeaderCode );
+   let inc = get_meta_string_path ctx class_def.cl_meta Meta.HeaderInclude in
+   if (inc<>"") then
+      output_h ("#include \"" ^ inc ^ "\"\n");
 
    gen_open_namespace output_h class_path;
    output_h "\n\n";
@@ -4099,7 +4129,6 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
    List.iter (gen_member_def ctx class_def true interface)  (List.filter should_implement_field class_def.cl_ordered_statics);
 
    output_h ( get_class_code class_def Meta.HeaderClassCode );
-
    output_h "};\n\n";
 
    if (class_def.cl_interface) then begin
@@ -4143,30 +4172,50 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
    let depend_referenced = find_referenced_types ctx.ctx_common (TClassDecl class_def) super_deps constructor_deps false true false in
    depend_referenced;;
 
+
 let write_resources common_ctx =
-   let resource_file = new_cpp_file common_ctx common_ctx.file ([],"__resources__") in
-   resource_file#write "#include <hxcpp.h>\n\n";
 
    let idx = ref 0 in
+
    Hashtbl.iter (fun _ data ->
-      resource_file#write_i ("static unsigned char __res_" ^ (string_of_int !idx) ^ "[] = {\n");
+      let id = "__res_" ^ (string_of_int !idx) in
+      let resource_file = new_cpp_file common_ctx common_ctx.file (["resources"],id) in
+      resource_file#write "namespace hx {\n";
+      resource_file#write_i ("unsigned char " ^ id ^ "[] = {\n");
       resource_file#write_i "0xff, 0xff, 0xff, 0xff,\n";
       for i = 0 to String.length data - 1 do
       let code = Char.code (String.unsafe_get data i) in
-         resource_file#write  (Printf.sprintf "0x%.2x, " code);
+         resource_file#write  (Printf.sprintf "%d," code);
          if ( (i mod 10) = 9) then resource_file#write "\n";
       done;
       resource_file#write ("0x00 };\n");
       incr idx;
+      resource_file#write ("}\n");
+      resource_file#close;
    ) common_ctx.resources;
+
+
+   let resource_file = new_cpp_file common_ctx common_ctx.file ([],"__resources__") in
+   resource_file#write "#include <hxcpp.h>\n\n";
+   resource_file#write "namespace hx { \n\n";
+
+   idx := 0;
+   Hashtbl.iter (fun _ data ->
+      let id = "__res_" ^ (string_of_int !idx) in
+      resource_file#write_i ("extern unsigned char " ^ id ^ "[];\n");
+      incr idx;
+   ) common_ctx.resources;
+
+   resource_file#write "}\n\n";
 
    idx := 0;
    resource_file#write "hx::Resource __Resources[] =";
    resource_file#begin_block;
    Hashtbl.iter (fun name data ->
+      let id = "__res_" ^ (string_of_int !idx) in
       resource_file#write_i
          ("{ " ^ (str name) ^ "," ^ (string_of_int (String.length data)) ^ "," ^
-            "__res_" ^ (string_of_int !idx) ^ " + 4 },\n");
+            "hx::" ^ id ^ " + 4 },\n");
       incr idx;
    ) common_ctx.resources;
 
@@ -4178,7 +4227,7 @@ let write_resources common_ctx =
 
 
 
-let write_build_data common_ctx filename classes main_deps build_extra exe_name =
+let write_build_data common_ctx filename classes main_deps build_extra extern_src exe_name =
    let buildfile = open_out filename in
    let include_prefix = get_include_prefix common_ctx true in
    let add_class_to_buildfile class_def =
@@ -4213,6 +4262,17 @@ let write_build_data common_ctx filename classes main_deps build_extra exe_name 
    output_string buildfile "<compilerflag value=\"-Iinclude\"/>\n";
    add_class_to_buildfile (  ( [] , "__main__") , main_deps );
    output_string buildfile "</files>\n";
+   output_string buildfile "<files id=\"__resources__\">\n";
+   let idx = ref 0 in
+   Hashtbl.iter (fun _ data ->
+      let id = "__res_" ^ (string_of_int !idx) in
+      output_string buildfile ("<file name=\"src/resources/" ^ id ^ ".cpp\" />\n");
+      incr idx;
+   ) common_ctx.resources;
+   output_string buildfile "</files>\n";
+   output_string buildfile "<files id=\"__externs__\">\n";
+   List.iter (fun src -> output_string buildfile ("<file name=\"" ^src^ "\" />\n") ) extern_src;
+   output_string buildfile "</files>\n";
    output_string buildfile ("<set name=\"HAXE_OUTPUT\" value=\"" ^ exe_name ^ "\" />\n");
    output_string buildfile "<include name=\"${HXCPP}/build-tool/BuildCommon.xml\"/>\n";
    output_string buildfile build_extra;
@@ -4221,9 +4281,11 @@ let write_build_data common_ctx filename classes main_deps build_extra exe_name 
 
 let write_build_options common_ctx filename defines =
    let writer = cached_source_writer common_ctx filename in
-   writer#write ( defines ^ "\n");
+   PMap.iter ( fun name value -> match name with
+      | "true" | "sys" | "dce" | "cpp" | "debug" -> ()
+      | _ ->  writer#write (name ^ "="^(escape_command value)^ "\n" ) ) defines;
    let cmd = Unix.open_process_in "haxelib path hxcpp" in
-   writer#write (Pervasives.input_line cmd);
+   writer#write ("hxcpp=" ^ (Pervasives.input_line cmd));
    Pervasives.ignore (Unix.close_process_in cmd);
    writer#close;;
 
@@ -4601,6 +4663,8 @@ type cppia_op =
    | IaNoMain
    | IaResources
    | IaReso
+   | IaNoCast
+   | IaAccessCallNative
 
 	| IaBinOp of Ast.binop
 ;;
@@ -4683,7 +4747,8 @@ let cppia_op_info = function
    | IaNoMain -> ("NOMAIN", 76)
    | IaResources -> ("RESOURCES", 77)
    | IaReso -> ("RESO", 78)
-
+	| IaNoCast -> ("NOCAST", 79)
+   | IaAccessCallNative -> ("V", 80)
 
 	| IaBinOp OpAdd -> ("+", 101)
 	| IaBinOp OpMult -> ("*", 102)
@@ -4952,8 +5017,13 @@ class script_writer common_ctx ctx filename asciiOut =
 
    if (not was_cast) then begin
       if (forceCast) then begin
-         let toType = (type_string expr.etype) in
-         this#writeOpLine (if toType="int" then IaCastInt else if toType=="bool" then IaCastBool else IaCast);
+         let op =match (type_string expr.etype) with
+         | "int" -> IaCastInt
+         | "bool" -> IaCastBool
+         | _ when is_interface_type toType -> IaNoCast
+         | _ -> IaCast
+         in
+         this#writeOpLine op;
       end;
       this#gen_expression expr;
    end
@@ -5247,7 +5317,10 @@ let generate_script_class common_ctx script class_def =
          | AccNo -> IaAccessNot
          | AccNever -> IaAccessNot
          | AccResolve -> IaAccessResolve
-         | AccCall -> IaAccessCall
+         | AccCall -> if ( (has_meta_key class_def.cl_meta Meta.NativeProperty) ||
+                           (has_meta_key field.cf_meta Meta.NativeProperty) ||
+                           (Common.defined common_ctx Define.ForceNativeProperty) )
+                         then IaAccessCallNative else IaAccessCall;
          | AccInline -> IaAccessNormal
          | AccRequire (_,_) -> IaAccessNormal
          in
@@ -5370,12 +5443,17 @@ let generate_source common_ctx =
    let super_deps = create_super_dependencies common_ctx in
    let constructor_deps = create_constructor_dependencies common_ctx in
    let main_deps = ref [] in
+   let extern_src = ref [] in
    let build_xml = ref "" in
    let scriptable = (Common.defined common_ctx Define.Scriptable) in
 
    List.iter (fun object_def ->
       (match object_def with
-      | TClassDecl class_def when is_extern_class class_def -> ()
+      | TClassDecl class_def when is_extern_class class_def ->
+         build_xml := !build_xml ^ (get_class_code class_def Meta.BuildXml);
+         let source = get_meta_string_path common_ctx class_def.cl_meta Meta.SourceFile in
+         if (source<>"") then
+            extern_src := source :: !extern_src;
       | TClassDecl class_def ->
          let name =  class_text class_def.cl_path in
          let is_internal = is_internal_class class_def.cl_path in
@@ -5427,27 +5505,35 @@ let generate_source common_ctx =
 
    write_resources common_ctx;
 
-   (* Output class list if requested *)
+   (* Output class info if requested *)
    if (scriptable || (Common.defined common_ctx Define.DllExport) ) then begin
-      let filename = match Common.defined_value_safe common_ctx Define.DllExport with
-         | "" -> "exe.classes"
-         | x -> x
+      let filename =
+         try Common.defined_value common_ctx Define.DllExport
+         with Not_found -> "export_classes.info"
       in
-      let exeClasses = open_out filename in
-      List.iter (fun x -> output_string exeClasses ((join_class_path (fst x) ".") ^ "\n") ) !exe_classes;
-      close_out exeClasses;
+      if (filename <> "") then begin
+         let exeClasses = open_out filename in
+         List.iter (fun x -> output_string exeClasses ((join_class_path (fst x) ".") ^ "\n") ) !exe_classes;
+
+         (* Output file info top *)
+         List.iter ( fun file ->
+               let full_path = Common.get_full_path (try Common.find_file common_ctx file with Not_found -> file) in
+               output_string exeClasses (file^"|"^full_path^"\n") )
+            ( List.sort String.compare ( pmap_keys !file_info) );
+         close_out exeClasses;
+     end;
    end;
 
    let output_name = match  common_ctx.main_class with
    | Some path -> (snd path)
    | _ -> "output" in
 
-   write_build_data common_ctx (common_ctx.file ^ "/Build.xml") !exe_classes !main_deps !build_xml output_name;
+   write_build_data common_ctx (common_ctx.file ^ "/Build.xml") !exe_classes !main_deps !build_xml !extern_src output_name;
    let cmd_defines = ref "" in
    PMap.iter ( fun name value -> match name with
       | "true" | "sys" | "dce" | "cpp" | "debug" -> ()
       | _ -> cmd_defines := !cmd_defines ^ " -D" ^ name ^ "=\"" ^ (escape_command value) ^ "\"" ) common_ctx.defines;
-   write_build_options common_ctx (common_ctx.file ^ "/Options.txt") !cmd_defines;
+   write_build_options common_ctx (common_ctx.file ^ "/Options.txt") common_ctx.defines;
    if ( not (Common.defined common_ctx Define.NoCompilation) ) then begin
       let old_dir = Sys.getcwd() in
       Sys.chdir common_ctx.file;

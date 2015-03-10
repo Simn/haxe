@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2015 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -21,39 +21,12 @@
  */
 package python.lib;
 
-import python.NativeIterator;
-import python.NativeIterable;
+import haxe.io.BytesData;
+import python.Tuple;
 
-@:pythonImport("builtins", "set")
-extern class Set <T>
-{
-	@:overload(function (?array:Array<T>):Void {})
-	public function new (?iterable:NativeIterable<T>):Void;
+private typedef Selectable = haxe.extern.EitherType<Int,{function fileno():Int;}>
 
-	public inline function length ():Int
-	{
-		return python.internal.UBuiltins.len(this);
-	}
-
-	public inline function has (v:T):Bool
-	{
-		return python.Syntax.isIn(v, this);
-	}
-
-
-	public inline function minus (other:Set<T>):Set<T>
-	{
-		return python.Syntax.binop(this, "-", other);
-	}
-	public inline function plus (other:Set<T>):Set<T>
-	{
-		return python.Syntax.binop(this, "+", other);
-	}
-
-	function __iter__ ():NativeIterator<T>;
-
-	public inline function iterator ():NativeIterator<T>
-	{
-		return __iter__();
-	}
+@:pythonImport("select")
+extern class Select {
+    static function select<T>(rlist:Array<T>, wlist:Array<T>, xlist:Array<T>, ?timeout:Float):Tuple3<Array<T>,Array<T>,Array<T>>;
 }

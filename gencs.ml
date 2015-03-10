@@ -124,6 +124,12 @@ let is_bool t =
 			true
 		| _ -> false
 
+let is_exactly_bool gen t =
+	match gen.gfollow#run_f t with
+		| TAbstract ({ a_path = ([], "Bool") },[]) ->
+			true
+		| _ -> false
+
 let is_dynamic gen t =
 	match follow (gen.greal_type t) with
 		| TDynamic _ -> true
@@ -476,7 +482,7 @@ struct
 							{ e with eexpr = TNew(boxed_ptr,[],[expr]) }
 						| Some e ->
 							run e)
-				| TCast(expr, _) when is_bool e.etype ->
+				| TCast(expr, _) when is_bool e.etype && not (is_exactly_bool gen expr.etype) ->
 					{
 						eexpr = TCall(
 							mk_static_field_access_infer runtime_cl "toBool" expr.epos [],
@@ -878,6 +884,7 @@ let configure gen =
 			| TInst( { cl_path = (["haxe"], "Int64") }, [] ) -> ti64
 			| TAbstract( { a_path = [],"Class" }, _ )
 			| TAbstract( { a_path = [],"Enum" }, _ )
+			| TAbstract( { a_path = ["haxe";"extern"],"Rest" }, _ )
 			| TInst( { cl_path = ([], "Class") }, _ )
 			| TInst( { cl_path = ([], "Enum") }, _ ) -> TInst(ttype,[])
 			| TInst( ({ cl_kind = KTypeParameter _ } as cl), _ ) when erase_generics && not (Meta.has Meta.NativeGeneric cl.cl_meta) ->
@@ -1162,6 +1169,45 @@ let configure gen =
 		| _ -> false
 	in
 
+	let extract_statements expr =
+		let ret = ref [] in
+		let rec loop expr = match expr.eexpr with
+			| TCall ({ eexpr = TLocal {
+					v_name = "__is__" | "__typeof__" | "__array__" | "__sizeof__" | "__delegate__"
+				} }, el) ->
+				List.iter loop el
+			| TNew ({ cl_path = (["cs"], "NativeArray") }, params, [ size ]) ->
+				()
+			| TUnop (Ast.Increment, _, _)
+			| TUnop (Ast.Decrement, _, _)
+			| TBinop (Ast.OpAssign, _, _)
+			| TBinop (Ast.OpAssignOp _, _, _)
+			| TLocal { v_name = "__fallback__" }
+			| TLocal { v_name = "__sbreak__" } ->
+				ret := expr :: !ret
+			| TConst _
+			| TLocal _
+			| TArray _
+			| TBinop _
+			| TField _
+			| TEnumParameter _
+			| TTypeExpr _
+			| TObjectDecl _
+			| TArrayDecl _
+			| TCast _
+			| TMeta _
+			| TParenthesis _
+			| TUnop _ ->
+				Type.iter loop expr
+			| TFunction _ -> () (* do not extract parameters from inside of it *)
+			| _ ->
+				ret := expr :: !ret
+		in
+		loop expr;
+		(* [expr] *)
+		List.rev !ret
+	in
+
 	let expr_s w e =
 		last_line := -1;
 		in_value := false;
@@ -1340,7 +1386,9 @@ let configure gen =
 				| TMeta (_,e) ->
 						expr_s w e
 				| TArrayDecl el
-				| TCall ({ eexpr = TLocal { v_name = "__array__" } }, el) ->
+				| TCall ({ eexpr = TLocal { v_name = "__array__" } }, el)
+				| TCall ({ eexpr = TField(_, FStatic({ cl_path = (["cs"],"NativeArray") }, { cf_name = "make" })) }, el) ->
+					let _, el = extract_tparams [] el in
 					print w "new %s" (t_s e.etype);
 					write w "{";
 					ignore (List.fold_left (fun acc e ->
@@ -1523,11 +1571,13 @@ let configure gen =
 				| TBlock el ->
 					begin_block w;
 					List.iter (fun e ->
-						line_directive w e.epos;
-						in_value := false;
-						expr_s w e;
-						(if has_semicolon e then write w ";");
-						newline w
+						List.iter (fun e ->
+							line_directive w e.epos;
+							in_value := false;
+							expr_s w e;
+							(if has_semicolon e then write w ";");
+							newline w
+						) (extract_statements e)
 					) el;
 					end_block w
 				| TIf (econd, e1, Some(eelse)) when was_in_value ->
@@ -3129,7 +3179,7 @@ let configure gen =
 			let full_path = src ^ "/" ^ name in
 			mkdir_from_path full_path;
 
-			let f = open_out full_path in
+			let f = open_out_bin full_path in
 			output_string f v;
 			close_out f;
 

@@ -433,7 +433,7 @@ class RunCi {
 	static function main():Void {
 		Sys.putEnv("OCAMLRUNPARAM", "b");
 
-		var args = ["foo", "12", "a b  %PATH% $HOME c\\&<>[\"]#{}|%$"];
+		var args = ~/\r?\n/g.split(File.getContent('$sysDir/args.txt'));
 
 		var tests:Array<TEST> = switch (ci) {
 			case null:
@@ -478,6 +478,7 @@ class RunCi {
 
 					changeDirectory(sysDir);
 					runCommand("haxe", ["compile-macro.hxml"]);
+					runCommand("haxe", ["compile-each.hxml", "--run", "Main"].concat(args));
 
 					//BYTECODE
 					switch (ci) {
@@ -505,7 +506,7 @@ class RunCi {
 					runCommand("neko", ["sys.n"].concat(args));
 				case Php:
 					getPhpDependencies();
-					runCommand("haxe", ["compile-php.hxml"]);
+					runCommand("haxe", ["compile-php.hxml","-D","travis"]);
 					runCommand("php", ["bin/php/index.php"]);
 				case Python:
 					var pys = getPythonDependencies();

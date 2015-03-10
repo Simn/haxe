@@ -22,8 +22,9 @@
 package python.lib;
 
 
-import python.lib.Exceptions.OSError;
-import python.lib.Tuple;
+import python.Exceptions.OSError;
+import python.Tuple;
+import python.Dict;
 
 extern class Stat {
 	public var st_mode:Int;
@@ -81,7 +82,7 @@ extern class Os {
 
 	public static function listdir (path:String = "."):Array<String>;
 
-	public static function walk (top:String, topdown:Bool = true, onerror:OSError->Void = null, followlinks:Bool = false):Tup3<String, Array<String>, Array<String>>;
+	public static function walk (top:String, topdown:Bool = true, onerror:OSError->Void = null, followlinks:Bool = false):Tuple3<String, Array<String>, Array<String>>;
 
 	public static var sep(default, null) : String;
 	public static var pathsep(default, null):String;

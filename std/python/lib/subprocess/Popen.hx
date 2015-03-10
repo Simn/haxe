@@ -25,7 +25,8 @@ import python.lib.io.BufferedReader;
 import python.lib.io.FileIO;
 import python.lib.io.TextIOBase;
 import python.lib.Subprocess.StartupInfo;
-import python.lib.Tuple;
+import python.Tuple;
+import python.Dict;
 
 typedef PopenOptions = {
 	?bufsize : Int,
@@ -92,6 +93,6 @@ extern class Popen {
 	public var returncode : Int;
 	public var pid:Int;
 
-	public function communicate (input:Bytes = null, timeout:Null<Int> = null):Tup2<Bytes, Bytes>;
+	public function communicate (input:Bytes = null, timeout:Null<Int> = null):Tuple2<Bytes, Bytes>;
 
 }

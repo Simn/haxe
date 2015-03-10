@@ -79,7 +79,8 @@ module KeywordHandler = struct
 		let h = Hashtbl.create 0 in
 		List.iter (fun s -> Hashtbl.add h s ()) [
 			"len"; "int"; "float"; "list"; "bool"; "str"; "isinstance"; "print"; "min"; "max";
-			"hasattr"; "getattr"; "setattr"; "callable"; "type"; "ord"; "chr"; "iter"; "map"; "filter"
+			"hasattr"; "getattr"; "setattr"; "callable"; "type"; "ord"; "chr"; "iter"; "map"; "filter";
+			"tuple"; "dict"; "set";
 		];
 		h
 
@@ -791,7 +792,7 @@ module Transformer = struct
 
 		| (is_value, TSwitch(e, cases, edef)) ->
 			begin match follow e.etype with
-				| TInst({cl_path = [],"String"},_) ->
+				| TInst({cl_path = [],"str"},_) ->
 					transform_string_switch ae is_value e cases edef
 				| _ ->
 					transform_switch ae is_value e cases edef
@@ -842,7 +843,7 @@ module Transformer = struct
 		| (is_value, TBinop(OpAssignOp op,{eexpr = TField(e1,FDynamic s)},e2)) ->
 			let e = dynamic_field_read_write ae.a_next_id e1 s op e2 in
 			transform_expr ~is_value:is_value e
-		| (is_value, TField(e1, FClosure(Some ({cl_path = [],("String" | "list")},_),cf))) ->
+		| (is_value, TField(e1, FClosure(Some ({cl_path = [],("str" | "list")},_),cf))) ->
 			let e = dynamic_field_read e1 cf.cf_name in
 			transform_expr ~is_value:is_value e
 		| (is_value, TBinop(OpAssign, left, right))->
@@ -1006,7 +1007,7 @@ module Printer = struct
 		)
 
 	let is_underlying_string t = match follow t with
-		| TAbstract(a,tl) -> (is_type1 "" "String")(Abstract.get_underlying_type a tl)
+		| TAbstract(a,tl) -> (is_type1 "" "str")(Abstract.get_underlying_type a tl)
 		| _ -> false
 	let is_underlying_array t = match follow t with
 		| TAbstract(a,tl) -> (is_type1 "" "list")(Abstract.get_underlying_type a tl)
@@ -1235,8 +1236,6 @@ module Printer = struct
 					   see: https://github.com/HaxeFoundation/haxe/issues/2952
 					*)
 					(* Printf.sprintf "(%s %s %s)" (print_expr pctx e1) (fst ops) (print_expr pctx e2) *)
-				| TAbstract({a_path = [],("String")}, []),TAbstract({a_path = [],("String")}, []) when (is_type1 "" "String") (e.etype)->
-					Printf.sprintf "(%s %s %s)" (print_expr pctx e1) (fst ops) (print_expr pctx e2)
 				| TInst({cl_path = [],("list")},_), _ ->
 					Printf.sprintf "(%s %s %s)" (print_expr pctx e1) (fst ops) (print_expr pctx e2)
 				| TDynamic _, TDynamic _ ->
@@ -1250,7 +1249,7 @@ module Printer = struct
 				Printf.sprintf "HxOverrides.modf(%s, %s)" (print_expr pctx e1) (print_expr pctx e2)
 			| TBinop(OpUShr,e1,e2) ->
 				Printf.sprintf "HxOverrides.rshift(%s, %s)" (print_expr pctx e1) (print_expr pctx e2)
-			| TBinop(OpAdd,e1,e2) when (is_type1 "" "String")(e.etype) || is_underlying_string e.etype ->
+			| TBinop(OpAdd,e1,e2) when (is_type1 "" "str")(e.etype) || is_underlying_string e.etype ->
 				let follow_parens e = match e.eexpr with
 					| TParenthesis e -> e
 					| _ -> e
@@ -1269,15 +1268,15 @@ module Printer = struct
 				let rec safe_string ex =
 					match ex.eexpr, ex.etype with
 						| e, _ when is_safe_string ex -> print_expr pctx ex
-						| TBinop(OpAdd, e1, e2), x when (is_type1 "" "String")(x) -> Printf.sprintf "(%s + %s)" (safe_string e1) (safe_string e2)
-						| (TLocal(_)),x when (is_type1 "" "String")(x) ->
+						| TBinop(OpAdd, e1, e2), x when (is_type1 "" "str")(x) -> Printf.sprintf "(%s + %s)" (safe_string e1) (safe_string e2)
+						| (TLocal(_)),x when (is_type1 "" "str")(x) ->
 							(*
 								we could add this pattern too, but is it sideeffect free??
 								| TField({ eexpr = TLocal(_)},_)
 							*)
 							let s = (print_expr pctx ex) in
 							Printf.sprintf "(\"null\" if %s is None else %s)" s s
-						| _,x when (is_type1 "" "String")(x) -> Printf.sprintf "HxOverrides.stringOrNull(%s)" (print_expr pctx ex)
+						| _,x when (is_type1 "" "str")(x) -> Printf.sprintf "HxOverrides.stringOrNull(%s)" (print_expr pctx ex)
 						| _,_ ->
 							if has_feature pctx "Std.string" then
 								Printf.sprintf "Std.string(%s)" (print_expr pctx ex)
@@ -1337,7 +1336,7 @@ module Printer = struct
 			| TIf(econd,eif,eelse) ->
 				print_if_else pctx econd eif eelse false
 			| TWhile(econd,e1,NormalWhile) ->
-				Printf.sprintf "while %s:\n%s\t%s" (print_expr pctx econd) indent (print_expr_indented e1)
+				Printf.sprintf "while %s:\n%s\t%s" (print_expr pctx (remove_outer_parens econd)) indent (print_expr_indented e1)
 			| TWhile(econd,e1,DoWhile) ->
 				error "Currently not supported" e.epos
 			| TTry(e1,catches) ->
@@ -1384,7 +1383,7 @@ module Printer = struct
 			opt eelse (print_expr {pctx with pc_indent = "\t" ^ pctx.pc_indent}) (Printf.sprintf "else:\n%s\t" indent)
 		in
 		let else_str = if else_str = "" then "" else "\n" ^ indent ^ else_str in
-		Printf.sprintf "if %s:\n%s\t%s%s" (print_expr pctx econd1) indent if_str else_str
+		Printf.sprintf "if %s:\n%s\t%s%s" (print_expr pctx (remove_outer_parens econd1)) indent if_str else_str
 
 	and print_field pctx e1 fa is_assign =
 		let obj = match e1.eexpr with
@@ -1409,9 +1408,9 @@ module Printer = struct
 			(* we need to get rid of these cases in the transformer, how is this handled in js *)
 			| FInstance(c,_,{cf_name = "length"}) when (is_type "" "list")(TClassDecl c) ->
 				Printf.sprintf "len(%s)" (print_expr pctx e1)
-			| FInstance(c,_,{cf_name = "length"}) when (is_type "" "String")(TClassDecl c) ->
+			| FInstance(c,_,{cf_name = "length"}) when (is_type "" "str")(TClassDecl c) ->
 				Printf.sprintf "len(%s)" (print_expr pctx e1)
-			| FStatic(c,{cf_name = "fromCharCode"}) when (is_type "" "String")(TClassDecl c) ->
+			| FStatic(c,{cf_name = "fromCharCode"}) when (is_type "" "str")(TClassDecl c) ->
 				Printf.sprintf "HxString.fromCharCode"
 			| FStatic({cl_path = ["python";"internal"],"UBuiltins"},{cf_name = s}) ->
 				s
@@ -1451,7 +1450,7 @@ module Printer = struct
 					Printf.sprintf "if isinstance(_hx_e1, %s):\n%s\t%s\t%s" t_str indent assign (print_expr {pctx with pc_indent = "\t" ^ pctx.pc_indent} e)
 				in
 				let res = match t with
-				| "String" -> print_type_check "str"
+				| "str" -> print_type_check "str"
 				| "Bool" -> print_type_check "bool"
 				| "Int" -> print_type_check "int"
 				| "Float" -> print_type_check "float"
@@ -1549,7 +1548,11 @@ module Printer = struct
 			| "python_Syntax.field",[e1;{eexpr = TConst(TString id)}] ->
 				Printf.sprintf "%s.%s" (print_expr pctx e1) id
 			| "python_Syntax._tuple", [{eexpr = TArrayDecl el}] ->
-				Printf.sprintf "(%s)" (print_exprs pctx ", " el)
+				(match el with
+				| [e] ->
+					Printf.sprintf "(%s,)" (print_expr pctx e)
+				| _ ->
+					Printf.sprintf "(%s)" (print_exprs pctx ", " el))
 			| "python_Syntax._arrayAccess", e1 :: {eexpr = TArrayDecl el} :: etrail ->
 				let trailing_colon = match etrail with
 					| [{eexpr = TConst(TBool(true))}] -> true
@@ -1768,22 +1771,10 @@ module Generator = struct
 		end)
 
 	let newline ctx =
-		spr ctx "\n"
+		if not (Buffer.length ctx.buf = 0) then spr ctx "\n"
 
 
 	(* Generating functions *)
-
-	let gen_pre_code_meta ctx metadata =
-		try
-			begin match Meta.get (Meta.Custom ":preCode") metadata with
-				| _,[(EConst(String s)),_],_ ->
-					newline ctx;
-					spr ctx s
-				| _ ->
-					raise Not_found
-			end
-		with Not_found ->
-			()
 
 	let gen_py_metas ctx metas indent =
 		List.iter (fun (n,el,_) ->
@@ -1865,22 +1856,23 @@ module Generator = struct
 	let gen_class_constructor ctx c cf =
 		let member_inits = get_members_with_init_expr c in
 		let py_metas = filter_py_metas cf.cf_meta in
-		begin match member_inits,cf.cf_expr with
-			| _,Some ({eexpr = TFunction f} as ef) ->
+		begin match cf.cf_expr with
+			| Some ({eexpr = TFunction f} as ef) ->
 				let ethis = mk (TConst TThis) (TInst(c,List.map snd c.cl_params)) cf.cf_pos in
 				let member_data = List.map (fun cf ->
 					let ef = mk (TField(ethis,FInstance(c,[],cf))) cf.cf_type cf.cf_pos in (* TODO *)
 					mk (TBinop(OpAssign,ef,null ef.etype ef.epos)) ef.etype ef.epos
 				) member_inits in
-				let e = {f.tf_expr with eexpr = TBlock (member_data @ [f.tf_expr])} in
-				cf.cf_expr <- Some {ef with eexpr = TFunction {f with tf_expr = e}};
+				let e = concat (mk (TBlock member_data) ctx.com.basic.tvoid cf.cf_pos) f.tf_expr in
+				let ef = {ef with eexpr = TFunction {f with tf_expr = e}} in
+				cf.cf_expr <- Some ef;
+
+				newline ctx;
+				newline ctx;
+				gen_func_expr ctx ef c "__init__" py_metas ["self"] "\t" false cf.cf_pos
 			| _ ->
-				(* TODO: is this correct? *)
-				()
-		end;
-		newline ctx;
-		newline ctx;
-		gen_func_expr ctx (match cf.cf_expr with None -> assert false | Some e -> e) c "__init__" py_metas ["self"] "\t" false cf.cf_pos
+				assert false
+		end
 
 	let gen_class_field ctx c p cf =
 		let field = handle_keywords cf.cf_name in
@@ -1976,63 +1968,8 @@ module Generator = struct
 				in
 				ctx.class_inits <- f :: ctx.class_inits
 
-	let gen_import ctx path meta =
-		gen_pre_code_meta ctx meta;
-
-		if Meta.has Meta.PythonImport meta && is_directly_used ctx.com meta then begin
-			let _, args, mp = Meta.get Meta.PythonImport meta in
-
-			let class_name = match path with
-				| [],name -> name
-				| path,name -> (ExtString.String.join "_" path) ^ "_" ^ name
-			in
-
-			let import_type,ignore_error = match args with
-				| [(EConst(String(module_name)), _)]
-				| [(EConst(String(module_name)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("false")),_)),_)] ->
-					IModule module_name, false
-
-				| [(EConst(String(module_name)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("true")),_)),_)] ->
-					IModule module_name,true
-
-				| [(EConst(String(module_name)), _); (EConst(String(object_name)), _)]
-				| [(EConst(String(module_name)), _); (EConst(String(object_name)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("false")),_)),_)] ->
-					IObject (module_name,object_name), false
-
-				| [(EConst(String(module_name)), _); (EConst(String(object_name)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("true")),_)),_)] ->
-					IObject (module_name,object_name), true
-				| _ ->
-					error "Unsupported @:pythonImport format" mp
-			in
-
-			let import = match import_type with
-				| IModule module_name ->
-					(* importing whole module *)
-					"import " ^ module_name ^ " as " ^ class_name
-
-				| IObject (module_name,object_name) ->
-					if String.contains object_name '.' then
-						(* importing nested class *)
-						"import " ^ module_name ^ " as _hx_temp_import; " ^ class_name ^ " = _hx_temp_import." ^ object_name ^ "; del _hx_temp_import"
-					else
-						(* importing a class from a module *)
-						"from " ^ module_name ^ " import " ^ object_name ^ " as " ^ class_name
-			in
-			if ignore_error then begin
-				spr_line ctx "try:";
-				spr ctx "\t";
-				spr_line ctx import;
-				spr_line ctx "except:\n\tpass"
-			end else
-				spr_line ctx import
-		end
-
 	let gen_class ctx c =
-		gen_pre_code_meta ctx c.cl_meta;
-		(* print ctx "# print %s.%s\n" (s_type_path c.cl_module.m_path) (snd c.cl_path); *)
 		if not c.cl_extern then begin
-			newline ctx;
-			newline ctx;
 			let is_nativegen = Meta.has Meta.NativeGen c.cl_meta in
 			let mt = (t_infos (TClassDecl c)) in
 			let p = get_path mt in
@@ -2049,12 +1986,19 @@ module Generator = struct
 			) c.cl_implements in
 
 			newline ctx;
+			newline ctx;
+			newline ctx;
 			print ctx "class %s" p;
 			(match p_super with Some p -> print ctx "(%s)" p | _ -> ());
-			spr ctx ":\n";
+			spr ctx ":";
+
+			let use_pass = ref true in
 
 			if not is_nativegen then begin
-				if has_feature ctx "python._hx_class_name" then print ctx "\t_hx_class_name = \"%s\"\n" p_name;
+				if has_feature ctx "python._hx_class_name" then begin
+					use_pass := false;
+					print ctx "\n\t_hx_class_name = \"%s\"" p_name
+				end;
 
 				let print_field names field quote =
 					if has_feature ctx ("python." ^ field) then try
@@ -2066,7 +2010,8 @@ module Generator = struct
 							| _ ->
 								"[" ^ (String.concat ", " (List.map q names)) ^ "]"
 						in
-						print ctx "\t%s = %s\n" field s
+						use_pass := false;
+						print ctx "\n\t%s = %s" field s
 					with Exit -> ()
 				in
 
@@ -2078,7 +2023,9 @@ module Generator = struct
 
 				if has_feature ctx "python._hx_super" then (match p_super with
 					| None -> ()
-					| Some ps -> print ctx "\t_hx_super = %s\n" ps
+					| Some ps ->
+						use_pass := false;
+						print ctx "\n\t_hx_super = %s\n" ps
 				);
 
 			end;
@@ -2100,14 +2047,11 @@ module Generator = struct
 					has_feature ctx "Type.createEmptyInstance"
 			in
 
-			let use_pass = (not has_inner_static) && (not has_empty_constructor) && match x.cfd_methods with
+			let use_pass = !use_pass && (not has_inner_static) && (not has_empty_constructor) && match x.cfd_methods with
 				| [] -> c.cl_constructor = None
 				| _ -> c.cl_interface
 			in
-			if use_pass then begin
-				newline ctx;
-				spr ctx "\tpass";
-			end;
+			if use_pass then spr ctx "\n\tpass";
 
 			if not is_nativegen then begin
 				if has_feature ctx "python._hx_class" then print ctx "\n%s._hx_class = %s" p p;
@@ -2136,18 +2080,20 @@ module Generator = struct
 
 		newline ctx;
 		newline ctx;
-		print ctx "class %s(Enum):\n" p;
+		print ctx "class %s(Enum):" p;
 
-		if has_feature ctx "python._hx_class_name" then print ctx "\t_hx_class_name = \"%s\"\n" p_name;
+		let use_pass = ref true in
+
+		if has_feature ctx "python._hx_class_name" then begin
+			use_pass := false;
+			print ctx "\n\t_hx_class_name = \"%s\"" p_name
+		end;
 		if has_feature ctx "python._hx_constructs" then begin
 			let fix = match enum_constructs with [] -> "" | _ -> "\"" in
 			let enum_constructs_str = fix ^ (String.concat ("\", \"") (List.map (fun ef -> ef.ef_name) enum_constructs)) ^ fix in
-			print ctx "\t_hx_constructs = [%s]" enum_constructs_str;
+			use_pass := false;
+			print ctx "\n\t_hx_constructs = [%s]" enum_constructs_str;
 		end;
-
-
-		spr ctx "\n\tdef __init__(self, t, i, p):\n";
-		print ctx "\t\tsuper(%s,self).__init__(t, i, p)" p;
 
 		let const_constructors,param_constructors = List.partition (fun ef ->
 			match follow ef.ef_type with
@@ -2181,8 +2127,11 @@ module Generator = struct
 				newline ctx;
 				print ctx "\t@staticmethod\n\tdef %s(%s):\n" f param_str;
 				print ctx "\t\treturn %s(\"%s\", %i, [%s])" p ef.ef_name ef.ef_index args_str;
+				use_pass := false;
 			| _ -> assert false
 		) param_constructors;
+
+		if !use_pass then spr ctx "\n\tpass";
 
 		List.iter (fun ef ->
 			(* TODO: haxe source has api.quoteString for ef.ef_name *)
@@ -2197,28 +2146,33 @@ module Generator = struct
 		gen_enum_metadata ctx en p
 
 	let gen_abstract ctx a =
-		gen_pre_code_meta ctx a.a_meta;
-		(* print ctx "# print %s.%s\n" (s_type_path a.a_module.m_path) (snd a.a_path); *)
 		newline ctx;
 		newline ctx;
 		newline ctx;
 		let mt = (t_infos (TAbstractDecl a)) in
 		let p = get_path mt in
 		let p_name = get_full_name mt in
-		print ctx "class %s:\n" p;
+		print ctx "class %s:" p;
 
-		if has_feature ctx "python._hx_class_name" then print ctx "\t_hx_class_name = \"%s\"\n" p_name;
+		let use_pass = ref true in
+
+		if has_feature ctx "python._hx_class_name" then begin
+			use_pass := false;
+			print ctx "\n\t_hx_class_name = \"%s\"" p_name
+		end;
 
 		(match a.a_impl with
 		| Some c ->
 			List.iter (fun cf ->
+				use_pass := false;
 				if cf.cf_name = "_new" then
 					gen_class_constructor ctx c cf
 				else
 					gen_class_field ctx c p cf
 			) c.cl_ordered_statics
-		| None ->
-			spr ctx "\n\tpass");
+		| None -> ());
+
+		if !use_pass then spr ctx "\n\tpass";
 
 		if has_feature ctx "python._hx_class" then print ctx "\n%s._hx_class = %s" p p;
 		if has_feature ctx "python._hx_classes" then print ctx "\n_hx_classes[\"%s\"] = %s" p_name p
@@ -2247,6 +2201,9 @@ module Generator = struct
 			let slash_index = try (String.rindex ctx.com.file '/')+1 with Not_found -> 0 in
 			let len = String.length ctx.com.file - slash_index in
 			let file_name = String.sub ctx.com.file slash_index len in
+			newline ctx;
+			newline ctx;
+			newline ctx;
 			spr ctx "def _hx_resources__():";
 			spr ctx "\n\timport inspect";
 			spr ctx "\n\timport sys";
@@ -2272,13 +2229,61 @@ module Generator = struct
 		end
 
 	let gen_imports ctx =
+		let import path meta =
+			if Meta.has Meta.PythonImport meta && is_directly_used ctx.com meta then begin
+				let _, args, mp = Meta.get Meta.PythonImport meta in
+
+				let class_name = match path with
+					| [],name -> name
+					| path,name -> (ExtString.String.join "_" path) ^ "_" ^ name
+				in
+
+				let import_type,ignore_error = match args with
+					| [(EConst(String(module_name)), _)]
+					| [(EConst(String(module_name)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("false")),_)),_)] ->
+						IModule module_name, false
+
+					| [(EConst(String(module_name)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("true")),_)),_)] ->
+						IModule module_name,true
+
+					| [(EConst(String(module_name)), _); (EConst(String(object_name)), _)]
+					| [(EConst(String(module_name)), _); (EConst(String(object_name)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("false")),_)),_)] ->
+						IObject (module_name,object_name), false
+
+					| [(EConst(String(module_name)), _); (EConst(String(object_name)), _); (EBinop(OpAssign, (EConst(Ident("ignoreError")),_), (EConst(Ident("true")),_)),_)] ->
+						IObject (module_name,object_name), true
+					| _ ->
+						error "Unsupported @:pythonImport format" mp
+				in
+
+				let import = match import_type with
+					| IModule module_name ->
+						(* importing whole module *)
+						"import " ^ module_name ^ " as " ^ class_name
+
+					| IObject (module_name,object_name) ->
+						if String.contains object_name '.' then
+							(* importing nested class *)
+							"import " ^ module_name ^ " as _hx_temp_import; " ^ class_name ^ " = _hx_temp_import." ^ object_name ^ "; del _hx_temp_import"
+						else
+							(* importing a class from a module *)
+							"from " ^ module_name ^ " import " ^ object_name ^ " as " ^ class_name
+				in
+				newline ctx;
+				if ignore_error then begin
+					spr ctx "try:\n\t";
+					spr_line ctx import;
+					spr ctx "except:\n\tpass"
+				end else
+					spr ctx import
+			end
+		in
 		List.iter (fun mt ->
 			match mt with
-			| TClassDecl c when c.cl_extern -> gen_import ctx c.cl_path c.cl_meta
-			| TEnumDecl e when e.e_extern -> gen_import ctx e.e_path e.e_meta
+			| TClassDecl c when c.cl_extern -> import c.cl_path c.cl_meta
+			| TEnumDecl e when e.e_extern -> import e.e_path e.e_meta
 			| _ -> ()
-		) ctx.com.types;
-		newline ctx
+		) ctx.com.types
 
 	let gen_types ctx =
 		let used_paths = Hashtbl.create 0 in
@@ -2289,16 +2294,23 @@ module Generator = struct
 		let need_anon_for_trace = (has_feature ctx "has_anon_trace") && (has_feature ctx "haxe.Log.trace") in
 		if (has_feature ctx "has_anon") || (has_feature ctx "_hx_AnonObject") || need_anon_for_trace then begin
 			let with_body = (has_feature ctx "has_anon") || need_anon_for_trace in
-			spr ctx "\n\nclass _hx_AnonObject:\n";
+			newline ctx;
+			newline ctx;
+			newline ctx;
+			spr ctx "class _hx_AnonObject:\n";
 			if with_body then begin
-				spr ctx "\tdef __init__(self,fields):\n";
+				spr ctx "\tdef __init__(self, fields):\n";
 				spr ctx "\t\tself.__dict__ = fields"
 			end else
 				spr ctx "\tpass";
 			Hashtbl.add used_paths ([],"_hx_AnonObject") true;
 		end;
-		if has_feature ctx "python._hx_classes" then
-			spr ctx "\n\n_hx_classes = {}";
+		if has_feature ctx "python._hx_classes" then begin
+			newline ctx;
+			newline ctx;
+			newline ctx;
+			spr ctx "_hx_classes = {}";
+		end;
 		if has_feature ctx "Boot.*" then
 			gen_type ctx (find_type (["python"],"Boot"));
 		if has_feature ctx "has_enum" || has_feature ctx "Enum.*" then
@@ -2311,9 +2323,11 @@ module Generator = struct
 		) ctx.com.types
 
 	let gen_static_inits ctx =
+		newline ctx;
 		List.iter (fun f -> f()) (List.rev ctx.static_inits)
 
 	let gen_class_inits ctx =
+		newline ctx;
 		List.iter (fun f -> f()) (List.rev ctx.class_inits)
 
 	let gen_main ctx =
@@ -2321,6 +2335,7 @@ module Generator = struct
 			| None ->
 				()
 			| Some e ->
+				newline ctx;
 				newline ctx;
 				gen_expr ctx e "" ""
 
@@ -2332,7 +2347,6 @@ module Generator = struct
 		gen_imports ctx;
 		gen_resources ctx;
 		gen_types ctx;
-		newline ctx;
 		gen_class_inits ctx;
 		gen_static_inits ctx;
 		gen_main ctx;

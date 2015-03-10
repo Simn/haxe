@@ -21,11 +21,11 @@
  */
 package python.lib;
 
-import python.lib.Exceptions.BaseException;
+import python.Exceptions.BaseException;
 import python.lib.io.FileIO;
 import python.lib.io.RawIOBase;
 import python.lib.io.TextIOBase;
-import python.lib.Tuple.Tup3;
+import python.Tuple.Tuple3;
 
 
 extern class TB {}
@@ -51,6 +51,6 @@ extern class Sys {
 
 	public static var maxsize:Int;
 
-	public static function exc_info<T:BaseException>():Tup3<Class<T>, T, TB>;
+	public static function exc_info<T:BaseException>():Tuple3<Class<T>, T, TB>;
 
 }

@@ -22,7 +22,7 @@
 package python;
 
 import python.internal.AnonObject;
-import python.lib.Dict;
+import python.Dict;
 import python.NativeStringTools;
 
 typedef PySys = python.lib.Sys;
@@ -95,7 +95,7 @@ class Lib {
 					if (it1.hasNext()) {
 						return it1.next();
 					} else {
-						throw new python.lib.Exceptions.StopIteration();
+						throw new python.Exceptions.StopIteration();
 					}
 				},
 				__iter__ : function () return self

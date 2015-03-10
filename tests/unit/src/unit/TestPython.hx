@@ -22,7 +22,6 @@ import python.lib.Os;
 import python.lib.Pprint;
 import python.lib.Random;
 import python.lib.Re;
-import python.lib.Set;
 import python.lib.Shutil;
 import python.lib.Subprocess;
 import python.lib.Sys;
@@ -32,7 +31,8 @@ import python.lib.ThreadLowLevel;
 import python.lib.Time;
 import python.lib.Traceback;
 import python.lib.Tty;
-import python.lib.Tuple;
+import python.Tuple;
+import python.Set;
 
 import python.lib.datetime.Datetime;
 import python.lib.datetime.Timedelta;
@@ -238,7 +238,7 @@ class TestPython extends Test {
 	}
 
 	function testOptionalKwArgs () {
-		function test (?kw:KwArgs<Dynamic>) eq(0,kw.toDict().length());
+		function test (?kw:KwArgs<Dynamic>) eq(0,kw.toDict().length);
 		test();
 	}
 
@@ -249,7 +249,7 @@ class TestPython extends Test {
 			eq(1,a[0]);
 			eq(2,a[1]);
 
-			eq(0, kw.toDict().length());
+			eq(0, kw.toDict().length);
 		}
 		var x = [1,2];
 		test(x);
@@ -371,25 +371,29 @@ class TestPython extends Test {
 	}
 
 	function testTupleCreation() {
-		var t = Tup2.create(1, 2);
+		var t = Tuple1.make(1);
+		eq(t._1, 1);
+		eq(t.length, 1);
+
+		var t = Tuple2.make(1, 2);
 		eq(t._1, 1);
 		eq(t._2, 2);
 		eq(t.length, 2);
 
-		var t = Tup3.create(1, 2, 3);
+		var t = Tuple3.make(1, 2, 3);
 		eq(t._1, 1);
 		eq(t._2, 2);
 		eq(t._3, 3);
 		eq(t.length, 3);
 
-		var t = Tup4.create(1, 2, 3, 4);
+		var t = Tuple4.make(1, 2, 3, 4);
 		eq(t._1, 1);
 		eq(t._2, 2);
 		eq(t._3, 3);
 		eq(t._4, 4);
 		eq(t.length, 4);
 
-		var t = Tup5.create(1, 2, 3, 4, 5);
+		var t = Tuple5.make(1, 2, 3, 4, 5);
 		eq(t._1, 1);
 		eq(t._2, 2);
 		eq(t._3, 3);

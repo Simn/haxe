@@ -112,6 +112,10 @@ extern class Element extends Node
 	var onpointerleave : haxe.Constraints.Function;
 	var ongotpointercapture : haxe.Constraints.Function;
 	var onlostpointercapture : haxe.Constraints.Function;
+	var onfullscreenchange : haxe.Constraints.Function;
+	var onfullscreenerror : haxe.Constraints.Function;
+	var onpointerlockchange : haxe.Constraints.Function;
+	var onpointerlockerror : haxe.Constraints.Function;
 	var previousElementSibling(default,null) : Element;
 	var nextElementSibling(default,null) : Element;
 	var onerror : haxe.Constraints.Function;
@@ -119,7 +123,7 @@ extern class Element extends Node
 	var firstElementChild(default,null) : Element;
 	var lastElementChild(default,null) : Element;
 	var childElementCount(default,null) : Int;
-	
+
 	function getAttribute( name : String ) : String;
 	function getAttributeNS( namespace_ : String, localName : String ) : String;
 	/** @throws DOMError */
@@ -147,6 +151,8 @@ extern class Element extends Node
 	function releasePointerCapture( pointerId : Int ) : Void;
 	function setCapture( ?retargetToElement : Bool = false ) : Void;
 	function releaseCapture() : Void;
+	function requestFullScreen( ?fsOptions : RequestFullscreenOptions ) : Void;
+	function requestPointerLock() : Void;
 	function getAttributeNode( name : String ) : Attr;
 	/** @throws DOMError */
 	function setAttributeNode( newAttr : Attr ) : Attr;
@@ -177,9 +183,9 @@ extern class Element extends Node
 	function getAnimationPlayers() : Array<AnimationPlayer>;
 	function remove() : Void;
 	/** @throws DOMError */
-	function convertQuadFromNode( quad : DOMQuad, from : haxe.EitherType<Text,haxe.EitherType<Element,Document>>, ?options : ConvertCoordinateOptions ) : DOMQuad;
+	function convertQuadFromNode( quad : DOMQuad, from : haxe.extern.EitherType<Text,haxe.extern.EitherType<Element,Document>>, ?options : ConvertCoordinateOptions ) : DOMQuad;
 	/** @throws DOMError */
-	function convertRectFromNode( rect : DOMRectReadOnly, from : haxe.EitherType<Text,haxe.EitherType<Element,Document>>, ?options : ConvertCoordinateOptions ) : DOMQuad;
+	function convertRectFromNode( rect : DOMRectReadOnly, from : haxe.extern.EitherType<Text,haxe.extern.EitherType<Element,Document>>, ?options : ConvertCoordinateOptions ) : DOMQuad;
 	/** @throws DOMError */
-	function convertPointFromNode( point : DOMPointInit, from : haxe.EitherType<Text,haxe.EitherType<Element,Document>>, ?options : ConvertCoordinateOptions ) : DOMPoint;
+	function convertPointFromNode( point : DOMPointInit, from : haxe.extern.EitherType<Text,haxe.extern.EitherType<Element,Document>>, ?options : ConvertCoordinateOptions ) : DOMPoint;
 }

@@ -21,7 +21,8 @@
  */
 package python.lib.os;
 
-import python.lib.Tuple;
+import haxe.extern.Rest;
+import python.Tuple;
 
 @:pythonImport("os", "path")
 extern class Path {
@@ -63,7 +64,7 @@ extern class Path {
 
 	public static function ismount (path:String):Bool;
 
-	public static function join (path:String, paths:haxe.Rest<String>):String;
+	public static function join (path:String, paths:Rest<String>):String;
 
 	public static function normpath (path:String):String;
 
@@ -73,11 +74,11 @@ extern class Path {
 
 	public static function samefile (path1:String, path2:String):String;
 
-	public static function split (path:String):Tup2<String, String>;
+	public static function split (path:String):Tuple2<String, String>;
 
-	public static function splitdrive (path:String):Tup2<String, String>;
+	public static function splitdrive (path:String):Tuple2<String, String>;
 
-	public static function splitext (path:String):Tup2<String, String>;
+	public static function splitext (path:String):Tuple2<String, String>;
 
 	public static function supports_unicode_filenames ():Bool;
 

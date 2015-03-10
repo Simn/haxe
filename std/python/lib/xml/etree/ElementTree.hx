@@ -21,10 +21,11 @@
  */
 package python.lib.xml.etree;
 
-import python.lib.Tuple.Tup2;
+import python.Tuple.Tuple2;
 
 import python.NativeIterable;
 import python.NativeIterator;
+import python.Dict;
 
 extern class XMLParser {
 
@@ -44,7 +45,7 @@ extern class Element {
 	public function copy ():Element;
 
 	public function keys ():Array<String>;
-	public function items ():Array<Tup2<String, String>>;
+	public function items ():Array<Tuple2<String, String>>;
 
 	public function iter (tag:String):NativeIterable<Element>;
 	public function iterfind (tag:String, namespaces:Dict<String,String> = null):NativeIterator<Element>;
