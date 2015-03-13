@@ -146,4 +146,19 @@ class HxOverrides {
 		}
 	}
 
+	@:ifFeature("python._KwArgs.KwArgs_Impl_.fromT")
+	static public function mapKwArgs(a:{}, v:Dict<String,String>)
+	{
+		var a = python.Lib.dictAsAnon(python.Lib.anonToDict(a));
+		for (k in v.keys()) {
+			var val = v.get(k);
+			if (UBuiltins.hasattr(a, k)) {
+				var x = UBuiltins.getattr(a, k);
+				UBuiltins.setattr(a, val, x);
+				UBuiltins.delattr(a, k);
+			}
+		}
+		return a;
+	}
+
 }

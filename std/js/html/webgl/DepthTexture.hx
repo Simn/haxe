@@ -20,20 +20,8 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated from mozilla/Promise.webidl line 22:0. Do not edit!
+package js.html.webgl;
 
-package js.html;
-
-@:native("Promise")
-extern class Promise
-{
-	static function resolve( ?value : Dynamic ) : Promise/*<Any>*/;
-	static function reject( ?value : Dynamic ) : Promise/*<Void>*/;
-	static function all( iterable : Array<Dynamic> ) : Promise/*<Any>*/;
-	static function race( iterable : Array<Dynamic> ) : Promise/*<Any>*/;
-	/** @throws DOMError */
-	function new( init : Dynamic -> Dynamic -> Void ) : Void;
-	function then( ?fulfillCallback : haxe.Constraints.Function, ?rejectCallback : haxe.Constraints.Function ) : Promise/*<Any>*/;
-	@:native("catch")
-	function catch_( ?rejectCallback : haxe.Constraints.Function ) : Promise/*<Any>*/;
-}
+/** @deprecated Use ExtensionDepthTexture instead. */
+@:deprecated("DepthTexture is deprecated, use ExtensionDepthTexture instead")
+typedef DepthTexture = ExtensionDepthTexture;

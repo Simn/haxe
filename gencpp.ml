@@ -1,4 +1,4 @@
-(*
+(* gencommon.$(MODULE_EXT)
  * Copyright (C)2005-2013 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -385,7 +385,7 @@ let get_code meta key =
 ;;
 
 (*
-let dump_meta meta = 
+let dump_meta meta =
    List.iter (fun m -> match m with | (k,_,_) -> print_endline ((fst (MetaInfo.to_string k)) ^ "=" ^ (get_meta_string meta k) ) | _ -> () ) meta;;
 *)
 
@@ -429,7 +429,6 @@ List.filter (function (t,pl) ->
 let rec is_function_expr expr =
    match expr.eexpr with
    | TParenthesis expr | TMeta(_,expr) -> is_function_expr expr
-   | TCast (e,None) -> is_function_expr e
    | TFunction _ -> true
    | _ -> false;;
 
@@ -474,13 +473,22 @@ let is_numeric = function
 
 
 let rec remove_parens expression =
-   match expression.eexpr with
-   | TParenthesis e -> remove_parens e
-   | TMeta(_,e) -> remove_parens e
-   | TCast ( e,None) -> remove_parens e
-   | _ -> expression
+      match expression.eexpr with
+      | TParenthesis e -> remove_parens e
+      | TMeta(_,e) -> remove_parens e
+      | _ -> expression
 ;;
 
+
+(*
+let rec remove_parens_cast expression =
+   match expression.eexpr with
+   | TParenthesis e -> remove_parens_cast e
+   | TMeta(_,e) -> remove_parens_cast e
+   | TCast ( e,None) -> remove_parens_cast e
+   | _ -> expression
+;;
+*)
 
 let cant_be_null type_string =
    is_numeric type_string
@@ -1266,7 +1274,7 @@ let rec is_dynamic_in_cpp ctx expr =
                | _ -> ctx.ctx_dbgout "/* not TFun */";  true
          );
       | TParenthesis(expr) | TMeta(_,expr) -> is_dynamic_in_cpp ctx expr
-      | TCast (e,None) -> is_dynamic_in_cpp ctx e
+      | TCast (e,None) -> (type_string expr.etype) = "Dynamic"
       | TLocal { v_name = "__global__" } -> false
       | TConst TNull -> true
       | _ -> ctx.ctx_dbgout "/* other */";  false (* others ? *) )
@@ -1960,7 +1968,6 @@ and gen_expression ctx retval expression =
       | TField _ | TEnumParameter _ -> false
       | TLocal { v_name = "__global__" } -> false
       | TParenthesis p | TMeta(_,p) -> is_variable p
-      | TCast (e,None) -> is_variable e
       | _ -> true
       in
       let expr_type = type_string expression.etype in
@@ -2388,11 +2395,13 @@ and gen_expression ctx retval expression =
          output "HX_STACK_DO_THROW(";
          gen_expression ctx true expression;
          output ")";
-   | TCast (cast,None) ->
-      let void_cast = retval && ((type_string expression.etype)="Void" ) in
-      if (void_cast) then output "Void(";
+   | TCast (cast,None) when (not retval) || (type_string expression.etype) = "Void" ->
       gen_expression ctx retval cast;
-      if (void_cast) then output ")";
+   | TCast (cast,None) ->
+      let ret_type = type_string expression.etype in
+      output ("( " ^ ret_type ^ "(");
+      gen_expression ctx true cast;
+      output "))";
    | TCast (e1,Some t) ->
       let class_name = (join_class_path_remap (t_path t) "::" ) in
       if (class_name="Array") then
@@ -3002,7 +3011,7 @@ let generate_enum_files common_ctx enum_def super_deps meta file_info =
    let class_path = enum_def.e_path in
    let just_class_name =  (snd class_path) in
    let class_name =  just_class_name ^ "_obj" in
-   let smart_class_name =  ("::" ^ (join_class_path class_path "::") )  in
+   let remap_class_name =  ("::" ^ (join_class_path_remap class_path "::") )  in
    (*let cpp_file = new_cpp_file common_ctx.file class_path in*)
    let cpp_file = new_placed_cpp_file common_ctx class_path in
    let output_cpp = (cpp_file#write) in
@@ -3026,7 +3035,7 @@ let generate_enum_files common_ctx enum_def super_deps meta file_info =
       let name = keyword_remap constructor.ef_name in
       match constructor.ef_type with
       | TFun (args,_) ->
-         output_cpp (smart_class_name ^ "  " ^ class_name ^ "::" ^ name ^ "(" ^
+         output_cpp (remap_class_name ^ "  " ^ class_name ^ "::" ^ name ^ "(" ^
             (gen_tfun_arg_list args) ^")\n");
          output_cpp ("\t{ return hx::CreateEnum< " ^ class_name ^ " >(" ^ (str name) ^ "," ^
             (string_of_int constructor.ef_index) ^ ",hx::DynamicArray(0," ^
@@ -3035,7 +3044,7 @@ let generate_enum_files common_ctx enum_def super_deps meta file_info =
          output_cpp "); }\n\n"
 
       | _ ->
-         output_cpp ( smart_class_name ^ " " ^ class_name ^ "::" ^ name ^ ";\n\n" )
+         output_cpp ( remap_class_name ^ " " ^ class_name ^ "::" ^ name ^ ";\n\n" )
    ) enum_def.e_constrs;
 
 
@@ -3190,14 +3199,14 @@ let generate_enum_files common_ctx enum_def super_deps meta file_info =
 
    PMap.iter (fun _ constructor ->
       let name = keyword_remap constructor.ef_name in
-      output_h ( "\t\tstatic " ^  smart_class_name ^ " " ^ name );
+      output_h ( "\t\tstatic " ^  remap_class_name ^ " " ^ name );
       match constructor.ef_type with
       | TFun (args,_) ->
          output_h ( "(" ^ (gen_tfun_arg_list args) ^");\n");
          output_h ( "\t\tstatic Dynamic " ^ name ^ "_dyn();\n");
       | _ ->
          output_h ";\n";
-         output_h ( "\t\tstatic inline " ^  smart_class_name ^ " " ^ name ^
+         output_h ( "\t\tstatic inline " ^  remap_class_name ^ " " ^ name ^
                   "_dyn() { return " ^name ^ "; }\n" );
    ) enum_def.e_constrs;
 
@@ -3619,7 +3628,7 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
          (* Dynamic "Get" Field function - string version *)
          output_cpp ("Dynamic " ^ class_name ^ "::__Field(const ::String &inName,hx::PropertyAccess inCallProp)\n{\n");
          let get_field_dat = List.map (fun f ->
-            (f.cf_name, String.length f.cf_name, 
+            (f.cf_name, String.length f.cf_name,
                (match f.cf_kind with
                | Var { v_read = AccCall } when is_extern_field f -> "if (" ^ (checkPropCall f) ^ ") return " ^(keyword_remap ("get_" ^ f.cf_name)) ^ "()"
                | Var { v_read = AccCall } -> "return " ^ (checkPropCall f) ^ " ? " ^ (keyword_remap ("get_" ^ f.cf_name)) ^ "() : " ^
@@ -3669,7 +3678,7 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
       if (has_get_static_field class_def) then begin
          output_cpp ("bool " ^ class_name ^ "::__GetStatic(const ::String &inName, Dynamic &outValue, hx::PropertyAccess inCallProp)\n{\n");
          let get_field_dat = List.map (fun f ->
-            (f.cf_name, String.length f.cf_name, 
+            (f.cf_name, String.length f.cf_name,
                (match f.cf_kind with
                | Var { v_read = AccCall } when is_extern_field f -> "if (" ^ (checkPropCall f) ^ ") { outValue = " ^(keyword_remap ("get_" ^ f.cf_name)) ^ "(); return true; }"
                | Var { v_read = AccCall } -> "outValue = " ^ (checkPropCall f) ^ " ? " ^ (keyword_remap ("get_" ^ f.cf_name)) ^ "() : " ^
@@ -3719,7 +3728,7 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
             (f.cf_name, String.length f.cf_name,
                (match f.cf_kind with
                | Var { v_write = AccCall } -> "if (" ^ (checkPropCall f) ^ ")  ioValue = " ^ (keyword_remap ("set_" ^ f.cf_name)) ^ "(ioValue);"
-                  ^ ( if is_extern_field f then "" else " else " ^ default_action ) 
+                  ^ ( if is_extern_field f then "" else " else " ^ default_action )
                | _ -> default_action
                )
             )
@@ -5028,13 +5037,6 @@ class script_writer common_ctx ctx filename asciiOut =
       this#gen_expression expr;
    end
    method gen_expression expr =
-   (* Redefine to allow different interpretation of cast *)
-   let rec remove_parens expression =
-      match expression.eexpr with
-      | TParenthesis e -> remove_parens e
-      | TMeta(_,e) -> remove_parens e
-      | _ -> expression
-   in
    let expression = remove_parens expr in
    this#begin_expr;
    (*this#write ( (this#fileText expression.epos.pfile) ^ "\t" ^ (string_of_int (Lexer.get_error_line expression.epos) ) ^ indent);*)

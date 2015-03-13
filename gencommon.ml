@@ -2251,7 +2251,7 @@ struct
 										let rec add_fn e = match e.eexpr with
 											| TBlock(hd :: tl) -> (match hd.eexpr with
 												| TCall({ eexpr = TConst TSuper }, _) ->
-													if is_hxgen (TClassDecl cl) then
+													if not (OverloadingConstructor.descends_from_native_or_skipctor cl) then
 														{ e with eexpr = TBlock(vars @ (hd :: (funs @ tl))) }
 													else
 														{ e with eexpr = TBlock(hd :: (vars @ funs @ tl)) }
@@ -5961,6 +5961,12 @@ struct
 						true)
 			| _ -> true
 
+	let unifies tfrom tto = try
+		unify tfrom tto;
+		true
+	with | _ ->
+		false
+
 	let do_unsafe_cast gen from_t to_t e	=
 		let t_path t =
 			match t with
@@ -5971,25 +5977,29 @@ struct
 				| TDynamic _ -> ([], "Dynamic")
 				| _ -> raise Not_found
 		in
-		let do_default () =
-			gen.gon_unsafe_cast to_t e.etype e.epos;
+		match gen.gfollow#run_f from_t, gen.gfollow#run_f to_t with
+		| TInst({ cl_kind = KTypeParameter tl },_), t2 when List.exists (fun t -> unifies t t2) tl ->
 			mk_cast to_t (mk_cast t_dynamic e)
-		in
-		(* TODO: there really should be a better way to write that *)
-		try
-			if (Hashtbl.find gen.gsupported_conversions (t_path from_t)) from_t to_t then
-				mk_cast to_t e
-			else
-				do_default()
-		with
-			| Not_found ->
-				try
-					if (Hashtbl.find gen.gsupported_conversions (t_path to_t)) from_t to_t then
-						mk_cast to_t e
-					else
-						do_default()
-				with
-					| Not_found -> do_default()
+		| _ ->
+			let do_default () =
+				gen.gon_unsafe_cast to_t e.etype e.epos;
+				mk_cast to_t (mk_cast t_dynamic e)
+			in
+			(* TODO: there really should be a better way to write that *)
+			try
+				if (Hashtbl.find gen.gsupported_conversions (t_path from_t)) from_t to_t then
+					mk_cast to_t e
+				else
+					do_default()
+			with
+				| Not_found ->
+					try
+						if (Hashtbl.find gen.gsupported_conversions (t_path to_t)) from_t to_t then
+							mk_cast to_t e
+						else
+							do_default()
+					with
+						| Not_found -> do_default()
 
 	(* ****************************** *)
 	(* cast handler *)
@@ -6282,7 +6292,7 @@ struct
 			| [], [] -> true
 			| (_,_,t) :: arglist, et :: elist -> (try
 				let t = run_follow gen t in
-				unify t et;
+				unify et t;
 				check_arg arglist elist
 			with | Unify_error el ->
 				(* List.iter (fun el -> gen.gcon.warning (Typecore.unify_error_msg (print_context()) el) p) el; *)
