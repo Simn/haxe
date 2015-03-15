@@ -80,7 +80,7 @@ module KeywordHandler = struct
 		List.iter (fun s -> Hashtbl.add h s ()) [
 			"len"; "int"; "float"; "list"; "bool"; "str"; "isinstance"; "print"; "min"; "max";
 			"hasattr"; "getattr"; "setattr"; "delattr"; "callable"; "type"; "ord"; "chr"; "iter"; "map"; "filter";
-			"tuple"; "dict"; "set";
+			"tuple"; "dict"; "set"; "bytes"; "bytearray"
 		];
 		h
 
@@ -1091,6 +1091,7 @@ module Printer = struct
 		let had_kw_args = ref false in
 		let sl = List.map (fun (v,cto) ->
 			let check_err () = if !had_var_args || !had_kw_args then error "Arguments after KwArgs/VarArgs are not allowed" p in
+			KeywordHandler.check_var_declaration v;
 			let name = handle_keywords v.v_name in
 			match follow v.v_type with
 				| TAbstract({a_path = ["python"],"KwArgs"},_) ->
@@ -1586,8 +1587,6 @@ module Printer = struct
 
 	and print_call pctx e1 el call_expr =
 		let get_native_fields t = match follow t with
-		| TAbstract(abst, [tx]) ->
-			(match follow tx with
 			| TAnon(a) ->
 				let fold f cf acc =
 					if Meta.has Meta.Native cf.cf_meta then begin
@@ -1599,9 +1598,14 @@ module Printer = struct
 				in
 				let mapping = PMap.foldi fold a.a_fields PMap.empty in
 				mapping
-			| _ -> PMap.empty)
-		| _ ->
-			assert false
+			| _ -> PMap.empty
+		in
+		let native_fields_str native_fields =
+			let fold_dict k v acc =
+				let prefix = if acc = "" then "" else "," in
+				Printf.sprintf "%s%s\"%s\":\"%s\"" acc prefix (handle_keywords k) v
+			in
+			PMap.foldi fold_dict native_fields ""
 		in
 		match e1.eexpr, el with
 			| TLocal { v_name = "`trace" }, [e;infos] ->
@@ -1615,17 +1619,23 @@ module Printer = struct
 			| TField(e1,((FAnon {cf_name = (("iterator" | "toUpperCase" | "toLowerCase" | "pop" | "shift") as s)}) | FDynamic (("iterator" | "toUpperCase" | "toLowerCase" | "pop" | "shift") as s))), [] ->
 				Printf.sprintf "HxOverrides.%s(%s)" s (print_expr pctx e1)
 			| TField(_, (FStatic({cl_path = ["python"; "_KwArgs"], "KwArgs_Impl_"},{ cf_name="fromT" }))), [e2]  ->
-				let native_fields = get_native_fields call_expr.etype in
+				let t = match follow call_expr.etype with
+				| TAbstract(_, [t]) -> t
+				| _ -> assert false
+				in
+				let native_fields = get_native_fields t in
 				if PMap.is_empty native_fields then
 					print_call2 pctx e1 el
 				else
-					let fold_dict k v acc =
-						let prefix = if acc = "" then "" else "," in
-						Printf.sprintf "%s%s\"%s\":\"%s\"" acc prefix (handle_keywords k) v
-					in
-					let native_map = PMap.foldi fold_dict native_fields ""
-					in
-					Printf.sprintf "python__KwArgs_KwArgs_Impl_.fromT(HxOverrides.mapKwArgs(%s, {%s}))" (print_expr pctx e2) native_map
+					let s1 = native_fields_str native_fields in
+					Printf.sprintf "python__KwArgs_KwArgs_Impl_.fromT(HxOverrides.mapKwArgs(%s, {%s}))" (print_expr pctx e2) s1
+			| TField(_, (FStatic({cl_path = ["python"; "_KwArgs"], "KwArgs_Impl_"},{ cf_name="toDictHelper" }))), [e2; et]  ->
+				let native_fields = get_native_fields et.etype in
+				if PMap.is_empty native_fields then
+					print_call2 pctx e1 el
+				else
+					let s1 = native_fields_str native_fields in
+					Printf.sprintf "python__KwArgs_KwArgs_Impl_.toDictHelper(HxOverrides.reverseMapKwArgs(%s, {%s}), None)" (print_expr pctx e2) s1
 			| _,_ ->
 				print_call2 pctx e1 el
 

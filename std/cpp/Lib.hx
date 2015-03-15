@@ -25,12 +25,17 @@ package cpp;
 import haxe.macro.Context;
 import haxe.macro.Type;
 import haxe.macro.Expr;
-#end
+#else
 
 using cpp.NativeString;
 using cpp.RawConstPointer;
 using cpp.Char;
 
+#end
+
+#if macro
+@:noPackageRestrict
+#end
 class Lib {
 
    #if !macro
@@ -47,7 +52,7 @@ class Lib {
 
    @:analyzer(no_simplification)
 	public static function _loadPrime( lib : String, prim : String, signature : String, quietFail = false ) : Dynamic {
-		var factory:Function< RawConstPointer<Char> -> RawPointer<Object> > =
+		var factory:Callable< RawConstPointer<Char> -> RawPointer<Object> > =
                untyped __global__.__hxcpp_cast_get_proc_address(lib, prim + "__prime", quietFail);
       if (factory!=null)
       {
@@ -142,7 +147,7 @@ class Lib {
          case "s" : return "String";
          case "o" : return "cpp.Object";
          case "v" : return "cpp.Void";
-         case "c" : return "cpp.RawConstPtr<cpp.Char> ";
+         case "c" : return "cpp.ConstCharStar";
          default:
             throw "Unknown signature type :" + code;
       }
@@ -162,7 +167,7 @@ class Lib {
       var typeString = parts.length==1 ? "Void" : codeToType(parts.shift());
       for(p in parts)
          typeString += "->" + codeToType(p);
-      typeString = "cpp.Function<" + typeString + ">";
+      typeString = "cpp.Callable<" + typeString + ">";
       var expr = 'new $typeString(cpp.Lib._loadPrime("$inModule","$inName","$inSig",$inAllowFail))';
       return Context.parse( expr, Context.currentPos() );
    }

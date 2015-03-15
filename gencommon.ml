@@ -107,6 +107,10 @@ let follow_once t =
 
 let t_empty = TAnon({ a_fields = PMap.empty; a_status = ref (Closed) })
 
+let tmp_count = ref 0
+
+let reset_temps () = tmp_count := 0
+
 (* the undefined is a special var that works like null, but can have special meaning *)
 let v_undefined = alloc_var "__undefined__" t_dynamic
 
@@ -531,6 +535,8 @@ type generator_ctx =
 	gfollow : (t, t) rule_dispatcher;
 
 	gtypes : (path, module_type) Hashtbl.t;
+	mutable gtypes_list : module_type list;
+	mutable gmodules : Type.module_def list;
 
 	(* cast detection helpers / settings *)
 	(* this is a cache for all field access types *)
@@ -727,6 +733,8 @@ let new_ctx con =
 		gsyntax_filters = new rule_map_dispatcher "gsyntax_filters";
 		gfollow = new rule_dispatcher "gfollow" false;
 		gtypes = types;
+		gtypes_list = con.types;
+		gmodules = con.modules;
 
 		greal_field_types = Hashtbl.create 0;
 		ghandle_cast = (fun to_t from_t e -> mk_cast to_t e);
@@ -737,11 +745,13 @@ let new_ctx con =
 
 		gadd_type = (fun md should_filter ->
 			if should_filter then begin
-				con.types <- md :: con.types;
-				con.modules <- { m_id = alloc_mid(); m_path = (t_path md); m_types = [md]; m_extra = module_extra "" "" 0. MFake } :: con.modules
+				gen.gtypes_list <- md :: gen.gtypes_list;
+				gen.gmodules <- { m_id = alloc_mid(); m_path = (t_path md); m_types = [md]; m_extra = module_extra "" "" 0. MFake } :: gen.gmodules;
+				Hashtbl.add gen.gtypes (t_path md) md;
 			end else gen.gafter_filters_ended <- (fun () ->
-				con.types <- md :: con.types;
-				con.modules <- { m_id = alloc_mid(); m_path = (t_path md); m_types = [md]; m_extra = module_extra "" "" 0. MFake } :: con.modules
+				gen.gtypes_list <- md :: gen.gtypes_list;
+				gen.gmodules <- { m_id = alloc_mid(); m_path = (t_path md); m_types = [md]; m_extra = module_extra "" "" 0. MFake } :: gen.gmodules;
+				Hashtbl.add gen.gtypes (t_path md) md;
 			) :: gen.gafter_filters_ended;
 		);
 		gadd_to_module = (fun md pr -> failwith "module added outside expr filters");
@@ -802,15 +812,14 @@ let reorder_modules gen =
 	let modules = Hashtbl.create 20 in
 	List.iter (fun md ->
 		Hashtbl.add modules ( (t_infos md).mt_module ).m_path md
-	) gen.gcon.types;
+	) gen.gtypes_list;
 
-	let con = gen.gcon in
-	con.modules <- [];
+	gen.gmodules <- [];
 	let processed = Hashtbl.create 20 in
 	Hashtbl.iter (fun md_path md ->
 		if not (Hashtbl.mem processed md_path) then begin
 			Hashtbl.add processed md_path true;
-			con.modules <- { m_id = alloc_mid(); m_path = md_path; m_types = List.rev ( Hashtbl.find_all modules md_path ); m_extra = (t_infos md).mt_module.m_extra } :: con.modules
+			gen.gmodules <- { m_id = alloc_mid(); m_path = md_path; m_types = List.rev ( Hashtbl.find_all modules md_path ); m_extra = (t_infos md).mt_module.m_extra } :: gen.gmodules
 		end
 	) modules
 
@@ -825,6 +834,7 @@ let run_filters_from gen t filters =
 
 				gen.gcurrent_classfield <- None;
 				let rec process_field f =
+					reset_temps();
 					gen.gcurrent_classfield <- Some(f);
 					List.iter (fun fn -> fn()) gen.gon_classfield_start;
 
@@ -838,10 +848,10 @@ let run_filters_from gen t filters =
 				List.iter process_field c.cl_ordered_fields;
 				List.iter process_field c.cl_ordered_statics;
 
-				gen.gcurrent_classfield <- None;
 				(match c.cl_constructor with
 				| None -> ()
 				| Some f -> process_field f);
+				gen.gcurrent_classfield <- None;
 				(match c.cl_init with
 				| None -> ()
 				| Some e ->
@@ -856,7 +866,7 @@ let run_filters gen =
 	gen.gcon.error <- (fun msg pos -> has_errors := true; last_error msg pos);
 	(* first of all, we have to make sure that the filters won't trigger a major Gc collection *)
 	let t = Common.timer "gencommon_filters" in
-	(if Common.defined gen.gcon Define.GencommonDebug then debug_mode := true);
+	(if Common.defined gen.gcon Define.GencommonDebug then debug_mode := true else debug_mode := false);
 	let run_filters filter =
 		let rec loop acc mds =
 			match mds with
@@ -865,7 +875,7 @@ let run_filters gen =
 					let filters = [ filter#run_f ] in
 					let added_types = ref [] in
 					gen.gadd_to_module <- (fun md_type priority ->
-						gen.gcon.types <- md_type :: gen.gcon.types;
+						gen.gtypes_list <- md_type :: gen.gtypes_list;
 						added_types := (md_type, priority) :: !added_types
 					);
 
@@ -893,7 +903,7 @@ let run_filters gen =
 
 					loop (added_types @ (md :: acc)) tl
 		in
-		List.rev (loop [] gen.gcon.types)
+		List.rev (loop [] gen.gtypes_list)
 	in
 
 	let run_mod_filter filter =
@@ -925,21 +935,21 @@ let run_filters gen =
 					processed
 		in
 
-		let filtered = loop [] gen.gcon.types in
+		let filtered = loop [] gen.gtypes_list in
 		gen.gadd_to_module <- last_add_to_module;
-		gen.gcon.types <- List.rev (filtered)
+		gen.gtypes_list <- List.rev (filtered)
 	in
 
 	run_mod_filter gen.gmodule_filters;
 	List.iter (fun fn -> fn()) gen.gafter_mod_filters_ended;
 
 	let last_add_to_module = gen.gadd_to_module in
-	gen.gcon.types <- run_filters gen.gexpr_filters;
+	gen.gtypes_list <- run_filters gen.gexpr_filters;
 	gen.gadd_to_module <- last_add_to_module;
 
 	List.iter (fun fn -> fn()) gen.gafter_expr_filters_ended;
-	(* Codegen.post_process gen.gcon.types [gen.gexpr_filters#run_f]; *)
-	gen.gcon.types <- run_filters gen.gsyntax_filters;
+	(* Codegen.post_process gen.gtypes_list [gen.gexpr_filters#run_f]; *)
+	gen.gtypes_list <- run_filters gen.gsyntax_filters;
 	List.iter (fun fn -> fn()) gen.gafter_filters_ended;
 
 	reorder_modules gen;
@@ -1045,7 +1055,7 @@ let dump_descriptor gen name path_s module_s =
 					SourceWriter.newline w
 				| _ -> () (* still no typedef or abstract is generated *)
 		) md_def.m_types
-	) gen.gcon.modules;
+	) gen.gmodules;
 	SourceWriter.write w "end modules";
 	SourceWriter.newline w;
 	(* dump all resources *)
@@ -1144,30 +1154,8 @@ let is_relative cwd rel =
 	See that it will write a whole module
 *)
 let generate_modules gen extension source_dir (module_gen : SourceWriter.source_writer->module_def->bool) out_files =
-	let cwd = Common.unique_full_path (Sys.getcwd()) in
 	List.iter (fun md_def ->
 		let source_dir =
-			if Common.defined gen.gcon Define.UnityStdTarget then
-				let file = md_def.m_extra.m_file in
-				let file = if file = "" then "." else file in
-				if is_relative cwd file then
-					let base_path = try
-							let last = Str.search_backward path_regex file (String.length file - 1) in
-							String.sub file 0 last
-						with | Not_found ->
-							"."
-					in
-					match List.rev (fst md_def.m_path) with
-						| "editor" :: _ ->
-							base_path ^ "/" ^ gen.gcon.file ^ "/Editor"
-						| _ ->
-							base_path ^ "/" ^ gen.gcon.file
-				else match List.rev (fst md_def.m_path) with
-					| "editor" :: _ ->
-						Common.defined_value gen.gcon Define.UnityStdTarget ^ "/Editor/" ^ (String.concat "/" (fst md_def.m_path))
-					| _ ->
-						Common.defined_value gen.gcon Define.UnityStdTarget ^ "/Haxe-Std/" ^ (String.concat "/" (fst md_def.m_path))
-			else
 				gen.gcon.file ^ "/" ^ source_dir ^ "/" ^ (String.concat "/" (fst (path_of_md_def md_def)))
 		in
 		let w = SourceWriter.new_source_writer () in
@@ -1177,7 +1165,7 @@ let generate_modules gen extension source_dir (module_gen : SourceWriter.source_
 			let path = path_of_md_def md_def in
 			write_file gen w source_dir path extension out_files
 		end
-	) gen.gcon.modules
+	) gen.gmodules
 
 let generate_modules_t gen extension source_dir change_path (module_gen : SourceWriter.source_writer->module_type->bool) out_files =
 	let source_dir = gen.gcon.file ^ "/" ^ source_dir in
@@ -1189,7 +1177,7 @@ let generate_modules_t gen extension source_dir change_path (module_gen : Source
 			let path = change_path (t_path md) in
 			write_file gen w (source_dir ^ "/" ^ (String.concat "/" (fst path))) path extension out_files;
 		end
-	) gen.gcon.types
+	) gen.gtypes_list
 
 (*
 	various helper functions
@@ -1199,7 +1187,6 @@ let mk_paren e =
 	match e.eexpr with | TParenthesis _ -> e | _ -> { e with eexpr=TParenthesis(e) }
 
 (* private *)
-let tmp_count = ref 0
 
 let get_real_fun gen t =
 	match follow t with
@@ -1230,8 +1217,6 @@ let ensure_local gen block name e =
 			let var = mk_temp gen name e.etype in
 			block := { e with eexpr = TVar(var, Some e); etype = gen.gcon.basic.tvoid; } :: !block;
 			{ e with eexpr = TLocal var }
-
-let reset_temps () = tmp_count := 0
 
 let follow_module follow_func md = match md with
 	| TClassDecl _
@@ -1354,7 +1339,8 @@ type tfield_access =
 
 let is_var f = match f.cf_kind with | Var _ -> true | _ -> false
 
-let find_first_declared_field gen orig_cl ?exact_field field =
+let find_first_declared_field gen orig_cl ?get_vmtype ?exact_field field =
+	let get_vmtype = match get_vmtype with None -> (fun t -> t) | Some f -> f in
 	let chosen = ref None in
 	let is_overload = ref false in
 	let rec loop_cl depth c tl tlch =
@@ -1368,7 +1354,7 @@ let find_first_declared_field gen orig_cl ?exact_field field =
 			| _, Some f2 ->
 				List.iter (fun f ->
 					let declared_t = apply_params c.cl_params tl f.cf_type in
-					if Typeload.same_overload_args declared_t f2.cf_type f f2 then
+					if Typeload.same_overload_args ~get_vmtype declared_t f2.cf_type f f2 then
 						chosen := Some(depth,f,c,tl,tlch)
 				) (ret :: ret.cf_overloads)
 		with | Not_found -> ());
@@ -1640,7 +1626,7 @@ struct
 					| TAbstractDecl a -> a.a_meta <- (meta, [], a.a_pos) :: a.a_meta
 			end
 		in
-		List.iter filter gen.gcon.types
+		List.iter filter gen.gtypes_list
 
 end;;
 
@@ -1916,7 +1902,7 @@ struct
 			let basic = gen.gcon.basic in
 			let should_change cl = not cl.cl_interface && (not cl.cl_extern || is_hxgen (TClassDecl cl)) && (match cl.cl_kind with KAbstractImpl _ -> false | _ -> true) in
 			let static_ctor_name = gen.gmk_internal_name "hx" "ctor" in
-			let msize = List.length gen.gcon.types in
+			let msize = List.length gen.gtypes_list in
 			let processed, empty_ctors = Hashtbl.create msize, Hashtbl.create msize in
 
 
@@ -4830,6 +4816,12 @@ struct
 							iface.cl_array_access <- Option.map (apply_params (cl.cl_params) (List.map (fun _ -> t_dynamic) cl.cl_params)) cl.cl_array_access;
 							iface.cl_module <- cl.cl_module;
 							iface.cl_meta <- (Meta.HxGen, [], cl.cl_pos) :: iface.cl_meta;
+							if gen.gcon.platform = Cs then begin
+								let tparams = List.map (fun _ -> "object") cl.cl_params in
+								iface.cl_meta <- (Meta.Meta, [
+									EConst( String("haxe.lang.GenericInterface(typeof(" ^ path_s cl.cl_path ^ "<" ^ String.concat ", " tparams ^">))") ), cl.cl_pos
+								], cl.cl_pos) :: iface.cl_meta
+							end;
 							Hashtbl.add ifaces cl.cl_path iface;
 
 							iface.cl_implements <- (base_generic, []) :: iface.cl_implements;
@@ -4983,22 +4975,45 @@ struct
 					| _ -> assert false
 			in
 
-			let iter_types (_,t) =
+			let iter_types (nt,t) =
 				let cls = get_cls t in
-				check_type (snd cls.cl_path) (fun name -> cls.cl_path <- (fst cls.cl_path, name))
+				let orig = cls.cl_path in
+				check_type (snd orig) (fun name -> cls.cl_path <- (fst orig, name))
+			in
+
+			let save_params save params =
+				List.fold_left (fun save (_,t) ->
+					let cls = get_cls t in
+					(cls.cl_path,t) :: save) save params
 			in
 
 			List.iter (function
 				| TClassDecl cl ->
 					i := 0;
 
+					let save = [] in
+
 					found_types := PMap.empty;
+					let save = save_params save cl.cl_params in
 					List.iter iter_types cl.cl_params;
 					let cur_found_types = !found_types in
+					let save = ref save in
 					List.iter (fun cf ->
 						found_types := cur_found_types;
+						save := save_params !save cf.cf_params;
 						List.iter iter_types cf.cf_params
-					) (cl.cl_ordered_fields @ cl.cl_ordered_statics)
+					) (cl.cl_ordered_fields @ cl.cl_ordered_statics);
+
+					if !save <> [] then begin
+						let save = !save in
+						let res = cl.cl_restore in
+						cl.cl_restore <- (fun () ->
+							res();
+							List.iter (fun (path,t) ->
+								let cls = get_cls t in
+								cls.cl_path <- path) save
+						);
+					end
 
 				| TEnumDecl ( ({ e_params = hd :: tl }) ) ->
 					i := 0;
@@ -5012,7 +5027,7 @@ struct
 
 				| _ -> ()
 
-			) gen.gcon.types
+			) gen.gtypes_list
 
 	end;;
 
@@ -6135,7 +6150,7 @@ struct
 			| TEnum(en, params_to), TInst(cl, params_from)
 				| TInst(cl, params_to), TEnum(en, params_from) ->
 					(* this is here for max compatibility with EnumsToClass module *)
-				if en.e_path = cl.cl_path && en.e_extern then begin
+				if en.e_path = cl.cl_path && Meta.has Meta.Class en.e_meta then begin
 					(try
 						List.iter2 (type_eq gen (if gen.gallow_tp_dynamic_conversion then EqRightDynamic else EqStrict)) params_from params_to;
 						e
@@ -6569,6 +6584,8 @@ struct
 						| _ -> assert false
 					in
 					handle e t real_t
+				| TCast( { eexpr = TConst TNull }, _ ) ->
+					{ e with eexpr = TConst TNull }
 				| TCast( { eexpr = TCall( { eexpr = TLocal { v_name = "__delegate__" } } as local, [del] ) } as e2, _) ->
 					{ e with eexpr = TCast({ e2 with eexpr = TCall(local, [Type.map_expr run del]) }, None) }
 
@@ -6586,7 +6603,12 @@ struct
 					let et = e.etype in
 					let base_type = match follow et with
 						| TInst({ cl_path = ([], "Array") } as cl, bt) -> gen.greal_type_param (TClassDecl cl) bt
-						| _ -> assert false
+						| _ ->
+							gen.gcon.warning (debug_type et) e.epos;
+							(match gen.gcurrent_class with
+								| Some cl -> print_endline (path_s cl.cl_path)
+								| _ -> ());
+							assert false
 					in
 					let base_type = List.hd base_type in
 					{ e with eexpr = TArrayDecl( List.map (fun e -> handle (run e) base_type e.etype) el ); etype = et }
@@ -6886,6 +6908,8 @@ struct
 
 		rcf_hash_fields : (int, string) Hashtbl.t;
 
+		rcf_hash_paths : (path * int, string) Hashtbl.t;
+
 		(*
 			main expr -> field expr -> field string -> possible hash int (if optimize) -> possible set expr -> should_throw_exceptions -> changed expression
 
@@ -6927,6 +6951,7 @@ struct
 			rcf_class_eager_creation = false;
 
 			rcf_hash_fields = Hashtbl.create 100;
+			rcf_hash_paths = Hashtbl.create 100;
 
 			rcf_on_getset_field = dynamic_getset_field;
 			rcf_on_call_field = dynamic_call_field;
@@ -6985,10 +7010,11 @@ struct
 	let hash_field ctx f pos =
 		let h = hash f in
 		(try
-			let f2 = Hashtbl.find ctx.rcf_hash_fields h in
+			let f2 = Hashtbl.find ctx.rcf_hash_paths (ctx.rcf_gen.gcurrent_path, h) in
 			if f <> f2 then ctx.rcf_gen.gcon.error ("Field conflict between " ^ f ^ " and " ^ f2) pos
 		with Not_found ->
-			Hashtbl.add ctx.rcf_hash_fields h f);
+			Hashtbl.add ctx.rcf_hash_paths (ctx.rcf_gen.gcurrent_path, h) f;
+			Hashtbl.replace ctx.rcf_hash_fields h f);
 		h
 
 	(* ( tf_args, switch_var ) *)
@@ -9128,7 +9154,6 @@ struct
 
 			cl.cl_super <- Some(super,[]);
 			cl.cl_extern <- en.e_extern;
-			en.e_extern <- true;
 			en.e_meta <- (Meta.Class, [], pos) :: en.e_meta;
 			cl.cl_module <- en.e_module;
 			cl.cl_meta <- ( Meta.Enum, [], pos ) :: cl.cl_meta;
@@ -10945,7 +10970,7 @@ struct
 		specify a explicit_fn_name function (tclass->string->string)
 		Otherwise, it expects the platform to be able to handle covariant return types
 	*)
-	let run ~explicit_fn_name gen =
+	let run ~explicit_fn_name ~get_vmtype gen =
 		let implement_explicitly = is_some explicit_fn_name in
 		let run md = match md with
 			| TClassDecl ( { cl_interface = true; cl_extern = false } as c ) ->
@@ -10979,7 +11004,7 @@ struct
 								| (_, cf) :: _ when Meta.has Meta.Overload cf.cf_meta -> (* overloaded function *)
 									(* try to find exact function *)
 									List.find (fun (t,f2) ->
-										Typeload.same_overload_args ftype t f f2
+										Typeload.same_overload_args ~get_vmtype ftype t f f2
 									) overloads
 								| _ :: _ ->
 									(match field_access gen (TInst(c, List.map snd c.cl_params)) f.cf_name with
@@ -10995,7 +11020,7 @@ struct
 								if List.length f.cf_params <> List.length f2.cf_params then raise Not_found;
 								replace_mono t2;
 								match follow (apply_params f2.cf_params (List.map snd f.cf_params) t2), follow real_ftype with
-								| TFun(a1,r1), TFun(a2,r2) when not implement_explicitly && not (type_iseq r1 r2) && Typeload.same_overload_args real_ftype t2 f f2 ->
+								| TFun(a1,r1), TFun(a2,r2) when not implement_explicitly && not (type_iseq r1 r2) && Typeload.same_overload_args ~get_vmtype real_ftype t2 f f2 ->
 									(* different return types are the trickiest cases to deal with *)
 									(* check for covariant return type *)
 									let is_covariant = match follow r1, follow r2 with
@@ -11021,7 +11046,7 @@ struct
 								| TFun(a1,r1), TFun(a2,r2) ->
 									(* just implement a function that will call the main one *)
 									let name, is_explicit = match explicit_fn_name with
-										| Some fn when not (type_iseq r1 r2) && Typeload.same_overload_args real_ftype t2 f f2 ->
+										| Some fn when not (type_iseq r1 r2) && Typeload.same_overload_args ~get_vmtype real_ftype t2 f f2 ->
 												fn iface itl f.cf_name, true
 										| _ -> f.cf_name, false
 									in
@@ -11071,13 +11096,13 @@ struct
 					(* find the first declared field *)
 					let is_overload = Meta.has Meta.Overload f.cf_meta in
 					let decl = if is_overload then
-						find_first_declared_field gen c ~exact_field:f f.cf_name
+						find_first_declared_field gen c ~get_vmtype ~exact_field:f f.cf_name
 					else
-						find_first_declared_field gen c f.cf_name
+						find_first_declared_field gen c ~get_vmtype f.cf_name
 					in
 					match decl with
 					| Some(f2,actual_t,_,t,declared_cl,_,_)
-						when not (Typeload.same_overload_args actual_t (get_real_fun gen f.cf_type) f2 f) ->
+						when not (Typeload.same_overload_args ~get_vmtype actual_t (get_real_fun gen f.cf_type) f2 f) ->
 							if Meta.has Meta.Overload f.cf_meta then begin
 								(* if it is overload, create another field with the requested type *)
 								let f3 = mk_class_field f.cf_name t f.cf_public f.cf_pos f.cf_kind f.cf_params in
@@ -11142,12 +11167,12 @@ struct
 		in
 		run
 
-	let configure ?explicit_fn_name gen =
+	let configure ?explicit_fn_name ~get_vmtype gen =
 		let delay () =
 			Hashtbl.clear gen.greal_field_types
 		in
 		gen.gafter_mod_filters_ended <- delay :: gen.gafter_mod_filters_ended;
-		let run = run ~explicit_fn_name:explicit_fn_name gen in
+		let run = run ~explicit_fn_name ~get_vmtype gen in
 		let map md = Some(run md) in
 		gen.gmodule_filters#add ~name:name ~priority:(PCustom priority) map
 end;;

@@ -753,7 +753,7 @@ let configure gen =
 			let needed,params = loop 0 [] params in
 			let part = change_id part in
 			(part ^ "<" ^ (String.concat ", " needed) ^ ">")::ns, params
-		with _ ->
+		with _ -> (* Invalid_string / int_of_string *)
 			(change_id nspart)::ns, params
 		) ([],params) ns
 		in
@@ -1806,6 +1806,11 @@ let configure gen =
 
 	let gen_attributes w metadata =
 		List.iter (function
+			| Meta.Meta, [EConst(String s), _], _ ->
+				write w "[";
+				write w s;
+				write w "]";
+				newline w
 			| Meta.Meta, [meta], _ ->
 				write w "[";
 				gen_spart w meta;
@@ -2603,7 +2608,7 @@ let configure gen =
 				end;
 				(not cl.cl_extern)
 			| TEnumDecl e ->
-				if not e.e_extern then begin
+				if not e.e_extern && not (Meta.has Meta.Class e.e_meta) then begin
 					(if no_root && len w = 0 then write w "using haxe.root;\n"; newline w;);
 					gen_enum w e;
 					newline w;
@@ -2682,7 +2687,7 @@ let configure gen =
 			 cl.cl_super <- Option.map super_map cl.cl_super;
 			 cl.cl_implements <- List.map super_map cl.cl_implements
 		| _ -> ()
-		) gen.gcon.types;
+		) gen.gtypes_list;
 
 	let closure_t = ClosuresToClass.DoubleAndDynamicClosureImpl.get_ctx gen 6 in
 
@@ -2756,7 +2761,7 @@ let configure gen =
 		path_param_s (TClassDecl c) c.cl_path tl ^ "." ^ fname
 	in
 
-	FixOverrides.configure ~explicit_fn_name:explicit_fn_name gen;
+	FixOverrides.configure ~explicit_fn_name:explicit_fn_name ~get_vmtype:real_type gen;
 	Normalize.configure gen ~metas:(Hashtbl.create 0);
 
 	AbstractImplementationFix.configure gen;
@@ -3179,9 +3184,6 @@ let configure gen =
 	(* copy resource files *)
 	if Hashtbl.length gen.gcon.resources > 0 then begin
 		let src =
-			if Common.defined gen.gcon Define.UnityStdTarget then
-				Common.defined_value gen.gcon Define.UnityStdTarget ^ "/../Resources"
-			else
 				gen.gcon.file ^ "/src/Resources"
 		in
 		Hashtbl.iter (fun name v ->
@@ -3217,32 +3219,77 @@ let configure gen =
 		else i
 	in
 
-	let hashes = Hashtbl.fold (fun i s acc -> (normalize_i i,s) :: acc) rcf_ctx.rcf_hash_fields [] in
+	let nhash = ref 0 in
+	let hashes = Hashtbl.fold (fun i s acc -> incr nhash; (normalize_i i,s) :: acc) rcf_ctx.rcf_hash_fields [] in
 	let hashes = List.sort (fun (i,s) (i2,s2) -> compare i i2) hashes in
 
 	let flookup_cl = get_cl (get_type gen (["haxe";"lang"], "FieldLookup")) in
+	let haxe_libs = List.filter (function (_,_,_,lookup) -> is_some (lookup (["haxe";"lang"], "DceNo"))) gen.gcon.net_libs in
 	(try
+		(* first let's see if we're adding a -net-lib that has already a haxe.lang.FieldLookup *)
+		let name,_,_,_ = List.find (function (_,_,_,lookup) -> is_some (lookup (["haxe";"lang"], "FieldLookup"))) gen.gcon.net_libs in
+		if not (Common.defined gen.gcon Define.DllImport) then begin
+			gen.gcon.warning ("The -net-lib with path " ^ name ^ " contains a Haxe-generated assembly. Please define `-D dll_import` to handle Haxe-generated dll import correctly") null_pos;
+			raise Not_found
+		end;
+		if not (List.exists (function (n,_,_,_) -> n = name) haxe_libs) then
+			gen.gcon.warning ("The -net-lib with path " ^ name ^ " contains a Haxe-generated assembly, however it wasn't compiled with `-dce no`. Recompilation with `-dce no` is recommended") null_pos;
+		(* it has; in this case, we need to add the used fields on each __init__ *)
+		flookup_cl.cl_extern <- true;
+		let hashs_by_path = Hashtbl.create !nhash in
+		Hashtbl.iter (fun (path,i) s -> Hashtbl.add hashs_by_path path (i,s)) rcf_ctx.rcf_hash_paths;
+		Hashtbl.iter (fun _ md -> match md with
+			| TClassDecl ({ cl_extern = false; cl_interface = false } as c) -> (try
+				let all = Hashtbl.find_all hashs_by_path c.cl_path in
+				let all = List.map (fun (i,s) -> normalize_i i, s) all in
+				let all = List.sort (fun (i,s) (i2,s2) -> compare i i2) all in
+
+				if all <> [] then begin
+					let add = mk_static_field_access_infer flookup_cl "addFields" c.cl_pos [] in
+					let expr = { eexpr = TCall(add, [
+						mk_nativearray_decl gen basic.tint (List.map (fun (i,s) -> { eexpr = TConst(TInt (i)); etype = basic.tint; epos = c.cl_pos }) all) c.cl_pos;
+						mk_nativearray_decl gen basic.tstring (List.map (fun (i,s) -> { eexpr = TConst(TString (s)); etype = basic.tstring; epos = c.cl_pos }) all) c.cl_pos;
+					]); etype = basic.tvoid; epos = c.cl_pos } in
+					match c.cl_init with
+						| None -> c.cl_init <- Some expr
+						| Some e ->
+							c.cl_init <- Some { eexpr = TBlock([expr;e]); etype = basic.tvoid; epos = e.epos }
+				end
+			with | Not_found -> ())
+			| _ -> ()) gen.gtypes;
+
+	with | Not_found -> try
 		let basic = gen.gcon.basic in
-		let change_array = ArrayDeclSynf.default_implementation gen native_arr_cl in
 		let cl = flookup_cl in
 		let field_ids = PMap.find "fieldIds" cl.cl_statics in
 		let fields = PMap.find "fields" cl.cl_statics in
 
-		field_ids.cf_expr <- Some (change_array {
-			eexpr = TArrayDecl(List.map (fun (i,s) -> { eexpr = TConst(TInt (i)); etype = basic.tint; epos = field_ids.cf_pos }) hashes);
-			etype = basic.tarray basic.tint;
-			epos = field_ids.cf_pos
-		});
-
-		fields.cf_expr <- Some (change_array {
-			eexpr = TArrayDecl(List.map (fun (i,s) -> { eexpr = TConst(TString s); etype = basic.tstring; epos = fields.cf_pos }) hashes);
-			etype = basic.tarray basic.tstring;
-			epos = fields.cf_pos
-		})
+		field_ids.cf_expr <- Some (mk_nativearray_decl gen basic.tint (List.map (fun (i,s) -> { eexpr = TConst(TInt (i)); etype = basic.tint; epos = field_ids.cf_pos }) hashes) field_ids.cf_pos);
+		fields.cf_expr <- Some (mk_nativearray_decl gen basic.tstring (List.map (fun (i,s) -> { eexpr = TConst(TString s); etype = basic.tstring; epos = fields.cf_pos }) hashes) fields.cf_pos);
 
 	with | Not_found ->
 		gen.gcon.error "Fields 'fieldIds' and 'fields' were not found in class haxe.lang.FieldLookup" flookup_cl.cl_pos
 	);
+
+	if Common.defined gen.gcon Define.DllImport then begin
+		Hashtbl.iter (fun _ md -> match md with
+			| TClassDecl ({ cl_extern = false } as c) -> (try
+				let extra = match c.cl_params with
+					| _ :: _ when not erase_generics -> "_" ^ string_of_int (List.length c.cl_params)
+					| _ -> ""
+				in
+				let pack = match c.cl_path with
+					| ([], _) when no_root && is_hxgen (TClassDecl c) ->
+						["haxe";"root"]
+					| (p,_) -> p
+				in
+				let path = (pack, snd c.cl_path ^ extra) in
+				ignore (List.find (function (_,_,_,lookup) ->
+					is_some (lookup path)) haxe_libs);
+				c.cl_extern <- true;
+			with | Not_found -> ())
+			| _ -> ()) gen.gtypes
+	end;
 
 	TypeParams.RenameTypeParameters.run gen;
 
@@ -3252,11 +3299,11 @@ let configure gen =
 	mkdir_recursive "" parts;
 	generate_modules gen "cs" "src" module_gen out_files;
 
-	if not (Common.defined gen.gcon Define.KeepOldOutput ||  Common.defined gen.gcon Define.UnityStdTarget) then
+	if not (Common.defined gen.gcon Define.KeepOldOutput) then
 		clean_files (gen.gcon.file ^ "/src") !out_files gen.gcon.verbose;
 
 	dump_descriptor gen ("hxcs_build.txt") path_s module_s;
-	if ( not (Common.defined gen.gcon Define.NoCompilation || Common.defined gen.gcon Define.UnityStdTarget) ) then begin
+	if ( not (Common.defined gen.gcon Define.NoCompilation) ) then begin
 		let old_dir = Sys.getcwd() in
 		Sys.chdir gen.gcon.file;
 		let cmd = "haxelib run hxcs hxcs_build.txt --haxe-version " ^ (string_of_int gen.gcon.version) ^ " --feature-level 1" in
@@ -3271,8 +3318,16 @@ let configure gen =
 
 let generate con =
 	(try
+
 		let gen = new_ctx con in
 		let basic = con.basic in
+
+		if Common.defined_value con Define.Dce = "no" then begin
+			let m = { null_module with m_id = alloc_mid(); m_path = ["haxe";"lang"],"DceNo" } in
+			let cl = mk_class m (["haxe";"lang"],"DceNo") null_pos in
+			gen.gtypes_list <- (TClassDecl cl) :: gen.gtypes_list;
+			Hashtbl.add gen.gtypes cl.cl_path (TClassDecl cl)
+		end;
 
 		(* make the basic functions in C# *)
 		let type_cl = get_cl ( get_type gen (["System"], "Type")) in
@@ -3435,8 +3490,8 @@ let rec convert_signature ctx p = function
 
 let ilpath_s = function
 	| ns,[], name -> path_s (ns,name)
-	| [],nested,name -> String.concat "#" nested ^ "." ^ name
-	| ns, nested, name -> String.concat "." ns ^ "." ^ String.concat "#" nested ^ "." ^ name
+	| [],nested,name -> String.concat "." nested ^ "." ^ name
+	| ns, nested, name -> String.concat "." ns ^ "." ^ String.concat "." nested ^ "." ^ name
 
 let get_cls = function
 	| _,_,c -> c

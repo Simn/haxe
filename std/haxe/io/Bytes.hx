@@ -92,7 +92,7 @@ class Bytes {
 		#elseif cs
 		cs.system.Array.Copy(src.b, srcpos, b, pos, len);
 		#elseif python
-		python.Syntax.pythonCode("self.b[pos:pos+len] = src.b[srcpos:srcpos+len]");
+		python.Syntax.pythonCode("self.b[{0}:{0}+{1}] = src.b[srcpos:srcpos+{1}]", pos, len);
 		#elseif cpp
 		b.blit(pos, src.b, srcpos, len);
 		#else
@@ -293,6 +293,29 @@ class Bytes {
 	}
 
 	/**
+		Returns the 16 bit unsignged integer at given position (in low endian encoding).
+	**/
+	public inline function getUInt16( pos : Int ) : Int {
+		#if neko_v21
+		return untyped $sget16(b, pos, false);
+		#else
+		return get(pos) | (get(pos + 1) << 8);
+		#end
+	}
+
+	/**
+		Returns the 16 bit unsignged integer at given position (in low endian encoding).
+	**/
+	public inline function setUInt16( pos : Int, v : Int ) : Void {
+		#if neko_v21
+		untyped $sset16(b, pos, v, false);
+		#else
+		set(pos, v);
+		set(pos + 1, v >> 8);
+		#end
+	}
+
+	/**
 		Returns the 32 bit integer at given position (in low endian encoding).
 	**/
 	public inline function getInt32( pos : Int ) : Int {
@@ -357,7 +380,7 @@ class Bytes {
 			return new String(b, pos, len, "UTF-8")
 		catch (e:Dynamic) throw e;
 		#elseif python
-		return python.Syntax.pythonCode("self.b[pos:pos+len].decode('UTF-8','replace')");
+		return python.Syntax.pythonCode("self.b[{0}:{0}+{1}].decode('UTF-8','replace')", pos, len);
 		#else
 		var s = "";
 		var b = b;
@@ -451,7 +474,7 @@ class Bytes {
 		#elseif java
 		return new Bytes(length, new java.NativeArray(length));
 		#elseif python
-		return new Bytes(length, new python.lib.Bytearray(length));
+		return new Bytes(length, new python.Bytearray(length));
 		#else
 		var a = new Array();
 		for( i in 0...length )
@@ -486,7 +509,7 @@ class Bytes {
 		catch (e:Dynamic) throw e;
 
 		#elseif python
-			var b:BytesData = new python.lib.Bytearray(s, "UTF-8");
+			var b:BytesData = new python.Bytearray(s, "UTF-8");
 			return new Bytes(b.length, b);
 
 		#else
