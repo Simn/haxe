@@ -46,7 +46,7 @@ extern class Window extends EventTarget
 	var top(default,null) : Window;
 	var opener : Dynamic;
 	var parent(default,null) : Window;
-	var frameElement(default,null) : Element;
+	var frameElement(default,null) : DOMElement;
 	var navigator(default,null) : Navigator;
 	var applicationCache(default,null) : ApplicationCache;
 	var orientation(default,null) : Int;
@@ -138,13 +138,15 @@ extern class Window extends EventTarget
 	var onpointerleave : haxe.Constraints.Function;
 	var ongotpointercapture : haxe.Constraints.Function;
 	var onlostpointercapture : haxe.Constraints.Function;
-	var onfullscreenchange : haxe.Constraints.Function;
-	var onfullscreenerror : haxe.Constraints.Function;
 	var onpointerlockchange : haxe.Constraints.Function;
 	var onpointerlockerror : haxe.Constraints.Function;
 	var indexedDB(default,null) : js.html.idb.Factory;
 	var onerror : haxe.extern.EitherType<Event,String> -> String -> Int -> Int -> Dynamic -> Bool;
 	var speechSynthesis(default,null) : SpeechSynthesis;
+	var ontouchstart : haxe.Constraints.Function;
+	var ontouchend : haxe.Constraints.Function;
+	var ontouchmove : haxe.Constraints.Function;
+	var ontouchcancel : haxe.Constraints.Function;
 	var onafterprint : haxe.Constraints.Function;
 	var onbeforeprint : haxe.Constraints.Function;
 	var onbeforeunload : Event -> String;
@@ -187,7 +189,7 @@ extern class Window extends EventTarget
 	/** @throws DOMError */
 	function getSelection() : Selection;
 	/** @throws DOMError */
-	function getComputedStyle( elt : Element, ?pseudoElt : String = "" ) : CSSStyleDeclaration;
+	function getComputedStyle( elt : DOMElement, ?pseudoElt : String = "" ) : CSSStyleDeclaration;
 	/** @throws DOMError */
 	function matchMedia( query : String ) : MediaQueryList;
 	/** @throws DOMError */
@@ -209,7 +211,7 @@ extern class Window extends EventTarget
 	/** @throws DOMError */
 	function cancelAnimationFrame( handle : Int ) : Void;
 	/** @throws DOMError */
-	function getDefaultComputedStyle( elt : Element, ?pseudoElt : String = "" ) : CSSStyleDeclaration;
+	function getDefaultComputedStyle( elt : DOMElement, ?pseudoElt : String = "" ) : CSSStyleDeclaration;
 	function scrollByLines( numLines : Int, ?options : ScrollOptions ) : Void;
 	function scrollByPages( numPages : Int, ?options : ScrollOptions ) : Void;
 	/** @throws DOMError */

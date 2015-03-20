@@ -1,5 +1,7 @@
 2015-03-15: 3.2.0-RC1
 
+	This release removes support for Flash 8 target
+
 	New features:
 
 	all : added --display mode for toplevel completion
@@ -12,6 +14,7 @@
 	python : added python target
 	flash : flash player 12-14 support
 	js : added @:jsRequire and js.Lib.require
+	js : support haxe.CallStack.exceptionStack
 	cs : added @:bridgeProperties
 	cs : added -D erase_generics
 	cs : added -D dll_import to import haxe-generated dlls

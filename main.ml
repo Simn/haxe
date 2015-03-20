@@ -142,6 +142,7 @@ let deprecated = [
 	"Class not found : neko.zip.Writer", "neko.zip.Writer has been removed, use haxe.zip.Writer instead";
 	"Class not found : haxe.Public", "Use @:publicFields instead of implementing or extending haxe.Public";
 	"#Xml has no field createProlog", "Xml.createProlog was renamed to Xml.createProcessingInstruction";
+	"Module js.html.HtmlElement is loaded with a different case than js.html.HTMLElement", "htmlelement"
 ]
 
 let limit_string s offset =
@@ -158,7 +159,10 @@ let limit_string s offset =
 
 let error ctx msg p =
 	let msg = try List.assoc msg deprecated with Not_found -> msg in
-	message ctx msg p;
+	if msg = "htmlelement" then
+		message ctx "There was a problem with HtmlElement, please refer to https://github.com/HaxeFoundation/html-externs/blob/master/README.md#htmlelement" null_pos
+	else
+		message ctx msg p;
 	ctx.has_error <- true
 
 let htmlescape s =
@@ -168,7 +172,7 @@ let htmlescape s =
 	s
 
 let reserved_flags = [
-	"cross";"flash8";"js";"neko";"flash";"php";"cpp";"cs";"java";"python";
+	"cross";"js";"neko";"flash";"php";"cpp";"cs";"java";"python";
 	"as3";"swc";"macro";"sys"
 	]
 
@@ -1031,7 +1035,7 @@ try
 		if com.platform <> Cross then failwith "Multiple targets";
 		Common.init_platform com pf;
 		com.file <- file;
-		if (pf = Flash8 || pf = Flash) && file_extension file = "swc" then Common.define com Define.Swc;
+		if (pf = Flash) && file_extension file = "swc" then Common.define com Define.Swc;
 	in
 	let define f = Arg.Unit (fun () -> Common.define com f) in
 	let process_ref = ref (fun args -> ()) in
@@ -1392,16 +1396,11 @@ try
 	process_ref := process;
 	process ctx.com.args;
 	process_libs();
-	(try ignore(Common.find_file com "mt/Include.hx"); Common.raw_define com "mt"; with Not_found -> ());
 	if com.display <> DMNone then begin
 		com.warning <- message ctx;
 		com.error <- error ctx;
 		com.main_class <- None;
 		let real = get_real_path (!Parser.resume_display).Ast.pfile in
-		(* try to fix issue on windows when get_real_path fails (8.3 DOS names disabled) *)
-		let real = (match List.rev (ExtString.String.nsplit real path_sep) with
-		| file :: path when String.length file > 0 && file.[0] >= 'a' && file.[1] <= 'z' -> file.[0] <- char_of_int (int_of_char file.[0] - int_of_char 'a' + int_of_char 'A'); String.concat path_sep (List.rev (file :: path))
-		| _ -> real) in
 		classes := lookup_classes com real;
 		if !classes = [] then begin
 			if not (Sys.file_exists real) then failwith "Display file does not exist";
@@ -1421,28 +1420,18 @@ try
 			(* no platform selected *)
 			set_platform Cross "";
 			"?"
-		| Flash8 | Flash ->
-			if com.flash_version >= 9. then begin
-				let rec loop = function
-					| [] -> ()
-					| (v,_) :: _ when v > com.flash_version -> ()
-					| (v,def) :: l ->
-						Common.raw_define com ("flash" ^ def);
-						loop l
-				in
-				loop Common.flash_versions;
-				Common.raw_define com "flash";
-				com.defines <- PMap.remove "flash8" com.defines;
-				com.package_rules <- PMap.remove "flash" com.package_rules;
-				add_std "flash";
-			end else begin
-				com.package_rules <- PMap.add "flash" (Directory "flash8") com.package_rules;
-				com.package_rules <- PMap.add "flash8" Forbidden com.package_rules;
-				Common.raw_define com "flash";
-				Common.raw_define com ("flash" ^ string_of_int (int_of_float com.flash_version));
-				com.platform <- Flash8;
-				add_std "flash8";
-			end;
+		| Flash ->
+			let rec loop = function
+				| [] -> ()
+				| (v,_) :: _ when v > com.flash_version -> ()
+				| (v,def) :: l ->
+					Common.raw_define com ("flash" ^ def);
+					loop l
+			in
+			loop Common.flash_versions;
+			Common.raw_define com "flash";
+			com.package_rules <- PMap.remove "flash" com.package_rules;
+			add_std "flash";
 			"swf"
 		| Neko ->
 			add_std "neko";
@@ -1457,12 +1446,18 @@ try
 			add_std "cpp";
 			"cpp"
 		| Cs ->
+			let old_flush = ctx.flush in
+			ctx.flush <- (fun () ->
+				com.net_libs <- [];
+				old_flush()
+			);
 			Gencs.before_generate com;
 			add_std "cs"; "cs"
 		| Java ->
 			let old_flush = ctx.flush in
 			ctx.flush <- (fun () ->
 				List.iter (fun (_,_,close,_,_) -> close()) com.java_libs;
+				com.java_libs <- [];
 				old_flush()
 			);
 			Genjava.before_generate com;
@@ -1549,10 +1544,10 @@ try
 			end;
 		| Cross ->
 			()
-		| Flash8 | Flash when Common.defined com Define.As3 ->
+		| Flash when Common.defined com Define.As3 ->
 			Common.log com ("Generating AS3 in : " ^ com.file);
 			Genas3.generate com;
-		| Flash8 | Flash ->
+		| Flash ->
 			Common.log com ("Generating swf : " ^ com.file);
 			Genswf.generate com !swf_header;
 		| Neko ->

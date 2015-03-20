@@ -34,8 +34,12 @@ extern class Document extends Node
 	var characterSet(default,null) : String;
 	var contentType(default,null) : String;
 	var doctype(default,null) : DocumentType;
-	var documentElement(default,null) : Element;
+	var documentElement(default,null) : DOMElement;
 	var inputEncoding(default,null) : String;
+	var fullscreenEnabled(default,null) : Bool;
+	var fullscreenElement(default,null) : DOMElement;
+	var onfullscreenchange : haxe.Constraints.Function;
+	var onfullscreenerror : haxe.Constraints.Function;
 	var location(default,null) : Location;
 	var referrer(default,null) : String;
 	var lastModified(default,null) : String;
@@ -43,7 +47,7 @@ extern class Document extends Node
 	var title : String;
 	var dir : String;
 	var defaultView(default,null) : Window;
-	var activeElement(default,null) : Element;
+	var activeElement(default,null) : DOMElement;
 	var onreadystatechange : haxe.Constraints.Function;
 	var onwheel : haxe.Constraints.Function;
 	var oncopy : haxe.Constraints.Function;
@@ -51,11 +55,8 @@ extern class Document extends Node
 	var onpaste : haxe.Constraints.Function;
 	var onbeforescriptexecute : haxe.Constraints.Function;
 	var onafterscriptexecute : haxe.Constraints.Function;
-	var currentScript(default,null) : Element;
-	var fullScreenEnabled(default,null) : Bool;
-	var fullScreenElement(default,null) : Element;
-	var fullScreen(default,null) : Bool;
-	var pointerLockElement(default,null) : Element;
+	var currentScript(default,null) : DOMElement;
+	var pointerLockElement(default,null) : DOMElement;
 	var hidden(default,null) : Bool;
 	var visibilityState(default,null) : VisibilityState;
 	var styleSheets(default,null) : StyleSheetList;
@@ -127,15 +128,17 @@ extern class Document extends Node
 	var onpointerleave : haxe.Constraints.Function;
 	var ongotpointercapture : haxe.Constraints.Function;
 	var onlostpointercapture : haxe.Constraints.Function;
-	var onfullscreenchange : haxe.Constraints.Function;
-	var onfullscreenerror : haxe.Constraints.Function;
 	var onpointerlockchange : haxe.Constraints.Function;
 	var onpointerlockerror : haxe.Constraints.Function;
 	var onerror : haxe.Constraints.Function;
 	var children(default,null) : HTMLCollection;
-	var firstElementChild(default,null) : Element;
-	var lastElementChild(default,null) : Element;
+	var firstElementChild(default,null) : DOMElement;
+	var lastElementChild(default,null) : DOMElement;
 	var childElementCount(default,null) : Int;
+	var ontouchstart : haxe.Constraints.Function;
+	var ontouchend : haxe.Constraints.Function;
+	var ontouchmove : haxe.Constraints.Function;
+	var ontouchcancel : haxe.Constraints.Function;
 	
 	/** @throws DOMError */
 	function new() : Void;
@@ -143,13 +146,13 @@ extern class Document extends Node
 	/** @throws DOMError */
 	function getElementsByTagNameNS( namespace_ : String, localName : String ) : HTMLCollection;
 	function getElementsByClassName( classNames : String ) : HTMLCollection;
-	function getElementById( elementId : String ) : Element;
+	function getElementById( elementId : String ) : DOMElement;
 	/** @throws DOMError */
-	@:overload( function( localName : String ) : Element {} )
-	function createElement( localName : String, typeExtension : String ) : Element;
+	@:overload( function( localName : String ) : DOMElement {} )
+	function createElement( localName : String, typeExtension : String ) : DOMElement;
 	/** @throws DOMError */
-	@:overload( function( namespace_ : String, qualifiedName : String ) : Element {} )
-	function createElementNS( namespace_ : String, qualifiedName : String, typeExtension : String ) : Element;
+	@:overload( function( namespace_ : String, qualifiedName : String ) : DOMElement {} )
+	function createElementNS( namespace_ : String, qualifiedName : String, typeExtension : String ) : DOMElement;
 	function createDocumentFragment() : DocumentFragment;
 	function createTextNode( data : String ) : Text;
 	function createComment( data : String ) : Comment;
@@ -173,26 +176,30 @@ extern class Document extends Node
 	function createAttribute( name : String ) : Attr;
 	/** @throws DOMError */
 	function createAttributeNS( namespace_ : String, name : String ) : Attr;
+	function exitFullscreen() : Void;
 	/** @throws DOMError */
 	function hasFocus() : Bool;
 	function releaseCapture() : Void;
-	function cancelFullScreen() : Void;
 	function exitPointerLock() : Void;
 	/** @throws DOMError */
 	function registerElement( name : String, ?options : ElementRegistrationOptions ) : Dynamic;
 	function enableStyleSheetsForSet( name : String ) : Void;
-	function elementFromPoint( x : Float, y : Float ) : Element;
+	function elementFromPoint( x : Float, y : Float ) : DOMElement;
 	function caretPositionFromPoint( x : Float, y : Float ) : CaretPosition;
 	/** @throws DOMError */
-	function querySelector( selectors : String ) : Element;
+	function querySelector( selectors : String ) : DOMElement;
 	/** @throws DOMError */
 	function querySelectorAll( selectors : String ) : NodeList;
+	function createTouch( ?view : Window, ?target : EventTarget, ?identifier : Int = 0, ?pageX : Int = 0, ?pageY : Int = 0, ?screenX : Int = 0, ?screenY : Int = 0, ?clientX : Int = 0, ?clientY : Int = 0, ?radiusX : Int = 0, ?radiusY : Int = 0, ?rotationAngle : Float = 0.0, ?force : Float = 0.0 ) : Touch;
+	@:overload( function( touch : Touch, ?touches : Touch ) : TouchList {} )
+	@:overload( function() : TouchList {} )
+	function createTouchList( touches : Array<Touch> ) : TouchList;
 	/** @throws DOMError */
-	function convertQuadFromNode( quad : DOMQuad, from : haxe.extern.EitherType<Text,haxe.extern.EitherType<Element,Document>>, ?options : ConvertCoordinateOptions ) : DOMQuad;
+	function convertQuadFromNode( quad : DOMQuad, from : haxe.extern.EitherType<Text,haxe.extern.EitherType<DOMElement,Document>>, ?options : ConvertCoordinateOptions ) : DOMQuad;
 	/** @throws DOMError */
-	function convertRectFromNode( rect : DOMRectReadOnly, from : haxe.extern.EitherType<Text,haxe.extern.EitherType<Element,Document>>, ?options : ConvertCoordinateOptions ) : DOMQuad;
+	function convertRectFromNode( rect : DOMRectReadOnly, from : haxe.extern.EitherType<Text,haxe.extern.EitherType<DOMElement,Document>>, ?options : ConvertCoordinateOptions ) : DOMQuad;
 	/** @throws DOMError */
-	function convertPointFromNode( point : DOMPointInit, from : haxe.extern.EitherType<Text,haxe.extern.EitherType<Element,Document>>, ?options : ConvertCoordinateOptions ) : DOMPoint;
+	function convertPointFromNode( point : DOMPointInit, from : haxe.extern.EitherType<Text,haxe.extern.EitherType<DOMElement,Document>>, ?options : ConvertCoordinateOptions ) : DOMPoint;
 	/** @throws DOMError */
 	function createExpression( expression : String, resolver : XPathNSResolver ) : XPathExpression;
 	function createNSResolver( nodeResolver : Node ) : Node;
