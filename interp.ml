@@ -106,6 +106,7 @@ type extern_api = {
 	on_type_not_found : (string -> value) -> unit;
 	parse_string : string -> Ast.pos -> bool -> Ast.expr;
 	type_expr : Ast.expr -> Type.texpr;
+	type_macro_expr : Ast.expr -> Type.texpr;
 	store_typed_expr : Type.texpr -> Ast.expr;
 	get_display : string -> string;
 	allow_package : string -> unit;
@@ -2726,7 +2727,11 @@ let get_ident ctx s =
 
 let no_env = [||]
 
-let rec eval ctx (e,p) =
+let rec eval_expr ctx e =
+	let e = Genneko.gen_expr ctx.gen e in
+	catch_errors ctx (fun() -> (eval ctx e)())
+
+and eval ctx (e,p) =
 	match e with
 	| EConst c ->
 		(match c with
@@ -2817,6 +2822,15 @@ let rec eval ctx (e,p) =
 				e
 			) in
 			e())
+	| ECall ((EConst (Builtin "toValue"),_),[e1]) ->
+		let v = eval ctx e1 in
+		(fun () ->
+			let e = decode_expr (v()) in
+			let e = ((get_ctx()).curapi.type_macro_expr e) in
+ 			match eval_expr ctx e with
+			| Some v -> v
+			| None -> VNull
+		);
 	| ECall (e,el) ->
 		let el = List.map (eval ctx) el in
 		(match fst e with
@@ -3611,10 +3625,6 @@ let add_types ctx types ready =
 	List.iter ready types;
 	let e = (EBlock (Genneko.build ctx.gen types), null_pos) in
 	ignore(catch_errors ctx (fun() -> ignore((eval ctx e)())))
-
-let eval_expr ctx e =
-	let e = Genneko.gen_expr ctx.gen e in
-	catch_errors ctx (fun() -> (eval ctx e)())
 
 let get_path ctx path p =
 	let rec loop = function

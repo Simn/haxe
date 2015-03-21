@@ -4263,6 +4263,8 @@ let typing_timer ctx f =
 			exit();
 			raise e
 
+let load_macro_ref : (typer -> path -> string -> pos -> (typer * ((string * bool * t) list * t * tclass * Type.tclass_field) * (Interp.value list -> Interp.value option))) ref = ref (fun _ _ _ _ -> assert false)
+
 let make_macro_api ctx p =
 	let parse_expr_string s p inl =
 		typing_timer ctx (fun() -> parse_expr_string ctx s p inl)
@@ -4319,6 +4321,15 @@ let make_macro_api ctx p =
 		Interp.parse_string = parse_expr_string;
 		Interp.type_expr = (fun e ->
 			typing_timer ctx (fun() -> (type_expr ctx e Value))
+		);
+		Interp.type_macro_expr = (fun e ->
+			let e = typing_timer ctx (fun() -> (type_expr ctx e Value)) in
+			let rec loop e = match e.eexpr with
+				| TField(_,FStatic(c,cf)) -> ignore(!load_macro_ref ctx c.cl_path cf.cf_name e.epos)
+				| _ -> Type.iter loop e
+			in
+			loop e;
+			e
 		);
 		Interp.store_typed_expr = (fun te ->
 			let p = te.epos in
@@ -5023,4 +5034,5 @@ get_constructor_ref := get_constructor;
 cast_or_unify_ref := Codegen.AbstractCast.cast_or_unify_raise;
 type_module_type_ref := type_module_type;
 find_array_access_raise_ref := Codegen.AbstractCast.find_array_access_raise;
-build_call_ref := build_call
+build_call_ref := build_call;
+load_macro_ref := load_macro
