@@ -231,6 +231,7 @@ let make_complex_type (t:Type.t) : Ast.complex_type = (!make_complex_type_ref) t
 let encode_tvar (v:tvar) : value = (!encode_tvar_ref) v
 let decode_path (v:value) : Ast.type_path = (!decode_path_ref) v
 let decode_import (v:value) : ((string * Ast.pos) list * Ast.import_mode) = (!decode_import_ref) v
+let eval_expr_ref : (context -> texpr -> value option) ref = ref (fun _ _ -> assert false)
 
 let to_int f = Int32.of_float (mod_float f 2147483648.0)
 let need_32_bits i = Int32.compare (Int32.logand (Int32.add i 0x40000000l) 0x80000000l) Int32.zero <> 0
@@ -2684,6 +2685,13 @@ let macro_lib =
 			in
 			encode_type (apply_params tpl tl (map (decode_type t)))
 		);
+		"eval", Fun1 (fun v ->
+			let e = decode_expr v in
+			let e = ((get_ctx()).curapi.type_macro_expr e) in
+ 			match !eval_expr_ref (get_ctx()) e with
+			| Some v -> v
+			| None -> VNull
+		);
 	]
 
 (* ---------------------------------------------------------------------- *)
@@ -2822,15 +2830,6 @@ and eval ctx (e,p) =
 				e
 			) in
 			e())
-	| ECall ((EConst (Builtin "toValue"),_),[e1]) ->
-		let v = eval ctx e1 in
-		(fun () ->
-			let e = decode_expr (v()) in
-			let e = ((get_ctx()).curapi.type_macro_expr e) in
- 			match eval_expr ctx e with
-			| Some v -> v
-			| None -> VNull
-		);
 	| ECall (e,el) ->
 		let el = List.map (eval ctx) el in
 		(match fst e with
@@ -5102,3 +5101,4 @@ decode_texpr_ref := decode_texpr;
 encode_tvar_ref := encode_tvar;
 decode_path_ref := decode_path;
 decode_import_ref := decode_import;
+eval_expr_ref := eval_expr;

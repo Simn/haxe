@@ -483,6 +483,10 @@ class Context {
 		return load("store_typed_expr",1)(t);
 	}
 
+	public static function eval( e : Expr ) : Dynamic {
+		return load("eval",1)(e);
+	}
+
 	/**
 		Manually adds a dependency between module `modulePath` and an external
 		file `externFile`.
