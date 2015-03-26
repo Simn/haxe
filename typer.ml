@@ -4058,6 +4058,29 @@ and build_call ctx acc el (with_type:with_type) p =
 			end
 		| TAbstract(a,tl) when Meta.has Meta.Callable a.a_meta ->
 			loop (Abstract.get_underlying_type a tl)
+		| TAnon an ->
+			let rec loop cfl = match cfl with
+				| cf :: cfl when Meta.has (Meta.Custom ":call") cf.cf_meta ->
+					begin try
+						let args,ret = match follow cf.cf_type with
+							| TFun(args,ret) -> args,ret
+							| _ -> assert false
+						in
+						let _,_,mk_call = unify_field_call ctx (FAnon cf) el args ret p false in
+						mk_call e e.epos
+					with Error (Call_error _,_) ->
+						loop cfl
+					end;
+				| _ :: cfl ->
+					loop cfl
+				| [] ->
+					let el = List.map (fun e -> type_expr ctx e Value) el in
+					if ctx.untyped then
+						mk (TCall (e,el)) (mk_mono()) p
+					else
+						error (s_type_kind e.etype ^ " cannot be called") e.epos
+			in
+			loop (PMap.fold (fun cf acc -> cf :: acc) an.a_fields [])
 		| TMono _ ->
 			let t = mk_mono() in
 			let el = List.map (fun e -> type_expr ctx e Value) el in

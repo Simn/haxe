@@ -1083,7 +1083,7 @@ let convert_switch mctx st cases loop =
 
 (* Decision tree compilation *)
 
-let transform_extractors eval cases p =
+let transform_extractors ctx eval cases p =
 	let efail = (EThrow(EConst(Ident "false"),p)),p in
 	let cfail = [(EConst (Ident "_"),p)],None,Some efail in
 	let has_extractor = ref false in
@@ -1109,6 +1109,28 @@ let transform_extractors eval cases p =
 					let e1 = find_ex true e1 in
 					let e2 = find_ex true e2 in
 					(EBinop(OpOr,e1,e2)),(pos e)
+				| ECall(e1,el) ->
+					begin try
+						let old = ctx.untyped in
+						ctx.untyped <- true;
+						let et = try type_expr ctx e Value with _ -> ctx.untyped <- old; raise Not_found in
+						ctx.untyped <- old;
+						begin match et.eexpr with
+							| TCall({eexpr = TField(_,FAnon cf)},_) ->
+								let p = pos e in
+								let e_unapply = EField(e1,cf.cf_name),p in
+								let e_underscore = EConst(Ident "_"),p in
+								let e_unapply_call = ECall(e_unapply,[e_underscore]),p in
+								let e_some = EConst(Ident "Some"),p in
+								let e_some_call = ECall(e_some,el),p in
+								let e = EBinop(OpArrow,e_unapply_call,e_some_call),p in
+								find_ex in_or e
+							| _ ->
+								raise Not_found
+						end
+					with Not_found ->
+						Ast.map_expr (find_ex in_or) e
+					end
 				| _ ->
 					Ast.map_expr (find_ex in_or) e
 			in
@@ -1165,7 +1187,7 @@ let match_expr ctx e cases def with_type p =
 			cases @ [[(EConst(Ident "_")),p],None,def]
 		| _ -> cases
 	in
-	let cases,has_extractor = transform_extractors e cases p in
+	let cases,has_extractor = transform_extractors ctx e cases p in
 	(* type subject(s) *)
 	let array_match = ref false in
 	let evals = match fst e with

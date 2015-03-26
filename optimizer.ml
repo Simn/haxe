@@ -465,6 +465,13 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 			{ e with eexpr = TFunction { tf_args = args; tf_expr = expr; tf_type = f.tf_type } }
 		| TConst TSuper ->
 			error "Cannot inline function containing super" po
+		| TObjectDecl fl ->
+			let fl = List.map (fun (s,e) -> s,map false e) fl in
+			begin match follow e.etype with
+				| TAnon a when !(a.a_status) = Const -> a.a_status := Closed
+				| _ -> ()
+			end;
+			{e with eexpr = TObjectDecl fl}
 		| _ ->
 			Type.map_expr (map false) e
 	in
