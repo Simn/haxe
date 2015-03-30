@@ -106,6 +106,7 @@ class TestBytes extends Test {
 		eq(input.readAll().toString(), "One é accent");
 	}
 
+	#if !php // https://github.com/HaxeFoundation/haxe/issues/4060
 	function testFastGet() {
 		var b = haxe.io.Bytes.alloc(10);
 		var bd = b.getData();
@@ -126,4 +127,16 @@ class TestBytes extends Test {
 		eq(fget(bd3, 0), 0xC3);
 		eq(fget(bd3, 1), 0xA9);
 	}
+
+	function testBytesDataEquality () {
+		var b1 = haxe.io.Bytes.ofString("AB");
+		var x = b1.getData();
+		var b2 = haxe.io.Bytes.ofData(x);
+
+		b2.set(0, "C".code);
+
+		eq(b1.getString(0,2), b2.getString(0,2));
+
+	}
+	#end
 }

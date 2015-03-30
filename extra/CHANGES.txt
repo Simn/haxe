@@ -1,3 +1,20 @@
+2015-??-??: 3.2.0
+
+	New features:
+
+	all : added @:noPrivateAccess to re-enable access restrictions within @:privateAccess
+
+	Bugfixes:
+
+	all : fixed detection of @:generic classes with constructor constraints
+	all : fixed variable initialization check issue in loop condition
+	js : added variable number of arguments support in js.html.* classes
+	js : fixed DCE issue related to printing enums
+
+	General improvements and optimizations:
+
+	php : support interpolation in __php__ code
+
 2015-03-15: 3.2.0-RC1
 
 	This release removes support for Flash 8 target
@@ -49,7 +66,7 @@
 	cpp : fixed issue with NativeArray in --no-inline mode
 	php : fixed issue with invalid references for closures in for-loops
 	php : fixed Reflect.compare and string comparison for numeric strings
-	cs/java : fixed various issues with -java-lib and -net-lib. 
+	cs/java : fixed various issues with -java-lib and -net-lib.
 	cs/java : added @:libType to skip checking on -java-lib / -net-lib types
 	cs/java : compilation server now works with C#/Java [experimental support]
 	cs : fixed Type.enumIndex / switch on C# native enums

@@ -321,6 +321,7 @@ let keyword_remap name =
    | "_Complex" | "INFINITY" | "NAN"
    | "INT_MIN" | "INT_MAX" | "INT8_MIN" | "INT8_MAX" | "UINT8_MAX" | "INT16_MIN"
    | "INT16_MAX" | "UINT16_MAX" | "INT32_MIN" | "INT32_MAX" | "UINT32_MAX"
+   | "DELETE"
    | "struct" -> "_" ^ name
    | "asm" -> "_asm_"
    | x -> x
@@ -347,7 +348,7 @@ let get_meta_string meta key =
 
 
 
-let get_meta_string_path ctx meta key =
+let get_meta_string_path meta key =
    let rec loop = function
       | [] -> ""
       | (k,[Ast.EConst (Ast.String name),_], pos) :: _  when k=key->
@@ -367,6 +368,28 @@ let get_meta_string_path ctx meta key =
    loop meta
 ;;
 
+
+let get_meta_string_full_filename meta key =
+   let rec loop = function
+      | [] -> ""
+      | (k,_, pos) :: _  when k=key->
+           if (Filename.is_relative pos.pfile) then
+              Gencommon.normalize (Filename.concat (Sys.getcwd()) pos.pfile)
+           else
+              pos.pfile
+      | _ :: l -> loop l
+      in
+   loop meta
+;;
+
+let get_meta_string_full_dirname meta key =
+   let name = get_meta_string_full_filename meta key in
+   try
+      Gencommon.normalize (Filename.dirname name)
+   with Invalid_argument _ -> ""
+;;
+
+
 let get_field_access_meta field_access key =
 match field_access with
    | FInstance(_,_,class_field)
@@ -376,7 +399,15 @@ match field_access with
 
 let get_code meta key =
    let code = get_meta_string meta key in
-   if (code<>"") then code ^ "\n" else code
+   let magic_var = "${GENCPP_SOURCE_DIRECTORY}"  in
+   let code = if ExtString.String.exists code magic_var then begin
+         let source_directory = get_meta_string_full_dirname meta key in
+         let _,code = ExtString.String.replace code magic_var source_directory in
+         code
+      end else
+         code
+      in
+   if (code<>"") then String.concat "\n" (ExtString.String.nsplit code "\r\n") ^ "\n" else code
 ;;
 
 let has_meta_key meta key =
@@ -2049,7 +2080,7 @@ and gen_expression ctx retval expression =
          match func.eexpr with
             | TField(obj,field) when is_array obj.etype ->
                (match field_name field with
-                  | "pop" | "shift" -> check_array_element_cast obj.etype ".StaticCast" "()"
+                  | "pop" | "shift" | "__unsafe_get" | "__unsafe_set" -> check_array_element_cast obj.etype ".StaticCast" "()"
                   | "map" -> check_array_cast expression.etype
                   | _ -> ()
                )
@@ -2160,7 +2191,8 @@ and gen_expression ctx retval expression =
       end
    (* Get precidence matching haxe ? *)
    | TBinop (op,expr1,expr2) -> gen_bin_op op expr1 expr2
-   | TField (expr,_) | TEnumParameter (expr,_,_) when (is_null expr) -> output "Dynamic()"
+   | TField (expr,_) | TEnumParameter (expr,_,_) when (is_null expr) ->
+         output "hx::Throw(HX_CSTRING(\"Invalid field access on null object\"))"
    | TEnumParameter (expr,ef,i) ->
       let enum = match follow ef.ef_type with
          | TEnum(en,_) | TFun(_,TEnum(en,_)) -> en
@@ -2565,12 +2597,18 @@ let gen_field ctx class_def class_name ptr_name dot_name is_static is_interface 
          let func_name = "__default_" ^ (remap_name) in
          output ("HX_BEGIN_DEFAULT_FUNC(" ^ func_name ^ "," ^ class_name ^ ")\n");
          output return_type;
-         output (" run(" ^ (gen_arg_list function_def.tf_args "") ^ ")");
+         output (" run(" ^ (gen_arg_list function_def.tf_args "__o_") ^ ")");
          ctx.ctx_dump_src_pos <- dump_src;
          if (is_void) then begin
             ctx.ctx_writer#begin_block;
+            generate_default_values ctx function_def.tf_args "__o_";
             gen_expression ctx false function_def.tf_expr;
             output "return null();\n";
+            ctx.ctx_writer#end_block;
+         end else if (has_default_values function_def.tf_args) then begin
+            ctx.ctx_writer#begin_block;
+            generate_default_values ctx function_def.tf_args "__o_";
+            gen_expression ctx false function_def.tf_expr;
             ctx.ctx_writer#end_block;
          end else
             gen_expression ctx false (to_block function_def.tf_expr);
@@ -2734,7 +2772,7 @@ let find_referenced_types ctx obj super_deps constructor_deps header_only for_de
       end
    in
    let add_extern_class klass =
-      let include_file = get_meta_string_path ctx klass.cl_meta (if for_depends then Meta.Depend else Meta.Include) in
+      let include_file = get_meta_string_path klass.cl_meta (if for_depends then Meta.Depend else Meta.Include) in
       if (include_file<>"") then
          add_type ( path_of_string include_file )
       else if (not for_depends) && (has_meta_key klass.cl_meta Meta.Include) then
@@ -3456,7 +3494,7 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
       output_cpp "#include <hx/Scriptable.h>\n";
 
    output_cpp ( get_class_code class_def Meta.CppFileCode );
-   let inc = get_meta_string_path ctx class_def.cl_meta Meta.CppInclude in
+   let inc = get_meta_string_path class_def.cl_meta Meta.CppInclude in
    if (inc<>"") then
       output_cpp ("#include \"" ^ inc ^ "\"\n");
 
@@ -3501,16 +3539,16 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
       output_cpp (ptr_name ^ " " ^ class_name ^ "::__new(" ^constructor_type_args ^")\n");
 
       let create_result () =
-         output_cpp ("{  " ^ ptr_name ^ " result = new " ^ class_name ^ "();\n");
+         output_cpp ("{  " ^ ptr_name ^ " _result_ = new " ^ class_name ^ "();\n");
          in
       create_result ();
-      output_cpp ("\tresult->__construct(" ^ constructor_args ^ ");\n");
-      output_cpp ("\treturn result;}\n\n");
+      output_cpp ("\t_result_->__construct(" ^ constructor_args ^ ");\n");
+      output_cpp ("\treturn _result_;}\n\n");
 
       output_cpp ("Dynamic " ^ class_name ^ "::__Create(hx::DynamicArray inArgs)\n");
       create_result ();
-      output_cpp ("\tresult->__construct(" ^ (array_arg_list constructor_var_list) ^ ");\n");
-      output_cpp ("\treturn result;}\n\n");
+      output_cpp ("\t_result_->__construct(" ^ (array_arg_list constructor_var_list) ^ ");\n");
+      output_cpp ("\treturn _result_;}\n\n");
       if ( (List.length implemented) > 0 ) then begin
          output_cpp ("hx::Object *" ^ class_name ^ "::__ToInterface(const hx::type_info &inType) {\n");
          List.iter (fun interface_name ->
@@ -4079,7 +4117,7 @@ let generate_class_files common_ctx member_types super_deps constructor_deps cla
    List.iter ( gen_forward_decl h_file ) referenced;
 
    output_h ( get_class_code class_def Meta.HeaderCode );
-   let inc = get_meta_string_path ctx class_def.cl_meta Meta.HeaderInclude in
+   let inc = get_meta_string_path class_def.cl_meta Meta.HeaderInclude in
    if (inc<>"") then
       output_h ("#include \"" ^ inc ^ "\"\n");
 
@@ -5473,7 +5511,7 @@ let generate_source common_ctx =
       (match object_def with
       | TClassDecl class_def when is_extern_class class_def ->
          build_xml := !build_xml ^ (get_class_code class_def Meta.BuildXml);
-         let source = get_meta_string_path common_ctx class_def.cl_meta Meta.SourceFile in
+         let source = get_meta_string_path class_def.cl_meta Meta.SourceFile in
          if (source<>"") then
             extern_src := source :: !extern_src;
       | TClassDecl class_def ->
