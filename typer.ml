@@ -2347,18 +2347,53 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 		end;
 		find_overload left make map (if left then a.a_ops else List.filter (fun (_,cf) -> not (Meta.has Meta.Impl cf.cf_meta)) a.a_ops)
 	in
+	let numeric_types = ref 0 in
 	try
 		begin match follow e1.etype with
 			| TAbstract({a_impl = Some c} as a,tl) -> find_abstract_overload a c tl true
+			| TAbstract({a_path = [],("Int" | "Float")},_) ->
+				incr numeric_types;
+				raise Not_found
 			| _ -> raise Not_found
 		end
 	with Not_found -> try
 		begin match follow e2.etype with
 			| TAbstract({a_impl = Some c} as a,tl) -> find_abstract_overload a c tl false
+			| TAbstract({a_path = [],("Int" | "Float")},_) ->
+				incr numeric_types;
+				raise Not_found
 			| _ -> raise Not_found
 		end
+	with Not_found -> try
+		(* hack (?) *)
+		if !numeric_types = 2 then raise Not_found;
+		let make c map cf e1 e2 t =
+			make_static_call ctx c cf map [e1;e2] t (punion e1.epos e2.epos)
+		in
+		let rec loop cl = match cl with
+			| c :: cl ->
+				let rec loop2 cfl = match cfl with
+					| [] -> []
+					| cf :: cfl ->
+						begin try
+							let _,e,_ = Meta.get Meta.Op cf.cf_meta in
+							begin match e with
+								| [EBinop(op,_,_),_] -> (op,cf) :: loop2 cfl
+								| _ -> raise Not_found
+							end
+						with Not_found ->
+							loop2 cfl
+						end
+				in
+				let cfl = loop2 c.cl_ordered_statics in
+				let map t = t in
+				begin try find_overload true (make c map) map cfl
+				with Not_found -> loop cl end
+			| [] ->
+				raise Not_found
+		in
+		loop ctx.m.module_using;
 	with Not_found ->
-
 		make e1 e2
 
 and type_unop ctx op flag e p =
