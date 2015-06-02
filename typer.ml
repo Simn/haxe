@@ -2235,44 +2235,9 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 	| OpAssignOp _ ->
 		assert false
 	in
-	let find_overload a c tl left =
-		let map = apply_params a.a_params tl in
-		let make op_cf cf e1 e2 tret =
-			if cf.cf_expr = None then begin
-				if not (Meta.has Meta.NoExpr cf.cf_meta) then display_error ctx "Recursive operator method" p;
-				if not (Meta.has Meta.CoreType a.a_meta) then begin
-					(* for non core-types we require that the return type is compatible to the native result type *)
-					let e' = make {e1 with etype = Abstract.follow_with_abstracts e1.etype} {e1 with etype = Abstract.follow_with_abstracts e2.etype} in
-					let t_expected = e'.etype in
-					begin try
-						unify_raise ctx tret t_expected p
-					with Error (Unify _,_) ->
-						match follow tret with
-							| TAbstract(a,tl) when type_iseq (Abstract.get_underlying_type a tl) t_expected ->
-								()
-							| _ ->
-								let st = s_type (print_context()) in
-								error (Printf.sprintf "The result of this operation (%s) is not compatible with declared return type %s" (st t_expected) (st tret)) p
-					end;
-				end;
-				let e = Codegen.binop op e1 e2 tret p in
-				mk_cast e tret p
-				(* Codegen.maybe_cast e tret *)
-			end else begin
-				let e = make_static_call ctx c cf map [e1;e2] tret p in
-				e
-			end
-		in
-		(* special case for == and !=: if the second type is a monomorph, assume that we want to unify
-		   it with the first type to preserve comparison semantics. *)
-		let is_eq_op = match op with OpEq | OpNotEq -> true | _ -> false in
-		if is_eq_op then begin match follow e1.etype,follow e2.etype with
-			| TMono _,_ | _,TMono _ ->
-				Type.unify e1.etype e2.etype
-			| _ ->
-				()
-		end;
- 		let rec loop ol = match ol with
+	let is_eq_op = match op with OpEq | OpNotEq -> true | _ -> false in
+	let find_overload left make map ol =
+		let rec loop ol = match ol with
 			| (op_cf,cf) :: ol when op_cf <> op && (not is_assign_op || op_cf <> OpAssignOp(op)) ->
 				loop ol
 			| (op_cf,cf) :: ol ->
@@ -2289,7 +2254,7 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 								monos,t1,t2,tret
 							in
 							let monos,t1,t2,tret = map_arguments() in
-							let make e1 e2 = make op_cf cf e1 e2 tret in
+							let make e1 e2 = make cf e1 e2 tret in
 							let t1 = if is_impl then Abstract.follow_with_abstracts t1 else t1 in
 							let e1,e2 = if left || not left && swapped then begin
 								Type.type_eq EqStrict (if is_impl then Abstract.follow_with_abstracts e1.etype else e1.etype) t1;
@@ -2298,7 +2263,7 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 								Type.type_eq EqStrict e2.etype t2;
 								Codegen.AbstractCast.cast_or_unify_raise ctx t1 e1 p,e2
 							end in
-							check_constraints ctx "" cf.cf_params monos (apply_params a.a_params tl) false cf.cf_pos;
+							check_constraints ctx "" cf.cf_params monos map false cf.cf_pos;
 							let check_null e t = if is_eq_op then match e.eexpr with
 								| TConst TNull when not (is_explicit_null t) -> raise (Unify_error [])
 								| _ -> ()
@@ -2342,19 +2307,58 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 			| [] ->
 				raise Not_found
 		in
-		loop (if left then a.a_ops else List.filter (fun (_,cf) -> not (Meta.has Meta.Impl cf.cf_meta)) a.a_ops)
+		loop ol
+	in
+	let find_abstract_overload a c tl left =
+		let map = apply_params a.a_params tl in
+		let make cf e1 e2 tret =
+			if cf.cf_expr = None then begin
+				if not (Meta.has Meta.NoExpr cf.cf_meta) then display_error ctx "Recursive operator method" p;
+				if not (Meta.has Meta.CoreType a.a_meta) then begin
+					(* for non core-types we require that the return type is compatible to the native result type *)
+					let e' = make {e1 with etype = Abstract.follow_with_abstracts e1.etype} {e1 with etype = Abstract.follow_with_abstracts e2.etype} in
+					let t_expected = e'.etype in
+					begin try
+						unify_raise ctx tret t_expected p
+					with Error (Unify _,_) ->
+						match follow tret with
+							| TAbstract(a,tl) when type_iseq (Abstract.get_underlying_type a tl) t_expected ->
+								()
+							| _ ->
+								let st = s_type (print_context()) in
+								error (Printf.sprintf "The result of this operation (%s) is not compatible with declared return type %s" (st t_expected) (st tret)) p
+					end;
+				end;
+				let e = Codegen.binop op e1 e2 tret p in
+				mk_cast e tret p
+				(* Codegen.maybe_cast e tret *)
+			end else begin
+				let e = make_static_call ctx c cf map [e1;e2] tret p in
+				e
+			end
+		in
+		(* special case for == and !=: if the second type is a monomorph, assume that we want to unify
+		   it with the first type to preserve comparison semantics. *)
+		if is_eq_op then begin match follow e1.etype,follow e2.etype with
+			| TMono _,_ | _,TMono _ ->
+				Type.unify e1.etype e2.etype
+			| _ ->
+				()
+		end;
+		find_overload left make map (if left then a.a_ops else List.filter (fun (_,cf) -> not (Meta.has Meta.Impl cf.cf_meta)) a.a_ops)
 	in
 	try
 		begin match follow e1.etype with
-			| TAbstract({a_impl = Some c} as a,tl) -> find_overload a c tl true
+			| TAbstract({a_impl = Some c} as a,tl) -> find_abstract_overload a c tl true
 			| _ -> raise Not_found
 		end
 	with Not_found -> try
 		begin match follow e2.etype with
-			| TAbstract({a_impl = Some c} as a,tl) -> find_overload a c tl false
+			| TAbstract({a_impl = Some c} as a,tl) -> find_abstract_overload a c tl false
 			| _ -> raise Not_found
 		end
 	with Not_found ->
+
 		make e1 e2
 
 and type_unop ctx op flag e p =
