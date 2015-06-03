@@ -183,6 +183,28 @@ enum ValueType {
 		if( a == b )
 			return true;
 		try {
+			#if prezi_enums
+			if (a.__enum__ == null || b.__enum__ == null) {
+				return false;
+			}
+			if (a.index != b.index) {
+				return false;
+			}
+			if (a.params == null) {
+				if (b.params == null) {
+					return true;
+				} else {
+					return false;
+				}
+			} else if (b.params == null) {
+				return false;
+			}
+			for (i in 0...a.params.length) {
+				if (!enumEq(a.params[i], b.params[i])) {
+					return false;
+				}
+			}
+			#else
 			if( a[0] != b[0] )
 				return false;
 			for( i in 2...a.length )
@@ -191,6 +213,7 @@ enum ValueType {
 			var e = a.__enum__;
 			if( e != b.__enum__ || e == null )
 				return false;
+			#end
 		} catch( e : Dynamic ) {
 			return false;
 		}
@@ -198,15 +221,15 @@ enum ValueType {
 	}
 
 	public inline static function enumConstructor( e : EnumValue ) : String {
-		return untyped e[0];
+		return untyped #if prezi_enums e.name #else e[0] #end;
 	}
 
 	public inline static function enumParameters( e : EnumValue ) : Array<Dynamic> {
-		return untyped e.slice(2);
+		return untyped #if prezi_enums (e.params == null ? [] : e.params) #else e.slice(2) #end;
 	}
 
 	public inline static function enumIndex( e : EnumValue ) : Int {
-		return untyped e[1];
+		return untyped #if prezi_enums e.index #else e[1] #end;
 	}
 
 	public static function allEnums<T>( e : Enum<T> ) : Array<T> {

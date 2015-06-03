@@ -8,3 +8,4 @@
 compile-each.hxml
 unit.Test
 -js bin/unit.js
+-D prezi-enums

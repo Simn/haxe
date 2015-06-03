@@ -489,6 +489,18 @@ class Serializer {
 				buf.add("0");
 			}
 
+			#elseif prezi_enums
+			if (useEnumIndex) {
+				buf.add(":");
+				buf.add(v.index);
+			} else {
+				serializeString(v.name);
+			}
+			buf.add(":");
+			var l = v.params == null ? 0 : __getField(v.params, "length");
+			buf.add(l);
+			for( i in 0...l )
+				serialize(v.params[i]);
 			#else
 			if( useEnumIndex ) {
 				buf.add(":");

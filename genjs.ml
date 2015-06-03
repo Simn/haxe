@@ -514,7 +514,10 @@ and gen_expr ctx e =
 			print ctx ",$bind($_,$_%s))" (field f.cf_name))
 	| TEnumParameter (x,_,i) ->
 		gen_value ctx x;
-		print ctx "[%i]" (i + 2)
+		if Common.raw_defined ctx.com "prezi-enums" then
+			print ctx ".params[%i]" i
+		else
+			print ctx "[%i]" (i + 2)
 	| TField ({ eexpr = TConst (TInt _ | TFloat _) } as x,f) ->
 		gen_expr ctx { e with eexpr = TField(mk (TParenthesis x) x.etype x.epos,f) }
 	| TField (x, (FInstance(_,_,f) | FStatic(_,f) | FAnon(f))) when Meta.has Meta.SelfCall f.cf_meta ->
@@ -1085,6 +1088,7 @@ let generate_class ctx c =
 	flush ctx
 
 let generate_enum ctx e =
+	let prezi = Common.raw_defined ctx.com "prezi-enums" in
 	let p = s_path ctx e.e_path in
 	let ename = List.map (fun s -> Printf.sprintf "\"%s\"" (Ast.s_escape s)) (fst e.e_path @ [snd e.e_path]) in
 	if ctx.js_flatten then
@@ -1104,13 +1108,19 @@ let generate_enum ctx e =
 		(match f.ef_type with
 		| TFun (args,_) ->
 			let sargs = String.concat "," (List.map (fun (n,_,_) -> ident n) args) in
-			print ctx "function(%s) { var $x = [\"%s\",%d,%s]; $x.__enum__ = %s;" sargs f.ef_name f.ef_index sargs p;
+			if prezi then
+				print ctx "function(%s) { var $x = {name: \"%s\", index: %d, params: [%s]}; $x.__enum__ = %s;" sargs f.ef_name f.ef_index sargs p
+			else
+				print ctx "function(%s) { var $x = [\"%s\",%d,%s]; $x.__enum__ = %s;" sargs f.ef_name f.ef_index sargs p;
 			if has_feature ctx "has_enum" then
 				spr ctx " $x.toString = $estr;";
 			spr ctx " return $x; }";
 			ctx.separator <- true;
 		| _ ->
-			print ctx "[\"%s\",%d]" f.ef_name f.ef_index;
+			if prezi then
+				print ctx "{name: \"%s\", index: %i}" f.ef_name f.ef_index
+			else
+				print ctx "[\"%s\",%d]" f.ef_name f.ef_index;
 			newline ctx;
 			if has_feature ctx "has_enum" then begin
 				print ctx "%s%s.toString = $estr" p (field f.ef_name);

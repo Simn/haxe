@@ -106,7 +106,23 @@ class Boot {
 				t = "object";
 			switch( t ) {
 			case "object":
+				#if prezi_enums
+				if( o.__enum__ ) {
+					if( o.params == null )
+						return o.name;
+					var str = o.name+"(";
+					s += "\t";
+					for( i in 0...o.params.length ) {
+						if( i != 0 )
+							str += "," + __string_rec(o.params[i],s);
+						else
+							str += __string_rec(o.params[i],s);
+					}
+					return str + ")";
+				}
+				#end
 				if( __js__("o instanceof Array") ) {
+					#if prezi_enums
 					if( o.__enum__ ) {
 						if( o.length == 2 )
 							return o[0];
@@ -120,6 +136,7 @@ class Boot {
 						}
 						return str + ")";
 					}
+					#end
 					var l = o.length;
 					var i;
 					var str = "[";
