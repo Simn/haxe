@@ -54,7 +54,11 @@
 **/
 @:forward
 @:callable
-abstract Null<T>(T) from T to T { }
+abstract Null<T>(T) from T to T {
+	public function force():T {
+		return this;
+	}
+}
 
 /**
 	The standard Boolean type, which can either be true or false.

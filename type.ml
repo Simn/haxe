@@ -590,8 +590,8 @@ let rec follow t =
 		| _ -> t)
 	| TLazy f ->
 		follow (!f())
-	| TAbstract({a_path = [],"Null"},[t]) ->
-		follow t
+(* 	| TAbstract({a_path = [],"Null"},[t]) ->
+		follow t *)
 	| TType (t,tl) ->
 		follow (apply_params t.t_params tl t.t_type)
 	| _ -> t
@@ -1400,10 +1400,10 @@ let rec type_eq param a b =
 	| TAbstract (a1,tl1) , TAbstract (a2,tl2) ->
 		if a1 != a2 && not (param = EqCoreType && a1.a_path = a2.a_path) then error [cannot_unify a b];
 		List.iter2 (type_eq param) tl1 tl2
-	| TAbstract ({a_path=[],"Null"},[t]),_ ->
+(* 	| TAbstract ({a_path=[],"Null"},[t]),_ ->
 		type_eq param t b
 	| _,TAbstract ({a_path=[],"Null"},[t]) ->
-		type_eq param a t
+		type_eq param a t *)
 	| TAnon a1, TAnon a2 ->
 		(try
 			PMap.iter (fun n f1 ->
@@ -1487,8 +1487,8 @@ let rec unify a b =
 	| TEnum (ea,tl1) , TEnum (eb,tl2) ->
 		if ea != eb then error [cannot_unify a b];
 		unify_type_params a b tl1 tl2
-	| TAbstract ({a_path=[],"Null"},[t]),_ ->
-		unify t b
+(* 	| TAbstract ({a_path=[],"Null"},[t]),_ ->
+		unify t b*)
 	| _,TAbstract ({a_path=[],"Null"},[t]) ->
 		unify a t
 	| TAbstract (a1,tl1) , TAbstract (a2,tl2) when a1 == a2 ->

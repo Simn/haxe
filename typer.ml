@@ -5035,19 +5035,7 @@ let rec create com =
 			| "Int" -> ctx.t.tint <- TAbstract (a,[])
 			| "Bool" -> ctx.t.tbool <- TAbstract (a,[])
 			| "Null" ->
-				let mk_null t =
-					try
-						if not (is_null ~no_lazy:true t) then TAbstract (a,[t]) else t
-					with Exit ->
-						(* don't force lazy evaluation *)
-						let r = ref (fun() -> assert false) in
-						r := (fun() ->
-							let t = (if not (is_null t) then TAbstract (a,[t]) else t) in
-							r := (fun() -> t);
-							t
-						);
-						TLazy r
-				in
+				let mk_null t = TAbstract (a,[t]) in
 				ctx.t.tnull <- mk_null;
 			| _ -> ());
 		| TEnumDecl e ->
