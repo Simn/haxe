@@ -42,6 +42,7 @@ type sourcemap = {
 type ctx = {
 	com : Common.context;
 	buf : Rbuffer.t;
+	chan : out_channel;
 	packages : (string list,unit) Hashtbl.t;
 	smap : sourcemap;
 	js_modern : bool;
@@ -128,9 +129,9 @@ let ident s = if Hashtbl.mem kwds s then "$" ^ s else s
 let check_var_declaration v = if Hashtbl.mem kwds2 v.v_name then v.v_name <- "$" ^ v.v_name
 
 let anon_field s = if Hashtbl.mem kwds s || not (valid_js_ident s) then "'" ^ s ^ "'" else s
-let static_field s =
+let static_field c s =
 	match s with
-	| "length" | "name" -> ".$" ^ s
+	| "length" | "name" when not c.cl_extern || Meta.has Meta.HxGen c.cl_meta-> ".$" ^ s
 	| s -> field s
 
 let has_feature ctx = Common.has_feature ctx.com
@@ -150,6 +151,10 @@ let handle_newlines ctx str =
 		in
 		loop 0
 	else ()
+
+let flush ctx =
+	Rbuffer.output_buffer ctx.chan ctx.buf;
+	Rbuffer.clear ctx.buf
 
 let spr ctx s =
 	ctx.separator <- false;
@@ -256,7 +261,7 @@ let write_mappings ctx =
 
 let newline ctx =
 	match Rbuffer.nth ctx.buf (Rbuffer.length ctx.buf - 1) with
-	| '}' | '{' | ':' when not ctx.separator -> print ctx "\n%s" ctx.tabs
+	| '}' | '{' | ':' | ';' when not ctx.separator -> print ctx "\n%s" ctx.tabs
 	| _ -> print ctx ";\n%s" ctx.tabs
 
 let newprop ctx =
@@ -517,7 +522,7 @@ and gen_expr ctx e =
 	| TField (x,f) ->
 		gen_value ctx x;
 		let name = field_name f in
-		spr ctx (match f with FStatic _ -> static_field name | FEnum _ | FInstance _ | FAnon _ | FDynamic _ | FClosure _ -> field name)
+		spr ctx (match f with FStatic(c,_) -> static_field c name | FEnum _ | FInstance _ | FAnon _ | FDynamic _ | FClosure _ -> field name)
 	| TTypeExpr t ->
 		spr ctx (ctx.type_accessor t)
 	| TParenthesis e ->
@@ -940,13 +945,13 @@ let gen_class_static_field ctx c f =
 	| None when is_extern_field f ->
 		()
 	| None ->
-		print ctx "%s%s = null" (s_path ctx c.cl_path) (static_field f.cf_name);
+		print ctx "%s%s = null" (s_path ctx c.cl_path) (static_field c f.cf_name);
 		newline ctx
 	| Some e ->
 		match e.eexpr with
 		| TFunction _ ->
-			let path = (s_path ctx c.cl_path) ^ (static_field f.cf_name) in
-			let dot_path = (dot_path c.cl_path) ^ (static_field f.cf_name) in
+			let path = (s_path ctx c.cl_path) ^ (static_field c f.cf_name) in
+			let dot_path = (dot_path c.cl_path) ^ (static_field c f.cf_name) in
 			ctx.id_counter <- 0;
 			print ctx "%s = " path;
 			(match (get_exposed ctx dot_path f.cf_meta) with [s] -> print ctx "$hx_exports.%s = " s | _ -> ());
@@ -1076,7 +1081,8 @@ let generate_class ctx c =
 		print ctx "\n}";
 		(match c.cl_super with None -> ctx.separator <- true | _ -> print ctx ")");
 		newline ctx
-	end
+	end;
+	flush ctx
 
 let generate_enum ctx e =
 	let p = s_path ctx e.e_path in
@@ -1124,15 +1130,17 @@ let generate_enum ctx e =
 		print ctx "%s.__empty_constructs__ = [%s]" p (String.concat "," (List.map (fun s -> Printf.sprintf "%s.%s" p s) ctors_without_args));
 		newline ctx
 	end;
-	match Codegen.build_metadata ctx.com (TEnumDecl e) with
+	begin match Codegen.build_metadata ctx.com (TEnumDecl e) with
 	| None -> ()
 	| Some e ->
 		print ctx "%s.__meta__ = " p;
 		gen_expr ctx e;
 		newline ctx
+	end;
+	flush ctx
 
 let generate_static ctx (c,f,e) =
-	print ctx "%s%s = " (s_path ctx c.cl_path) (static_field f);
+	print ctx "%s%s = " (s_path ctx c.cl_path) (static_field c f);
 	gen_value ctx e;
 	newline ctx
 
@@ -1188,6 +1196,7 @@ let alloc_ctx com =
 	let ctx = {
 		com = com;
 		buf = Rbuffer.create 16000;
+		chan = open_out_bin com.file;
 		packages = Hashtbl.create 0;
 		smap = {
 			source_last_line = 0;
@@ -1232,7 +1241,6 @@ let gen_single_expr ctx e expr =
 	str
 
 let generate com =
-	let t = Common.timer "generate js" in
 	(match com.js_gen with
 	| Some g -> g()
 	| None ->
@@ -1247,7 +1255,7 @@ let generate com =
 				let path = dot_path c.cl_path in
 				let class_exposed = get_exposed ctx path c.cl_meta in
 				let static_exposed = List.map (fun f ->
-					get_exposed ctx (path ^ static_field f.cf_name) f.cf_meta
+					get_exposed ctx (path ^ static_field c f.cf_name) f.cf_meta
 				) c.cl_ordered_statics in
 				List.concat (class_exposed :: static_exposed)
 			| _ -> []
@@ -1398,8 +1406,6 @@ let generate com =
 		);
 	end;
 	if com.debug then write_mappings ctx else (try Sys.remove (com.file ^ ".map") with _ -> ());
-	let ch = open_out_bin com.file in
-	Rbuffer.output_buffer ch ctx.buf;
-	close_out ch);
-	t()
+	flush ctx;
+	close_out ctx.chan)
 

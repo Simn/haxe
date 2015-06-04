@@ -205,8 +205,6 @@ struct
 				| TCall( ({ eexpr = TField( (_ as ef), FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = ("ffloor" as f) }) ) } as fe), p)
 				| TCall( ({ eexpr = TField( (_ as ef), FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = ("fceil" as f) }) ) } as fe), p) ->
 						Type.map_expr run { e with eexpr = TCall({ fe with eexpr = TField(ef, FDynamic (String.sub f 1 (String.length f - 1)))	}, p) }
-				| TCall( ({ eexpr = TField( (_ as ef), FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = ("fround") }) ) } as fe), p) ->
-						Type.map_expr run { e with eexpr = TCall({ fe with eexpr = TField(ef, FDynamic "rint")	}, p) }
 				| TCall( { eexpr = TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "floor" }) ) }, _)
 				| TCall( { eexpr = TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "round" }) ) }, _)
 				| TCall( { eexpr = TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "ceil" }) ) }, _) ->
@@ -2473,8 +2471,6 @@ let configure gen =
 
 	TypeParams.RenameTypeParameters.run gen;
 
-	let t = Common.timer "code generation" in
-
 	let parts = Str.split_delim (Str.regexp "[\\/]+") gen.gcon.file in
 	mkdir_recursive "" parts;
 	generate_modules_t gen "java" "src" change_path module_gen out_files;
@@ -2491,9 +2487,7 @@ let configure gen =
 		print_endline cmd;
 		if gen.gcon.run_command cmd <> 0 then failwith "Build failed";
 		Sys.chdir old_dir;
-	end;
-
-	t()
+	end
 
 (* end of configure function *)
 
@@ -2717,6 +2711,7 @@ let convert_param ctx p parent param =
 			tp_name = name;
 			tp_params = [];
 			tp_constraints = List.map (convert_signature ctx p) constraints;
+			tp_meta = [];
 		}
 
 let get_type_path ctx ct = match ct with | CTPath p -> p | _ -> assert false
@@ -2837,12 +2832,14 @@ let convert_java_enum ctx p pe =
 								tp_name = name;
 								tp_params = [];
 								tp_constraints = List.map (convert_signature ctx p) (ext :: impl);
+								tp_meta = [];
 							}
 						| (name, None, impl) ->
 							{
 								tp_name = name;
 								tp_params = [];
 								tp_constraints = List.map (convert_signature ctx p) (impl);
+								tp_meta = [];
 							}
 					) field.jf_types in
 					ctx.jtparams <- old_types;

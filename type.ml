@@ -263,6 +263,7 @@ and tabstract = {
 	mutable a_to : t list;
 	mutable a_to_field : (t * tclass_field) list;
 	mutable a_array : tclass_field list;
+	mutable a_resolve : tclass_field option;
 }
 
 and module_type =
@@ -439,6 +440,7 @@ let null_abstract = {
 	a_to = [];
 	a_to_field = [];
 	a_array = [];
+	a_resolve = None;
 }
 
 let of_type =
@@ -1311,7 +1313,7 @@ let rec s_expr_ast print_var_ids tabs s_type e =
 		let sfa = match fa with
 			| FInstance(c,tl,cf) -> tag "FInstance" ~extra_tabs:"\t" [s_type (TInst(c,tl)); cf.cf_name]
 			| FStatic(c,cf) -> tag "FStatic" ~extra_tabs:"\t" [s_type_path c.cl_path; cf.cf_name]
-			| FClosure(co,cf) -> tag "FClosure" ~extra_tabs:"\t" [(match co with None -> "None" | Some (c,_) -> s_type_path c.cl_path); cf.cf_name]
+			| FClosure(co,cf) -> tag "FClosure" ~extra_tabs:"\t" [(match co with None -> "None" | Some (c,tl) -> s_type (TInst(c,tl))); cf.cf_name]
 			| FAnon cf -> tag "FAnon" ~extra_tabs:"\t" [cf.cf_name]
 			| FDynamic s -> tag "FDynamic" ~extra_tabs:"\t" [s]
 			| FEnum(en,ef) -> tag "FEnum" ~extra_tabs:"\t" [s_type_path en.e_path; ef.ef_name]
@@ -1518,8 +1520,8 @@ let unify_kind k1 k2 =
 			| MethDynamic -> direct_access v.v_read && direct_access v.v_write
 			| MethMacro -> false
 			| MethNormal | MethInline ->
-				match v.v_write with
-				| AccNo | AccNever -> true
+				match v.v_read,v.v_write with
+				| AccNormal,(AccNo | AccNever) -> true
 				| _ -> false)
 		| Method m1, Method m2 ->
 			match m1,m2 with

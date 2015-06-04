@@ -5,13 +5,45 @@ open Typecore
 
 (* PASS 1 begin *)
 
-let rec verify_ast e = match e.eexpr with
-	| TField(_) ->
+let rec verify_ast ctx e =
+	let not_null e e1 = match e1.eexpr with
+		| TConst TNull -> display_error ctx ("Invalid null expression: " ^ (s_expr_pretty "" (s_type (print_context())) e)) e.epos
+		| _ -> ()
+	in
+	let rec loop e = match e.eexpr with
+	| TField(e1,_) ->
+		not_null e e1;
 		()
+	| TArray(e1,e2) ->
+		not_null e e1;
+		loop e1;
+		loop e2
+	| TCall(e1,el) ->
+		not_null e e1;
+		loop e1;
+		List.iter loop el
+	| TUnop(_,_,e1) ->
+		not_null e e1;
+		loop e1
+	(* probably too messy *)
+(* 	| TBinop((OpEq | OpNotEq),e1,e2) ->
+		loop e1;
+		loop e2
+	| TBinop((OpAssign | OpAssignOp _),e1,e2) ->
+		not_null e e1;
+		loop e1;
+		loop e2
+	| TBinop(op,e1,e2) ->
+		not_null e e1;
+		not_null e e2;
+		loop e1;
+		loop e2 *)
 	| TTypeExpr(TClassDecl {cl_kind = KAbstractImpl a}) when not (Meta.has Meta.RuntimeValue a.a_meta) ->
 		error "Cannot use abstract as value" e.epos
 	| _ ->
-		Type.iter verify_ast e
+		Type.iter loop e
+	in
+	loop e
 
 (*
 	Wraps implicit blocks in TIf, TFor, TWhile, TFunction and TTry with real ones
@@ -874,7 +906,7 @@ let apply_native_paths ctx t =
 			let meta,path = get_real_path e.e_meta e.e_path in
 			e.e_meta <- meta :: e.e_meta;
 			e.e_path <- path;
-		| TAbstractDecl a ->
+		| TAbstractDecl a when Meta.has Meta.CoreType a.a_meta ->
 			let meta,path = get_real_path a.a_meta a.a_path in
 			a.a_meta <- meta :: a.a_meta;
 			a.a_path <- path;
@@ -984,8 +1016,25 @@ let add_meta_field ctx t = match t with
 		| Some e ->
 			let f = mk_field "__meta__" t_dynamic c.cl_pos in
 			f.cf_expr <- Some e;
-			c.cl_ordered_statics <- f :: c.cl_ordered_statics;
-			c.cl_statics <- PMap.add f.cf_name f c.cl_statics)
+			let can_deal_with_interface_metadata () = match ctx.com.platform with
+				| Flash when Common.defined ctx.com Define.As3 -> false
+				| Php -> false
+				| _ -> true
+			in
+			if c.cl_interface && not (can_deal_with_interface_metadata()) then begin
+				(* borrowed from gencommon, but I did wash my hands afterwards *)
+				let path = fst c.cl_path,snd c.cl_path ^ "_HxMeta" in
+				let ncls = mk_class c.cl_module path c.cl_pos in
+				let cf = mk_field "__meta__" e.etype e.epos in
+				cf.cf_expr <- Some e;
+				ncls.cl_statics <- PMap.add "__meta__" cf ncls.cl_statics;
+				ncls.cl_ordered_statics <- cf :: ncls.cl_ordered_statics;
+				ctx.com.types <- (TClassDecl ncls) :: ctx.com.types;
+				c.cl_meta <- (Meta.Custom ":hasMetadata",[],e.epos) :: c.cl_meta
+			end else begin
+				c.cl_ordered_statics <- f :: c.cl_ordered_statics;
+				c.cl_statics <- PMap.add f.cf_name f c.cl_statics
+			end)
 	| _ ->
 		()
 
@@ -1120,7 +1169,7 @@ let run com tctx main =
 		] in
 		List.iter (run_expression_filters tctx filters) new_types;
 		Analyzer.Run.run_on_types tctx new_types;
-		List.iter (iter_expressions [verify_ast]) new_types;
+		List.iter (iter_expressions [verify_ast tctx]) new_types;
 		let filters = [
 			Optimizer.sanitize com;
 			if com.config.pf_add_final_return then add_final_return else (fun e -> e);
@@ -1154,7 +1203,7 @@ let run com tctx main =
 			rename_local_vars tctx;
 		] in
 		List.iter (run_expression_filters tctx filters) new_types;
-		List.iter (iter_expressions [verify_ast]) new_types;
+		List.iter (iter_expressions [verify_ast tctx]) new_types;
 	end;
 	next_compilation();
 	List.iter (fun f -> f()) (List.rev com.filters); (* macros onGenerate etc. *)
@@ -1188,7 +1237,7 @@ let run com tctx main =
 				not (Meta.has Meta.Enum cf.cf_meta)
 			in
 			(* also filter abstract implementation classes that have only @:enum fields (issue #2858) *)
-			if not (Meta.has Meta.Used c.cl_meta || Common.defined com Define.As3) || not (List.exists is_runtime_field c.cl_ordered_statics) then
+			if not (List.exists is_runtime_field c.cl_ordered_statics) then
 				c.cl_extern <- true
 		| _ -> ()
 	) com.types;

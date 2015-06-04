@@ -247,6 +247,7 @@ let make_generic ctx ps pt p =
 				| TAbstract(a,tl) -> (s_type_path_underscore a.a_path) ^ (loop_tl tl)
 				| _ when not top -> "_" (* allow unknown/incompatible types as type parameters to retain old behavior *)
 				| TMono _ -> raise (Generic_Exception (("Could not determine type for parameter " ^ s), p))
+				| TDynamic _ -> "Dynamic"
 				| t -> raise (Generic_Exception (("Type parameter must be a class or enum instance (found " ^ (s_type (print_context()) t) ^ ")"), p))
 			and loop_tl tl = match tl with
 				| [] -> ""
@@ -769,8 +770,6 @@ module AbstractCast = struct
 		let ta = apply_params a.a_params pl a.a_this in
 		let rec loop cfl = match cfl with
 			| [] -> raise Not_found
-			| cf :: cfl when not (Ast.Meta.has Ast.Meta.ArrayAccess cf.cf_meta) ->
-				loop cfl
 			| cf :: cfl ->
 				let monos = List.map (fun _ -> mk_mono()) cf.cf_params in
 				let map t = apply_params a.a_params pl (apply_params cf.cf_params monos t) in
@@ -1779,11 +1778,12 @@ module UnificationCallback = struct
 		| _ ->
 			List.map (fun e -> f e t_dynamic) el
 
-	let rec run f e =
+	let rec run ff e =
 		let f e t =
-			(* TODO: I don't think this should cause errors on Flash target *)
-			(* if not (type_iseq e.etype t) then f e t else e *)
-			f e t
+			if not (type_iseq e.etype t) then
+				ff e t
+			else
+				e
 		in
 		let check e = match e.eexpr with
 			| TBinop((OpAssign | OpAssignOp _ as op),e1,e2) ->
@@ -1838,7 +1838,7 @@ module UnificationCallback = struct
 				tf_stack := List.tl !tf_stack;
 				etf
 			| _ ->
-				check (Type.map_expr (run f) e)
+				check (Type.map_expr (run ff) e)
 end;;
 
 module DeprecationCheck = struct

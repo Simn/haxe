@@ -276,7 +276,7 @@ let constants =
 	"$";"add";"remove";"has";"__t";"module";"isPrivate";"isPublic";"isExtern";"isInterface";"exclude";
 	"constructs";"names";"superClass";"interfaces";"fields";"statics";"constructor";"init";"t";
 	"gid";"uid";"atime";"mtime";"ctime";"dev";"ino";"nlink";"rdev";"size";"mode";"pos";"len";
-	"binops";"unops";"from";"to";"array";"op";"isPostfix";"impl";
+	"binops";"unops";"from";"to";"array";"op";"isPostfix";"impl";"resolve";
 	"id";"capture";"extra";"v";"ids";"vars";"en";"overrides";"status"];
 	h
 
@@ -2212,7 +2212,7 @@ let macro_lib =
 		);
 		"on_generate", Fun1 (fun f ->
 			match f with
-			| VFunction (Fun1 _) ->
+			| VFunction (Fun1 _) | VClosure _ ->
 				let ctx = get_ctx() in
 				ctx.curapi.on_generate (fun tl ->
 					ignore(catch_errors ctx (fun() -> ctx.do_call VNull f [enc_array (List.map encode_type tl)] null_pos));
@@ -3883,6 +3883,7 @@ and encode_tparam_decl tp =
 		"name", enc_string tp.tp_name;
 		"params", enc_array (List.map encode_tparam_decl tp.tp_params);
 		"constraints", enc_array (List.map encode_ctype tp.tp_constraints);
+		"meta", encode_meta_content tp.tp_meta;
 	]
 
 and encode_fun f =
@@ -4119,6 +4120,7 @@ and decode_tparam_decl v =
 		tp_name = dec_string (field v "name");
 		tp_constraints = (match field v "constraints" with VNull -> [] | a -> List.map decode_ctype (dec_array a));
 		tp_params = decode_tparams (field v "params");
+		tp_meta = decode_meta_content (field v "meta");
 	}
 
 and decode_fun v =
@@ -4371,6 +4373,7 @@ and encode_tabstract a =
 		"from", enc_array ((List.map (fun t -> enc_obj [ "t",encode_type t; "field",VNull]) a.a_from) @ (List.map (fun (t,cf) -> enc_obj [ "t",encode_type t; "field",encode_cfield cf]) a.a_from_field));
 		"to", enc_array ((List.map (fun t -> enc_obj [ "t",encode_type t; "field",VNull]) a.a_to) @ (List.map (fun (t,cf) -> enc_obj [ "t",encode_type t; "field",encode_cfield cf]) a.a_to_field));
 		"array", enc_array (List.map encode_cfield a.a_array);
+		"resolve", (match a.a_resolve with None -> VNull | Some cf -> encode_cfref cf)
 	]
 
 and encode_efield f =
@@ -4628,12 +4631,18 @@ and encode_tfunc func =
 	]
 
 and encode_field_access fa =
+	let encode_instance c tl =
+		enc_obj [
+			"c",encode_clref c;
+			"params",encode_tparams tl
+		]
+	in
 	let tag,pl = match fa with
-		| FInstance(c,_,cf) -> 0,[encode_clref c;encode_cfref cf] (* TODO: breaking change, kind of *)
+		| FInstance(c,tl,cf) -> 0,[encode_clref c;encode_tparams tl;encode_cfref cf]
 		| FStatic(c,cf) -> 1,[encode_clref c;encode_cfref cf]
 		| FAnon(cf) -> 2,[encode_cfref cf]
 		| FDynamic(s) -> 3,[enc_string s]
-		| FClosure(co,cf) -> 4,[(match co with Some (c,_) -> encode_clref c | None -> VNull);encode_cfref cf] (* TODO: breaking change, kind of, too *)
+		| FClosure(co,cf) -> 4,[(match co with Some (c,tl) -> encode_instance c tl | None -> VNull);encode_cfref cf]
 		| FEnum(en,ef) -> 5,[encode_enref en;encode_efield ef]
 	in
 	enc_enum IFieldAccess tag pl
@@ -4769,13 +4778,18 @@ let decode_efield v =
 
 let decode_field_access v =
 	match decode_enum v with
-	| 0, [c;cf] ->
+	| 0, [c;tl;cf] ->
 		let c = decode_ref c in
-		FInstance(c,List.map snd c.cl_params,decode_ref cf) (* TODO: breaking change? *)
+		FInstance(c,List.map decode_type (dec_array tl),decode_ref cf)
 	| 1, [c;cf] -> FStatic(decode_ref c,decode_ref cf)
 	| 2, [cf] -> FAnon(decode_ref cf)
 	| 3, [s] -> FDynamic(dec_string s)
-	| 4, [co;cf] -> FClosure(opt decode_ref co,decode_ref cf)
+	| 4, [co;cf] ->
+		let co = match co with
+			| VNull -> None
+			| _ -> Some (decode_ref (field co "c"),List.map decode_type (dec_array (field co "params")))
+		in
+		FClosure(co,decode_ref cf)
 	| 5, [e;ef] -> FEnum(decode_ref e,decode_efield ef)
 	| _ -> raise Invalid_expr
 

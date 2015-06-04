@@ -70,7 +70,7 @@ exception Abort
 exception Completion of string
 
 
-let version = 3200
+let version = 3300
 let version_major = version / 1000
 let version_minor = (version mod 1000) / 100
 let version_revision = (version mod 100)
@@ -96,7 +96,7 @@ let is_debug_run() =
 	try Sys.getenv "HAXEDEBUG" = "1" with _ -> false
 
 let s_version =
-	Printf.sprintf "%d.%d.%d" version_major version_minor version_revision
+	Printf.sprintf "%d.%d.%d%s" version_major version_minor version_revision (match Version.version_extra with None -> "" | Some v -> " " ^ v)
 
 let format msg p =
 	if p = Ast.null_pos then
@@ -122,25 +122,25 @@ let message ctx msg p =
 	ctx.messages <- format msg p :: ctx.messages
 
 let deprecated = [
-	"Class not found : IntIter","IntIter was renamed to IntIterator";
+	"Type not found : IntIter","IntIter was renamed to IntIterator";
 	"EReg has no field customReplace","EReg.customReplace was renamed to EReg.map";
 	"#StringTools has no field isEOF","StringTools.isEOF was renamed to StringTools.isEof";
-	"Class not found : haxe.BaseCode","haxe.BaseCode was moved to haxe.crypto.BaseCode";
-	"Class not found : haxe.Md5","haxe.Md5 was moved to haxe.crypto.Md5";
-	"Class not found : haxe.SHA1","haxe.SHA1 was moved to haxe.crypto.SHA1";
-	"Class not found : Hash","Hash has been removed, use Map instead";
-	"Class not found : IntHash","IntHash has been removed, use Map instead";
-	"Class not found : haxe.FastList","haxe.FastList was moved to haxe.ds.GenericStack";
+	"Type not found : haxe.BaseCode","haxe.BaseCode was moved to haxe.crypto.BaseCode";
+	"Type not found : haxe.Md5","haxe.Md5 was moved to haxe.crypto.Md5";
+	"Type not found : haxe.SHA1","haxe.SHA1 was moved to haxe.crypto.SHA1";
+	"Type not found : Hash","Hash has been removed, use Map instead";
+	"Type not found : IntHash","IntHash has been removed, use Map instead";
+	"Type not found : haxe.FastList","haxe.FastList was moved to haxe.ds.GenericStack";
 	"#Std has no field format","Std.format has been removed, use single quote 'string ${escape}' syntax instead";
 	"Identifier 'EType' is not part of enum haxe.macro.ExprDef","EType has been removed, use EField instead";
 	"Identifier 'CType' is not part of enum haxe.macro.Constant","CType has been removed, use CIdent instead";
-	"Class not found : haxe.rtti.Infos","Use @:rtti instead of implementing haxe.rtti.Infos";
-	"Class not found : haxe.rtti.Generic","Use @:generic instead of implementing haxe.Generic";
-	"Class not found : flash.utils.TypedDictionary","flash.utils.TypedDictionary has been removed, use Map instead";
-	"Class not found : haxe.Stack", "haxe.Stack has been renamed to haxe.CallStack";
-	"Class not found : neko.zip.Reader", "neko.zip.Reader has been removed, use haxe.zip.Reader instead";
-	"Class not found : neko.zip.Writer", "neko.zip.Writer has been removed, use haxe.zip.Writer instead";
-	"Class not found : haxe.Public", "Use @:publicFields instead of implementing or extending haxe.Public";
+	"Type not found : haxe.rtti.Infos","Use @:rtti instead of implementing haxe.rtti.Infos";
+	"Type not found : haxe.rtti.Generic","Use @:generic instead of implementing haxe.Generic";
+	"Type not found : flash.utils.TypedDictionary","flash.utils.TypedDictionary has been removed, use Map instead";
+	"Type not found : haxe.Stack", "haxe.Stack has been renamed to haxe.CallStack";
+	"Type not found : neko.zip.Reader", "neko.zip.Reader has been removed, use haxe.zip.Reader instead";
+	"Type not found : neko.zip.Writer", "neko.zip.Writer has been removed, use haxe.zip.Writer instead";
+	"Type not found : haxe.Public", "Use @:publicFields instead of implementing or extending haxe.Public";
 	"#Xml has no field createProlog", "Xml.createProlog was renamed to Xml.createProcessingInstruction"
 ]
 
@@ -660,7 +660,7 @@ let rec process_params create pl =
 				(* already connected : skip *)
 				loop acc l)
 		| "--run" :: cl :: args ->
-			let acc = (cl ^ ".main()") :: "--macro" :: acc in
+			let acc = cl :: "-main" :: "--interp" :: acc in
 			let ctx = create (!each_params @ (List.rev acc)) in
 			ctx.com.sys_args <- args;
 			init ctx;
@@ -978,8 +978,8 @@ and do_connect host port args =
 
 and init ctx =
 	let usage = Printf.sprintf
-		"Haxe Compiler %s %s- (C)2005-2015 Haxe Foundation\n Usage : haxe%s -main <class> [-swf|-js|-neko|-php|-cpp|-as3] <output> [options]\n Options :"
-		s_version (match Version.version_extra with None -> "" | Some v -> v) (if Sys.os_type = "Win32" then ".exe" else "")
+		"Haxe Compiler %s - (C)2005-2015 Haxe Foundation\n Usage : haxe%s -main <class> [-swf|-js|-neko|-php|-cpp|-as3] <output> [options]\n Options :"
+		s_version (if Sys.os_type = "Win32" then ".exe" else "")
 	in
 	let com = ctx.com in
 	let classes = ref [([],"Std")] in
@@ -1017,8 +1017,8 @@ try
 			| l ->
 				l
 		in
-		let parts = "" :: Str.split_delim (Str.regexp "[;:]") p in
-		com.class_path <- List.map normalize_path (loop parts)
+		let parts = Str.split_delim (Str.regexp "[;:]") p in
+		com.class_path <- "" :: List.map normalize_path (loop parts)
 	with
 		Not_found ->
 			if Sys.os_type = "Unix" then
@@ -1097,7 +1097,7 @@ try
 				| _ -> 	if List.mem var reserved_flags then raise (Arg.Bad (var ^ " is a reserved compiler flag and cannot be defined from command line"));
 			end;
 			Common.raw_define com var;
-		),"<var> : define a conditional compilation flag");
+		),"<var[=value]> : define a conditional compilation flag");
 		("-v",Arg.Unit (fun () ->
 			com.verbose <- true
 		),": turn on verbose mode");
@@ -1112,7 +1112,7 @@ try
 			| "std" | "full" | "no" -> ()
 			| _ -> raise (Arg.Bad "Invalid DCE mode, expected std | full | no"));
 			Common.define_value com Define.Dce mode
-		),"[std|full|no] : set the dead code elimination mode");
+		),"[std|full|no] : set the dead code elimination mode (default std)");
 		("-swf-version",Arg.Float (fun v ->
 			if not !swf_version || com.flash_version < v then com.flash_version <- v;
 			swf_version := true;
@@ -1290,7 +1290,6 @@ try
 		("--interp", Arg.Unit (fun() ->
 			Common.define com Define.Interp;
 			set_platform Neko "";
-			no_output := true;
 			interp := true;
 		),": interpret the program using internal macro system");
 		("--macro", Arg.String (fun e ->
@@ -1484,7 +1483,7 @@ try
 	end else begin
 		ctx.setup();
 		Common.log com ("Classpath : " ^ (String.concat ";" com.class_path));
-		Common.log com ("Defines : " ^ (String.concat ";" (PMap.foldi (fun v _ acc -> v :: acc) com.defines [])));
+		Common.log com ("Defines : " ^ (String.concat ";" (PMap.foldi (fun k v acc -> (match v with "1" -> k | _ -> k ^ "=" ^ v) :: acc) com.defines [])));
 		let t = Common.timer "typing" in
 		Typecore.type_expr_ref := (fun ctx e with_type -> Typer.type_expr ctx e with_type);
 		let tctx = Typer.create com in
@@ -1529,45 +1528,44 @@ try
 			| Cpp | Cs | Java | Php -> Common.mkdir_from_path (com.file ^ "/.")
 			| _ -> Common.mkdir_from_path com.file
 		end;
-		(match com.platform with
-		| _ when !no_output ->
+		if not !no_output then begin
 			if !interp then begin
 				let ctx = Interp.create com (Typer.make_macro_api tctx Ast.null_pos) in
 				Interp.add_types ctx com.types (fun t -> ());
 				(match com.main with
 				| None -> ()
 				| Some e -> ignore(Interp.eval_expr ctx e));
-			end;
-		| Cross ->
-			()
-		| Flash when Common.defined com Define.As3 ->
-			Common.log com ("Generating AS3 in : " ^ com.file);
-			Genas3.generate com;
-		| Flash ->
-			Common.log com ("Generating swf : " ^ com.file);
-			Genswf.generate com !swf_header;
-		| Neko ->
-			Common.log com ("Generating neko : " ^ com.file);
-			Genneko.generate com;
-		| Js ->
-			Common.log com ("Generating js : " ^ com.file);
-			Genjs.generate com
-		| Php ->
-			Common.log com ("Generating PHP in : " ^ com.file);
-			Genphp.generate com;
-		| Cpp ->
-			Common.log com ("Generating Cpp in : " ^ com.file);
-			Gencpp.generate com;
-		| Cs ->
-			Common.log com ("Generating Cs in : " ^ com.file);
-			Gencs.generate com;
-		| Java ->
-			Common.log com ("Generating Java in : " ^ com.file);
-			Genjava.generate com;
-		| Python ->
-			Common.log com ("Generating python in : " ^ com.file);
-			Genpy.generate com;
-		);
+			end else if com.platform = Cross then
+				()
+			else begin
+				let generate,name = match com.platform with
+				| Flash when Common.defined com Define.As3 ->
+					Genas3.generate,"AS3"
+				| Flash ->
+					Genswf.generate !swf_header,"swf"
+				| Neko ->
+					Genneko.generate,"neko"
+				| Js ->
+					Genjs.generate,"js"
+				| Php ->
+					Genphp.generate,"php"
+				| Cpp ->
+					Gencpp.generate,"cpp"
+				| Cs ->
+					Gencs.generate,"cs"
+				| Java ->
+					Genjava.generate,"java"
+				| Python ->
+					Genpy.generate,"python"
+				| Cross ->
+					assert false
+				in
+				Common.log com ("Generating " ^ name ^ ": " ^ com.file);
+				let t = Common.timer ("generate " ^ name) in
+				generate com;
+				t()
+			end
+		end
 	end;
 	Sys.catch_break false;
 	List.iter (fun f -> f()) (List.rev com.final_filters);

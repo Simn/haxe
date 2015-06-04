@@ -2379,6 +2379,22 @@ let configure gen =
 				begin_block w;
 				true
 		in
+
+		(try
+			let _,m,_ = Meta.get (Meta.Custom "generic_iface") cl.cl_meta in
+			let rec loop i acc =
+				if i == 0 then
+					acc
+				else
+					"object" :: (loop (pred i) acc)
+			in
+			let tparams = loop (match m with [(EConst(Int s),_)] -> int_of_string s | _ -> assert false) [] in
+			cl.cl_meta <- (Meta.Meta, [
+				EConst(String("global::haxe.lang.GenericInterface(typeof(global::" ^ module_s (TClassDecl cl) ^ "<" ^ String.concat ", " tparams ^ ">))") ), cl.cl_pos
+			], cl.cl_pos) :: cl.cl_meta
+		with Not_found ->
+			());
+
 		gen_attributes w cl.cl_meta;
 
 		let is_main =
@@ -3292,8 +3308,6 @@ let configure gen =
 
 	TypeParams.RenameTypeParameters.run gen;
 
-	let t = Common.timer "code generation" in
-
 	let parts = Str.split_delim (Str.regexp "[\\/]+") gen.gcon.file in
 	mkdir_recursive "" parts;
 	generate_modules gen "cs" "src" module_gen out_files;
@@ -3309,9 +3323,7 @@ let configure gen =
 		print_endline cmd;
 		if gen.gcon.run_command cmd <> 0 then failwith "Build failed";
 		Sys.chdir old_dir;
-	end;
-
-	t()
+	end
 
 (* end of configure function *)
 
@@ -3743,6 +3755,7 @@ let convert_ilmethod ctx p m is_explicit_impl =
 				tp_name = "M" ^ string_of_int t.tnumber;
 				tp_params = [];
 				tp_constraints = [];
+				tp_meta = [];
 			}
 		) m.mtypes in
 		FFun {
@@ -3911,6 +3924,7 @@ let convert_delegate ctx p ilcls =
 			tp_name = "T" ^ string_of_int t.tnumber;
 			tp_params = [];
 			tp_constraints = [];
+			tp_meta = [];
 		}
 	) ilcls.ctypes in
 	let mk_op_fn op name p =
@@ -4092,6 +4106,7 @@ let convert_ilclass ctx p ?(delegate=false) ilcls = match ilcls.csuper with
 					tp_name = "T" ^ string_of_int p.tnumber;
 					tp_params = [];
 					tp_constraints = [];
+					tp_meta = [];
 				}) ilcls.ctypes
 			in
 

@@ -62,6 +62,20 @@ let is_special_compare e1 e2 =
 	| TInst ({ cl_path = ["flash"],"NativeXml" } as c,_) , _ | _ , TInst ({ cl_path = ["flash"],"NativeXml" } as c,_) -> Some c
 	| _ -> None
 
+let is_fixed_override cf t =
+	let is_type_parameter c = match c.cl_kind with
+		| KTypeParameter _ -> true
+		| _ -> false
+	in
+	match follow cf.cf_type,follow t with
+	| TFun(_,r1),TFun(_,r2) ->
+		begin match follow r1,follow r2 with
+		| TInst(c1,_),TInst(c2,_) when c1 != c2 && not (is_type_parameter c1) && not (is_type_parameter c2) -> true
+		| _ -> false
+		end
+	| _ ->
+		false
+
 let protect name =
 	match name with
 	| "Error" | "Namespace" -> "_" ^ name
@@ -521,6 +535,14 @@ let rec gen_call ctx e el r =
 		spr ctx "(";
 		concat ctx "," (gen_value ctx) el;
 		spr ctx ")"
+	| TField (e1,FInstance(_,_,cf)),el when is_fixed_override cf e.etype ->
+		let s = type_str ctx r e.epos in
+		spr ctx "((";
+		gen_value ctx e;
+		spr ctx "(";
+		concat ctx "," (gen_value ctx) el;
+		spr ctx ")";
+		print ctx ") as %s)" s
 	| _ ->
 		gen_value ctx e;
 		spr ctx "(";
@@ -1106,7 +1128,13 @@ let generate_class ctx c =
 	pack();
 	newline ctx;
 	print ctx "}";
-	newline ctx
+	newline ctx;
+	if c.cl_interface && Ast.Meta.has (Ast.Meta.Custom ":hasMetadata") c.cl_meta then begin
+		(* we have to reference the metadata class in order for it to be compiled *)
+		let path = fst c.cl_path,snd c.cl_path ^ "_HxMeta" in
+		spr ctx (Ast.s_type_path path);
+		newline ctx
+	end
 
 let generate_main ctx inits =
 	ctx.curclass <- { null_class with cl_path = [],"__main__" };
