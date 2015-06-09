@@ -116,6 +116,7 @@ type extern_api = {
 	get_expected_type : unit -> t option;
 	get_call_arguments : unit -> Ast.expr list option;
 	get_local_method : unit -> string;
+	get_local_imports : unit -> Ast.import list;
 	get_local_using : unit -> tclass list;
 	get_local_vars : unit -> (string, Type.tvar) PMap.t;
 	get_build_fields : unit -> value;
@@ -212,6 +213,7 @@ let make_complex_type_ref = ref (fun _ -> assert false)
 let encode_tvar_ref = ref (fun _ -> assert false)
 let decode_path_ref = ref (fun _ -> assert false)
 let decode_import_ref = ref (fun _ -> assert false)
+let encode_import_ref = ref (fun _ -> assert false)
 let get_ctx() = (!get_ctx_ref)()
 let enc_array (l:value list) : value = (!enc_array_ref) l
 let dec_array (l:value) : value list = (!dec_array_ref) l
@@ -229,7 +231,8 @@ let enc_string (s:string) : value = (!enc_string_ref) s
 let make_complex_type (t:Type.t) : Ast.complex_type = (!make_complex_type_ref) t
 let encode_tvar (v:tvar) : value = (!encode_tvar_ref) v
 let decode_path (v:value) : Ast.type_path = (!decode_path_ref) v
-let decode_import (v:value) : ((string * Ast.pos) list * Ast.import_mode) = (!decode_import_ref) v
+let encode_import (i:Ast.import) : value = (!encode_import_ref) i
+let decode_import (v:value) : Ast.import = (!decode_import_ref) v
 
 let to_int f = Int32.of_float (mod_float f 2147483648.0)
 let need_32_bits i = Int32.compare (Int32.logand (Int32.add i 0x40000000l) 0x80000000l) Int32.zero <> 0
@@ -277,7 +280,7 @@ let constants =
 	"constructs";"names";"superClass";"interfaces";"fields";"statics";"constructor";"init";"t";
 	"gid";"uid";"atime";"mtime";"ctime";"dev";"ino";"nlink";"rdev";"size";"mode";"pos";"len";
 	"binops";"unops";"from";"to";"array";"op";"isPostfix";"impl";"resolve";
-	"id";"capture";"extra";"v";"ids";"vars";"en";"overrides";"status"];
+	"id";"capture";"extra";"v";"ids";"vars";"en";"overrides";"status";"overloads";"path"];
 	h
 
 let h_get = hash "__get" and h_set = hash "__set"
@@ -2521,6 +2524,9 @@ let macro_lib =
 		"local_using", Fun0 (fun() ->
 			enc_array (List.map encode_clref ((get_ctx()).curapi.get_local_using()))
 		);
+		"local_imports", Fun0 (fun() ->
+			enc_array (List.map encode_import ((get_ctx()).curapi.get_local_imports()))
+		);
 		"local_vars", Fun1 (fun as_var ->
 			let as_var = match as_var with
 				| VNull | VBool false -> false
@@ -3663,6 +3669,7 @@ type enum_index =
 	| IModuleType
 	| IFieldAccess
 	| IAnonStatus
+	| IImportMode
 
 let enum_name = function
 	| IExpr -> "ExprDef"
@@ -3683,9 +3690,10 @@ let enum_name = function
 	| IModuleType -> "ModuleType"
 	| IFieldAccess -> "FieldAccess"
 	| IAnonStatus -> "AnonStatus"
+	| IImportMode -> "ImportMode"
 
 let init ctx =
-	let enums = [IExpr;IBinop;IUnop;IConst;ITParam;ICType;IField;IType;IFieldKind;IMethodKind;IVarAccess;IAccess;IClassKind;ITypedExpr;ITConstant;IModuleType;IFieldAccess;IAnonStatus] in
+	let enums = [IExpr;IBinop;IUnop;IConst;ITParam;ICType;IField;IType;IFieldKind;IMethodKind;IVarAccess;IAccess;IClassKind;ITypedExpr;ITConstant;IModuleType;IFieldAccess;IAnonStatus;IImportMode] in
 	let get_enum_proto e =
 		match get_path ctx ["haxe";"macro";enum_name e] null_pos with
 		| VObject e ->
@@ -3809,6 +3817,18 @@ let encode_unop op =
 	| NegBits -> 4
 	in
 	enc_enum IUnop tag []
+
+let encode_import (path,mode) =
+	let tag,pl = match mode with
+		| INormal -> 0, []
+		| IAsName s -> 1, [enc_string s]
+		| IAll -> 2,[]
+	in
+	let mode = enc_enum IImportMode tag pl in
+	enc_obj [
+		"path", enc_array (List.map (fun (name,p) -> enc_obj [ "pos", encode_pos p; "name", enc_string name]) path);
+		"mode", mode
+	]
 
 let rec encode_path t =
 	let fields = [
@@ -4398,6 +4418,7 @@ and encode_cfield f =
 		"kind", encode_field_kind f.cf_kind;
 		"pos", encode_pos f.cf_pos;
 		"doc", null enc_string f.cf_doc;
+		"overloads", encode_ref f.cf_overloads (encode_array encode_cfield) (fun() -> "overloads");
 	]
 
 and encode_field_kind k =
@@ -4762,7 +4783,7 @@ let decode_cfield v =
 		cf_kind = decode_field_kind (field v "kind");
 		cf_params = decode_type_params (field v "params");
 		cf_expr = None;
-		cf_overloads = [];
+		cf_overloads = decode_ref (field v "overloads");
 	}
 
 let decode_efield v =
@@ -5012,17 +5033,7 @@ let rec make_ast e =
 		in
 		if snd mp = snd p then p else (fst mp) @ [snd mp],snd p
 	in
-	let mk_path (pack,name) p =
-		match List.rev pack with
-		| [] -> (EConst (Ident name),p)
-		| pl ->
-			let rec loop = function
-				| [] -> assert false
-				| [n] -> (EConst (Ident n),p)
-				| n :: l -> (EField (loop l, n),p)
-			in
-			(EField (loop pl,name),p)
-	in
+	let mk_path = expr_of_type_path in
 	let mk_const = function
 		| TInt i -> Int (Int32.to_string i)
 		| TFloat s -> Float s
@@ -5106,3 +5117,4 @@ decode_texpr_ref := decode_texpr;
 encode_tvar_ref := encode_tvar;
 decode_path_ref := decode_path;
 decode_import_ref := decode_import;
+encode_import_ref := encode_import;

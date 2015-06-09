@@ -50,6 +50,7 @@ module Meta = struct
 		| ClassCode
 		| Commutative
 		| CompilerGenerated
+		| Const
 		| CoreApi
 		| CoreType
 		| CppFileCode
@@ -438,12 +439,14 @@ type import_mode =
 	| IAsName of string
 	| IAll
 
+type import = (string * pos) list * import_mode
+
 type type_def =
 	| EClass of (class_flag, class_field list) definition
 	| EEnum of (enum_flag, enum_constructor list) definition
 	| ETypedef of (enum_flag, complex_type) definition
 	| EAbstract of (abstract_flag, class_field list) definition
-	| EImport of (string * pos) list * import_mode
+	| EImport of import
 	| EUsing of type_path
 
 type type_decl = type_def * pos
@@ -869,6 +872,8 @@ let get_value_meta meta =
 	with Not_found ->
 		PMap.empty
 
+(* Type path related functions *)
+
 let rec string_list_of_expr_path_raise (e,p) =
 	match e with
 	| EConst (Ident i) -> [i]
@@ -882,3 +887,27 @@ let expr_of_type_path (sl,s) p =
 		let e1 = (EConst(Ident s1),p) in
 		let e = List.fold_left (fun e s -> (EField(e,s),p)) e1 sl in
 		EField(e,s),p
+
+let match_path recursive sl sl_pattern =
+	let rec loop sl1 sl2 = match sl1,sl2 with
+		| [],[] ->
+			true
+		(* always recurse into types of package paths *)
+		| (s1 :: s11 :: _),[s2] when is_lower_ident s2 && not (is_lower_ident s11)->
+			s1 = s2
+		| [_],[""] ->
+			true
+		| _,([] | [""]) ->
+			recursive
+		| [],_ ->
+			false
+		| (s1 :: sl1),(s2 :: sl2) ->
+			s1 = s2 && loop sl1 sl2
+	in
+	loop sl sl_pattern
+
+let full_dot_path mpath tpath =
+	if mpath = tpath then
+		(fst tpath) @ [snd tpath]
+	else
+		(fst mpath) @ [snd mpath;snd tpath]

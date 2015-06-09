@@ -443,7 +443,7 @@ let rec load_instance ctx t p allow_no_params =
 					| t :: tl1,(name,t2) :: tl2 ->
 						let check_const c =
 							let is_expression = (match t with TInst ({ cl_kind = KExpr _ },_) -> true | _ -> false) in
-							let expects_expression = name = "Const" || Meta.has (Meta.Custom ":const") c.cl_meta in
+							let expects_expression = name = "Const" || Meta.has Meta.Const c.cl_meta in
 							let accepts_expression = name = "Rest" in
 							if is_expression then begin
 								if not expects_expression && not accepts_expression then
@@ -694,6 +694,7 @@ let hide_params ctx =
 		module_using = [];
 		module_globals = PMap.empty;
 		wildcard_packages = [];
+		module_imports = [];
 	};
 	ctx.type_params <- [];
 	(fun() ->
@@ -1461,10 +1462,10 @@ let set_heritance ctx c herits p =
 	) herits in
 	List.iter loop (List.filter (ctx.g.do_inherit ctx c p) herits)
 
-let rec type_type_params ?(enum_constructor=false) ctx path get_params p tp =
+let rec type_type_param ?(enum_constructor=false) ctx path get_params p tp =
 	let n = tp.tp_name in
 	let c = mk_class ctx.m.curmod (fst path @ [snd path],n) p in
-	c.cl_params <- List.map (type_type_params ctx c.cl_path get_params p) tp.tp_params;
+	c.cl_params <- type_type_params ctx c.cl_path get_params p tp.tp_params;
 	c.cl_kind <- KTypeParameter [];
 	c.cl_meta <- tp.Ast.tp_meta;
 	if enum_constructor then c.cl_meta <- (Meta.EnumConstructorParam,[],c.cl_pos) :: c.cl_meta;
@@ -1493,11 +1494,17 @@ let rec type_type_params ?(enum_constructor=false) ctx path get_params p tp =
 		delay ctx PForce (fun () -> ignore(!r()));
 		n, TLazy r
 
+and type_type_params ?(enum_constructor=false) ctx path get_params p tpl =
+	let names = ref [] in
+	List.map (fun tp ->
+		if List.mem tp.tp_name !names then display_error ctx ("Duplicate type parameter name: " ^ tp.tp_name) p;
+		names := tp.tp_name :: !names;
+		type_type_param ~enum_constructor ctx path get_params p tp
+	) tpl
+
 let type_function_params ctx fd fname p =
 	let params = ref [] in
-	params := List.map (fun tp ->
-		type_type_params ctx ([],fname) (fun() -> !params) p tp
-	) fd.f_params;
+	params := type_type_params ctx ([],fname) (fun() -> !params) p fd.f_params;
 	!params
 
 let find_enclosing com e =
@@ -1767,29 +1774,10 @@ let init_core_api ctx c =
 	| _ -> error "Constructor differs from core type" c.cl_pos)
 
 let check_global_metadata ctx f_add mpath tpath so =
-	let sl1 = if mpath = tpath then
-		(fst tpath) @ [snd tpath]
-	else
-		(fst mpath) @ [snd mpath;snd tpath]
-	in
+	let sl1 = full_dot_path mpath tpath in
 	let sl1,field_mode = match so with None -> sl1,false | Some s -> sl1 @ [s],true in
 	List.iter (fun (sl2,m,(recursive,to_types,to_fields)) ->
-		let rec loop sl1 sl2 = match sl1,sl2 with
-			| [],[] ->
-				true
-			(* always recurse into types of package paths *)
-			| (s1 :: s11 :: _),[s2] when is_lower_ident s2 && not (is_lower_ident s11)->
-				s1 = s2
-			| [_],[""] ->
-				true
-			| _,([] | [""]) ->
-				recursive
-			| [],_ ->
-				false
-			| (s1 :: sl1),(s2 :: sl2) ->
-				s1 = s2 && loop sl1 sl2
-		in
-		let add = ((field_mode && to_fields) || (not field_mode && to_types)) && (loop sl1 sl2) in
+		let add = ((field_mode && to_fields) || (not field_mode && to_types)) && (match_path recursive sl1 sl2) in
 		if add then f_add m
 	) ctx.g.global_metadata
 
@@ -2624,6 +2612,12 @@ let init_class ctx c p context_init herits fields =
 		| _ :: l ->
 			check_require l
 	in
+	let rec check_if_feature = function
+		| [] -> []
+		| (Meta.IfFeature,el,_) :: _ -> List.map (fun (e,p) -> match e with EConst (String s) -> s | _ -> error "String expected" p) el
+		| _ :: l -> check_if_feature l
+	in
+	let cl_if_feature = check_if_feature c.cl_meta in
 	let cl_req = check_require c.cl_meta in
 	List.iter (fun f ->
 		let p = f.cff_pos in
@@ -2631,15 +2625,11 @@ let init_class ctx c p context_init herits fields =
 			let fd , constr, f, do_add = loop_cf f in
 			let is_static = List.mem AStatic fd.cff_access in
 			if (is_static || constr) && c.cl_interface && f.cf_name <> "__init__" && not is_lib then error "You can't declare static fields in interfaces" p;
-			begin try
-				let _,args,_ = Meta.get Meta.IfFeature f.cf_meta in
-				List.iter (fun e -> match fst e with
-					| EConst(String s) ->
-						ctx.m.curmod.m_extra.m_if_feature <- (s,(c,f,is_static)) :: ctx.m.curmod.m_extra.m_if_feature;
-					| _ ->
-						error "String expected" (pos e)
-				) args
-			with Not_found -> () end;
+			let set_feature s =
+				ctx.m.curmod.m_extra.m_if_feature <- (s,(c,f,is_static)) :: ctx.m.curmod.m_extra.m_if_feature
+			in
+			List.iter set_feature cl_if_feature;
+			List.iter set_feature (check_if_feature f.cf_meta);
 			let req = check_require fd.cff_meta in
 			let req = (match req with None -> if is_static || constr then cl_req else None | _ -> req) in
 			(match req with
@@ -2754,6 +2744,7 @@ let rec init_module_type ctx context_init do_init (decl,p) =
 	in
 	match decl with
 	| EImport (path,mode) ->
+		ctx.m.module_imports <- (path,mode) :: ctx.m.module_imports;
 		let rec loop acc = function
 			| x :: l when is_lower_ident (fst x) -> loop (x::acc) l
 			| rest -> List.rev acc, rest
@@ -2997,7 +2988,7 @@ let rec init_module_type ctx context_init do_init (decl,p) =
 		List.iter (fun c ->
 			let p = c.ec_pos in
 			let params = ref [] in
-			params := List.map (fun tp -> type_type_params ~enum_constructor:true ctx ([],c.ec_name) (fun() -> !params) c.ec_pos tp) c.ec_params;
+			params := type_type_params ~enum_constructor:true ctx ([],c.ec_name) (fun() -> !params) c.ec_pos c.ec_params;
 			let params = !params in
 			let ctx = { ctx with type_params = params @ ctx.type_params } in
 			let rt = (match c.ec_type with
@@ -3154,6 +3145,7 @@ let type_module ctx m file ?(is_extern=false) tdecls p =
 			module_using = [];
 			module_globals = PMap.empty;
 			wildcard_packages = [];
+			module_imports = [];
 		};
 		meta = [];
 		this_stack = [];
@@ -3187,13 +3179,13 @@ let type_module ctx m file ?(is_extern=false) tdecls p =
 	List.iter (fun d ->
 		match d with
 		| (TClassDecl c, (EClass d, p)) ->
-			c.cl_params <- List.map (type_type_params ctx c.cl_path (fun() -> c.cl_params) p) d.d_params;
+			c.cl_params <- type_type_params ctx c.cl_path (fun() -> c.cl_params) p d.d_params;
 		| (TEnumDecl e, (EEnum d, p)) ->
-			e.e_params <- List.map (type_type_params ctx e.e_path (fun() -> e.e_params) p) d.d_params;
+			e.e_params <- type_type_params ctx e.e_path (fun() -> e.e_params) p d.d_params;
 		| (TTypeDecl t, (ETypedef d, p)) ->
-			t.t_params <- List.map (type_type_params ctx t.t_path (fun() -> t.t_params) p) d.d_params;
+			t.t_params <- type_type_params ctx t.t_path (fun() -> t.t_params) p d.d_params;
 		| (TAbstractDecl a, (EAbstract d, p)) ->
-			a.a_params <- List.map (type_type_params ctx a.a_path (fun() -> a.a_params) p) d.d_params;
+			a.a_params <- type_type_params ctx a.a_path (fun() -> a.a_params) p d.d_params;
 		| _ ->
 			assert false
 	) decls;

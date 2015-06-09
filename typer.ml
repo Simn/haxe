@@ -4554,6 +4554,9 @@ let make_macro_api ctx p =
 		Interp.get_local_using = (fun() ->
 			ctx.m.module_using;
 		);
+		Interp.get_local_imports = (fun() ->
+			ctx.m.module_imports;
+		);
 		Interp.get_local_vars = (fun () ->
 			ctx.locals;
 		);
@@ -4755,6 +4758,7 @@ let load_macro ctx cpath f p =
 		module_using = [];
 		module_globals = PMap.empty;
 		wildcard_packages = [];
+		module_imports = [];
 	};
 	add_dependency ctx.m.curmod mloaded;
 	let mt = Typeload.load_type_def mctx p { tpackage = fst cpath; tname = snd cpath; tparams = []; tsub = sub } in
@@ -5004,6 +5008,7 @@ let rec create com =
 			module_using = [];
 			module_globals = PMap.empty;
 			wildcard_packages = [];
+			module_imports = [];
 		};
 		meta = [];
 		this_stack = [];
