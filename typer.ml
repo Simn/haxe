@@ -713,7 +713,7 @@ let rec unify_call_args' ctx el args r callp inline force_inline =
 					assert false
 			end
 		| [],(_,false,_) :: _ ->
-			call_error Not_enough_arguments callp
+			call_error (Not_enough_arguments args) callp
 		| [],(name,true,t) :: args ->
 			begin match loop [] args with
 				| [] when not (inline && (ctx.g.doinline || force_inline)) && not ctx.com.config.pf_pad_nulls ->
@@ -789,44 +789,50 @@ let unify_field_call ctx fa el args ret p inline =
 	in
 	let is_forced_inline = is_forced_inline co cf in
 	let is_overload = Meta.has Meta.Overload cf.cf_meta in
+	let attempt_call t cf = match follow t with
+		| TFun(args,ret) ->
+			let el,tf = unify_call_args' ctx el args ret p inline is_forced_inline in
+			let mk_call ethis p_field =
+				let ef = mk (TField(ethis,mk_fa cf)) tf p_field in
+				make_call ctx ef (List.map fst el) ret p
+			in
+			el,tf,mk_call
+		| _ ->
+			assert false
+	in
 	let rec loop candidates = match candidates with
 		| [] -> [],[]
 		| (t,cf) :: candidates ->
 			begin try
-				begin match follow t with
-					| TFun(args,ret) ->
-						let el,tf = unify_call_args' ctx el args ret p inline is_forced_inline in
-						let mk_call ethis p_field =
-							let ef = mk (TField(ethis,mk_fa cf)) tf p_field in
-							make_call ctx ef (List.map fst el) ret p
-						in
-						let candidate = (el,tf,mk_call) in
-						if ctx.com.config.pf_overload && is_overload then begin
-							let candidates,failures = loop candidates in
-							candidate :: candidates,failures
-						end else
-							[candidate],[]
-					| _ ->
-						assert false
-				end
+				let candidate = attempt_call t cf in
+				if ctx.com.config.pf_overload && is_overload then begin
+					let candidates,failures = loop candidates in
+					candidate :: candidates,failures
+				end else
+					[candidate],[]
 			with Error (Call_error _,_) as err ->
 				let candidates,failures = loop candidates in
 				candidates,err :: failures
 			end
 	in
-	let candidates,failures = loop candidates in
-	let fail () = match List.rev failures with
-		| err :: _ -> raise err
-		| _ -> assert false
-	in
-	if is_overload && ctx.com.config.pf_overload then begin match Codegen.Overloads.reduce_compatible candidates with
-		| [] -> fail()
-		| [el,tf,mk_call] -> List.map fst el,tf,mk_call
-		| _ -> error "Ambiguous overload" p
-	end else begin match List.rev candidates with
-		| [] -> fail()
-		| (el,tf,mk_call) :: _ -> List.map fst el,tf,mk_call
-	end
+	match candidates with
+	| [t,cf] ->
+		let el,tf,mk_call = attempt_call t cf in
+		List.map fst el,tf,mk_call
+	| _ ->
+		let candidates,failures = loop candidates in
+		let fail () = match List.rev failures with
+			| err :: _ -> raise err
+			| _ -> assert false
+		in
+		if is_overload && ctx.com.config.pf_overload then begin match Codegen.Overloads.reduce_compatible candidates with
+			| [] -> fail()
+			| [el,tf,mk_call] -> List.map fst el,tf,mk_call
+			| _ -> error "Ambiguous overload" p
+		end else begin match List.rev candidates with
+			| [] -> fail()
+			| (el,tf,mk_call) :: _ -> List.map fst el,tf,mk_call
+		end
 
 let fast_enum_field e ef p =
 	let et = mk (TTypeExpr (TEnumDecl e)) (TAnon { a_fields = PMap.empty; a_status = ref (EnumStatics e) }) p in
@@ -4003,15 +4009,6 @@ and type_call ctx e el (with_type:with_type) p =
 		def ()
 
 and build_call ctx acc el (with_type:with_type) p =
-	let push_this e =
-		match e.eexpr with
-			| TConst (TInt _ | TFloat _ | TString _ | TBool _) ->
-				(Interp.make_ast e),fun () -> ()
-			| _ ->
-				ctx.this_stack <- e :: ctx.this_stack;
-				let er = EMeta((Meta.This,[],e.epos), (EConst(Ident "this"),e.epos)),e.epos in
-				er,fun () -> ctx.this_stack <- List.tl ctx.this_stack
-	in
 	match acc with
  	| AKInline (ethis,f,fmode,t) when Meta.has Meta.Generic f.cf_meta ->
 		type_generic_function ctx (ethis,fmode) el with_type p
@@ -4032,7 +4029,7 @@ and build_call ctx acc el (with_type:with_type) p =
 		begin match ef.cf_kind with
 		| Method MethMacro ->
 			let ethis = type_module_type ctx (TClassDecl cl) None p in
-			let eparam,f = push_this eparam in
+			let eparam,f = Codegen.push_this ctx eparam in
 			let e = build_call ctx (AKMacro (ethis,ef)) (eparam :: el) with_type p in
 			f();
 			e
@@ -4074,7 +4071,7 @@ and build_call ctx acc el (with_type:with_type) p =
 			| TInst (c,_) ->
 				let rec loop c =
 					if PMap.mem cf.cf_name c.cl_fields then
-						let eparam,f = push_this ethis in
+						let eparam,f = Codegen.push_this ctx ethis in
 						ethis_f := f;
 						let e = match ctx.g.do_macro ctx MExpr c.cl_path cf.cf_name (eparam :: el) p with
 							| None -> (fun() -> type_expr ctx (EConst (Ident "null"),p) Value)
