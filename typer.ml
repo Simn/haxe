@@ -733,7 +733,7 @@ let rec unify_call_args' ctx el args r callp inline force_inline =
 		| e :: el,(name,opt,t) :: args ->
 			begin try
 				let e = type_against t e in
-				(e,opt) :: loop el args
+				(e,false) :: loop el args
 			with
 				WithTypeError (ul,p) ->
 					if opt then

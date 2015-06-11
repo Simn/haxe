@@ -1657,12 +1657,6 @@ struct
 		| TEnum(ef,tlf), TEnum(ea, tla) ->
 			if ef != ea then raise Not_found;
 			(cacc, rate_tp tlf tla)
-		| TAbstract({ a_path = [], "Null" }, [tf]), TAbstract({ a_path = [], "Null" }, [ta]) ->
-			rate_conv (cacc+0) tf ta
-		| TAbstract({ a_path = [], "Null" }, [tf]), ta ->
-			rate_conv (cacc+1) tf ta
-		| tf, TAbstract({ a_path = [], "Null" }, [ta]) ->
-			rate_conv (cacc+1) tf ta
 		| TDynamic _, TDynamic _ ->
 			(cacc, 0)
 		| TDynamic _, _ ->
@@ -1671,6 +1665,12 @@ struct
 			(cacc + 2, 0) (* a dynamic to a basic type will have an "unboxing" penalty *)
 		| _, TDynamic _ ->
 			(cacc + 1, 0)
+		| TAbstract({ a_path = [], "Null" }, [tf]), TAbstract({ a_path = [], "Null" }, [ta]) ->
+			rate_conv (cacc+0) tf ta
+		| TAbstract({ a_path = [], "Null" }, [tf]), ta ->
+			rate_conv (cacc+1) tf ta
+		| tf, TAbstract({ a_path = [], "Null" }, [ta]) ->
+			rate_conv (cacc+1) tf ta
 		| TAbstract(af,tlf), TAbstract(aa,tla) ->
 			(if af == aa then
 				(cacc, rate_tp tlf tla)
@@ -1741,7 +1741,8 @@ struct
 			(* convert compatible into ( rate * compatible_type ) list *)
 			let rec mk_rate acc elist args = match elist, args with
 				| [], [] -> acc
-				| (_,true) :: elist, _ :: args -> mk_rate acc elist args
+				| (e,true) :: elist, _ :: args ->
+					mk_rate acc elist args
 				| (e,false) :: elist, (n,o,t) :: args ->
 					(* if the argument is an implicit cast, we need to start with a penalty *)
 					(* The penalty should be higher than any other implicit cast - other than Dynamic *)
