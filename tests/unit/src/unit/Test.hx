@@ -255,7 +255,7 @@ class Test {
 		#if (neko || php || cpp || java || cs || python)
 		#else
 		if( timer != null ) timer.stop();
-		timer = new haxe.Timer(10000);
+		timer = new haxe.Timer(30000);
 		timer.run = asyncTimeout;
 		#end
 	}
@@ -347,6 +347,14 @@ class Test {
 			//new TestUnspecified(),
 			//new TestRemoting(),
 		];
+
+
+		#if js
+		if (js.Browser.supported) {
+			classes.push(new TestJQuery());
+		}
+		#end
+
 		// SPOD tests
 		#if ( (neko || (php && (travis || php_sqlite)) || java || cpp || (cs && travis)) && !macro && !interp)
 		#if ( travis && !(cpp || cs) )

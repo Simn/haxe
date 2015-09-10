@@ -365,6 +365,7 @@ module Simplifier = struct
 				let e1 = match e1.eexpr with
 					| TFunction _ -> loop e1
 					| TArrayDecl [{eexpr = TFunction _}] -> loop e1
+					| TNew(_,_,el) when not (List.exists Optimizer.has_side_effect el) -> loop e1 (* issue #4322 *)
 					| _ -> bind ~allow_tlocal:true e1
 				in
 				{e with eexpr = TVar(v,Some e1)}
@@ -896,13 +897,8 @@ module Ssa = struct
 						close join;
 						Some e
 					| None ->
-						begin match e1.eexpr with
-							| TMeta((Meta.Exhaustive,_,_),_)
-							| TParenthesis({eexpr = TMeta((Meta.Exhaustive,_,_),_)}) ->
-								()
-							| _ ->
-								add_branch join ctx.cur_data e.epos;
-						end;
+						if not (Optimizer.is_exhaustive e1) then
+							add_branch join ctx.cur_data e.epos;
 						None
 				in
 				close_join_node ctx join e.epos;
@@ -1045,7 +1041,7 @@ module ConstPropagation = struct
 		with Not_found ->
 			-1
 
-	let can_be_inlined com v0 e = type_iseq v0.v_type e.etype && match e.eexpr with
+	let rec can_be_inlined com v0 e = type_iseq_strict v0.v_type e.etype && match e.eexpr with
 		| TConst ct ->
 			begin match ct with
 				| TThis | TSuper -> false
@@ -1069,6 +1065,9 @@ module ConstPropagation = struct
 			Ssa.get_var_usage_count v0 <= 1
 		| TField(_,FEnum _) ->
 			Ssa.get_var_usage_count v0 <= 1
+		| TCast(e1,None) ->
+			(* We can inline an unsafe cast if the variable is only used once. *)
+			can_be_inlined com v0 {e1 with etype = e.etype} && Ssa.get_var_usage_count v0 <= 1
 		| _ ->
 			false
 

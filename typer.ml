@@ -860,7 +860,8 @@ let rec type_module_type ctx t tparams p =
 		mk (TTypeExpr (TEnumDecl e)) (TType (e.e_type,types)) p
 	| TTypeDecl s ->
 		let t = apply_params s.t_params (List.map (fun _ -> mk_mono()) s.t_params) s.t_type in
-		Codegen.DeprecationCheck.check_typedef ctx.com s p;
+		if not (Common.defined ctx.com Define.NoDeprecationWarnings) then
+			Codegen.DeprecationCheck.check_typedef ctx.com s p;
 		(match follow t with
 		| TEnum (e,params) ->
 			type_module_type ctx (TEnumDecl e) (Some params) p
@@ -2368,7 +2369,7 @@ and type_unop ctx op flag e p =
 					| [] -> raise Not_found
 					| (op2,flag2,cf) :: opl when op == op2 && flag == flag2 ->
 						let m = mk_mono() in
-						let tcf = apply_params c.cl_params pl (monomorphs cf.cf_params cf.cf_type) in
+						let tcf = apply_params a.a_params pl (monomorphs cf.cf_params cf.cf_type) in
 						if Meta.has Meta.Impl cf.cf_meta then begin
 							if type_iseq (tfun [apply_params a.a_params pl a.a_this] m) tcf then cf,tcf,m else loop opl
 						end else
@@ -3220,7 +3221,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 		let e = type_expr ctx e NoValue in
 		ctx.in_loop <- old_loop;
 		let cond = type_expr ctx cond Value in
-		let cond = Codegen.AbstractCast.cast_or_unify ctx ctx.t.tbool cond p in
+		let cond = Codegen.AbstractCast.cast_or_unify ctx ctx.t.tbool cond cond.epos in
 		mk (TWhile (cond,e,DoWhile)) ctx.t.tvoid p
 	| ESwitch (e1,cases,def) ->
 		begin try
@@ -3231,17 +3232,25 @@ and type_expr ctx (e,p) (with_type:with_type) =
 			type_switch_old ctx e1 cases def with_type p
 		end
 	| EReturn e ->
-		let e , t = (match e with
+		begin match e with
 			| None ->
 				let v = ctx.t.tvoid in
 				unify ctx v ctx.ret p;
-				None , v
+				mk (TReturn None) t_dynamic p
 			| Some e ->
 				let e = type_expr ctx e (WithType ctx.ret) in
 				let e = Codegen.AbstractCast.cast_or_unify ctx ctx.ret e p in
-				Some e , e.etype
-		) in
-		mk (TReturn e) t_dynamic p
+				begin match follow e.etype with
+				| TAbstract({a_path=[],"Void"},_) ->
+					(* if we get a Void expression (e.g. from inlining) we don't want to return it (issue #4323) *)
+					mk (TBlock [
+						e;
+						mk (TReturn None) t_dynamic p
+					]) t_dynamic e.epos;
+				| _ ->
+					mk (TReturn (Some e)) t_dynamic p
+				end
+		end
 	| EBreak ->
 		if not ctx.in_loop then display_error ctx "Break outside loop" p;
 		mk TBreak t_dynamic p
@@ -4336,6 +4345,8 @@ let typing_timer ctx f =
 			exit();
 			raise e
 
+let load_macro_ref : (typer -> path -> string -> pos -> (typer * ((string * bool * t) list * t * tclass * Type.tclass_field) * (Interp.value list -> Interp.value option))) ref = ref (fun _ _ _ _ -> assert false)
+
 let make_macro_api ctx p =
 	let parse_expr_string s p inl =
 		typing_timer ctx (fun() -> parse_expr_string ctx s p inl)
@@ -4392,6 +4403,15 @@ let make_macro_api ctx p =
 		Interp.parse_string = parse_expr_string;
 		Interp.type_expr = (fun e ->
 			typing_timer ctx (fun() -> (type_expr ctx e Value))
+		);
+		Interp.type_macro_expr = (fun e ->
+			let e = typing_timer ctx (fun() -> (type_expr ctx e Value)) in
+			let rec loop e = match e.eexpr with
+				| TField(_,FStatic(c,({cf_kind = Method _} as cf))) -> ignore(!load_macro_ref ctx c.cl_path cf.cf_name e.epos)
+				| _ -> Type.iter loop e
+			in
+			loop e;
+			e
 		);
 		Interp.store_typed_expr = (fun te ->
 			let p = te.epos in
@@ -4678,7 +4698,25 @@ and flush_macro_context mint ctx =
 	end else mint in
 	(* we should maybe ensure that all filters in Main are applied. Not urgent atm *)
 	let expr_filters = [Codegen.AbstractCast.handle_abstract_casts mctx; Filters.captured_vars mctx.com; Filters.rename_local_vars mctx] in
-	let type_filters = [Filters.add_field_inits mctx] in
+
+	(*
+		some filters here might cause side effects that would break compilation server.
+		let's save the minimal amount of information we need
+	*)
+	let minimal_restore t =
+		match t with
+		| TClassDecl c ->
+			let meta = c.cl_meta in
+			let path = c.cl_path in
+			c.cl_restore <- (fun() -> c.cl_meta <- meta; c.cl_path <- path);
+		| _ ->
+			()
+	in
+	let type_filters = [
+		Filters.add_field_inits mctx;
+		minimal_restore;
+		Filters.apply_native_paths mctx
+	] in
 	let ready = fun t ->
 		Filters.apply_filters_once mctx expr_filters t;
 		List.iter (fun f -> f t) type_filters
@@ -4777,6 +4815,11 @@ let load_macro ctx cpath f p =
 	in
 	mctx, meth, call
 
+type macro_arg_type =
+	| MAExpr
+	| MAFunction
+	| MAOther
+
 let type_macro ctx mode cpath f (el:Ast.expr list) p =
 	let mctx, (margs,mret,mclass,mfield), call_macro = load_macro ctx cpath f p in
 	let mpos = mfield.cf_pos in
@@ -4830,7 +4873,14 @@ let type_macro ctx mode cpath f (el:Ast.expr list) p =
 		(*
 			force default parameter types to haxe.macro.Expr, and if success allow to pass any value type since it will be encoded
 		*)
-		let eargs = List.map (fun (n,o,t) -> try unify_raise mctx t expr p; (n, o, t_dynamic), true with Error (Unify _,_) -> (n,o,t), false) margs in
+		let eargs = List.map (fun (n,o,t) ->
+			try unify_raise mctx t expr p; (n, o, t_dynamic), MAExpr
+			with Error (Unify _,_) -> match follow t with
+				| TFun _ ->
+					(n,o,t_dynamic), MAFunction
+				| _ ->
+					(n,o,t), MAOther
+			) margs in
 		(*
 			this is quite tricky here : we want to use unify_call_args which will type our AST expr
 			but we want to be able to get it back after it's been padded with nulls
@@ -4858,7 +4908,7 @@ let type_macro ctx mode cpath f (el:Ast.expr list) p =
 		) el in
 		let elt, _ = unify_call_args mctx constants (List.map fst eargs) t_dynamic p false false in
 		List.iter (fun f -> f()) (!todo);
-		List.map2 (fun (_,ise) e ->
+		List.map2 (fun (_,mct) e ->
 			let e, et = (match e.eexpr with
 				(* get back our index and real expression *)
 				| TArray ({ eexpr = TArrayDecl [e] }, { eexpr = TConst (TInt index) }) -> List.nth el (Int32.to_int index), e
@@ -4866,9 +4916,17 @@ let type_macro ctx mode cpath f (el:Ast.expr list) p =
 				| TConst TNull -> (EConst (Ident "null"),e.epos), e
 				| _ -> assert false
 			) in
-			if ise then
+			let ictx = Interp.get_ctx() in
+			match mct with
+			| MAExpr ->
 				Interp.encode_expr e
-			else match Interp.eval_expr (Interp.get_ctx()) et with
+			| MAFunction ->
+				let e = ictx.Interp.curapi.Interp.type_macro_expr e in
+	 			begin match Interp.eval_expr ictx e with
+				| Some v -> v
+				| None -> Interp.VNull
+				end
+			| MAOther -> match Interp.eval_expr ictx et with
 				| None -> assert false
 				| Some v -> v
 		) eargs elt
@@ -5102,4 +5160,5 @@ get_constructor_ref := get_constructor;
 cast_or_unify_ref := Codegen.AbstractCast.cast_or_unify_raise;
 type_module_type_ref := type_module_type;
 find_array_access_raise_ref := Codegen.AbstractCast.find_array_access_raise;
-build_call_ref := build_call
+build_call_ref := build_call;
+load_macro_ref := load_macro

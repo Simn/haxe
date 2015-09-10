@@ -774,7 +774,8 @@ module AbstractCast = struct
 
 	let cast_or_unify_raise ctx tleft eright p =
 		try
-			if ctx.com.display <> DMNone then raise Not_found;
+			(* can't do that anymore because this might miss macro calls (#4315) *)
+			(* if ctx.com.display <> DMNone then raise Not_found; *)
 			do_check_cast ctx tleft eright p
 		with Not_found ->
 			unify_raise ctx eright.etype tleft p;
@@ -1808,9 +1809,10 @@ module UnificationCallback = struct
 				e
 		in
 		let check e = match e.eexpr with
-			| TBinop((OpAssign | OpAssignOp _ as op),e1,e2) ->
+			| TBinop((OpAssign | OpAssignOp _),e1,e2) ->
+				assert false; (* this trigger #4347, to be fixed before enabling
 				let e2 = f e2 e1.etype in
-				{e with eexpr = TBinop(op,e1,e2)}
+				{e with eexpr = TBinop(op,e1,e2)} *)
 			| TVar(v,Some ev) ->
 				let eo = Some (f ev v.v_type) in
 				{ e with eexpr = TVar(v,eo) }
@@ -1978,6 +1980,11 @@ let interpolate_code com code tl f_string f_expr p =
 				err ("Unexpected " ^ x)
 	in
 	loop (Str.full_split regex code)
+
+let map_source_header com f =
+	match Common.defined_value_safe com Define.SourceHeader with
+	| "" -> ()
+	| s -> f s
 
 (* Collection of functions that return expressions *)
 module ExprBuilder = struct

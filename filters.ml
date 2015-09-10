@@ -7,7 +7,10 @@ open Typecore
 
 let rec verify_ast ctx e =
 	let not_null e e1 = match e1.eexpr with
-		| TConst TNull -> display_error ctx ("Invalid null expression: " ^ (s_expr_pretty "" (s_type (print_context())) e)) e.epos
+		| TConst TNull ->
+			(* TODO: https://github.com/HaxeFoundation/haxe/issues/4072 *)
+			(* display_error ctx ("Invalid null expression: " ^ (s_expr_pretty "" (s_type (print_context())) e)) e.epos *)
+			()
 		| _ -> ()
 	in
 	let rec loop e = match e.eexpr with
@@ -144,7 +147,7 @@ let rec add_final_return e =
 				| TAbstract ({ a_path = [],"Bool" },_) -> TBool false
 				| _ -> TNull
 			) in
-			{ eexpr = TReturn (Some { eexpr = TConst c; epos = p; etype = t }); etype = t; epos = p }
+			{ eexpr = TReturn (Some { eexpr = TConst c; epos = p; etype = t }); etype = t_dynamic; epos = p }
 		in
 		match e.eexpr with
 		| TBlock el ->
@@ -166,7 +169,7 @@ let rec add_final_return e =
 		| TFunction f ->
 			let f = (match follow f.tf_type with
 				| TAbstract ({ a_path = [],"Void" },[]) -> f
-				| t -> { f with tf_expr = loop f.tf_expr t }
+				| _ -> { f with tf_expr = loop f.tf_expr f.tf_type }
 			) in
 			{ e with eexpr = TFunction f }
 		| _ -> e
@@ -296,6 +299,9 @@ let check_local_vars_init e =
 		| TThrow e | TReturn (Some e) ->
 			loop vars e;
 			vars := PMap.map (fun _ -> true) !vars
+		| TFunction _ ->
+			(* do not recurse into functions, their code is only relevant when executed *)
+			()
 		| _ ->
 			Type.iter (loop vars) e
 	in
@@ -1160,8 +1166,8 @@ let run com tctx main =
 	if use_static_analyzer then begin
 		(* PASS 1: general expression filters *)
 		let filters = [
-			Codegen.UnificationCallback.run (check_unification tctx);
 			Codegen.AbstractCast.handle_abstract_casts tctx;
+			check_local_vars_init;
 			Optimizer.inline_constructors tctx;
 			Optimizer.reduce_expression tctx;
 			blockify_ast;
@@ -1180,10 +1186,10 @@ let run com tctx main =
 	end else begin
 		(* PASS 1: general expression filters *)
 		let filters = [
-			Codegen.UnificationCallback.run (check_unification tctx);
 			Codegen.AbstractCast.handle_abstract_casts tctx;
 			blockify_ast;
 			check_local_vars_init;
+			Optimizer.inline_constructors tctx;
 			( if (Common.defined com Define.NoSimplify) || (Common.defined com Define.Cppia) ||
 						( match com.platform with Cpp -> false | _ -> true ) then
 					fun e -> e
@@ -1195,7 +1201,7 @@ let run com tctx main =
 						timer();
 						save();
 					e );
-			if com.foptimize then (fun e -> Optimizer.reduce_expression tctx (Optimizer.inline_constructors tctx e)) else Optimizer.sanitize com;
+			if com.foptimize then (fun e -> Optimizer.reduce_expression tctx e) else Optimizer.sanitize com;
 			captured_vars com;
 			promote_complex_rhs com;
 			if com.config.pf_add_final_return then add_final_return else (fun e -> e);

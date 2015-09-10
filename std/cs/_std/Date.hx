@@ -29,9 +29,15 @@ import haxe.Int64;
 #end
 @:coreApi class Date
 {
+	@:readOnly private static var epochTicks:Int64 = new DateTime(1970, 1, 1).Ticks;
 	private var date:DateTime;
 
-	public function new(year : Int, month : Int, day : Int, hour : Int, min : Int, sec : Int ) : Void
+	@:overload private function new(native:DateTime)
+	{
+		date = native;
+	}
+
+	@:overload public function new(year : Int, month : Int, day : Int, hour : Int, min : Int, sec : Int ) : Void
 	{
 		if (day <= 0) day = 1;
 		if (year <= 0) year = 1;
@@ -40,7 +46,7 @@ import haxe.Int64;
 
 	public inline function getTime() : Float
 	{
-		return (cast(date.Ticks, Float) / cast(TimeSpan.TicksPerMillisecond, Float));
+		return cast(date.Ticks - epochTicks, Float) / cast(TimeSpan.TicksPerMillisecond, Float);
 	}
 
 	public inline function getHours() : Int
@@ -93,18 +99,14 @@ import haxe.Int64;
 			+":"+(if( s < 10 ) "0"+s else ""+s);
 	}
 
-	static public function now() : Date
+	static public inline function now() : Date
 	{
-		var d = new Date(0, 0, 0, 0, 0, 0);
-		d.date = DateTime.Now;
-		return d;
+		return new Date(DateTime.Now);
 	}
 
-	static public function fromTime( t : Float ) : Date
+	static public inline function fromTime( t : Float ) : Date
 	{
-		var d = new Date(0, 0, 0, 0, 0, 0);
-		d.date = new DateTime(cast(t * cast(TimeSpan.TicksPerMillisecond, Float), Int64));
-		return d;
+		return new Date(new DateTime(cast(t * cast(TimeSpan.TicksPerMillisecond, Float), Int64) + epochTicks));
 	}
 
 	static public function fromString( s : String ) : Date
@@ -128,10 +130,8 @@ import haxe.Int64;
 		}
 	}
 
-	private static function fromNative( d : cs.system.DateTime ) : Date
+	private static inline function fromNative( d : cs.system.DateTime ) : Date
 	{
-		var date = new Date(0, 0, 0, 0, 0, 0);
-		date.date = d;
-		return date;
+		return new Date(d);
 	}
 }

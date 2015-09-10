@@ -44,6 +44,11 @@ let has_side_effect e =
 	with Exit ->
 		true
 
+let rec is_exhaustive e1 = match e1.eexpr with
+	| TMeta((Meta.Exhaustive,_,_),_) -> true
+	| TMeta(_, e1) | TParenthesis e1 -> is_exhaustive e1
+	| _ -> false
+
 let mk_untyped_call name p params =
 	{
 		eexpr = TCall({ eexpr = TLocal(alloc_unbound_var name t_dynamic); etype = t_dynamic; epos = p }, params);
@@ -404,7 +409,7 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 			in_loop := old;
 			{ e with eexpr = TWhile (cond,eloop,flag) }
 		| TSwitch (e1,cases,def) when term ->
-			let term = term && def <> None in
+			let term = term && (def <> None || is_exhaustive e1) in
 			let cases = List.map (fun (el,e) ->
 				let el = List.map (map false) el in
 				el, map term e
@@ -420,10 +425,18 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 		| TBlock l ->
 			let old = save_locals ctx in
 			let t = ref e.etype in
-			let has_return e =
-				let rec loop e = match e.eexpr with
-					| TReturn _ -> raise Exit
-					| _ -> Type.iter loop e
+			let rec has_term_return e =
+				let rec loop e =
+					let r = match e.eexpr with
+					| TReturn _ -> true
+					| TIf (_,_,None) | TSwitch (_,_,None) | TFor _ | TWhile (_,_,NormalWhile) -> false (* we might not enter this code at all *)
+					| TTry (a, catches) -> List.for_all has_term_return (a :: List.map snd catches)
+					| TIf (cond,a,Some b) -> has_term_return cond || (has_term_return a && has_term_return b)
+					| TSwitch (cond,cases,Some def) -> has_term_return cond || List.for_all has_term_return (def :: List.map snd cases)
+					| TBinop (OpBoolAnd,a,b) -> has_term_return a && has_term_return b
+					| _ -> Type.iter loop e; false
+					in
+					if r then raise Exit
 				in
 				try loop e; false with Exit -> true
 			in
@@ -436,7 +449,7 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 					let e = map term e in
 					if term then t := e.etype;
 					[e]
-				| ({ eexpr = TIf (cond,e1,None) } as e) :: l when term && has_return e1 ->
+				| ({ eexpr = TIf (cond,e1,None) } as e) :: l when term && has_term_return e1 ->
 					loop [{ e with eexpr = TIf (cond,e1,Some (mk (TBlock l) e.etype e.epos)); epos = punion e.epos (match List.rev l with e :: _ -> e.epos | [] -> assert false) }]
 				| e :: l ->
 					let e = map false e in
@@ -462,20 +475,14 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 			l.i_write <- true;
 			let e2 = map false e2 in
 			{e with eexpr = TBinop(op,{e1 with eexpr = TLocal l.i_subst},e2)}
-(* 		| TCall({eexpr = TLocal v} as e1,el) ->
-			let el = List.map (map false) el in
-			let l = read_local v in
-			let edef() = {e with eexpr = TCall({e1 with eexpr = TLocal l.i_subst},el)} in
-			begin try
-				begin match List.assq l inlined_vars with
-				| {eexpr = TField(_, (FStatic(_,cf) | FInstance(_,_,cf)))} as e' when cf.cf_kind = Method MethInline ->
-					make_call ctx e' el e.etype e.epos
+		| TObjectDecl fl ->
+			let fl = List.map (fun (s,e) -> s,map false e) fl in
+			begin match follow e.etype with
+				| TAnon an when (match !(an.a_status) with Const -> true | _ -> false) ->
+					{e with eexpr = TObjectDecl fl; etype = TAnon { an with a_status = ref Closed}}
 				| _ ->
-					edef()
-				end
-			with Not_found ->
-				edef()
-			end *)
+					{e with eexpr = TObjectDecl fl}
+			end
 		| TFunction f ->
 			(match f.tf_args with [] -> () | _ -> has_vars := true);
 			let old = save_locals ctx and old_fun = !in_local_fun in
@@ -487,6 +494,9 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 			{ e with eexpr = TFunction { tf_args = args; tf_expr = expr; tf_type = f.tf_type } }
 		| TConst TSuper ->
 			error "Cannot inline function containing super" po
+		| TMeta(m,e1) ->
+			let e1 = map term e1 in
+			{e with eexpr = TMeta(m,e1)}
 		| _ ->
 			Type.map_expr (map false) e
 	in
