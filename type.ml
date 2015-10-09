@@ -2254,6 +2254,24 @@ and unify_with_variance f t1 t2 =
 	| _ ->
 		error [cannot_unify t1 t2]
 
+and reduce_of_rec t =
+	let rp = List.map reduce_of_rec in
+	let t = match follow t with
+	| TInst(c,tl) ->
+		TInst(c, rp tl )
+	| TEnum(en,tl) ->
+		TEnum(en, rp tl)
+	| TAbstract(a,tl) ->
+		TAbstract( a, rp tl)
+	| TType(ta, tl) ->
+		TType( ta, rp tl)
+	| TFun(p, r) ->
+		TFun( List.map (fun (s, b, t) -> (s, b, reduce_of_rec t)) p, reduce_of_rec r )
+	| _ ->
+		t
+	in
+	reduce_of t
+
 and unify_type_params a b tl1 tl2 =
 	List.iter2 (fun t1 t2 ->
 		try
@@ -2263,7 +2281,13 @@ and unify_type_params a b tl1 tl2 =
 				if is_of_type t1 || is_of_type t2 then
 					with_variance (type_eq EqRightDynamic) (reduce_of t1) (reduce_of t2)
 				else
-					raise (Unify_error l)
+
+					try
+						(* try to reduce nested Of types like in Array<Void->Of<Promise<_>, T> *)
+						with_variance (type_eq EqRightDynamic) (reduce_of_rec t1) (reduce_of_rec t2)
+					with Unify_error l ->
+						raise (Unify_error l)
+
 			with Unify_error l ->
 				let err = cannot_unify a b in
 				error (err :: (Invariant_parameter (t1,t2)) :: l)
