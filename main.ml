@@ -42,6 +42,7 @@
 	semantic suffixes may be used freely (e.g. e1, e_if, e')
 *)
 
+open Error
 open Printf
 open Ast
 open Genswf
@@ -228,7 +229,7 @@ let make_path f =
 			if String.length x = 0 then
 				error "empty part"
 			else if x.[0] < 'a' || x.[0] > 'z' then
-				error "Package name must start with a lower case character";
+				error (error_message PackageNameMustStartWithALowerCaseCharacter);
 			invalid_char x;
 			let path,name = loop l in
 			x :: path,name
@@ -242,7 +243,7 @@ let check_uppercase x =
 	if String.length x = 0 then
 		failwith "empty part"
 	else if not (starts_uppercase x) then
-		failwith "Class name must start with uppercase character"
+		failwith (error_message ClassNameMustStartWithUppercaseCharacter)
 
 let make_type_path f =
 	let pack,name = make_path f in
