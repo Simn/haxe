@@ -21,7 +21,7 @@
  */
 package haxe;
 
-using haxe.Int64;
+//using haxe.Int64;
 
  /**
 	A cross-platform signed 64-bit integer.
@@ -131,14 +131,14 @@ abstract Int64(__Int64) from __Int64 to __Int64
 			return "0";
 		var str = "";
 		var neg = false;
-		if( i.isNeg() ) {
+		if( isNeg(i) ) {
 			neg = true;
 			// i = -i; cannot negate here as --9223372036854775808 = -9223372036854775808
 		}
 		var ten : Int64 = 10;
 		while( i != 0 ) {
-			var r = i.divMod( ten );
-			if (r.modulus.isNeg()) {
+			var r = divMod(i, ten);
+			if (isNeg(r.modulus)) {
 				str = Int64.neg(r.modulus).low + str;
 				i = Int64.neg(r.quotient);
 			} else {
@@ -173,15 +173,15 @@ abstract Int64(__Int64) from __Int64 to __Int64
 			}
 		}
 
-		var divSign = dividend.isNeg() != divisor.isNeg();
+		var divSign = isNeg(dividend) != isNeg(divisor);
 
-		var modulus = dividend.isNeg() ? -dividend : dividend.copy();
-		divisor = divisor.isNeg() ? -divisor : divisor;
+		var modulus = isNeg(dividend) ? -dividend : dividend.copy();
+		divisor = isNeg(divisor) ? -divisor : divisor;
 
 		var quotient : Int64 = 0;
 		var mask : Int64 = 1;
 
-		while( !divisor.isNeg() ) {
+		while( !isNeg(divisor) ) {
 			var cmp = ucompare( divisor, modulus );
 			divisor <<= 1;
 			mask <<= 1;
@@ -198,7 +198,7 @@ abstract Int64(__Int64) from __Int64 to __Int64
 		}
 
 		if( divSign ) quotient = -quotient;
-		if( dividend.isNeg() ) modulus = -modulus;
+		if( isNeg(dividend) ) modulus = -modulus;
 
 		return {
 			quotient : quotient,
@@ -308,7 +308,7 @@ abstract Int64(__Int64) from __Int64 to __Int64
 		return div( a, b );
 
 	@:op(A / B) private static inline function intDiv( a : Int, b : Int64 ) : Int64
-		return div( a, b ).toInt();
+		return toInt(div( a, b ));
 
 	/**
 		Returns the modulus of `a` divided by `b`.
@@ -317,10 +317,10 @@ abstract Int64(__Int64) from __Int64 to __Int64
 		return divMod(a, b).modulus;
 
 	@:op(A % B) private static inline function modInt( a : Int64, b : Int ) : Int64
-		return mod( a, b ).toInt();
+		return toInt(mod( a, b ));
 
 	@:op(A % B) private static inline function intMod( a : Int, b : Int64 ) : Int64
-		return mod( a, b ).toInt();
+		return toInt(mod( a, b ));
 
 	/**
 		Returns `true` if `a` is equal to `b`.

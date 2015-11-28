@@ -2347,26 +2347,17 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 		end;
 		find_overload left make map (if left then a.a_ops else List.filter (fun (_,cf) -> not (Meta.has Meta.Impl cf.cf_meta)) a.a_ops)
 	in
-	let numeric_types = ref 0 in
 	try
 		begin match follow e1.etype with
 			| TAbstract({a_impl = Some c} as a,tl) -> find_abstract_overload a c tl true
-			| TAbstract({a_path = [],("Int" | "Float")},_) ->
-				incr numeric_types;
-				raise Not_found
 			| _ -> raise Not_found
 		end
 	with Not_found -> try
 		begin match follow e2.etype with
 			| TAbstract({a_impl = Some c} as a,tl) -> find_abstract_overload a c tl false
-			| TAbstract({a_path = [],("Int" | "Float")},_) ->
-				incr numeric_types;
-				raise Not_found
 			| _ -> raise Not_found
 		end
 	with Not_found -> try
-		(* hack (?) *)
-		if !numeric_types = 2 then raise Not_found;
 		let make c map cf e1 e2 t =
 			make_static_call ctx c cf map [e1;e2] t (punion e1.epos e2.epos)
 		in

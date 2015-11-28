@@ -21,8 +21,6 @@
  */
 package haxe;
 
-using haxe.Int64;
-
 import StringTools;
 
 class Int64Helper {
