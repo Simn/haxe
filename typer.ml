@@ -87,6 +87,12 @@ let check_assign ctx e =
 	| _ ->
 		error "Invalid assign" e.epos
 
+let extract_ast_source meta =
+	match Meta.get Meta.AstSource meta with
+	| _,[e],_ -> e
+	| _ -> raise Not_found
+
+
 type type_class =
 	| KInt
 	| KFloat
@@ -1859,6 +1865,37 @@ let unify_int ctx e k =
 			in
 			cf2
 		with Not_found ->
+			let metadata = List.filter (fun (m,_,_) -> match m with
+				| Meta.Generic -> false
+				| _ -> true
+			) cf.cf_meta in
+			let metadata = (Meta.NoCompletion,[],p) :: (Meta.NoUsing,[],p) :: (Meta.GenericInstance,[],p) :: metadata in
+			ignore(follow cf.cf_type);
+			if Meta.has Meta.AstSource cf.cf_meta then begin
+				let ct t = try Some (TExprToExpr.convert_type t) with Exit -> None in
+				let ce co = match co with None -> None | Some ct -> Some (EConst (tconst_to_const ct),p) in
+				let args = match cf.cf_expr with
+					| Some {eexpr = TFunction tf} -> List.map2 (fun (v,co) (n,o,t) ->n,o,ct t,ce co) tf.tf_args args
+					| _ -> assert false
+				in
+				let fd = {
+					f_params = [];
+					f_args = args;
+					f_type = None;
+					f_expr = Some (extract_ast_source cf.cf_meta);
+				} in
+				let cff = {
+					cff_name = name;
+					cff_doc = None;
+					cff_pos = cf.cf_pos;
+					cff_meta = metadata;
+					cff_access = (if cf.cf_public then APublic else APrivate) :: (if stat then [AStatic] else []);
+					cff_kind = FFun fd;
+				} in
+				let cf2 = List.hd (Typeload.ClassInitializer.type_fields_into_class ctx c [cff] p) in
+				ignore (follow cf2.cf_type);
+				cf2
+			end else
 			let cf2 = mk_field name t cf.cf_pos in
 			if stat then begin
 				c.cl_statics <- PMap.add name cf2 c.cl_statics;
@@ -1868,7 +1905,6 @@ let unify_int ctx e k =
 				c.cl_fields <- PMap.add name cf2 c.cl_fields;
 				c.cl_ordered_fields <- cf2 :: c.cl_ordered_fields
 			end;
-			ignore(follow cf.cf_type);
 			let rec check e = match e.eexpr with
 				| TNew({cl_kind = KTypeParameter _} as c,_,_) when not (Typeload.is_generic_parameter ctx c) ->
 					display_error ctx "Only generic type parameters can be constructed" e.epos;
@@ -1886,11 +1922,7 @@ let unify_int ctx e k =
 			);
 			cf2.cf_kind <- cf.cf_kind;
 			cf2.cf_public <- cf.cf_public;
-			let metadata = List.filter (fun (m,_,_) -> match m with
-				| Meta.Generic -> false
-				| _ -> true
-			) cf.cf_meta in
-			cf2.cf_meta <- (Meta.NoCompletion,[],p) :: (Meta.NoUsing,[],p) :: (Meta.GenericInstance,[],p) :: metadata;
+			cf2.cf_meta <- metadata;
 			cf2
 		in
 		let e = if stat then type_type ctx c.cl_path p else e in

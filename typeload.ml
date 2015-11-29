@@ -2634,6 +2634,15 @@ module ClassInitializer = struct
 		| FProp (get,set,t,eo) ->
 			create_property (ctx,cctx,fctx) c f (get,set,t,eo) p
 
+	let type_fields_into_class ctx c cffl p =
+		let ctx,cctx = create_class_context ctx c (fun () -> ()) p in
+		List.map (fun cff ->
+			let ctx,fctx = create_field_context (ctx,cctx) c cff in
+			let cf = init_field (ctx,cctx,fctx) cff in
+			add_field c cf (fctx.is_static || fctx.is_macro && ctx.in_macro);
+			cf
+		) cffl
+
 	let init_class ctx c p context_init herits fields =
 		let ctx,cctx = create_class_context ctx c context_init p in
 		let fields = patch_class ctx c fields in
