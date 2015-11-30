@@ -105,12 +105,16 @@ class AbstractBase<T> {
 }
 
 abstract AbstractZ<T>(AbstractBase<T>) from AbstractBase<T> {
-	@:to public static function toFoo(a:AbstractBase<Int>):Int {
-		return a.value;
+	@:to public static function toFoo(a:AbstractZ<Int>):Int {
+		return a.get().value;
 	}
 
-	@:to public static function toString(a:AbstractBase<String>):String {
-		return a.value;
+	@:to public static function toString(a:AbstractZ<String>):String {
+		return a.get().value;
+	}
+
+	function get() {
+		return this;
 	}
 }
 
@@ -300,8 +304,12 @@ abstract MyDebugString(String) to String {
 		return len == null ? this.substr(i) : this.substr(i, len);
 	}
 
-	@:to static inline public function toNormal(t:String, value:String) {
+	@:to static inline public function toNormal(t:MySpecialString, value:String) {
 		return new MyDebugString(value);
+	}
+
+	function get() {
+		return this;
 	}
 }
 

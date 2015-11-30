@@ -824,7 +824,7 @@ module AbstractCast = struct
 
 	let find_array_access_raise ctx a pl e1 e2o p =
 		let is_set = e2o <> None in
-		let ta = apply_params a.a_params pl a.a_this in
+		let ta = TAbstract(a,pl) in
 		let rec loop cfl = match cfl with
 			| [] -> raise Not_found
 			| cf :: cfl ->

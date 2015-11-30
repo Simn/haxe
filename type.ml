@@ -1871,10 +1871,7 @@ and unify_to_field ab tl b ?(allow_transitive_cast=true) (t,cf) =
 			| TFun((_,_,ta) :: _,_) ->
 				let monos = List.map (fun _ -> mk_mono()) cf.cf_params in
 				let map t = apply_params ab.a_params tl (apply_params cf.cf_params monos t) in
-				let athis = map ab.a_this in
-				(* we cannot allow implicit casts when the this type is not completely known yet *)
-				(* if has_mono athis then raise (Unify_error []); *)
-				with_variance (type_eq EqStrict) athis (map ta);
+				with_variance (type_eq EqStrict) a (map ta);
 				(* immediate constraints checking is ok here because we know there are no monomorphs *)
 				List.iter2 (fun m (name,t) -> match follow t with
 					| TInst ({ cl_kind = KTypeParameter constr },_) when constr <> [] ->
