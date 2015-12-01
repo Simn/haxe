@@ -1140,12 +1140,20 @@ let field_access ctx mode f fmode t e p =
 	match f.cf_kind with
 	| Method m ->
 		if mode = MSet && m <> MethDynamic && not ctx.untyped then error "Cannot rebind this method : please use 'dynamic' before method declaration" p;
-		begin match ctx.curfun,e.eexpr with
-		| (FunMemberAbstract | FunMemberAbstractLocal),TTypeExpr(TClassDecl ({cl_kind = KAbstractImpl a} as c)) when c == ctx.curclass && Meta.has Meta.Impl f.cf_meta ->
-			let e = mk (TField(e,fmode)) t p in
-			let ethis = get_this ctx p in
-			let ethis = {ethis with etype = TAbstract(a,List.map snd a.a_params)} in
-			AKUsing(e,ctx.curclass,f,ethis)
+		begin match e.eexpr with
+		| TTypeExpr(TClassDecl ({cl_kind = KAbstractImpl a} as c)) when c == ctx.curclass && Meta.has Meta.Impl f.cf_meta ->
+			begin match ctx.curfun with
+			| FunMemberAbstract
+			| FunMemberAbstractLocal ->
+				let e = mk (TField(e,fmode)) t p in
+				let ethis = get_this ctx p in
+				let ethis = {ethis with etype = TAbstract(a,List.map snd a.a_params)} in
+				AKUsing(e,ctx.curclass,f,ethis)
+			| FunStatic ->
+				error "Cannot call abstract implementation function statically" p
+			| _ ->
+				assert false (* ? *)
+			end
 		| _ ->
 			(match m, mode with
 			| MethInline, _ -> AKInline (e,f,fmode,t)
@@ -1533,6 +1541,7 @@ and type_field ?(resume=false) ctx e i p mode =
 	| TAnon a ->
 		(try
 			let f = PMap.find i a.a_fields in
+			(match f.cf_kind with Method _ when Meta.has Meta.Impl f.cf_meta -> error "Cannot call abstract implementation function statically" p | _ -> ());
 			if not f.cf_public && not ctx.untyped then begin
 				match !(a.a_status) with
 				| Closed | Extend _ -> () (* always allow anon private fields access *)
