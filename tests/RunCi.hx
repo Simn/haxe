@@ -748,9 +748,9 @@ class RunCi {
 
 					var env = Sys.environment();
 					if (
-						env.exists("SAUCE_USERNAME") && env.exists("SAUCE_ACCESS_KEY") &&
-						// only run on Linux build
-						(ci != null ? systemName == "Linux" : true)
+						env.exists("SAUCE") && 
+						env.exists("SAUCE_USERNAME") && 
+						env.exists("SAUCE_ACCESS_KEY")
 					) {
 						// sauce-connect should have been started
 
@@ -861,7 +861,7 @@ class RunCi {
 					if (commandSucceed("mxmlc", ["--version"])) {
 						infoMsg('mxmlc has already been installed.');
 					} else {
-						var flexVersion = "4.14.0";
+						var flexVersion = "4.14.1";
 						runCommand("wget", ['http://archive.apache.org/dist/flex/${flexVersion}/binaries/apache-flex-sdk-${flexVersion}-bin.tar.gz'], true);
 						runCommand("tar", ["-xf", 'apache-flex-sdk-${flexVersion}-bin.tar.gz', "-C", Sys.getEnv("HOME")]);
 						var flexsdkPath = Sys.getEnv("HOME") + '/apache-flex-sdk-${flexVersion}-bin';

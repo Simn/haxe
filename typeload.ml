@@ -1,23 +1,20 @@
 (*
- * Copyright (C)2005-2013 Haxe Foundation
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
+	The Haxe Compiler
+	Copyright (C) 2005-2015  Haxe Foundation
+
+	This program is free software; you can redistribute it and/or
+	modify it under the terms of the GNU General Public License
+	as published by the Free Software Foundation; either version 2
+	of the License, or (at your option) any later version.
+
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with this program; if not, write to the Free Software
+	Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *)
 
 open Ast
@@ -27,17 +24,16 @@ open Typecore
 
 let locate_macro_error = ref true
 
-let transform_abstract_field ctx this_t a_t a f =
+let transform_abstract_field com this_t a_t a f =
 	let stat = List.mem AStatic f.cff_access in
 	let p = f.cff_pos in
 	match f.cff_kind with
 	| FProp (("get" | "never"),("set" | "never"),_,_) when not stat ->
 		(* TODO: hack to avoid issues with abstract property generation on As3 *)
-		if Common.defined ctx.com Define.As3 then f.cff_meta <- (Meta.Extern,[],p) :: f.cff_meta;
+		if Common.defined com Define.As3 then f.cff_meta <- (Meta.Extern,[],p) :: f.cff_meta;
 		{ f with cff_access = AStatic :: f.cff_access; cff_meta = (Meta.Impl,[],p) :: f.cff_meta }
 	| FProp _ when not stat ->
-		display_error ctx "Member property accessors must be get/set or never" p;
-		f
+		error "Member property accessors must be get/set or never" p;
 	| FFun fu when f.cff_name = "new" && not stat ->
 		let init p = (EVars ["this",Some this_t,None],p) in
 		let cast e = (ECast(e,None)),pos e in
@@ -73,21 +69,24 @@ let transform_abstract_field ctx this_t a_t a f =
 	| _ ->
 		f
 
-(*
-	Build module structure : should be atomic - no type loading is possible
-*)
-let make_module ctx mpath file tdecls loadp =
-	let decls = ref [] in
-	let make_path name priv =
-		if List.exists (fun (t,_) -> snd (t_path t) = name) !decls then error ("Type name " ^ name ^ " is already defined in this module") loadp;
-		if priv then (fst mpath @ ["_" ^ snd mpath], name) else (fst mpath, name)
-	in
+let make_module ctx mpath file loadp =
 	let m = {
 		m_id = alloc_mid();
 		m_path = mpath;
 		m_types = [];
 		m_extra = module_extra (Common.unique_full_path file) (Common.get_signature ctx.com) (file_time file) (if ctx.in_macro then MMacro else MCode);
 	} in
+	m
+
+(*
+	Build module structure : should be atomic - no type loading is possible
+*)
+let module_pass_1 com m tdecls loadp =
+	let decls = ref [] in
+	let make_path name priv =
+		if List.exists (fun (t,_) -> snd (t_path t) = name) !decls then error ("Type name " ^ name ^ " is already defined in this module") loadp;
+		if priv then (fst m.m_path @ ["_" ^ snd m.m_path], name) else (fst m.m_path, name)
+	in
 	let pt = ref None in
 	let rec make_decl acc decl =
 		let p = snd decl in
@@ -95,9 +94,7 @@ let make_module ctx mpath file tdecls loadp =
 		| EImport _ | EUsing _ ->
 			(match !pt with
 			| None -> acc
-			| Some pt ->
-				display_error ctx "import and using may not appear after a type declaration" p;
-				error "Previous type declaration found here" pt)
+			| Some _ -> error "import and using may not appear after a type declaration" p)
 		| EClass d ->
 			if String.length d.d_name > 0 && d.d_name.[0] = '$' then error "Type names starting with a dollar are not allowed" p;
 			pt := Some p;
@@ -157,7 +154,7 @@ let make_module ctx mpath file tdecls loadp =
 			decls := (TTypeDecl t, decl) :: !decls;
 			acc
 		 | EAbstract d ->
-		 	if String.length d.d_name > 0 && d.d_name.[0] = '$' then error "Type names starting with a dollar are not allowed" p;
+			if String.length d.d_name > 0 && d.d_name.[0] = '$' then error "Type names starting with a dollar are not allowed" p;
 			let priv = List.mem APrivAbstract d.d_flags in
 			let path = make_path d.d_name priv in
 			let a = {
@@ -195,7 +192,7 @@ let make_module ctx mpath file tdecls loadp =
 					| _ :: l -> loop l
 				in
 				let this_t = loop d.d_flags in
-				let fields = List.map (transform_abstract_field ctx this_t a_t a) fields in
+				let fields = List.map (transform_abstract_field com this_t a_t a) fields in
 				let meta = ref [] in
 				if has_meta Meta.Dce a.a_meta then meta := (Meta.Dce,[],p) :: !meta;
 				let acc = make_decl acc (EClass { d_name = d.d_name ^ "_Impl_"; d_flags = [HPrivate]; d_data = fields; d_doc = None; d_params = []; d_meta = !meta },p) in
@@ -216,8 +213,7 @@ let make_module ctx mpath file tdecls loadp =
 	in
 	let tdecls = List.fold_left make_decl [] tdecls in
 	let decls = List.rev !decls in
-	m.m_types <- List.map fst decls;
-	m, decls, List.rev tdecls
+	decls, List.rev tdecls
 
 let parse_file com file p =
 	let ch = (try open_in_bin file with _ -> error ("Could not open " ^ file) p) in
@@ -745,7 +741,7 @@ let load_type_opt ?(opt=false) ctx p t =
 let valid_redefinition ctx f1 t1 f2 t2 =
 	let valid t1 t2 =
 		Type.unify t1 t2;
-		if is_null t1 <> is_null t2 then raise (Unify_error [Cannot_unify (t1,t2)]);
+		if is_null t1 <> is_null t2 || ((follow t1) == t_dynamic && (follow t2) != t_dynamic) then raise (Unify_error [Cannot_unify (t1,t2)]);
 	in
 	let t1, t2 = (match f1.cf_params, f2.cf_params with
 		| [], [] -> t1, t2
@@ -798,10 +794,10 @@ let valid_redefinition ctx f1 t1 f2 t2 =
 		end
 	| _,(Var { v_write = AccNo | AccNever }) ->
 		(* write variance *)
-		valid t2 t1
+		valid t1 t2
 	| _,(Var { v_read = AccNo | AccNever }) ->
 		(* read variance *)
-		valid t1 t2
+		valid t2 t1
 	| _ , _ ->
 		(* in case args differs, or if an interface var *)
 		type_eq EqStrict t1 t2;
@@ -1300,13 +1296,13 @@ let check_strict_meta ctx metas =
 
 (**** end of strict meta handling *****)
 
-let rec add_constructor ctx c force_constructor p =
+let add_constructor ctx c force_constructor p =
 	match c.cl_constructor, c.cl_super with
-	| None, Some ({ cl_constructor = Some cfsup } as csup,cparams) when not c.cl_extern && not (Meta.has Meta.CompilerGenerated cfsup.cf_meta) ->
+	| None, Some ({ cl_constructor = Some cfsup } as csup,cparams) when not c.cl_extern ->
 		let cf = {
 			cfsup with
 			cf_pos = p;
-			cf_meta = [];
+			cf_meta = List.filter (fun (m,_,_) -> m = Meta.CompilerGenerated) cfsup.cf_meta;
 			cf_doc = None;
 			cf_expr = None;
 		} in
@@ -1426,8 +1422,8 @@ let set_heritance ctx c herits p =
 				if c.cl_array_access <> None then error "Duplicate array access" p;
 				c.cl_array_access <- Some t
 			| TInst (intf,params) ->
-				if not (intf.cl_build()) then cancel_build intf;
 				if is_parent c intf then error "Recursive class" p;
+				if not (intf.cl_build()) then cancel_build intf;
 				if c.cl_interface then error "Interfaces cannot implement another interface (use extends instead)" p;
 				if not intf.cl_interface then error "You can only implement an interface" p;
 				process_meta intf;
@@ -1445,7 +1441,7 @@ let set_heritance ctx c herits p =
 		resolve imports before calling build_inheritance, since it requires full paths.
 		that means that typedefs are not working, but that's a fair limitation
 	*)
-	let rec resolve_imports t =
+	let resolve_imports t =
 		match t.tpackage with
 		| _ :: _ -> t
 		| [] ->
@@ -1852,7 +1848,7 @@ let is_java_native_function meta = try
 
 let build_module_def ctx mt meta fvars context_init fbuild =
 	let loop (f_build,f_enum) = function
-		| Meta.Build,args,p -> Some (fun () ->
+		| Meta.Build,args,p -> (fun () ->
 				let epath, el = (match args with
 					| [ECall (epath,el),p] -> epath, el
 					| _ -> error "Invalid build parameters" p
@@ -1867,7 +1863,7 @@ let build_module_def ctx mt meta fvars context_init fbuild =
 				(match r with
 				| None -> error "Build failure" p
 				| Some e -> fbuild e)
-			),f_enum
+			) :: f_build,f_enum
 		| Meta.Enum,_,p -> f_build,Some (fun () ->
 				begin match mt with
 					| TClassDecl ({cl_kind = KAbstractImpl a} as c) ->
@@ -1882,8 +1878,8 @@ let build_module_def ctx mt meta fvars context_init fbuild =
 			f_build,f_enum
 	in
 	(* let errors go through to prevent resume if build fails *)
-	let f_build,f_enum = List.fold_left loop (None,None) meta in
-	(match f_build with None -> () | Some f -> f());
+	let f_build,f_enum = List.fold_left loop ([],None) meta in
+	List.iter (fun f -> f()) (List.rev f_build);
 	(match f_enum with None -> () | Some f -> f())
 
 module ClassInitializer = struct
@@ -2020,7 +2016,7 @@ module ClassInitializer = struct
 			| Some { cf_public = p } -> p
 			| _ -> c.cl_extern || c.cl_interface || cctx.extends_public
 
- 	let rec get_parent c name =
+	let rec get_parent c name =
 		match c.cl_super with
 		| None -> None
 		| Some (csup,_) ->
@@ -2038,8 +2034,8 @@ module ClassInitializer = struct
 			c.cl_ordered_fields <- cf :: c.cl_ordered_fields;
 		end
 
- 	let type_opt (ctx,cctx) p t =
- 		let c = cctx.tclass in
+	let type_opt (ctx,cctx) p t =
+		let c = cctx.tclass in
 		match t with
 		| None when c.cl_extern || c.cl_interface ->
 			display_error ctx "Type required for extern classes and interfaces" p;
@@ -2061,7 +2057,7 @@ module ClassInitializer = struct
 						| Some a ->
 							let a_t = TExprToExpr.convert_type (TAbstract(a,List.map snd a.a_params)) in
 							let this_t = TExprToExpr.convert_type a.a_this in
-							transform_abstract_field ctx this_t a_t a f
+							transform_abstract_field ctx.com this_t a_t a f
 						| None ->
 							f
 					in
@@ -2473,6 +2469,10 @@ module ClassInitializer = struct
 			cf_params = params;
 			cf_overloads = [];
 		} in
+		cf.cf_meta <- List.map (fun (m,el,p) -> match m,el with
+			| Meta.AstSource,[] -> (m,(match fd.f_expr with None -> [] | Some e -> [e]),p)
+			| _ -> m,el,p
+		) cf.cf_meta;
 		generate_value_meta ctx.com (Some c) cf fd.f_args;
 		check_abstract (ctx,cctx,fctx) c cf fd t ret p;
 		init_meta_overloads ctx (Some c) cf;
@@ -2667,6 +2667,7 @@ module ClassInitializer = struct
 		let ctx,cctx = create_class_context ctx c context_init p in
 		let fields = patch_class ctx c fields in
 		let fields = build_fields (ctx,cctx) c fields in
+		if cctx.is_core_api && ctx.com.display = DMNone then delay ctx PForce (fun() -> init_core_api ctx c);
 		if not cctx.is_lib then begin
 			(match c.cl_super with None -> () | Some _ -> delay ctx PForce (fun() -> check_overriding ctx c));
 			if ctx.com.config.pf_overload then delay ctx PForce (fun() -> check_overloads ctx c)
@@ -2802,25 +2803,15 @@ let resolve_typedef t =
 		| _ -> t
 
 let add_module ctx m p =
-	let decl_type t =
-		let t = t_infos t in
-		try
-			let m2 = Hashtbl.find ctx.g.types_module t.mt_path in
-			if m.m_path <> m2 && String.lowercase (s_type_path m2) = String.lowercase (s_type_path m.m_path) then error ("Module " ^ s_type_path m2 ^ " is loaded with a different case than " ^ s_type_path m.m_path) p;
-			error ("Type name " ^ s_type_path t.mt_path ^ " is redefined from module " ^ s_type_path m2) p
-		with
-			Not_found ->
-				Hashtbl.add ctx.g.types_module t.mt_path m.m_path
-	in
-	List.iter decl_type m.m_types;
-	Hashtbl.add ctx.g.modules m.m_path m
+	Hashtbl.add ctx.g.modules m.m_path m;
+	List.iter (fun t -> Hashtbl.add ctx.g.types_module (t_path t) m.m_path) m.m_types
 
 (*
 	In this pass, we can access load and access other modules types, but we cannot follow them or access their structure
 	since they have not been setup. We also build a context_init list that will be evaluated the first time we evaluate
 	an expression into the context
 *)
-let rec init_module_type ctx context_init do_init (decl,p) =
+let init_module_type ctx context_init do_init (decl,p) =
 	let get_type name =
 		try List.find (fun t -> snd (t_infos t).mt_path = name) ctx.m.curmod.m_types with Not_found -> assert false
 	in
@@ -3212,10 +3203,49 @@ let rec init_module_type ctx context_init do_init (decl,p) =
 				error "Abstract is missing underlying type declaration" a.a_pos
 		end
 
-let type_module ctx m file ?(is_extern=false) tdecls p =
-	let m, decls, tdecls = make_module ctx m file tdecls p in
-	if is_extern then m.m_extra.m_kind <- MExtern;
-	add_module ctx m p;
+let module_pass_2 ctx m decls tdecls p =
+	(* here is an additional PASS 1 phase, which define the type parameters for all module types.
+		 Constraints are handled lazily (no other type is loaded) because they might be recursive anyway *)
+	List.iter (fun d ->
+		match d with
+		| (TClassDecl c, (EClass d, p)) ->
+			c.cl_params <- type_type_params ctx c.cl_path (fun() -> c.cl_params) p d.d_params;
+		| (TEnumDecl e, (EEnum d, p)) ->
+			e.e_params <- type_type_params ctx e.e_path (fun() -> e.e_params) p d.d_params;
+		| (TTypeDecl t, (ETypedef d, p)) ->
+			t.t_params <- type_type_params ctx t.t_path (fun() -> t.t_params) p d.d_params;
+		| (TAbstractDecl a, (EAbstract d, p)) ->
+			a.a_params <- type_type_params ctx a.a_path (fun() -> a.a_params) p d.d_params;
+		| _ ->
+			assert false
+	) decls;
+	(* setup module types *)
+	let context_init = ref [] in
+	let do_init() =
+		match !context_init with
+		| [] -> ()
+		| l -> context_init := []; List.iter (fun f -> f()) (List.rev l)
+	in
+	List.iter (init_module_type ctx context_init do_init) tdecls
+
+(*
+	Creates a module context for [m] and types [tdecls] using it.
+*)
+let type_types_into_module ctx m tdecls p =
+	let decls, tdecls = module_pass_1 ctx.com m tdecls p in
+	let types = List.map fst decls in
+	m.m_types <- m.m_types @ types;
+	let decl_type t =
+		let t = t_infos t in
+		try
+			let m2 = Hashtbl.find ctx.g.types_module t.mt_path in
+			if m.m_path <> m2 && String.lowercase (s_type_path m2) = String.lowercase (s_type_path m.m_path) then error ("Module " ^ s_type_path m2 ^ " is loaded with a different case than " ^ s_type_path m.m_path) p;
+			error ("Type name " ^ s_type_path t.mt_path ^ " is redefined from module " ^ s_type_path m2) p
+		with
+			Not_found ->
+				Hashtbl.add ctx.g.types_module t.mt_path m.m_path
+	in
+	List.iter decl_type types;
 	(* define the per-module context for the next pass *)
 	let ctx = {
 		com = ctx.com;
@@ -3256,31 +3286,48 @@ let type_module ctx m file ?(is_extern=false) tdecls p =
 		(* this will ensure both String and (indirectly) Array which are basic types which might be referenced *)
 		ignore(load_core_type ctx "String");
 	end;
-	(* here is an additional PASS 1 phase, which define the type parameters for all module types.
-		 Constraints are handled lazily (no other type is loaded) because they might be recursive anyway *)
-	List.iter (fun d ->
-		match d with
-		| (TClassDecl c, (EClass d, p)) ->
-			c.cl_params <- type_type_params ctx c.cl_path (fun() -> c.cl_params) p d.d_params;
-		| (TEnumDecl e, (EEnum d, p)) ->
-			e.e_params <- type_type_params ctx e.e_path (fun() -> e.e_params) p d.d_params;
-		| (TTypeDecl t, (ETypedef d, p)) ->
-			t.t_params <- type_type_params ctx t.t_path (fun() -> t.t_params) p d.d_params;
-		| (TAbstractDecl a, (EAbstract d, p)) ->
-			a.a_params <- type_type_params ctx a.a_path (fun() -> a.a_params) p d.d_params;
-		| _ ->
-			assert false
-	) decls;
-	(* setup module types *)
-	let context_init = ref [] in
-	let do_init() =
-		match !context_init with
-		| [] -> ()
-		| l -> context_init := []; List.iter (fun f -> f()) (List.rev l)
-	in
-	List.iter (init_module_type ctx context_init do_init) tdecls;
-	m
+	module_pass_2 ctx m decls tdecls p
 
+let handle_import_hx ctx m decls p =
+	let path_split = List.tl (List.rev (get_path_parts m.m_extra.m_file)) in
+	let join l = String.concat "/" (List.rev ("import.hx" :: l)) in
+	let rec loop path pack = match path,pack with
+		| _,[] -> [join path]
+		| (p :: path),(_ :: pack) -> (join (p :: path)) :: (loop path pack)
+		| _ -> []
+	in
+	let candidates = loop path_split (fst m.m_path) in
+	List.fold_left (fun acc path ->
+		let path = Common.unique_full_path path in
+		let _,decls = try
+			Hashtbl.find ctx.com.parser_cache path
+		with Not_found ->
+			if Sys.file_exists path then begin
+				let r = parse_file ctx.com path p in
+				List.iter (fun (d,p) -> match d with EImport _ | EUsing _ -> () | _ -> error "Only import and using is allowed in import.hx files" p) (snd r);
+				Hashtbl.replace ctx.com.parser_cache path r;
+				r
+			end else begin
+				let r = ([],[]) in
+				(* Add empty decls so we don't check the file system all the time. *)
+				Hashtbl.replace ctx.com.parser_cache path r;
+				r
+			end
+		in
+		decls @ acc
+	) decls candidates
+
+(*
+	Creates a new module and types [tdecls] into it.
+*)
+let type_module ctx mpath file ?(is_extern=false) tdecls p =
+	let m = make_module ctx mpath file p in
+	Hashtbl.add ctx.g.modules m.m_path m;
+	let tdecls = handle_import_hx ctx m tdecls p in
+	add_module ctx m p;
+	type_types_into_module ctx m tdecls p;
+	if is_extern then m.m_extra.m_kind <- MExtern;
+	m
 
 let resolve_module_file com m remap p =
 	let forbid = ref false in

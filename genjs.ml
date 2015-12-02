@@ -1,23 +1,20 @@
 (*
- * Copyright (C)2005-2013 Haxe Foundation
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
+	The Haxe Compiler
+	Copyright (C) 2005-2015  Haxe Foundation
+
+	This program is free software; you can redistribute it and/or
+	modify it under the terms of the GNU General Public License
+	as published by the Free Software Foundation; either version 2
+	of the License, or (at your option) any later version.
+
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with this program; if not, write to the Free Software
+	Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *)
 
 open Ast
@@ -47,6 +44,7 @@ type ctx = {
 	smap : sourcemap;
 	js_modern : bool;
 	js_flatten : bool;
+	store_exception_stack : bool;
 	mutable current : tclass;
 	mutable statics : (tclass * string * texpr) list;
 	mutable inits : texpr list;
@@ -434,6 +432,8 @@ let rec gen_call ctx e el in_value =
 		else match eelse with
 			| [] -> ()
 			| e :: _ -> gen_value ctx e)
+	| TLocal { v_name = "__rethrow__" }, [] ->
+		spr ctx "throw $hx_rethrow";
 	| TLocal { v_name = "__resources__" }, [] ->
 		spr ctx "[";
 		concat ctx "," (fun (name,data) ->
@@ -506,11 +506,11 @@ and gen_expr ctx e =
 			gen_value ctx x;
 			print ctx ",";
 			gen_value ctx x;
-			print ctx "%s)" (field f.cf_name)
+			print ctx "%s)" (if Meta.has Meta.SelfCall f.cf_meta then "" else (field f.cf_name))
 		| _ ->
 			print ctx "($_=";
 			gen_value ctx x;
-			print ctx ",$bind($_,$_%s))" (field f.cf_name))
+			print ctx ",$bind($_,$_%s))" (if Meta.has Meta.SelfCall f.cf_meta then "" else (field f.cf_name)))
 	| TEnumParameter (x,_,i) ->
 		gen_value ctx x;
 		print ctx "[%i]" (i + 2)
@@ -668,9 +668,23 @@ and gen_expr ctx e =
 		let last = ref false in
 		let else_block = ref false in
 
-		if (has_feature ctx "haxe.CallStack.exceptionStack") then begin
+		if ctx.store_exception_stack then begin
 			newline ctx;
 			print ctx "%s.lastException = %s" (ctx.type_accessor (TClassDecl { null_class with cl_path = ["haxe"],"CallStack" })) vname
+		end;
+
+		if (has_feature ctx "js.Lib.rethrow") then begin
+			let has_rethrow (_,e) =
+				let rec loop e = match e.eexpr with 
+				| TCall({eexpr = TLocal {v_name = "__rethrow__"}}, []) -> raise Exit
+				| _ -> Type.iter loop e
+				in
+				try (loop e; false) with Exit -> true
+			in
+			if List.exists has_rethrow catchs then begin
+				newline ctx;
+				print ctx "var $hx_rethrow = %s" vname;
+			end
 		end;
 
 		if (has_feature ctx "js.Boot.HaxeError") then begin
@@ -1215,6 +1229,7 @@ let alloc_ctx com =
 		};
 		js_modern = not (Common.defined com Define.JsClassic);
 		js_flatten = not (Common.defined com Define.JsUnflatten);
+		store_exception_stack = if Common.has_dce com then (Common.has_feature com "haxe.CallStack.exceptionStack") else List.exists (function TClassDecl { cl_path=["haxe"],"CallStack" } -> true | _ -> false) com.types;
 		statics = [];
 		inits = [];
 		current = null_class;
