@@ -635,7 +635,7 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 		else
 			let mt = map_type cf.cf_type in
 			let unify_func () = unify_raise ctx mt (TFun (List.map (fun e -> "",false,e.etype) params,tret)) p in
-			unify_func();
+			if cf.cf_name <> "_new" then unify_func(); (* TODO? *)
 			(*
 				this is very expensive since we are building the substitution list for
 				every expression, but hopefully in such cases the expression size is small
