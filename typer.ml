@@ -1034,6 +1034,8 @@ let rec acc_get ctx g p =
 				mk (TField (e,cmode)) t p
 			else
 				error "Recursive inline is not supported" p
+		| Some _ when ctx.com.display <> DMNone ->
+			mk (TField (e,cmode)) t p
 		| Some { eexpr = TFunction _ } ->
 			let chk_class c = (c.cl_extern || Meta.has Meta.Extern f.cf_meta) && not (Meta.has Meta.Runtime f.cf_meta) in
 			let wrap_extern c =
@@ -2404,9 +2406,9 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 	with Not_found -> try
 		begin match follow e2.etype with
 			| TAbstract({a_impl = Some c} as a,tl) -> find_overload a c tl false
-								| _ -> raise Not_found
-							end
-						with Not_found ->
+			| _ -> raise Not_found
+		end
+	with Not_found ->
 		make e1 e2
 
 and type_unop ctx op flag e p =
@@ -4030,7 +4032,8 @@ and type_call ctx e el (with_type:with_type) p =
 		if Common.defined ctx.com Define.NoTraces then
 			null ctx.t.tvoid p
 		else
-		let params = (match el with [] -> [] | _ -> ["customParams",(EArrayDecl el , p)]) in
+		let mk_to_string_meta e = EMeta((Meta.ToString,[],pos e),e),pos e in
+		let params = (match el with [] -> [] | _ -> ["customParams",(EArrayDecl (List.map mk_to_string_meta el) , p)]) in
 		let infos = mk_infos ctx p params in
 		if (platform ctx.com Js || platform ctx.com Python) && el = [] && has_dce ctx.com then
 			let e = type_expr ctx e Value in
@@ -4044,8 +4047,7 @@ and type_call ctx e el (with_type:with_type) p =
 			let v_trace = alloc_unbound_var "`trace" t_dynamic in
 			mk (TCall (mk (TLocal v_trace) t_dynamic p,[e;infos])) ctx.t.tvoid p
 		else
-			let me = Meta.ToString,[],pos e in
-			type_expr ctx (ECall ((EField ((EField ((EConst (Ident "haxe"),p),"Log"),p),"trace"),p),[(EMeta (me,e),pos e);infos]),p) NoValue
+			type_expr ctx (ECall ((EField ((EField ((EConst (Ident "haxe"),p),"Log"),p),"trace"),p),[mk_to_string_meta e;infos]),p) NoValue
 	| (EConst(Ident "callback"),p1),args ->
 		let ecb = try Some (type_ident_raise ctx "callback" p1 MCall) with Not_found -> None in
 		(match ecb with
