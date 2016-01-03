@@ -1154,12 +1154,20 @@ let field_access ctx mode f fmode t e p =
 	match f.cf_kind with
 	| Method m ->
 		if mode = MSet && m <> MethDynamic && not ctx.untyped then error "Cannot rebind this method : please use 'dynamic' before method declaration" p;
-		begin match ctx.curfun,e.eexpr with
-		| (FunMemberAbstract | FunMemberAbstractLocal),TTypeExpr(TClassDecl ({cl_kind = KAbstractImpl a} as c)) when c == ctx.curclass && Meta.has Meta.Impl f.cf_meta ->
-			let e = mk (TField(e,fmode)) t p in
-			let ethis = get_this ctx p in
-			let ethis = {ethis with etype = TAbstract(a,List.map snd a.a_params)} in
-			AKUsing(e,ctx.curclass,f,ethis)
+		begin match e.eexpr with
+		| TTypeExpr(TClassDecl ({cl_kind = KAbstractImpl a} as c)) when c == ctx.curclass && Meta.has Meta.Impl f.cf_meta ->
+			begin match ctx.curfun with
+			| FunMemberAbstract
+			| FunMemberAbstractLocal ->
+				let e = mk (TField(e,fmode)) t p in
+				let ethis = get_this ctx p in
+				let ethis = {ethis with etype = TAbstract(a,List.map snd a.a_params)} in
+				AKUsing(e,ctx.curclass,f,ethis)
+			| FunStatic ->
+				error "Cannot call abstract implementation function statically" p
+			| _ ->
+				assert false (* ? *)
+			end
 		| _ ->
 			(match m, mode with
 			| MethInline, _ -> AKInline (e,f,fmode,t)
@@ -1547,6 +1555,7 @@ and type_field ?(resume=false) ctx e i p mode =
 	| TAnon a ->
 		(try
 			let f = PMap.find i a.a_fields in
+			(match f.cf_kind with Method _ when Meta.has Meta.Impl f.cf_meta -> error "Cannot call abstract implementation function statically" p | _ -> ());
 			if not f.cf_public && not ctx.untyped then begin
 				match !(a.a_status) with
 				| Closed | Extend _ -> () (* always allow anon private fields access *)
@@ -2324,7 +2333,7 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 		in
 		(* special case for == and !=: if the second type is a monomorph, assume that we want to unify
 		   it with the first type to preserve comparison semantics. *)
-	let is_eq_op = match op with OpEq | OpNotEq -> true | _ -> false in
+		let is_eq_op = match op with OpEq | OpNotEq -> true | _ -> false in
 		if is_eq_op then begin match follow e1.etype,follow e2.etype with
 			| TMono _,_ | _,TMono _ ->
 				Type.unify e1.etype e2.etype
@@ -2335,7 +2344,6 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 			| (op_cf,cf) :: ol when op_cf <> op && (not is_assign_op || op_cf <> OpAssignOp(op)) ->
 				loop ol
 			| (op_cf,cf) :: ol ->
-				let is_impl = Meta.has Meta.Impl cf.cf_meta in
 				begin match follow cf.cf_type with
 					| TFun([(_,_,t1);(_,_,t2)],tret) ->
 						let check e1 e2 swapped =
@@ -2349,9 +2357,8 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 							in
 							let monos,t1,t2,tret = map_arguments() in
 							let make e1 e2 = make op_cf cf e1 e2 tret in
-							let t1 = if is_impl then Abstract.follow_with_abstracts t1 else t1 in
 							let e1,e2 = if left || not left && swapped then begin
-								Type.type_eq EqStrict (if is_impl then Abstract.follow_with_abstracts e1.etype else e1.etype) t1;
+								Type.type_eq EqStrict e1.etype t1;
 								e1,Codegen.AbstractCast.cast_or_unify_raise ctx t2 e2 p
 							end else begin
 								Type.type_eq EqStrict e2.etype t2;
@@ -2448,10 +2455,7 @@ and type_unop ctx op flag e p =
 					| (op2,flag2,cf) :: opl when op == op2 && flag == flag2 ->
 						let m = mk_mono() in
 						let tcf = apply_params a.a_params pl (monomorphs cf.cf_params cf.cf_type) in
-						if Meta.has Meta.Impl cf.cf_meta then begin
-							if type_iseq (tfun [apply_params a.a_params pl a.a_this] m) tcf then cf,tcf,m else loop opl
-						end else
-							if type_iseq (tfun [e.etype] m) tcf then cf,tcf,m else loop opl
+						if type_iseq (tfun [e.etype] m) tcf then cf,tcf,m else loop opl
 					| _ :: opl -> loop opl
 				in
 				let cf,t,r = try loop a.a_unops with Not_found -> raise Not_found in
@@ -4135,7 +4139,7 @@ and build_call ctx acc el (with_type:with_type) p =
 			let t = follow (field_type ctx cl [] ef p) in
 			(* for abstracts we have to apply their parameters to the static function *)
 			let t,tthis = match follow eparam.etype with
-				| TAbstract(a,tl) when Meta.has Meta.Impl ef.cf_meta -> apply_params a.a_params tl t,apply_params a.a_params tl a.a_this
+				| TAbstract(a,tl) when Meta.has Meta.Impl ef.cf_meta -> apply_params a.a_params tl t,apply_params a.a_params tl eparam.etype
 				| te -> t,te
 			in
 			let params,args,r,eparam = match t with

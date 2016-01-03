@@ -64,7 +64,7 @@ let transform_abstract_field com this_t a_t a f =
 		{ f with cff_name = "_new"; cff_access = AStatic :: f.cff_access; cff_kind = FFun fu; cff_meta = (Meta.Impl,[],p) :: f.cff_meta }
 	| FFun fu when not stat ->
 		if Meta.has Meta.From f.cff_meta then error "@:from cast functions must be static" f.cff_pos;
-		let fu = { fu with f_args = (if List.mem AMacro f.cff_access then fu.f_args else ("this",false,Some this_t,None) :: fu.f_args) } in
+		let fu = { fu with f_args = (if List.mem AMacro f.cff_access then fu.f_args else ("this",false,Some a_t,None) :: fu.f_args) } in
 		{ f with cff_kind = FFun fu; cff_access = AStatic :: f.cff_access; cff_meta = (Meta.Impl,[],p) :: f.cff_meta }
 	| _ ->
 		f
@@ -1543,6 +1543,12 @@ let type_function ctx args ret fmode f do_display p =
 	let fargs = List.map (fun (n,c,t) ->
 		if n.[0] = '$' then error "Function argument names starting with a dollar are not allowed" p;
 		let c = type_function_arg_value ctx t c in
+		let t = if n = "this" then begin match t with
+			| TAbstract(a,tl) -> apply_params a.a_params tl a.a_this
+			| _ -> t
+		end else
+			t
+		in
 		let v,c = add_local ctx n t, c in
 		if n = "this" then v.v_meta <- (Meta.This,[],p) :: v.v_meta;
 		v,c
@@ -2227,7 +2233,6 @@ module ClassInitializer = struct
 			| Some a ->
 				let m = mk_mono() in
 				let ta = TAbstract(a, List.map (fun _ -> mk_mono()) a.a_params) in
-				let tthis = if fctx.is_abstract_member || Meta.has Meta.To cf.cf_meta then monomorphs a.a_params a.a_this else a.a_this in
 				let allows_no_expr = ref (Meta.has Meta.CoreType a.a_meta) in
 				let rec loop ml = match ml with
 					| (Meta.From,_,_) :: _ ->
@@ -2244,7 +2249,7 @@ module ClassInitializer = struct
 						(* TODO: this doesn't seem quite right... *)
 						if not (Meta.has Meta.Impl cf.cf_meta) then cf.cf_meta <- (Meta.Impl,[],cf.cf_pos) :: cf.cf_meta;
 						let resolve_m args =
-							(try unify_raise ctx t (tfun (tthis :: args) m) cf.cf_pos with Error (Unify l,p) -> error (error_msg (Unify l)) p);
+							(try unify_raise ctx t (tfun (ta :: args) m) cf.cf_pos with Error (Unify l,p) -> error (error_msg (Unify l)) p);
 							match follow m with
 								| TMono _ when (match t with TFun(_,r) -> r == t_dynamic | _ -> false) -> t_dynamic
 								| m -> m
@@ -2276,45 +2281,34 @@ module ClassInitializer = struct
 						a.a_array <- cf :: a.a_array;
 					| (Meta.Op,[EBinop(op,_,_),_],_) :: _ ->
 						if fctx.is_macro then error (cf.cf_name ^ ": Macro operator functions are not supported") p;
-						let targ = if fctx.is_abstract_member then tthis else ta in
 						let left_eq,right_eq = match follow t with
 							| TFun([(_,_,t1);(_,_,t2)],_) ->
-								type_iseq targ t1,type_iseq targ t2
+								type_iseq ta t1,type_iseq ta t2
 							| _ ->
 								if fctx.is_abstract_member then
 									error (cf.cf_name ^ ": Member @:op functions must accept exactly one argument") cf.cf_pos
 								else
 									error (cf.cf_name ^ ": Static @:op functions must accept exactly two arguments") cf.cf_pos
 						in
-						if not (left_eq || right_eq) then error (cf.cf_name ^ ": The left or right argument type must be " ^ (s_type (print_context()) targ)) cf.cf_pos;
-						if right_eq && Meta.has Meta.Commutative cf.cf_meta then error (cf.cf_name ^ ": @:commutative is only allowed if the right argument is not " ^ (s_type (print_context()) targ)) cf.cf_pos;
+						if not (left_eq || right_eq) then error (cf.cf_name ^ ": The left or right argument type must be " ^ (s_type (print_context()) ta)) cf.cf_pos;
+						if right_eq && Meta.has Meta.Commutative cf.cf_meta then error (cf.cf_name ^ ": @:commutative is only allowed if the right argument is not " ^ (s_type (print_context()) ta)) cf.cf_pos;
 						a.a_ops <- (op,cf) :: a.a_ops;
 						allows_no_expr := true;
 					| (Meta.Op,[EUnop(op,flag,_),_],_) :: _ ->
 						if fctx.is_macro then error (cf.cf_name ^ ": Macro operator functions are not supported") p;
-						let targ = if fctx.is_abstract_member then tthis else ta in
-						(try type_eq EqStrict t (tfun [targ] (mk_mono())) with Unify_error l -> raise (Error ((Unify l),cf.cf_pos)));
+						(try type_eq EqStrict t (tfun [ta] (mk_mono())) with Unify_error l -> raise (Error ((Unify l),cf.cf_pos)));
 						a.a_unops <- (op,flag,cf) :: a.a_unops;
 						allows_no_expr := true;
-					| (Meta.Impl,_,_) :: ml when cf.cf_name <> "_new" && not fctx.is_macro ->
-						begin match follow t with
-							| TFun((_,_,t1) :: _, _) when type_iseq tthis t1 ->
-								()
-							| _ ->
-								display_error ctx ("First argument of implementation function must be " ^ (s_type (print_context()) tthis)) cf.cf_pos
-						end;
-						loop ml
 					| ((Meta.Resolve,_,_) | (Meta.Op,[EField _,_],_)) :: _ ->
 						if a.a_resolve <> None then error "Multiple resolve methods are not supported" cf.cf_pos;
-						let targ = if fctx.is_abstract_member then tthis else ta in
 						begin match follow t with
 							| TFun([(_,_,t1);(_,_,t2)],_) ->
 								if not fctx.is_macro then begin
-									if not (type_iseq targ t1) then error ("First argument type must be " ^ (s_type (print_context()) targ)) cf.cf_pos;
+									if not (type_iseq ta t1) then error ("First argument type must be " ^ (s_type (print_context()) ta)) cf.cf_pos;
 									if not (type_iseq ctx.t.tstring t2) then error ("Second argument type must be String") cf.cf_pos
 								end
 							| _ ->
-								error ("Field type of resolve must be " ^ (s_type (print_context()) targ) ^ " -> String -> T") cf.cf_pos
+								error ("Field type of resolve must be " ^ (s_type (print_context()) ta) ^ " -> String -> T") cf.cf_pos
 						end;
 						a.a_resolve <- Some cf;
 					| _ :: ml ->
@@ -2504,7 +2498,7 @@ module ClassInitializer = struct
 		let t_get,t_set = match cctx.abstract with
 			| Some a when fctx.is_abstract_member ->
 				if Meta.has Meta.IsVar f.cff_meta then error (f.cff_name ^ ": Abstract properties cannot be real variables") f.cff_pos;
-				let ta = apply_params a.a_params (List.map snd a.a_params) a.a_this in
+				let ta = TAbstract(a,List.map snd a.a_params) in
 				tfun [ta] ret, tfun [ta;ret] ret
 			| _ -> tfun [] ret, TFun(["value",false,ret],ret)
 		in

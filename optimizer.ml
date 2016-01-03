@@ -357,14 +357,6 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 			let e = if v.v_type != t_dynamic && follow e.etype == t_dynamic then mk (TCast(e,None)) v.v_type e.epos else e in
 			(match e.eexpr, opt with
 			| TConst TNull , Some c -> mk (TConst c) v.v_type e.epos
-			(*
-				This is really weird and should be reviewed again. The problem is that we cannot insert a TCast here because
-				the abstract `this` value could be written to, which is not possible if it is wrapped in a cast.
-
-				The original problem here is that we do not generate a temporary variable and thus mute the type of the
-				`this` variable, which leads to unification errors down the line. See issues #2236 and #3713.
-			*)
-			(* | _ when first && (Meta.has Meta.Impl cf.cf_meta) -> {e with etype = v.v_type} *)
 			| _ -> e) :: loop pl al false
 		| [], (v,opt) :: al ->
 			(mk (TConst (match opt with None -> TNull | Some c -> c)) v.v_type p) :: loop [] al false
@@ -654,16 +646,7 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 		else
 			let mt = map_type cf.cf_type in
 			let unify_func () = unify_raise ctx mt (TFun (List.map (fun e -> "",false,e.etype) params,tret)) p in
-			(match follow ethis.etype with
-			| TAnon a -> (match !(a.a_status) with
-				| Statics {cl_kind = KAbstractImpl a } when Meta.has Meta.Impl cf.cf_meta ->
-					if cf.cf_name <> "_new" then begin
-						(* the first argument must unify with a_this for abstract implementation functions *)
-						let tb = (TFun(("",false,map_type a.a_this) :: List.map (fun e -> "",false,e.etype) (List.tl params),tret)) in
-						unify_raise ctx mt tb p
-					end
-				| _ -> unify_func())
-			| _ -> unify_func());
+			if cf.cf_name <> "_new" then unify_func(); (* TODO? *)
 			(*
 				this is very expensive since we are building the substitution list for
 				every expression, but hopefully in such cases the expression size is small
