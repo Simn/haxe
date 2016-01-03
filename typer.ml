@@ -1660,7 +1660,7 @@ and type_field ?(resume=false) ctx e i p mode =
 					| [] -> error (Printf.sprintf "Field %s cannot be called on %s" f.cf_name (s_type (print_context()) e.etype)) p
 					| cf :: cfl ->
 						match follow (apply_params a.a_params pl (monomorphs cf.cf_params cf.cf_type)) with
-							| TFun((_,_,t1) :: _,_) when type_iseq t1 (Abstract.get_underlying_type a pl) ->
+							| TFun((_,_,t1) :: _,_) when type_iseq t1 e.etype ->
 								cf
 							| _ ->
 								loop cfl
@@ -1839,9 +1839,6 @@ let unify_int ctx e k =
 	let t = map cf.cf_type in
 	let args,ret = match t,using_param with
 		| TFun((_,_,ta) :: args,ret),Some e ->
-			let ta = if not (Meta.has Meta.Impl cf.cf_meta) then ta
-			else match follow ta with TAbstract(a,tl) -> Abstract.get_underlying_type a tl | _ -> assert false
-			in
 			(* manually unify first argument *)
 			unify ctx e.etype ta p;
 			args,ret

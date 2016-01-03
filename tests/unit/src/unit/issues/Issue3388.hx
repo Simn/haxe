@@ -8,13 +8,13 @@ private abstract A<T>(Array<T>) {
 	#if java
 	@:impl
 	@:overload @:extern
-	static inline public function sum(a:Array<Int>) {
+	static inline public function sum(a:A<Int>) {
 		return "sum of ints";
 	}
 
 	@:overload @:extern
 	@:impl
-	static inline public function sum(a:Array<String>) {
+	static inline public function sum(a:A<String>) {
 		return "sum of strings";
 	}
 	#end
