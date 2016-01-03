@@ -3505,7 +3505,6 @@ and type_expr ctx (e,p) (with_type:with_type) =
 				| TAnon a ->
 					(try
 						unify ctx (PMap.find "new" a.a_fields).cf_type ct p;
-						ctx.com.warning "Structures with new are deprecated, use haxe.Constraints.Constructible instead" p;
 						true
 					with Not_found ->
 						 false)
