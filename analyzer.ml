@@ -766,7 +766,7 @@ module Graph = struct
 
 	let get_var_info g v = match v.v_extra with
 		| Some(_,Some {eexpr = TConst (TInt i32)}) -> DynArray.get g.g_var_infos (Int32.to_int i32)
-		| _ -> assert false
+		| _ -> prerr_endline ("Unbound local " ^ v.v_name); assert false
 
 	(* edges *)
 
@@ -896,11 +896,11 @@ type analyzer_context = {
 	config : Config.t;
 	graph : Graph.t;
 	mutable entry : BasicBlock.t;
-	mutable has_unbound : bool;
 	mutable loop_counter : int;
 	mutable loop_stack : int list;
 	mutable scopes : int list;
 	mutable scope_depth : int;
+	stored_exprs : texpr DynArray.t;
 }
 
 (*
@@ -912,6 +912,25 @@ type analyzer_context = {
 module TexprTransformer = struct
 	open BasicBlock
 	open Graph
+
+	let store_expr =
+		let p = null_pos in
+		let analyzer_fake_field = mk_field "-storedExpr" t_dynamic p in
+		let ec = Typecore.make_static_this null_class p in
+		let ef = mk (TField(ec,FStatic(null_class,analyzer_fake_field))) t_dynamic p in
+		(fun ctx e ->
+			DynArray.add ctx.stored_exprs e;
+			let rec loop e = match e.eexpr with
+				| TLocal v ->
+					if not (Meta.has Meta.Used v.v_meta) then v.v_meta <- (Meta.Used,[],null_pos) :: v.v_meta
+				| _ ->
+					Type.iter loop e
+			in
+			loop e;
+			let i = DynArray.length ctx.stored_exprs - 1 in
+			let ei = mk (TConst (TInt (Int32.of_int i))) ctx.com.basic.tint e.epos in
+			mk (TCall(ef,[ei])) t_dynamic e.epos
+		)
 
 	let rec func ctx bb tf t p =
 		let g = ctx.graph in
@@ -970,12 +989,9 @@ module TexprTransformer = struct
 			close_node g bb;
 			g.g_unreachable
 		in
-		let check_unbound_call v el =
-			if is_unbound_call_that_might_have_side_effects v el then ctx.has_unbound <- true
-		in
 		let rec value bb e = match e.eexpr with
 			| TLocal v ->
-				bb,e
+				bb,(if Meta.has Meta.Unbound v.v_meta then store_expr ctx e else e)
 			| TBinop(OpAssign,({eexpr = TLocal v} as e1),e2) ->
 				block_element bb e,e1
 			| TBlock [e1] ->
@@ -983,8 +999,7 @@ module TexprTransformer = struct
 			| TBlock _ | TIf _ | TSwitch _ | TTry _ ->
 				bind_to_temp bb false e
 			| TCall({eexpr = TLocal v},el) when is_really_unbound v ->
-				check_unbound_call v el;
-				bb,e
+				bb,store_expr ctx e
 			| TCall(e1,el) ->
 				call bb e e1 el
 			| TBinop((OpAssign | OpAssignOp _) as op,e1,e2) ->
@@ -1126,7 +1141,9 @@ module TexprTransformer = struct
 		and call bb e e1 el =
 			begin match e1.eexpr with
 				| TConst TSuper when ctx.com.platform = Java || ctx.com.platform = Cs ->
-					bb,e
+					bb,store_expr ctx e
+				| _ when (match follow e.etype with TDynamic _ -> true | _ -> false) ->
+					bb,store_expr ctx e
 				| _ ->
 					let check e t = match e.eexpr,t with
 						| TLocal v,TType({t_path = ["cs"],("Ref" | "Out")},_) ->
@@ -1357,8 +1374,7 @@ module TexprTransformer = struct
 				end
 			(* side_effects *)
 			| TCall({eexpr = TLocal v},el) when is_really_unbound v ->
-				check_unbound_call v el;
-				add_texpr g bb e;
+				add_texpr g bb (store_expr ctx e);
 				bb
 			| TCall(e1,el) ->
 				let bb,e = call bb e e1 el in
@@ -1443,11 +1459,11 @@ module TexprTransformer = struct
 			config = config;
 			graph = g;
 			entry = g.g_unreachable;
-			has_unbound = false;
 			loop_counter = 0;
 			loop_stack = [];
 			scope_depth = 0;
 			scopes = [0];
+			stored_exprs = DynArray.create();
 		} in
 		let bb_func,bb_exit = match e.eexpr with
 			| TFunction tf ->
@@ -1568,8 +1584,8 @@ module TexprTransformer = struct
 				end
 			| TCall({eexpr = TConst (TString "fun")},[{eexpr = TConst (TInt i32)}]) ->
 				func ctx (Int32.to_int i32)
-			| TCall({eexpr = TLocal v},_) when is_really_unbound v ->
-				e
+			| TCall({eexpr = TField(_,FStatic(_,{cf_name = "-storedExpr"}))},[{eexpr = TConst (TInt i32)}]) ->
+				DynArray.get ctx.stored_exprs (Int32.to_int i32)
 			| _ ->
 				Type.map_expr loop e
 		in
@@ -1694,15 +1710,15 @@ module Ssa = struct
 			v'
 		in
 		let rec loop is_phi i e = match e.eexpr with
-			| TLocal v when not (is_unbound v) ->
+			| TLocal v ->
 				let v' = local ctx e v bb in
 				add_ssa_edge ctx.graph v' bb is_phi i;
 				{e with eexpr = TLocal v'}
-			| TVar(v,Some e1) when not (is_unbound v) ->
+			| TVar(v,Some e1) ->
 				let e1 = (loop is_phi i) e1 in
 				let v' = write_var v is_phi i in
 				{e with eexpr = TVar(v',Some e1)}
-			| TBinop(OpAssign,({eexpr = TLocal v} as e1),e2) when not (is_unbound v) ->
+			| TBinop(OpAssign,({eexpr = TLocal v} as e1),e2) ->
 				let e2 = (loop is_phi i) e2 in
 				let v' = write_var v is_phi i in
 				{e with eexpr = TBinop(OpAssign,{e1 with eexpr = TLocal v'},e2)};
@@ -1936,7 +1952,7 @@ module ConstPropagation = DataFlow(struct
 			| TConst ct ->
 				Const ct
 			| TLocal v ->
-				if is_unbound v || (follow v.v_type) == t_dynamic || v.v_capture then
+				if (follow v.v_type) == t_dynamic || v.v_capture then
 					Bottom
 				else
 					get_cell v.v_id
@@ -2402,9 +2418,9 @@ module LocalDce = struct
 				end
 			end
 		and expr e = match e.eexpr with
-			| TLocal v when not (is_unbound v) ->
+			| TLocal v ->
 				use v;
-			| TBinop(OpAssign,{eexpr = TLocal v},e1) | TVar(v,Some e1) when not (is_unbound v) ->
+			| TBinop(OpAssign,{eexpr = TLocal v},e1) | TVar(v,Some e1) ->
 				if has_side_effect e1 || keep v then expr e1
 				else ()
 			| _ ->
@@ -2807,7 +2823,7 @@ module Run = struct
 	let run_on_expr com config e =
 		try
 			let ctx = there com config e in
-			if config.optimize && not ctx.has_unbound then begin
+			if config.optimize then begin
 				with_timer "analyzer-ssa-apply" (fun () -> Ssa.apply ctx);
 				if config.const_propagation then with_timer "analyzer-const-propagation" (fun () -> ConstPropagation.apply ctx);
 				if config.copy_propagation then with_timer "analyzer-copy-propagation" (fun () -> CopyPropagation.apply ctx);
