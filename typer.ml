@@ -2461,6 +2461,7 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 			| _ -> raise Not_found
 		end
 	with Not_found -> try
+		if has_mono e1.etype || has_mono e2.etype || ctx.untyped then raise Not_found;
 		let make c map cf e1 e2 t =
 			make_static_call ctx c cf map [e1;e2] t (punion e1.epos e2.epos)
 		in
