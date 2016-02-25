@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2015 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -48,7 +48,7 @@ class ComplexTypeTools {
 		If [c] is null, the result is null.
 	**/
 	static public function toType( c : ComplexType ) : Null<Type>
-		return c == null ? null : haxe.macro.Context.typeof( { expr: ECheckType(macro null, c), pos: Context.currentPos() } );
+		return c == null ? null : Context.resolveType(c,Context.currentPos());
 
 	#end
 }

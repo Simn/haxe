@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2015  Haxe Foundation
+	Copyright (C) 2005-2016  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -85,7 +85,7 @@ let rec check_feature dce s =
 
 and check_and_add_feature dce s =
 	check_feature dce s;
-	Common.add_feature dce.com s;
+	Hashtbl.replace dce.curclass.cl_module.m_extra.m_features s true
 
 (* mark a field as kept *)
 and mark_field dce c cf stat =
@@ -98,23 +98,24 @@ and mark_field dce c cf stat =
 		end
 	in
 	if cf.cf_name = "new" then begin
-		let rec loop c = match c.cl_super with
-			| None -> ()
-			| Some (csup,_) ->
-				begin match csup.cl_constructor with
-				| None -> ()
+		let rec loop c =
+			begin match c.cl_constructor with
 				| Some cf -> add cf
-				end;
-				loop csup
+				| None -> ()
+			end;
+			match c.cl_super with
+			| Some(csup,_) -> loop csup
+			| None -> ()
 		in
 		loop c
-	end;
-	if not (PMap.mem cf.cf_name (if stat then c.cl_statics else c.cl_fields)) then begin
-		match c.cl_super with
-		| None -> add cf
-		| Some (c,_) -> mark_field dce c cf stat
-	end else
-		add cf
+	end else begin
+		if not (PMap.mem cf.cf_name (if stat then c.cl_statics else c.cl_fields)) then begin
+			match c.cl_super with
+			| None -> add cf
+			| Some (c,_) -> mark_field dce c cf stat
+		end else
+			add cf
+	end
 
 let rec update_marked_class_fields dce c =
 	(* mark all :?used fields as surely :used now *)
@@ -519,6 +520,16 @@ and expr dce e =
 
 let fix_accessors com =
 	List.iter (fun mt -> match mt with
+		(* filter empty abstract implementation classes (issue #1885). *)
+		| TClassDecl({cl_kind = KAbstractImpl _} as c) when c.cl_ordered_statics = [] && c.cl_ordered_fields = [] && not (Meta.has Meta.Used c.cl_meta) ->
+			c.cl_extern <- true
+		| TClassDecl({cl_kind = KAbstractImpl a} as c) when Meta.has Meta.Enum a.a_meta ->
+			let is_runtime_field cf =
+				not (Meta.has Meta.Enum cf.cf_meta)
+			in
+			(* also filter abstract implementation classes that have only @:enum fields (issue #2858) *)
+			if not (List.exists is_runtime_field c.cl_ordered_statics) then
+				c.cl_extern <- true
 		| (TClassDecl c) ->
 			let rec has_accessor c n stat =
 				PMap.mem n (if stat then c.cl_statics else c.cl_fields)
@@ -719,7 +730,9 @@ let run com main full =
 		| _ -> ()
 	) com.types;
 
-	(* mark extern classes as really used if they are extended by non-extern ones *)
+	(*
+		Mark extern classes as really used if they are extended by non-extern ones.
+	*)
 	List.iter (function
 		| TClassDecl ({cl_extern = false; cl_super = Some ({cl_extern = true} as csup, _)}) ->
 			mark_directly_used_class csup
@@ -735,6 +748,4 @@ let run com main full =
 		| x :: l -> x :: remove_meta m l
 	in
 	List.iter (fun cf -> cf.cf_meta <- remove_meta Meta.Used cf.cf_meta) dce.marked_fields;
-	List.iter (fun cf -> cf.cf_meta <- remove_meta Meta.MaybeUsed cf.cf_meta) dce.marked_maybe_fields;
-
-
+	List.iter (fun cf -> cf.cf_meta <- remove_meta Meta.MaybeUsed cf.cf_meta) dce.marked_maybe_fields

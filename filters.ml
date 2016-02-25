@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2015  Haxe Foundation
+	Copyright (C) 2005-2016  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -23,138 +23,6 @@ open Type
 open Typecore
 
 (* PASS 1 begin *)
-
-let rec verify_ast ctx e =
-	let not_null e e1 = match e1.eexpr with
-		| TConst TNull ->
-			(* TODO: https://github.com/HaxeFoundation/haxe/issues/4072 *)
-			(* display_error ctx ("Invalid null expression: " ^ (s_expr_pretty "" (s_type (print_context())) e)) e.epos *)
-			()
-		| _ -> ()
-	in
-	let rec loop e = match e.eexpr with
-	| TField(e1,_) ->
-		not_null e e1;
-		()
-	| TArray(e1,e2) ->
-		not_null e e1;
-		loop e1;
-		loop e2
-	| TCall(e1,el) ->
-		not_null e e1;
-		loop e1;
-		List.iter loop el
-	| TUnop(_,_,e1) ->
-		not_null e e1;
-		loop e1
-	(* probably too messy *)
-(* 	| TBinop((OpEq | OpNotEq),e1,e2) ->
-		loop e1;
-		loop e2
-	| TBinop((OpAssign | OpAssignOp _),e1,e2) ->
-		not_null e e1;
-		loop e1;
-		loop e2
-	| TBinop(op,e1,e2) ->
-		not_null e e1;
-		not_null e e2;
-		loop e1;
-		loop e2 *)
-	| TTypeExpr(TClassDecl {cl_kind = KAbstractImpl a}) when not (Meta.has Meta.RuntimeValue a.a_meta) ->
-		error "Cannot use abstract as value" e.epos
-	| _ ->
-		Type.iter loop e
-	in
-	loop e
-
-(*
-	Wraps implicit blocks in TIf, TFor, TWhile, TFunction and TTry with real ones
-*)
-let rec blockify_ast e =
-	match e.eexpr with
-	| TIf(e1,e2,eo) ->
-		{e with eexpr = TIf(blockify_ast e1,mk_block (blockify_ast e2),match eo with None -> None | Some e -> Some (mk_block (blockify_ast e)))}
-	| TFor(v,e1,e2) ->
-		{e with eexpr = TFor(v,blockify_ast e1,mk_block (blockify_ast e2))}
-	| TWhile(e1,e2,flag) ->
-		{e with eexpr = TWhile(blockify_ast e1,mk_block (blockify_ast e2),flag)}
-	| TFunction tf ->
-		{e with eexpr = TFunction {tf with tf_expr = mk_block (blockify_ast tf.tf_expr)}}
-	| TTry(e1,cl) ->
-		{e with eexpr = TTry(mk_block (blockify_ast e1),List.map (fun (v,e) -> v,mk_block (blockify_ast e)) cl)}
-	| TSwitch(e1,cases,def) ->
-		let e1 = blockify_ast e1 in
-		let cases = List.map (fun (el,e) ->
-			el,mk_block (blockify_ast e)
-		) cases in
-		let def = match def with None -> None | Some e -> Some (mk_block (blockify_ast e)) in
-		{e with eexpr = TSwitch(e1,cases,def)}
-	| _ ->
-		Type.map_expr blockify_ast e
-
-(*
-	Pushes complex right-hand side expression inwards.
-
-	return { exprs; value; } -> { exprs; return value; }
-	x = { exprs; value; } -> { exprs; x = value; }
-	var x = { exprs; value; } -> { var x; exprs; x = value; }
-*)
-let promote_complex_rhs com e =
-	let rec is_complex e = match e.eexpr with
-		| TBlock _ | TSwitch _ | TIf _ | TTry _ | TCast(_,Some _) -> true
-		| TBinop(_,e1,e2) -> is_complex e1 || is_complex e2
-		| TParenthesis e | TMeta(_,e) | TCast(e, None) | TField(e,_) -> is_complex e
-		| _ -> false
-	in
-	let rec loop f e = match e.eexpr with
-		| TBlock(el) ->
-			begin match List.rev el with
-				| elast :: el -> {e with eexpr = TBlock(block (List.rev ((loop f elast) :: el)))}
-				| [] -> e
-			end
-		| TSwitch(es,cases,edef) ->
-			{e with eexpr = TSwitch(es,List.map (fun (el,e) -> List.map find el,loop f e) cases,match edef with None -> None | Some e -> Some (loop f e)); }
-		| TIf(eif,ethen,eelse) ->
-			{e with eexpr = TIf(find eif, loop f ethen, match eelse with None -> None | Some e -> Some (loop f e)); }
-		| TTry(e1,el) ->
-			{e with eexpr = TTry(loop f e1, List.map (fun (el,e) -> el,loop f e) el); }
-		| TParenthesis e1 when not (Common.defined com Define.As3) ->
-			{e with eexpr = TParenthesis(loop f e1)}
-		| TMeta(m,e1) ->
-			{ e with eexpr = TMeta(m,loop f e1)}
-		| TReturn _ | TThrow _ ->
-			find e
-		| TContinue | TBreak ->
-			e
-		| _ ->
-			f (find e)
-	and block el =
-		let r = ref [] in
-		List.iter (fun e ->
-			match e.eexpr with
-			| TVar(v,eo) ->
-				begin match eo with
-					| Some e when is_complex e ->
-						let e = find e in
-						r := (loop (fun e -> mk (TBinop(OpAssign,mk (TLocal v) v.v_type e.epos,e)) v.v_type e.epos) e)
-							:: ((mk (TVar (v,None)) com.basic.tvoid e.epos))
-							:: !r
-					| Some e ->
-						r := (mk (TVar (v,Some (find e))) com.basic.tvoid e.epos) :: !r
-					| None -> r := (mk (TVar (v,None)) com.basic.tvoid e.epos) :: !r
-				end
-			| TReturn (Some e1) when (match follow e1.etype with TAbstract({a_path=[],"Void"},_) -> true | _ -> false) ->
-				r := ({e with eexpr = TReturn None}) :: e1 :: !r
-			| _ -> r := (find e) :: !r
-		) el;
-		List.rev !r
-	and find e = match e.eexpr with
-		| TReturn (Some e1) -> loop (fun er -> {e with eexpr = TReturn (Some er)}) e1
-		| TBinop(OpAssign | OpAssignOp _ as op, ({eexpr = TLocal _ | TField _ | TArray _} as e1), e2) -> loop (fun er -> {e with eexpr = TBinop(op, e1, er)}) e2
-		| TBlock(el) -> {e with eexpr = TBlock (block el)}
-		| _ -> Type.map_expr find e
-	in
-	find e
 
 (* Adds final returns to functions as required by some platforms *)
 let rec add_final_return e =
@@ -654,64 +522,17 @@ let captured_vars com e =
 (* RENAME LOCAL VARS *)
 
 let rename_local_vars ctx e =
-	let cfg = ctx.com.config in
-	let all_scope = (not cfg.pf_captured_scope) || (not cfg.pf_locals_scope) in
-	let vars = ref PMap.empty in
-	let all_vars = ref PMap.empty in
-	let vtemp = alloc_var "~" t_dynamic in
-	let rebuild_vars = ref false in
-	let rebuild m =
-		PMap.fold (fun v acc -> PMap.add v.v_name v acc) m PMap.empty
+	let vars = ref [] in
+	let declare v =
+		vars := v :: !vars
 	in
-	let save() =
-		let old = !vars in
-		if cfg.pf_unique_locals || not cfg.pf_locals_scope then (fun() -> ()) else (fun() -> vars := if !rebuild_vars then rebuild old else old)
+	let reserved = ref StringMap.empty in
+	let reserve name =
+		reserved := StringMap.add name true !reserved
 	in
-	let rename vars v =
-		let count = ref 1 in
-		while PMap.mem (v.v_name ^ string_of_int !count) vars do
-			incr count;
-		done;
-		v.v_name <- v.v_name ^ string_of_int !count;
-	in
-	let declare v p =
-		(match follow v.v_type with
-			| TAbstract ({a_path = [],"Void"},_) -> error "Arguments and variables of type Void are not allowed" p
-			| _ -> ());
-		(* chop escape char for all local variables generated *)
-		if is_gen_local v then v.v_name <- "_g" ^ String.sub v.v_name 1 (String.length v.v_name - 1);
-		let look_vars = (if not cfg.pf_captured_scope && v.v_capture then !all_vars else !vars) in
-		(try
-			let v2 = PMap.find v.v_name look_vars in
-			(*
-				block_vars will create some wrapper-functions that are declaring
-				the same variable twice. In that case do not perform a rename since
-				we are sure it's actually the same variable
-			*)
-			if v == v2 then raise Not_found;
-			rename look_vars v;
-		with Not_found ->
-			());
-		vars := PMap.add v.v_name v !vars;
-		if all_scope then all_vars := PMap.add v.v_name v !all_vars;
-	in
-	(*
-		This is quite a rare case, when a local variable would otherwise prevent
-		accessing a type because it masks the type value or the package name.
-	*)
 	let check t =
 		match (t_infos t).mt_path with
-		| [], name | name :: _, _ ->
-			let vars = if cfg.pf_locals_scope then vars else all_vars in
-			(try
-				let v = PMap.find name !vars in
-				if v == vtemp then raise Not_found; (* ignore *)
-				rename (!vars) v;
-				rebuild_vars := true;
-				vars := PMap.add v.v_name v !vars
-			with Not_found ->
-				());
-			vars := PMap.add name vtemp !vars
+		| [], name | name :: _, _ -> reserve name
 	in
 	let check_type t =
 		match follow t with
@@ -721,70 +542,62 @@ let rename_local_vars ctx e =
 		| TAbstract (a,_) -> check (TAbstractDecl a)
 		| TMono _ | TLazy _ | TAnon _ | TDynamic _ | TFun _ -> ()
 	in
-	let rec loop e =
-		match e.eexpr with
-		| TVar (v,eo) ->
-			if not cfg.pf_locals_scope then declare v e.epos;
-			(match eo with None -> () | Some e -> loop e);
-			if cfg.pf_locals_scope then declare v e.epos;
-		| TFunction tf ->
-			let old = save() in
-			List.iter (fun (v,_) -> declare v e.epos) tf.tf_args;
-			loop tf.tf_expr;
-			old()
-		| TBlock el ->
-			let old = save() in
-			(* we have to look ahead for vars on these targets (issue #3344) *)
-			begin match ctx.com.platform with
-				| Js ->
-					let rec check_var e = match e.eexpr with
-						| TVar (v,eo) ->
-							(match eo with None -> () | Some e -> loop e);
-							declare v e.epos
-						| TBlock _ ->
-							()
-						| _ ->
-							Type.iter check_var e
-					in
-					List.iter check_var el
-				| _ ->
-					()
-			end;
-			List.iter loop el;
-			old()
-		| TFor (v,it,e1) ->
-			loop it;
-			let old = save() in
-			declare v e.epos;
-			loop e1;
-			old()
-		| TTry (e,catchs) ->
-			loop e;
+	let rec collect e = match e.eexpr with
+ 		| TVar(v,eo) ->
+			declare v;
+			(match eo with None -> () | Some e -> collect e)
+		| TFor(v,e1,e2) ->
+			declare v;
+			collect e1;
+			collect e2;
+		| TTry(e1,catches) ->
+			collect e1;
 			List.iter (fun (v,e) ->
-				let old = save() in
-				declare v e.epos;
+				declare v;
 				check_type v.v_type;
-				loop e;
-				old()
-			) catchs;
+				collect e
+			) catches
+		| TFunction tf ->
+			List.iter (fun (v,_) -> declare v) tf.tf_args;
+			collect tf.tf_expr
 		| TTypeExpr t ->
 			check t
 		| TNew (c,_,_) ->
-			Type.iter loop e;
+			Type.iter collect e;
 			check (TClassDecl c);
 		| TCast (e,Some t) ->
-			loop e;
+			collect e;
 			check t;
 		| TConst TSuper ->
 			check_type e.etype
 		| _ ->
-			Type.iter loop e
+			Type.iter collect e
 	in
-	declare (alloc_var "this" t_dynamic) Ast.null_pos; (* force renaming of 'this' vars in abstract *)
+	(* Pass 1: Collect used identifiers and variables. *)
+	reserve "this";
+	if ctx.com.platform = Java then reserve "_";
 	begin match ctx.curclass.cl_path with
-		| s :: _,_ | [],s -> declare (alloc_var s t_dynamic) Ast.null_pos
+		| s :: _,_ | [],s -> reserve s
 	end;
-	loop e;
+	collect e;
+	(* Pass 2: Check and rename variables. *)
+	let count_table = Hashtbl.create 0 in
+	let maybe_rename v =
+		(* chop escape char for all local variables generated *)
+		if is_gen_local v then v.v_name <- "_g" ^ String.sub v.v_name 1 (String.length v.v_name - 1);
+		let name = ref v.v_name in
+		let count = ref (try Hashtbl.find count_table v.v_name with Not_found -> 0) in
+		while StringMap.mem !name !reserved do
+			incr count;
+			name := v.v_name ^ (string_of_int !count);
+		done;
+		reserve !name;
+		Hashtbl.replace count_table v.v_name !count;
+		if not (Meta.has Meta.RealPath v.v_meta) then
+			v.v_meta <- (Meta.RealPath,[EConst (String v.v_name),e.epos],e.epos) :: v.v_meta;
+		v.v_name <- !name;
+	in
+	List.iter maybe_rename (List.rev !vars);
 	e
 
 let check_unification ctx e t =
@@ -959,7 +772,7 @@ let apply_native_paths ctx t =
 			let meta,path = get_real_path e.e_meta e.e_path in
 			e.e_meta <- meta :: e.e_meta;
 			e.e_path <- path;
-		| TAbstractDecl a when Meta.has Meta.CoreType a.a_meta ->
+		| TAbstractDecl a ->
 			let meta,path = get_real_path a.a_meta a.a_path in
 			a.a_meta <- meta :: a.a_meta;
 			a.a_path <- path;
@@ -1035,7 +848,7 @@ let add_field_inits ctx t =
 						eassign;
 			) inits in
 			let el = if !need_this then (mk (TVar((v, Some ethis))) ethis.etype ethis.epos) :: el else el in
-			match c.cl_constructor with
+			let cf = match c.cl_constructor with
 			| None ->
 				let ct = TFun([],ctx.com.basic.tvoid) in
 				let ce = mk (TFunction {
@@ -1045,15 +858,19 @@ let add_field_inits ctx t =
 				}) ct c.cl_pos in
 				let ctor = mk_field "new" ct c.cl_pos in
 				ctor.cf_kind <- Method MethNormal;
-				c.cl_constructor <- Some { ctor with cf_expr = Some ce };
+				{ ctor with cf_expr = Some ce }
 			| Some cf ->
 				match cf.cf_expr with
 				| Some { eexpr = TFunction f } ->
 					let bl = match f.tf_expr with {eexpr = TBlock b } -> b | x -> [x] in
 					let ce = mk (TFunction {f with tf_expr = mk (TBlock (el @ bl)) ctx.com.basic.tvoid c.cl_pos }) cf.cf_type cf.cf_pos in
-					c.cl_constructor <- Some {cf with cf_expr = Some ce }
+					{cf with cf_expr = Some ce };
 				| _ ->
 					assert false
+			in
+			let config = Analyzer.Config.get_base_config ctx.com false in
+			Analyzer.Run.run_on_field ctx config c cf;
+			c.cl_constructor <- Some cf
 	in
 	match t with
 	| TClassDecl c ->
@@ -1201,75 +1018,41 @@ let iter_expressions fl mt =
 
 let run com tctx main =
 	begin match com.display with
-		| DMUsage | DMPosition ->
-			Codegen.detect_usage com;
-		| _ ->
-			()
+		| DMUsage | DMPosition -> Codegen.detect_usage com;
+		| _ -> ()
 	end;
 	if not (Common.defined com Define.NoDeprecationWarnings) then
 		Codegen.DeprecationCheck.run com;
 	let use_static_analyzer = Common.defined com Define.Analyzer in
-	(* this part will be a bit messy until we make the analyzer the default *)
 	let new_types = List.filter (fun t -> not (is_cached t)) com.types in
-	if use_static_analyzer then begin
-		(* PASS 1: general expression filters *)
-		let filters = [
-			Codegen.AbstractCast.handle_abstract_casts tctx;
-			check_local_vars_init;
-			Optimizer.inline_constructors tctx;
-			Optimizer.reduce_expression tctx;
-			blockify_ast;
-			captured_vars com;
-		] in
-		List.iter (run_expression_filters tctx filters) new_types;
-		Analyzer.Run.run_on_types tctx new_types;
-		List.iter (iter_expressions [verify_ast tctx]) new_types;
-		let filters = [
-			Optimizer.sanitize com;
-			if com.config.pf_add_final_return then add_final_return else (fun e -> e);
-			if com.platform = Js then wrap_js_exceptions com else (fun e -> e);
-			rename_local_vars tctx;
-		] in
-		List.iter (run_expression_filters tctx filters) new_types;
-	end else begin
-		(* PASS 1: general expression filters *)
-		let filters = [
-			Codegen.AbstractCast.handle_abstract_casts tctx;
-			blockify_ast;
-			check_local_vars_init;
-			Optimizer.inline_constructors tctx;
-			( if (Common.defined com Define.NoSimplify) || (Common.defined com Define.Cppia) ||
-						( match com.platform with Cpp -> false | _ -> true ) then
-					fun e -> e
-				else
-					fun e ->
-						let save = save_locals tctx in
-						let timer = timer "analyzer-simplify-apply" in
-						let e = try snd (Analyzer.Simplifier.apply com e) with Exit -> e in
-						timer();
-						save();
-					e );
-			if com.foptimize then (fun e -> Optimizer.reduce_expression tctx e) else Optimizer.sanitize com;
-			captured_vars com;
-			promote_complex_rhs com;
-			if com.config.pf_add_final_return then add_final_return else (fun e -> e);
-			if com.platform = Js then wrap_js_exceptions com else (fun e -> e);
-			rename_local_vars tctx;
-		] in
-		List.iter (run_expression_filters tctx filters) new_types;
-		List.iter (iter_expressions [verify_ast tctx]) new_types;
-	end;
+	(* PASS 1: general expression filters *)
+	let filters = [
+		Codegen.AbstractCast.handle_abstract_casts tctx;
+		check_local_vars_init;
+		Optimizer.inline_constructors tctx;
+		Optimizer.reduce_expression tctx;
+		captured_vars com;
+	] in
+	List.iter (run_expression_filters tctx filters) new_types;
+	if com.platform <> Cross then Analyzer.Run.run_on_types tctx use_static_analyzer new_types;
+	let filters = [
+		Optimizer.sanitize com;
+		if com.config.pf_add_final_return then add_final_return else (fun e -> e);
+		if com.platform = Js then wrap_js_exceptions com else (fun e -> e);
+		rename_local_vars tctx;
+	] in
+	List.iter (run_expression_filters tctx filters) new_types;
 	next_compilation();
 	List.iter (fun f -> f()) (List.rev com.filters); (* macros onGenerate etc. *)
 	List.iter (save_class_state tctx) new_types;
+	(* PASS 2: type filters pre-DCE *)
 	List.iter (fun t ->
 		remove_generic_base tctx t;
 		remove_extern_fields tctx t;
+		Codegen.update_cache_dependencies t;
+		(* check @:remove metadata before DCE so it is ignored there (issue #2923) *)
+		check_remove_metadata tctx t;
 	) com.types;
-	(* update cache dependencies before DCE is run *)
-	Codegen.update_cache_dependencies com;
-	(* check @:remove metadata before DCE so it is ignored there (issue #2923) *)
-	List.iter (check_remove_metadata tctx) com.types;
 	(* DCE *)
 	let dce_mode = if Common.defined com Define.As3 then
 		"no"
@@ -1282,20 +1065,7 @@ let run com tctx main =
 		| "no" -> Dce.fix_accessors com
 		| _ -> failwith ("Unknown DCE mode " ^ dce_mode)
 	end;
-	(* always filter empty abstract implementation classes (issue #1885) *)
-	List.iter (fun mt -> match mt with
-		| TClassDecl({cl_kind = KAbstractImpl _} as c) when c.cl_ordered_statics = [] && c.cl_ordered_fields = [] && not (Meta.has Meta.Used c.cl_meta) ->
-			c.cl_extern <- true
-		| TClassDecl({cl_kind = KAbstractImpl a} as c) when Meta.has Meta.Enum a.a_meta ->
-			let is_runtime_field cf =
-				not (Meta.has Meta.Enum cf.cf_meta)
-			in
-			(* also filter abstract implementation classes that have only @:enum fields (issue #2858) *)
-			if not (List.exists is_runtime_field c.cl_ordered_statics) then
-				c.cl_extern <- true
-		| _ -> ()
-	) com.types;
-	(* PASS 3: type filters *)
+	(* PASS 3: type filters post-DCE *)
 	let type_filters = [
 		check_private_path;
 		apply_native_paths;

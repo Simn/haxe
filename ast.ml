@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2015  Haxe Foundation
+	Copyright (C) 2005-2016  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -24,6 +24,7 @@ type pos = {
 }
 
 module IntMap = Map.Make(struct type t = int let compare a b = a - b end)
+module StringMap = Map.Make(struct type t = string let compare = String.compare end)
 
 module Meta = struct
 	type strict_meta =
@@ -36,6 +37,7 @@ module Meta = struct
 		| Annotation
 		| ArrayAccess
 		| Ast
+		| AstSource
 		| AutoBuild
 		| Bind
 		| Bitmap
@@ -75,6 +77,7 @@ module Meta = struct
 		| FlatEnum
 		| Font
 		| Forward
+		| ForwardStatics
 		| From
 		| FunctionCode
 		| FunctionTailCode
@@ -136,6 +139,7 @@ module Meta = struct
 		| Protected
 		| Public
 		| PublicFields
+		| Pure
 		| QuotedField
 		| ReadOnly
 		| RealPath
@@ -157,6 +161,7 @@ module Meta = struct
 		| Strict
 		| Struct
 		| StructAccess
+		| StructInit
 		| SuppressWarnings
 		| This
 		| Throws
@@ -412,6 +417,7 @@ type abstract_flag =
 	| AFromType of complex_type
 	| AToType of complex_type
 	| AIsType of complex_type
+	| AExtern
 
 type enum_constructor = {
 	ec_name : string;

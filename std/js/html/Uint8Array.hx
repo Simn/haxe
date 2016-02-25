@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2015 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -24,13 +24,15 @@
 
 package js.html;
 
+import js.html.compat.Uint8Array;
+
 @:native("Uint8Array")
 extern class Uint8Array extends ArrayBufferView implements ArrayAccess<Int>
 {
 	static inline var BYTES_PER_ELEMENT : Int = 1;
-	
+
 	var length(default,null) : Int;
-	
+
 	/** @throws DOMError */
 	@:overload( function( length : Int ) : Void {} )
 	@:overload( function( array : Uint8Array ) : Void {} )

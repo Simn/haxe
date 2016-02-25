@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2015  Haxe Foundation
+	Copyright (C) 2005-2016  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -74,12 +74,6 @@ type platform_config = {
 	pf_static : bool;
 	(** has access to the "sys" package *)
 	pf_sys : bool;
-	(** local variables are block-scoped *)
-	pf_locals_scope : bool;
-	(** captured local variables are scoped *)
-	pf_captured_scope : bool;
-	(** generated locals must be absolutely unique wrt the current function *)
-	pf_unique_locals : bool;
 	(** captured variables handling (see before) *)
 	pf_capture_policy : capture_policy;
 	(** when calling a method with optional args, do we replace the missing args with "null" constants *)
@@ -131,6 +125,7 @@ type context = {
 	mutable get_macros : unit -> context option;
 	mutable run_command : string -> int;
 	file_lookup_cache : (string,string option) Hashtbl.t;
+	parser_cache : (string,(type_def * pos) list) Hashtbl.t;
 	mutable stored_typed_exprs : (int, texpr) PMap.t;
 	(* output *)
 	mutable file : string;
@@ -220,7 +215,6 @@ module Define = struct
 		| NoOpt
 		| NoPatternMatching
 		| NoRoot
-		| NoSimplify
 		| NoSwfCompress
 		| NoTraces
 		| Objc
@@ -308,7 +302,6 @@ module Define = struct
 		| NoInline -> ("no_inline","Disable inlining")
 		| NoRoot -> ("no_root","Generate top-level types into haxe.root namespace")
 		| NoMacroCache -> ("no_macro_cache","Disable macro context caching")
-		| NoSimplify -> "no_simplify",("Disable simplification filter")
 		| NoSwfCompress -> ("no_swf_compress","Disable SWF output compression")
 		| NoTraces -> ("no_traces","Disable all trace calls")
 		| Objc -> ("objc","Sets the hxcpp output to objective-c++ classes. Must be defined for interop")
@@ -368,6 +361,7 @@ module MetaInfo = struct
 		| Annotation -> ":annotation",("Annotation (@interface) definitions on -java-lib imports will be annotated with this metadata. Has no effect on types compiled by Haxe",[Platform Java; UsedOn TClass])
 		| ArrayAccess -> ":arrayAccess",("Allows [] access on an abstract",[UsedOnEither [TAbstract;TAbstractField]])
 		| Ast -> ":ast",("Internally used to pass the AST source into the typed AST",[Internal])
+		| AstSource -> ":astSource",("Filled by the compiler with the parsed expression of the field",[UsedOn TClassField])
 		| AutoBuild -> ":autoBuild",("Extends @:build metadata to all extending and implementing classes",[HasParam "Build macro call";UsedOn TClass])
 		| Bind -> ":bind",("Override Swf class declaration",[Platform Flash;UsedOn TClass])
 		| Bitmap -> ":bitmap",("Embeds given bitmap data into the class (must extend flash.display.BitmapData)",[HasParam "Bitmap file path";UsedOn TClass;Platform Flash])
@@ -392,7 +386,7 @@ module MetaInfo = struct
 		| DefParam -> ":defParam",("?",[])
 		| Delegate -> ":delegate",("Automatically added by -net-lib on delegates",[Platform Cs; UsedOn TAbstract])
 		| Depend -> ":depend",("",[Platform Cpp])
-		| Deprecated -> ":deprecated",("Automatically added by -java-lib on class fields annotated with @Deprecated annotation. Has no effect on types compiled by Haxe",[Platform Java; UsedOnEither [TClass;TEnum;TClassField]])
+		| Deprecated -> ":deprecated",("Mark a type or field as deprecated",[])
 		| DirectlyUsed -> ":directlyUsed",("Marks types that are directly referenced by non-extern code",[Internal])
 		| DynamicObject -> ":dynamicObject",("Used internally to identify the Dynamic Object implementation",[Platforms [Java;Cs]; UsedOn TClass; Internal])
 		| Enum -> ":enum",("Defines finite value sets to abstract definitions",[UsedOn TAbstract])
@@ -407,6 +401,7 @@ module MetaInfo = struct
 		| FlatEnum -> ":flatEnum",("Internally used to mark an enum as being flat, i.e. having no function constructors",[UsedOn TEnum; Internal])
 		| Font -> ":font",("Embeds the given TrueType font into the class (must extend flash.text.Font)",[HasParam "TTF path";HasParam "Range String";UsedOn TClass])
 		| Forward -> ":forward",("Forwards field access to underlying type",[HasParam "List of field names";UsedOn TAbstract])
+		| ForwardStatics -> ":forwardStatics",("Forwards static field access to underlying type",[HasParam "List of field names";UsedOn TAbstract])
 		| From -> ":from",("Specifies that the field of the abstract is a cast operation from the type identified in the function",[UsedOn TAbstractField])
 		| FunctionCode -> ":functionCode",("Used to inject platform-native code into a function",[Platforms [Cpp;Java;Cs]])
 		| FunctionTailCode -> ":functionTailCode",("",[Platform Cpp])
@@ -469,6 +464,7 @@ module MetaInfo = struct
 		| PrivateAccess -> ":privateAccess",("Allow private access to anything for the annotated expression",[UsedOn TExpr])
 		| Protected -> ":protected",("Marks a class field as being protected",[UsedOn TClassField])
 		| Property -> ":property",("Marks a property field to be compiled as a native C# property",[UsedOn TClassField;Platform Cs])
+		| Pure -> ":pure",("Marks a class field, class or expression as pure (side-effect free)",[UsedOnEither [TClass;TClassField;TExpr]])
 		| ReadOnly -> ":readOnly",("Generates a field with the 'readonly' native keyword",[Platform Cs; UsedOn TClassField])
 		| RealPath -> ":realPath",("Internally used on @:native types to retain original path information",[Internal])
 		| Remove -> ":remove",("Causes an interface to be removed from all implementing classes before generation",[UsedOn TClass])
@@ -489,6 +485,7 @@ module MetaInfo = struct
 		| Strict -> ":strict",("Used to declare a native C# attribute or a native Java metadata. Is type checked",[Platforms [Java;Cs]])
 		| Struct -> ":struct",("Marks a class definition as a struct",[Platform Cs; UsedOn TClass])
 		| StructAccess -> ":structAccess",("Marks an extern class as using struct access('.') not pointer('->')",[Platform Cpp; UsedOn TClass])
+		| StructInit -> ":structInit",("Allows to initialize the class with a structure that matches constructor parameters",[UsedOn TClass])
 		| SuppressWarnings -> ":suppressWarnings",("Adds a SuppressWarnings annotation for the generated Java class",[Platform Java; UsedOn TClass])
 		| Throws -> ":throws",("Adds a 'throws' declaration to the generated function",[HasParam "Type as String"; Platform Java; UsedOn TClassField])
 		| This -> ":this",("Internally used to pass a 'this' expression to macros",[Internal; UsedOn TExpr])
@@ -543,9 +540,6 @@ let default_config =
 	{
 		pf_static = true;
 		pf_sys = true;
-		pf_locals_scope = true;
-		pf_captured_scope = true;
-		pf_unique_locals = false;
 		pf_capture_policy = CPNone;
 		pf_pad_nulls = false;
 		pf_add_final_return = false;
@@ -564,9 +558,6 @@ let get_config com =
 		{
 			pf_static = false;
 			pf_sys = false;
-			pf_locals_scope = false;
-			pf_captured_scope = false;
-			pf_unique_locals = false;
 			pf_capture_policy = CPLoopVars;
 			pf_pad_nulls = false;
 			pf_add_final_return = false;
@@ -579,9 +570,6 @@ let get_config com =
 		{
 			pf_static = false;
 			pf_sys = true;
-			pf_locals_scope = true;
-			pf_captured_scope = true;
-			pf_unique_locals = false;
 			pf_capture_policy = CPNone;
 			pf_pad_nulls = true;
 			pf_add_final_return = false;
@@ -594,9 +582,6 @@ let get_config com =
 		{
 			pf_static = true;
 			pf_sys = false;
-			pf_locals_scope = false;
-			pf_captured_scope = true;
-			pf_unique_locals = true;
 			pf_capture_policy = CPLoopVars;
 			pf_pad_nulls = false;
 			pf_add_final_return = true;
@@ -609,9 +594,6 @@ let get_config com =
 		{
 			pf_static = true;
 			pf_sys = false;
-			pf_locals_scope = true;
-			pf_captured_scope = true; (* handled by genSwf9 *)
-			pf_unique_locals = false;
 			pf_capture_policy = CPLoopVars;
 			pf_pad_nulls = false;
 			pf_add_final_return = false;
@@ -624,9 +606,6 @@ let get_config com =
 		{
 			pf_static = false;
 			pf_sys = true;
-			pf_locals_scope = false; (* some duplicate work is done in genPhp *)
-			pf_captured_scope = false;
-			pf_unique_locals = false;
 			pf_capture_policy = CPNone;
 			pf_pad_nulls = true;
 			pf_add_final_return = false;
@@ -639,9 +618,6 @@ let get_config com =
 		{
 			pf_static = true;
 			pf_sys = true;
-			pf_locals_scope = true;
-			pf_captured_scope = true;
-			pf_unique_locals = false;
 			pf_capture_policy = CPWrapRef;
 			pf_pad_nulls = true;
 			pf_add_final_return = true;
@@ -654,9 +630,6 @@ let get_config com =
 		{
 			pf_static = true;
 			pf_sys = true;
-			pf_locals_scope = false;
-			pf_captured_scope = true;
-			pf_unique_locals = true;
 			pf_capture_policy = CPWrapRef;
 			pf_pad_nulls = true;
 			pf_add_final_return = false;
@@ -669,9 +642,6 @@ let get_config com =
 		{
 			pf_static = true;
 			pf_sys = true;
-			pf_locals_scope = false;
-			pf_captured_scope = true;
-			pf_unique_locals = false;
 			pf_capture_policy = CPWrapRef;
 			pf_pad_nulls = true;
 			pf_add_final_return = false;
@@ -684,9 +654,6 @@ let get_config com =
 		{
 			pf_static = false;
 			pf_sys = true;
-			pf_locals_scope = false;
-			pf_captured_scope = false;
-			pf_unique_locals = false;
 			pf_capture_policy = CPLoopVars;
 			pf_pad_nulls = false;
 			pf_add_final_return = false;
@@ -760,6 +727,7 @@ let create v args =
 		file_lookup_cache = Hashtbl.create 0;
 		stored_typed_exprs = PMap.empty;
 		memory_marker = memory_marker;
+		parser_cache = Hashtbl.create 0;
 	}
 
 let log com str =
@@ -781,12 +749,13 @@ let get_signature com =
 	match com.defines_signature with
 	| Some s -> s
 	| None ->
-		let str = String.concat "@" (PMap.foldi (fun k v acc ->
+		let defines = PMap.foldi (fun k v acc ->
 			(* don't make much difference between these special compilation flags *)
-			match k with
-			| "display" | "use_rtti_doc" | "macrotimes" -> acc
-			| _ -> k :: v :: acc
-		) com.defines []) in
+			match String.concat "_" (ExtString.String.nsplit k "-") with
+			| "display" | "use_rtti_doc" | "macro_times" | "display_details" | "no_copt" -> acc
+			| _ -> (k ^ "=" ^ v) :: acc
+		) com.defines [] in
+		let str = String.concat "@" (List.sort compare defines) in
 		let s = Digest.string str in
 		com.defines_signature <- Some s;
 		s
@@ -973,10 +942,18 @@ let find_file ctx f =
 		| None -> raise Not_found
 		| Some f -> f)
 
-
 let get_full_path f = try Extc.get_full_path f with _ -> f
 
 let unique_full_path = if Sys.os_type = "Win32" || Sys.os_type = "Cygwin" then (fun f -> String.lowercase (get_full_path f)) else get_full_path
+
+let get_path_parts f =
+	let f = String.concat "/" (ExtString.String.nsplit f "\\") in
+	let cl = ExtString.String.nsplit f "." in
+	let cl = (match List.rev cl with
+		| ["hx";path] -> ExtString.String.nsplit path "/"
+		| _ -> cl
+	) in
+	cl
 
 let normalize_path p =
 	let l = String.length p in

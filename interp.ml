@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2015  Haxe Foundation
+	Copyright (C) 2005-2016  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -103,6 +103,7 @@ type extern_api = {
 	on_type_not_found : (string -> value) -> unit;
 	parse_string : string -> Ast.pos -> bool -> Ast.expr;
 	type_expr : Ast.expr -> Type.texpr;
+	resolve_type  : Ast.complex_type -> Ast.pos -> t;
 	type_macro_expr : Ast.expr -> Type.texpr;
 	store_typed_expr : Type.texpr -> Ast.expr;
 	get_display : string -> string;
@@ -196,6 +197,8 @@ exception Sys_exit of int
 
 let get_ctx_ref = ref (fun() -> assert false)
 let encode_complex_type_ref = ref (fun t -> assert false)
+let decode_complex_type_ref = ref (fun t -> assert false)
+let decode_pos_ref = ref (fun v -> assert false)
 let encode_type_ref = ref (fun t -> assert false)
 let decode_type_ref = ref (fun t -> assert false)
 let encode_expr_ref = ref (fun e -> assert false)
@@ -215,7 +218,10 @@ let eval_expr_ref : (context -> texpr -> value option) ref = ref (fun _ _ -> ass
 let get_ctx() = (!get_ctx_ref)()
 let enc_array (l:value list) : value = (!enc_array_ref) l
 let dec_array (l:value) : value list = (!dec_array_ref) l
+
+let decode_complex_type (v:value) : Ast.complex_type = (!decode_complex_type_ref) v
 let encode_complex_type (t:Ast.complex_type) : value = (!encode_complex_type_ref) t
+let decode_pos (v:value) : Ast.pos = (!decode_pos_ref) v
 let encode_type (t:Type.t) : value = (!encode_type_ref) t
 let decode_type (v:value) : Type.t = (!decode_type_ref) v
 let encode_expr (e:Ast.expr) : value = (!encode_expr_ref) e
@@ -1862,7 +1868,8 @@ let std_lib =
 	(* process *)
 		"process_run", (Fun2 (fun p args ->
 			match p, args with
-			| VString p, VArray args -> VAbstract (AProcess (Process.run p (Array.map vstring args)))
+			| VString p, VArray args -> VAbstract (AProcess (Process.run p (Some (Array.map vstring args))))
+			| VString p, _ -> VAbstract (AProcess (Process.run p None))
 			| _ -> error()
 		));
 		"process_stdout_read", (Fun4 (fun p str pos len ->
@@ -2427,6 +2434,9 @@ let macro_lib =
 		"type_expr", Fun1 (fun v ->
 			encode_texpr ((get_ctx()).curapi.type_expr (decode_expr v))
 		);
+		"resolve_type", Fun2 (fun t p ->
+			encode_type ((get_ctx()).curapi.resolve_type (decode_complex_type t) (decode_pos p));
+		);
 		"s_type", Fun1 (fun v ->
 			VString (Type.s_type (print_context()) (decode_type v))
 		);
@@ -2614,7 +2624,13 @@ let macro_lib =
 			match v with
 			| VString cp ->
 				let com = ccom() in
-				com.class_path <- (Common.normalize_path cp) :: com.class_path;
+				let norm_path = Common.normalize_path cp in
+				com.class_path <- norm_path :: com.class_path;
+				(match com.get_macros() with
+					| Some(mcom) ->
+						mcom.class_path <- norm_path :: com.class_path;
+					| None ->
+						());
 				Hashtbl.clear com.file_lookup_cache;
 				VNull
 			| _ ->
@@ -3427,8 +3443,8 @@ and eval_op ctx op e1 e2 p =
 		let e2 = eval ctx e2 in
 		(fun() ->
 			match e1() with
-			| VBool false as v -> v
-			| _ -> e2())
+			| VBool true -> e2()
+			| _ -> VBool false)
 	| "||" ->
 		let e1 = eval ctx e1 in
 		let e2 = eval ctx e2 in
@@ -3479,7 +3495,7 @@ and call ctx vthis vfun pl p =
 		| Stack_overflow -> exc (VString "Compiler Stack overflow")
 		| Sys_error msg | Failure msg -> exc (VString msg)
 		| Unix.Unix_error (_,cmd,msg) -> exc (VString ("Error " ^ cmd ^ " " ^ msg))
-		(* | Invalid_expr -> exc (VString "Invalid input value") *)
+		| Invalid_expr -> exc (VString "Invalid input value")
 		| Builtin_error | Invalid_argument _ -> exc (VString "Invalid call")) in
 	ctx.vthis <- oldthis;
 	ctx.venv <- oldenv;
@@ -3534,7 +3550,7 @@ let rec to_string ctx n v =
 			Buffer.contents b
 
 let rec compare ctx a b =
-	let fcmp (a:float) b = if a = b then CEq else if a < b then CInf else CSup in
+	let fcmp (a:float) b = if a = b then CEq else if a < b then CInf else if a > b then CSup else CUndef in
 	let scmp (a:string) b = if a = b then CEq else if a < b then CInf else CSup in
 	let icmp (a:int32) b = let l = Int32.compare a b in if l = 0 then CEq else if l < 0 then CInf else CSup in
 	match a, b with
@@ -3669,12 +3685,17 @@ let can_reuse ctx types =
 	end
 
 let add_types ctx types ready =
-	let types = List.filter (fun t ->
-		let path = Type.t_path t in
-		if Hashtbl.mem ctx.types path then false else begin
-			Hashtbl.add ctx.types path (Type.t_infos t).mt_module.m_id;
-			true;
-		end
+	let types = List.filter (fun t -> match t with
+		| TAbstractDecl a when not (Ast.Meta.has Ast.Meta.CoreType a.a_meta) ->
+			(* A @:native on an abstract causes the implementation class and the abstract
+			   to have the same path. Let's skip all abstracts so this doesn't matter. *)
+			false
+		| _ ->
+			let path = Type.t_path t in
+			if Hashtbl.mem ctx.types path then false else begin
+				Hashtbl.add ctx.types path (Type.t_infos t).mt_module.m_id;
+				true;
+			end
 	) types in
 	List.iter ready types;
 	let e = (EBlock (Genneko.build ctx.gen types), null_pos) in
@@ -4557,7 +4578,7 @@ and encode_anon_status s =
 	let tag, pl = (match s with
 		| Closed -> 0, []
 		| Opened -> 1, []
-		| Type.Const -> 2, []
+		(* | Type.Const -> 2, [] *)
 		| Extend tl -> 3, [encode_ref tl (fun tl -> enc_array (List.map encode_type tl)) (fun() -> "<extended types>")]
 		| Statics cl -> 4, [encode_clref cl]
 		| EnumStatics en -> 5, [encode_enref en]
@@ -5024,6 +5045,8 @@ let rec make_const e =
 
 ;;
 encode_complex_type_ref := encode_ctype;
+decode_complex_type_ref := decode_ctype;
+decode_pos_ref := decode_pos;
 enc_array_ref := enc_array;
 dec_array_ref := dec_array;
 encode_type_ref := encode_type;

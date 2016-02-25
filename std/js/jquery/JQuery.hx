@@ -95,7 +95,7 @@ package js.jquery;
 	/**
 		Finds the elements of an array which satisfy a filter function. The original array is not affected.
 	**/
-	static public function grep(array:Array<Dynamic>, _function:Dynamic -> Int -> Bool, ?invert:Bool):Array<Dynamic>;
+	static public function grep(array:haxe.extern.EitherType<Array<Dynamic>, js.html.NodeList>, _function:Dynamic -> Int -> Bool, ?invert:Bool):Array<Dynamic>;
 	/**
 		Determine whether an element has any jQuery data associated with it.
 	**/
@@ -104,6 +104,10 @@ package js.jquery;
 		Holds or releases the execution of jQuery's ready event.
 	**/
 	static public function holdReady(hold:Bool):Void;
+	/**
+		Modify and filter HTML strings passed through <a href="/category/manipulation/">jQuery manipulation methods</a>.
+	**/
+	static public function htmlPrefilter(html:String):String;
 	/**
 		Search for a specified value within an array and return its index (or -1 if not found).
 	**/
@@ -121,7 +125,7 @@ package js.jquery;
 	**/
 	static public function isFunction(obj:Dynamic):Bool;
 	/**
-		Determines whether its argument is a number.
+		Determines whether its argument represents a JavaScript number.
 	**/
 	static public function isNumeric(value:Dynamic):Bool;
 	/**
@@ -203,6 +207,12 @@ package js.jquery;
 	**/
 	static public function removeData(element:js.html.Element, ?name:String):js.jquery.JQuery;
 	/**
+		Creates an object containing a set of properties ready to be used in the definition of custom animations.
+	**/
+	@:overload(function(?duration:haxe.extern.EitherType<Float, String>, ?settings:Dynamic):Dynamic { })
+	@:overload(function(?duration:haxe.extern.EitherType<Float, String>, ?easing:String, ?complete:haxe.Constraints.Function):Dynamic { })
+	static public function speed(settings:Dynamic):Dynamic;
+	/**
 		A collection of properties that represent the presence of different browser features or bugs. Intended for jQuery's internal use; specific properties may be removed when they are no longer needed internally to improve page startup performance. For your own project's feature-detection needs, we strongly recommend the use of an external library such as <a href="http://modernizr.com">Modernizr</a> instead of dependency on properties in <code>jQuery.support</code>.
 	**/
 	static public var support : Dynamic;
@@ -219,7 +229,11 @@ package js.jquery;
 	**/
 	static public function unique(array:Array<js.html.Element>):Array<js.html.Element>;
 	/**
-		Provides a way to execute callback functions based on one or more objects, usually <a href="/category/deferred-object/">Deferred</a> objects that represent asynchronous events.
+		Sorts an array of DOM elements, in place, with the duplicates removed. Note that this only works on arrays of DOM elements, not strings or numbers.
+	**/
+	static public function uniqueSort(array:Array<js.html.Element>):Array<js.html.Element>;
+	/**
+		Provides a way to execute callback functions based on zero or more objects, usually <a href="/category/deferred-object/">Deferred</a> objects that represent asynchronous events.
 	**/
 	static public function when(deferreds:haxe.extern.Rest<js.jquery.Deferred>):js.jquery.Promise;
 	/**
@@ -354,6 +368,12 @@ package js.jquery;
 		The DOM node context originally passed to <code>jQuery()</code>; if none was passed then context will likely be the document.
 	**/
 	public var context : js.html.Element;
+	/**
+		Bind an event handler to the "contextmenu" JavaScript event, or trigger that event on an element.
+	**/
+	@:overload(function(handler:js.jquery.Event -> Void):js.jquery.JQuery { })
+	@:overload(function(?eventData:Dynamic, handler:js.jquery.Event -> Void):js.jquery.JQuery { })
+	public function contextmenu():js.jquery.JQuery;
 	/**
 		Set one or more CSS properties for the set of matched elements.
 		OR
@@ -528,9 +548,9 @@ package js.jquery;
 	/**
 		Search for a given element from among the matched elements.
 	**/
-	@:overload(function(selector:String):Float { })
-	@:overload(function(element:haxe.extern.EitherType<js.html.Element, js.jquery.JQuery>):Float { })
-	public function index():Float;
+	@:overload(function(selector:String):Int { })
+	@:overload(function(element:haxe.extern.EitherType<js.html.Element, js.jquery.JQuery>):Int { })
+	public function index():Int;
 	/**
 		Set the CSS inner height of each element in the set of matched elements.
 		OR
@@ -755,7 +775,7 @@ package js.jquery;
 	**/
 	public function prependTo(target:haxe.extern.EitherType<js.html.Element, haxe.extern.EitherType<Array<js.html.Element>, haxe.extern.EitherType<String, js.jquery.JQuery>>>):js.jquery.JQuery;
 	/**
-		Get the immediately preceding sibling of each element in the set of matched elements, optionally filtered by a selector.
+		Get the immediately preceding sibling of each element in the set of matched elements. If a selector is provided, it retrieves the previous sibling only if it matches that selector.
 	**/
 	public function prev(?selector:String):js.jquery.JQuery;
 	/**
@@ -1016,13 +1036,11 @@ package js.jquery;
 	**/
 	@:runtime
 	inline public function iterator():js.jquery.JqIterator return new js.jquery.JqIterator(this);
-
 	/**
-		Iterate on JQuery elements.
+		Haxe iterator.
 	**/
 	@:runtime
 	inline public function elements():js.jquery.JqEltsIterator return new js.jquery.JqEltsIterator(this);
-
 	static function __init__():Void {
 		js.jquery.Helper.embed();
 	}

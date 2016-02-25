@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2015 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -270,16 +270,17 @@ abstract Vector<T>(VectorData<T>) {
 
 		If `f` is null, the result is unspecified.
 	**/
-	//public function map<S>(f:T->S):Vector<S> {
-		//var r = new Vector<S>(length);
-		//var i = 0;
-		//var len = length;
-		//for(i in 0...len) {
-			//var v = f(get(i));
-			//r.set(i, v);
-		//}
-		//return r;
-	//}
+	#if cs @:extern #end public inline function map<S>(f:T->S):Vector<S> {
+		var length = length;
+		var r = new Vector<S>(length);
+		var i = 0;
+		var len = length;
+		for(i in 0...len) {
+			var v = f(get(i));
+			r.set(i, v);
+		}
+		return r;
+	}
 
 	/**
 		Sorts `this` Vector according to the comparison function `f`, where

@@ -1,4 +1,4 @@
-2015-??-??: 3.3.0
+2016-??-??: 3.3.0
 
 	New features:
 
@@ -35,6 +35,7 @@
 	Standard Library:
 
 	all : added Lambda.flatten and Lambda.flatMap (#3553)
+	sys : proper quoting/escaping (can be opt-out) for Sys.command and sys.io.Process (#3603)
 
 	Macro features and changes:
 
@@ -1481,7 +1482,7 @@
 	fixed infinite loop in neko EReg split/replace and epsilon matching
 	added neko native serialization support
 	fixed syntax for multiple constraints in type parameter
-	added recursive type parameters contraints (T : C<T> constraints)
+	added recursive type parameters constraints (T : C<T> constraints)
 	updated Xml handling
 
 2006-04-17: beta 5

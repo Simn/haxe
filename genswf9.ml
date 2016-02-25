@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2015  Haxe Foundation
+	Copyright (C) 2005-2016  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -213,9 +213,12 @@ let rec type_id ctx t =
 	| TInst ({ cl_path = ["haxe"],"Int32" },_) ->
 		type_path ctx ([],"Int")
 	| TInst ({ cl_path = ["flash"],"Vector" } as c,pl) ->
+		let def() = HMParams (type_path ctx c.cl_path,List.map (type_id ctx) pl) in
 		(match pl with
-		| [TInst({cl_kind = KTypeParameter _},_)] -> type_path ctx ([],"Object")
-		| _ -> HMParams (type_path ctx c.cl_path,List.map (type_id ctx) pl))
+		| [t] -> (match follow t with
+			| TInst({cl_kind = KTypeParameter _},_) -> type_path ctx ([],"Object")
+			| _ -> def())
+		| _ -> def())
 	| TInst (c,_) ->
 		(match c.cl_kind with
 		| KTypeParameter l ->
@@ -2017,7 +2020,16 @@ let check_constructor ctx c f =
 			error "You cannot assign some super class vars before calling super() in flash, this will reset them to default value" e.epos
 		| _ -> ()
 	in
+	(* only do so if we have a call to super() *)
+	let rec has_super e =
+		Type.iter has_super e;
+		match e.eexpr with
+		| TCall ({ eexpr = TConst TSuper },_) -> raise Exit
+		| _ -> ()
+	in
 	try
+		has_super f.tf_expr
+	with Exit -> try
 		loop f.tf_expr
 	with Exit ->
 		()

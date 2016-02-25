@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2015 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -24,13 +24,15 @@
 
 package js.html;
 
+import js.html.compat.Float64Array;
+
 @:native("Float64Array")
 extern class Float64Array extends ArrayBufferView implements ArrayAccess<Float>
 {
 	static inline var BYTES_PER_ELEMENT : Int = 8;
-	
+
 	var length(default,null) : Int;
-	
+
 	/** @throws DOMError */
 	@:overload( function( length : Int ) : Void {} )
 	@:overload( function( array : Float64Array ) : Void {} )

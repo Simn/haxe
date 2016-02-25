@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2015  Haxe Foundation
+	Copyright (C) 2005-2016  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -201,12 +201,7 @@ let report_times print =
 	end
 
 let make_path f =
-	let f = String.concat "/" (ExtString.String.nsplit f "\\") in
-	let cl = ExtString.String.nsplit f "." in
-	let cl = (match List.rev cl with
-		| ["hx";path] -> ExtString.String.nsplit path "/"
-		| _ -> cl
-	) in
+	let cl = get_path_parts f in
 	let error msg =
 		let msg = "Could not process argument " ^ f ^ "\n" ^ msg in
 		failwith msg
@@ -880,6 +875,11 @@ and wait_loop boot_com host port =
 				if ctx.has_error then ssend sin "\x02\n" else cache_context ctx.com;
 			);
 			ctx.setup <- (fun() ->
+				if verbose then begin
+					let defines = PMap.foldi (fun k v acc -> (k ^ "=" ^ v) :: acc) ctx.com.defines [] in
+					print_endline ("Defines " ^ (String.concat "," (List.sort compare defines)));
+					print_endline ("Using signature " ^ Digest.to_hex (get_signature ctx.com));
+				end;
 				Parser.display_error := (fun e p -> has_parse_error := true; ctx.com.error (Parser.error_msg e) p);
 				if ctx.com.display <> DMNone then begin
 					let file = (!Parser.resume_display).Ast.pfile in
@@ -985,7 +985,7 @@ and do_connect host port args =
 
 and init ctx =
 	let usage = Printf.sprintf
-		"Haxe Compiler %s - (C)2005-2015 Haxe Foundation\n Usage : haxe%s -main <class> [-swf|-js|-neko|-php|-cpp|-as3|-cs|-java|-python] <output> [options]\n Options :"
+		"Haxe Compiler %s - (C)2005-2016 Haxe Foundation\n Usage : haxe%s -main <class> [-swf|-js|-neko|-php|-cpp|-as3|-cs|-java|-python] <output> [options]\n Options :"
 		s_version (if Sys.os_type = "Win32" then ".exe" else "")
 	in
 	let com = ctx.com in
@@ -1448,7 +1448,7 @@ try
 			"n"
 		| Js ->
 			if not (PMap.exists (fst (Define.infos Define.JqueryVer)) com.defines) then
-				Common.define_value com Define.JqueryVer "11103";
+				Common.define_value com Define.JqueryVer "11201";
 			add_std "js";
 			"js"
 		| Php ->

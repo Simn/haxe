@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2015  Haxe Foundation
+	Copyright (C) 2005-2016  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -80,7 +80,7 @@ let rec follow_param t =
 		t
 
 let gen_meta meta =
-	let meta = List.filter (fun (m,_,_) -> match m with Meta.Used | Meta.MaybeUsed | Meta.RealPath -> false | _ -> true) meta in
+	let meta = List.filter (fun (m,_,_) -> match m with Meta.Used | Meta.MaybeUsed | Meta.RealPath | Meta.Pure -> false | _ -> true) meta in
 	match meta with
 	| [] -> []
 	| _ ->
@@ -502,7 +502,7 @@ let generate_type com t =
 		) in
 		let ext = (match c.cl_path with
 			| ["flash";"utils"], "ByteArray" -> " implements ArrayAccess<Int>" :: ext
-			| ["flash";"utils"], "Dictionnary" -> [" implements ArrayAccess<Dynamic>"]
+			| ["flash";"utils"], "Dictionary" -> [" implements ArrayAccess<Dynamic>"]
 			| ["flash";"xml"], "XML" -> [" implements Dynamic<XMLList>"]
 			| ["flash";"xml"], "XMLList" -> [" implements ArrayAccess<XML>"]
 			| ["flash";"display"],"MovieClip" -> [" extends Sprite #if !flash_strict implements Dynamic #end"]

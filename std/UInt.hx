@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2015 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -202,12 +202,12 @@ abstract UInt(Int) from Int to Int {
 	}
 
 	@:commutative @:op(A == B) private static inline function equalsFloat<T:Float>(a:UInt, b:T):Bool {
-        return a.toFloat() == b;
-    }
+		return a.toFloat() == b;
+	}
 
-    @:commutative @:op(A != B) private static inline function notEqualsFloat<T:Float>(a:UInt, b:T):Bool {
-        return a.toFloat() != b;
-    }
+	@:commutative @:op(A != B) private static inline function notEqualsFloat<T:Float>(a:UInt, b:T):Bool {
+		return a.toFloat() != b;
+	}
 
 	@:op(A >= B) private static inline function gteFloat(a:UInt, b:Float):Bool {
 		return a.toFloat() >= b;

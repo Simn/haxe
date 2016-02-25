@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2015  Haxe Foundation
+	Copyright (C) 2005-2016  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -69,12 +69,14 @@ and tconstant =
 	| TThis
 	| TSuper
 
+and tvar_extra = (type_params * texpr option) option
+
 and tvar = {
 	mutable v_id : int;
 	mutable v_name : string;
 	mutable v_type : t;
 	mutable v_capture : bool;
-	mutable v_extra : (type_params * texpr option) option;
+	mutable v_extra : tvar_extra;
 	mutable v_meta : metadata;
 }
 
@@ -87,7 +89,6 @@ and tfunc = {
 and anon_status =
 	| Closed
 	| Opened
-	| Const
 	| Extend of t list
 	| Statics of tclass
 	| EnumStatics of tenum
@@ -498,6 +499,22 @@ let map loop t =
 	| TDynamic t2 ->
 		if t == t2 then	t else TDynamic (loop t2)
 
+let dup t =
+	let monos = ref [] in
+	let rec loop t =
+		match t with
+		| TMono { contents = None } ->
+			(try
+				List.assq t !monos
+			with Not_found ->
+				let m = mk_mono() in
+				monos := (t,m) :: !monos;
+				m)
+		| _ ->
+			map loop t
+	in
+	loop t
+
 (* substitute parameters with other types *)
 let apply_params cparams params t =
 	match cparams with
@@ -840,6 +857,12 @@ let rec s_type_kind t =
 	| TDynamic t2 -> "TDynamic"
 	| TLazy _ -> "TLazy"
 
+let s_module_type_kind = function
+	| TClassDecl c -> "TClassDecl(" ^ (s_type_path c.cl_path) ^ ")"
+	| TEnumDecl en -> "TEnumDecl(" ^ (s_type_path en.e_path) ^ ")"
+	| TAbstractDecl a -> "TAbstractDecl(" ^ (s_type_path a.a_path) ^ ")"
+	| TTypeDecl t -> "TTypeDecl(" ^ (s_type_path t.t_path) ^ ")"
+
 let rec s_type ctx t =
 	match t with
 	| TMono r ->
@@ -1121,12 +1144,12 @@ let rec s_expr_ast print_var_ids tabs s_type e =
 		sprintf "[%s:%s]%s" s st (tag_args (tabs ^ extra_tabs) sl)
 	in
 	let var_id v = if print_var_ids then v.v_id else 0 in
-	let const c = sprintf "[Const %s:%s]" (s_const c) (s_type e.etype) in
+	let const c t = tag "Const" ~t [s_const c] in
 	let local v = sprintf "[Local %s(%i):%s]" v.v_name (var_id v) (s_type v.v_type) in
 	let var v sl = sprintf "[Var %s(%i):%s]%s" v.v_name (var_id v) (s_type v.v_type) (tag_args tabs sl) in
 	let module_type mt = sprintf "[TypeExpr %s:%s]" (s_type_path (t_path mt)) (s_type e.etype) in
 	match e.eexpr with
-	| TConst c -> const c
+	| TConst c -> const c (Some e.etype)
 	| TLocal v -> local v
 	| TArray (e1,e2) -> tag "Array" [loop e1; loop e2]
 	| TBinop (op,e1,e2) -> tag "Binop" [loop e1; s_binop op; loop e2]
@@ -1150,7 +1173,7 @@ let rec s_expr_ast print_var_ids tabs s_type e =
 	| TNew (c,tl,el) -> tag "New" ((s_type (TInst(c,tl))) :: (List.map loop el))
 	| TFunction f ->
 		let arg (v,cto) =
-			tag "Arg" ~t:(Some v.v_type) ~extra_tabs:"\t" (match cto with None -> [local v] | Some ct -> [local v;const ct])
+			tag "Arg" ~t:(Some v.v_type) ~extra_tabs:"\t" (match cto with None -> [local v] | Some ct -> [local v;const ct None])
 		in
 		tag "Function" ((List.map arg f.tf_args) @ [loop f.tf_expr])
 	| TVar (v,eo) -> var v (match eo with None -> [] | Some e -> [loop e])
@@ -1434,7 +1457,7 @@ type eq_kind =
 let rec type_eq param a b =
 	let can_follow t = match param with
 		| EqCoreType -> false
-		| EqDoNotFollowNull -> not (is_null t)
+		| EqDoNotFollowNull -> not (is_explicit_null t)
 		| _ -> true
 	in
 	if a == b then
@@ -1683,7 +1706,7 @@ let rec unify a b =
 			(match !(an.a_status) with
 			| Opened -> an.a_status := Closed;
 			| Statics _ | EnumStatics _ | AbstractStatics _ -> error []
-			| Closed | Extend _ | Const -> ())
+			| Closed | Extend _ -> ())
 		with
 			Unify_error l -> error (cannot_unify a b :: l))
 	| TAnon a1, TAnon a2 ->
@@ -1702,6 +1725,21 @@ let rec unify a b =
 		()
 	| TFun _, TAbstract ({ a_path = ["haxe"],"Function" },[]) ->
 		()
+	| TInst(c,tl),TAbstract({a_path = ["haxe"],"Constructible"},[t1]) ->
+		begin try
+			begin match c.cl_kind with
+				| KTypeParameter tl ->
+					(* type parameters require an equal Constructible constraint *)
+					if not (List.exists (fun t -> match follow t with TAbstract({a_path = ["haxe"],"Constructible"},[t2]) -> type_iseq t1 t2 | _ -> false) tl) then error [cannot_unify a b]
+				| _ ->
+					let _,t,cf = class_field c tl "new" in
+					if not cf.cf_public then error [invalid_visibility "new"];
+					begin try unify t1 t
+					with Unify_error l -> error (cannot_unify a b :: l) end
+			end
+		with Not_found ->
+			error [has_no_field a "new"]
+		end
 	| TDynamic t , _ ->
 		if t == a then
 			()
@@ -1792,14 +1830,11 @@ and unify_anons a b a1 a2 =
 				| Opened ->
 					if not (link (ref None) a f2.cf_type) then error [];
 					a1.a_fields <- PMap.add n f2 a1.a_fields
-				| Const when Meta.has Meta.Optional f2.cf_meta ->
-					()
 				| _ ->
-					error [has_no_field a n];
+					if not (Meta.has Meta.Optional f2.cf_meta) then
+						error [has_no_field a n];
 		) a2.a_fields;
 		(match !(a1.a_status) with
-		| Const when not (PMap.is_empty a2.a_fields) ->
-			PMap.iter (fun n _ -> if not (PMap.mem n a2.a_fields) then error [has_extra_field a n]) a1.a_fields;
 		| Opened ->
 			a1.a_status := Closed
 		| _ -> ());
@@ -1808,7 +1843,7 @@ and unify_anons a b a1 a2 =
 		| EnumStatics e -> (match !(a1.a_status) with EnumStatics e2 when e == e2 -> () | _ -> error [])
 		| AbstractStatics a -> (match !(a1.a_status) with AbstractStatics a2 when a == a2 -> () | _ -> error [])
 		| Opened -> a2.a_status := Closed
-		| Const | Extend _ | Closed -> ())
+		| Extend _ | Closed -> ())
 	with
 		Unify_error l -> error (cannot_unify a b :: l))
 
@@ -2101,7 +2136,8 @@ let map_expr f e =
 	| TObjectDecl el ->
 		{ e with eexpr = TObjectDecl (List.map (fun (v,e) -> v, f e) el) }
 	| TCall (e1,el) ->
-		{ e with eexpr = TCall (f e1, List.map f el) }
+		let e1 = f e1 in
+		{ e with eexpr = TCall (e1, List.map f el) }
 	| TVar (v,eo) ->
 		{ e with eexpr = TVar (v, match eo with None -> None | Some e -> Some (f e)) }
 	| TFunction fu ->

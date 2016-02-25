@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2015  Haxe Foundation
+	Copyright (C) 2005-2016  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -514,11 +514,15 @@ and gen_expr ctx e =
 	| TEnumParameter (x,_,i) ->
 		gen_value ctx x;
 		print ctx "[%i]" (i + 2)
-	| TField ({ eexpr = TConst (TInt _ | TFloat _) } as x,f) ->
-		gen_expr ctx { e with eexpr = TField(mk (TParenthesis x) x.etype x.epos,f) }
 	| TField (x, (FInstance(_,_,f) | FStatic(_,f) | FAnon(f))) when Meta.has Meta.SelfCall f.cf_meta ->
 		gen_value ctx x;
 	| TField (x,f) ->
+		let rec skip e = match e.eexpr with
+			| TCast(e1,None) | TMeta(_,e1) -> skip e1
+			| TConst(TInt _ | TFloat _) -> {e with eexpr = TParenthesis e}
+			| _ -> e
+		in
+		let x = skip x in
 		gen_value ctx x;
 		let name = field_name f in
 		spr ctx (match f with FStatic(c,_) -> static_field c name | FEnum _ | FInstance _ | FAnon _ | FDynamic _ | FClosure _ -> field name)
@@ -592,7 +596,7 @@ and gen_expr ctx e =
 		spr ctx "if";
 		gen_value ctx cond;
 		spr ctx " ";
-		gen_expr ctx e;
+		gen_expr ctx (mk_block e);
 		(match eelse with
 		| None -> ()
 		| Some e2 ->
@@ -601,7 +605,7 @@ and gen_expr ctx e =
 			| _ -> ());
 			semicolon ctx;
 			spr ctx " else ";
-			gen_expr ctx e2);
+			gen_expr ctx (match e2.eexpr with | TIf _ -> e2 | _ -> mk_block e2));
 	| TUnop (op,Ast.Prefix,e) ->
 		spr ctx (Ast.s_unop op);
 		gen_value ctx e
@@ -675,7 +679,7 @@ and gen_expr ctx e =
 
 		if (has_feature ctx "js.Lib.rethrow") then begin
 			let has_rethrow (_,e) =
-				let rec loop e = match e.eexpr with 
+				let rec loop e = match e.eexpr with
 				| TCall({eexpr = TLocal {v_name = "__rethrow__"}}, []) -> raise Exit
 				| _ -> Type.iter loop e
 				in
@@ -688,8 +692,27 @@ and gen_expr ctx e =
 		end;
 
 		if (has_feature ctx "js.Boot.HaxeError") then begin
-			newline ctx;
-			print ctx "if (%s instanceof %s) %s = %s.val" vname (ctx.type_accessor (TClassDecl { null_class with cl_path = ["js";"_Boot"],"HaxeError" })) vname vname;
+			let catch_var_used =
+				try
+					List.iter (fun (v,e) ->
+						match follow v.v_type with
+						| TDynamic _ -> (* Dynamic catch - unrap if the catch value is used *)
+							let rec loop e = match e.eexpr with
+							| TLocal v2 when v2 == v -> raise Exit
+							| _ -> Type.iter loop e
+							in
+							loop e
+						| _ -> (* not a Dynamic catch - we need to unwrap the error for type-checking *)
+							raise Exit
+					) catchs;
+					false
+				with Exit ->
+					true
+			in
+			if catch_var_used then begin
+				newline ctx;
+				print ctx "if (%s instanceof %s) %s = %s.val" vname (ctx.type_accessor (TClassDecl { null_class with cl_path = ["js";"_Boot"],"HaxeError" })) vname vname;
+			end;
 		end;
 
 		List.iter (fun (v,e) ->

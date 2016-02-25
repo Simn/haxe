@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2015  Haxe Foundation
+	Copyright (C) 2005-2016  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -24,7 +24,6 @@ type with_type =
 	| NoValue
 	| Value
 	| WithType of t
-	| WithTypeResume of t
 
 type type_patch = {
 	mutable tp_type : Ast.complex_type option;
@@ -54,6 +53,15 @@ type typer_pass =
 	| PForce				(* usually ensure that lazy have been evaluated *)
 	| PFinal				(* not used, only mark for finalize *)
 
+type typer_module = {
+	curmod : module_def;
+	mutable module_types : module_type list;
+	mutable module_using : tclass list;
+	mutable module_globals : (string, (module_type * string)) PMap.t;
+	mutable wildcard_packages : string list list;
+	mutable module_imports : Ast.import list;
+}
+
 type typer_globals = {
 	types_module : (path, path) Hashtbl.t;
 	modules : (path , module_def) Hashtbl.t;
@@ -70,21 +78,12 @@ type typer_globals = {
 	delayed_macros : (unit -> unit) DynArray.t;
 	mutable global_using : tclass list;
 	(* api *)
-	do_inherit : typer -> Type.tclass -> Ast.pos -> Ast.class_flag -> bool;
+	do_inherit : typer -> Type.tclass -> Ast.pos -> (bool * Ast.type_path) -> bool;
 	do_create : Common.context -> typer;
 	do_macro : typer -> macro_mode -> path -> string -> Ast.expr list -> Ast.pos -> Ast.expr option;
 	do_load_module : typer -> path -> pos -> module_def;
 	do_optimize : typer -> texpr -> texpr;
 	do_build_instance : typer -> module_type -> pos -> ((string * t) list * path * (t list -> t));
-}
-
-and typer_module = {
-	curmod : module_def;
-	mutable module_types : module_type list;
-	mutable module_using : tclass list;
-	mutable module_globals : (string, (module_type * string)) PMap.t;
-	mutable wildcard_packages : string list list;
-	mutable module_imports : Ast.import list;
 }
 
 and typer = {
@@ -107,7 +106,6 @@ and typer = {
 	(* per-function *)
 	mutable curfield : tclass_field;
 	mutable untyped : bool;
-	mutable in_super_call : bool;
 	mutable in_loop : bool;
 	mutable in_display : bool;
 	mutable in_macro : bool;
@@ -117,6 +115,7 @@ and typer = {
 	mutable locals : (string, tvar) PMap.t;
 	mutable opened : anon_status ref list;
 	mutable vthis : tvar option;
+	mutable in_call_args : bool;
 	(* events *)
 	mutable on_error : typer -> string -> pos -> unit;
 }
@@ -145,6 +144,8 @@ exception Error of error_msg * pos
 exception DisplayTypes of t list
 
 exception DisplayPosition of Ast.pos list
+
+exception WithTypeError of unify_error list * pos
 
 let make_call_ref : (typer -> texpr -> texpr list -> t -> pos -> texpr) ref = ref (fun _ _ _ _ _ -> assert false)
 let type_expr_ref : (typer -> Ast.expr -> with_type -> texpr) ref = ref (fun _ _ _ -> assert false)
@@ -290,20 +291,35 @@ let unify_min ctx el = (!unify_min_ref) ctx el
 
 let match_expr ctx e cases def with_type p = !match_expr_ref ctx e cases def with_type p
 
-let make_static_call ctx c cf map args t p =
+let make_static_this c p =
 	let ta = TAnon { a_fields = c.cl_statics; a_status = ref (Statics c) } in
-	let ethis = mk (TTypeExpr (TClassDecl c)) ta p in
+	mk (TTypeExpr (TClassDecl c)) ta p
+
+let make_static_field_access c cf t p =
+	let ethis = make_static_this c p in
+	mk (TField (ethis,(FStatic (c,cf)))) t p
+
+let make_static_call ctx c cf map args t p =
 	let monos = List.map (fun _ -> mk_mono()) cf.cf_params in
 	let map t = map (apply_params cf.cf_params monos t) in
-	let ef = mk (TField (ethis,(FStatic (c,cf)))) (map cf.cf_type) p in
+	let ef = make_static_field_access c cf (map cf.cf_type) p in
 	make_call ctx ef args (map t) p
+
+let raise_or_display ctx l p =
+	if ctx.untyped then ()
+	else if ctx.in_call_args then raise (WithTypeError(l,p))
+	else display_error ctx (error_msg (Unify l)) p
+
+let raise_or_display_message ctx msg p =
+	if ctx.in_call_args then raise (WithTypeError ([Unify_custom msg],p))
+	else display_error ctx msg p
 
 let unify ctx t1 t2 p =
 	try
 		Type.unify t1 t2
 	with
 		Unify_error l ->
-			if not ctx.untyped then display_error ctx (error_msg (Unify l)) p
+			raise_or_display ctx l p
 
 let unify_raise ctx t1 t2 p =
 	try
@@ -348,6 +364,17 @@ let delay ctx p f =
 			if p2 = p then
 				(p, f :: l) :: rest
 			else if p2 < p then
+				(p2,l) :: loop rest
+			else
+				(p,[f]) :: (p2,l) :: rest
+	in
+	ctx.g.delayed <- loop ctx.g.delayed
+
+let delay_late ctx p f =
+	let rec loop = function
+		| [] -> [p,[f]]
+		| (p2,l) :: rest ->
+			if p2 <= p then
 				(p2,l) :: loop rest
 			else
 				(p,[f]) :: (p2,l) :: rest

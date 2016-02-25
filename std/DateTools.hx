@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2015 Haxe Foundation
+ * Copyright (C)2005-2016 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -161,7 +161,7 @@ class DateTools {
 	/**
 		Converts a number of minutes to a timestamp.
 	**/
-	public static inline function minutes( n : Float ) : Float {
+	#if as3 @:extern #end public static inline function minutes( n : Float ) : Float {
 		return n * 60.0 * 1000.0;
 	}
 
