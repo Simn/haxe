@@ -2339,9 +2339,9 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 		assert false
 	in
 	let is_eq_op = match op with OpEq | OpNotEq -> true | _ -> false in
-	let find_overload left make map ol =
+	let find_overload left allow_private c make map ol =
 		let rec loop ol = match ol with
-			| (op_cf,cf) :: ol when op_cf <> op && (not is_assign_op || op_cf <> OpAssignOp(op)) ->
+			| (op_cf,cf) :: ol when (op_cf <> op && (not is_assign_op || op_cf <> OpAssignOp(op))) || (not allow_private && not (can_access ctx c cf true)) ->
 				loop ol
 			| (op_cf,cf) :: ol ->
 				let is_impl = Meta.has Meta.Impl cf.cf_meta in
@@ -2448,7 +2448,7 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 			| _ ->
 				()
 		end;
-		find_overload left make map (if left then a.a_ops else List.filter (fun (_,cf) -> not (Meta.has Meta.Impl cf.cf_meta)) a.a_ops)
+		find_overload left true c make map (if left then a.a_ops else List.filter (fun (_,cf) -> not (Meta.has Meta.Impl cf.cf_meta)) a.a_ops)
 	in
 	try
 		begin match follow e1.etype with
@@ -2482,7 +2482,7 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 				in
 				let cfl = loop2 c.cl_ordered_statics in
 				let map t = t in
-				begin try find_overload true (make c map) map cfl
+				begin try find_overload true false c (make c map) map cfl
 				with Not_found -> loop cl end
 			| [] ->
 				raise Not_found
