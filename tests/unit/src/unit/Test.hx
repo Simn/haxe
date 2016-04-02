@@ -320,6 +320,7 @@ class Test {
 			new TestGeneric(),
 			#if !no_pattern_matching
 			new TestMatch(),
+			new TestArray(),
 			#end
 			new TestSpecification(),
 			#if cs
