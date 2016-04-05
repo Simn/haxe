@@ -453,6 +453,14 @@ module Case = struct
 				Some e
 		in
 		List.iter (fun (v,t) -> v.v_type <- t) old_types;
+		let rec loop e = match e.eexpr with
+			| TLocal v when not (type_iseq v.v_type e.etype) ->
+				mk (TCast(e,None)) e.etype e.epos
+			| _ ->
+				Type.map_expr loop e
+		in
+		let eg = Option.map loop eg in
+		let eo = Option.map loop eo in
 		save();
 		{
 			case_guard = eg;
