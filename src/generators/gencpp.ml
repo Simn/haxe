@@ -650,7 +650,7 @@ let is_native_gen_module = function
    | TClassDecl class_def -> is_native_gen_class class_def
    | _ -> false
 ;;
-  
+
 
 
 (*  Get a string to represent a type.
@@ -2091,14 +2091,14 @@ let retype_expression ctx request_type function_args expression_tree =
                let exprType = cpp_type_of member.cf_type in
                let is_objc = is_cpp_objc_type retypedObj.cpptype in
 
-               if clazzType=TCppDynamic then begin
+               if retypedObj.cppexpr = CppNull then
+                  CppNullAccess, TCppDynamic
+               else if clazzType=TCppDynamic then begin
                   if is_internal_member member.cf_name then
                     CppFunction( FuncInstance(retypedObj,false,member), funcReturn ), exprType
                   else
                      CppDynamicField(retypedObj, member.cf_name), TCppVariant
-               end else if clazzType=TCppNull then
-                  CppNullAccess, TCppDynamic
-               else if is_struct_access obj.etype then begin
+               end else if is_struct_access obj.etype then begin
                   match retypedObj.cppexpr with
                   | CppThis ThisReal ->
                       CppVar(VarThis(member)), exprType
@@ -2185,10 +2185,10 @@ let retype_expression ctx request_type function_args expression_tree =
             | FAnon field ->
                let obj = retype TCppDynamic obj in
                let fieldName = field.cf_name in
-               if obj.cpptype=TCppGlobal then
-                  CppGlobal(fieldName), cpp_type_of expr.etype
-               else if obj.cpptype=TCppNull then
+               if obj.cppexpr = CppNull then
                   CppNullAccess, TCppDynamic
+               else if obj.cpptype=TCppGlobal then
+                  CppGlobal(fieldName), cpp_type_of expr.etype
                else if is_internal_member fieldName then begin
                   let cppType = cpp_return_type ctx expr.etype in
                   if obj.cpptype=TCppString then
@@ -2200,7 +2200,7 @@ let retype_expression ctx request_type function_args expression_tree =
 
             | FDynamic fieldName ->
                let obj = retype TCppDynamic obj in
-               if obj.cpptype=TCppNull then
+               if obj.cppexpr = CppNull then
                   CppNullAccess, TCppDynamic
                else if fieldName="cca" && obj.cpptype=TCppString then
                   CppFunction( FuncInternal(obj,"cca","."), TCppScalar("Int")), TCppDynamic
