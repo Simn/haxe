@@ -142,7 +142,7 @@ exception Forbid_package of (string * path * pos) * pos list * string
 
 exception Error of error_msg * pos
 
-exception DisplayTypes of t list
+exception DisplayTypes of t list * string option
 
 exception DisplayPosition of Ast.pos list
 

@@ -1703,11 +1703,16 @@ with
 			fields
 		in
 		complete_fields com fields
-	| Typecore.DisplayTypes tl ->
+	| Typecore.DisplayTypes (tl,arg) ->
 		let ctx = print_context() in
 		let b = Buffer.create 0 in
 		List.iter (fun t ->
-			Buffer.add_string b "<type>\n";
+			Buffer.add_string b "<type";
+            begin match arg with
+            	| None -> ()
+            	| Some s -> Buffer.add_string b (Printf.sprintf " arg=\"%s\"" s)
+			end;
+			Buffer.add_string b ">\n";
 			Buffer.add_string b (htmlescape (s_type ctx t));
 			Buffer.add_string b "\n</type>\n";
 		) tl;

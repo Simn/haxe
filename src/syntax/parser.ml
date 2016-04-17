@@ -1404,17 +1404,27 @@ and parse_call_params ec s =
 	with Display e ->
 		display (ECall (ec,[e]),punion (pos ec) (pos e))
 	) in
-	let rec loop acc =
+	let rec loop i acc =
 		try
 			match s with parser
-			| [< '(Comma,_); e = expr >] -> loop (e::acc)
+			| [< '(Comma,p) >] ->
+				if is_resuming p then begin
+					let p1 = punion (pos ec) p in
+					let meta = (Meta.Custom ":argNumber",[EConst (Int (string_of_int i)),p1],p1) in
+					let emeta = EMeta(meta,ec),p1 in
+					display (EDisplay(emeta,true),p1);
+				end;
+				begin match s with parser
+				| [< e = expr >] -> loop (i + 1) (e::acc)
+				| [< >] -> serror();
+				end
 			| [< >] -> List.rev acc
 		with Display e ->
 			display (ECall (ec,List.rev (e::acc)),punion (pos ec) (pos e))
 	in
 	match e with
 	| None -> []
-	| Some e -> loop [e]
+	| Some e -> loop 1 [e]
 
 and parse_macro_cond allow_op s =
 	match s with parser

@@ -1,4 +1,4 @@
-<type>
+<type arg="0">
 b : Int -&gt; String
 </type>
 

@@ -3684,7 +3684,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 		(match follow t with
 		| TInst (c,params) | TAbstract({a_impl = Some c},params) ->
 			let ct, f = get_constructor ctx c params p in
-			raise (DisplayTypes (ct :: List.map (fun f -> f.cf_type) f.cf_overloads))
+			raise (DisplayTypes (ct :: List.map (fun f -> f.cf_type) f.cf_overloads,None))
 		| _ ->
 			error "Not a class" p)
 	| ECheckType (e,t) ->
@@ -3753,7 +3753,7 @@ and handle_display ctx e_ast iscall with_type p =
 	with Error (Unknown_ident n,_) when not iscall ->
 		raise (Parser.TypePath ([n],None,false))
 	| Error (Unknown_ident "trace",_) ->
-		raise (DisplayTypes [tfun [t_dynamic] ctx.com.basic.tvoid])
+		raise (DisplayTypes ([tfun [t_dynamic] ctx.com.basic.tvoid],None))
 	| Error (Type_not_found (path,_),_) as err ->
 		begin try
 			raise (DisplayFields (get_submodule_fields path))
@@ -3771,7 +3771,7 @@ and handle_display ctx e_ast iscall with_type p =
 	| DMResolve _ ->
 		assert false
 	| DMType ->
-		raise (DisplayTypes [match e.eexpr with TVar(v,_) -> v.v_type | _ -> e.etype])
+		raise (DisplayTypes ([match e.eexpr with TVar(v,_) -> v.v_type | _ -> e.etype],None))
 	| DMUsage ->
 		let rec loop e = match e.eexpr with
 		| TField(_,FEnum(_,ef)) ->
@@ -4002,9 +4002,13 @@ and handle_display ctx e_ast iscall with_type p =
 			else
 				raise (DisplayFields fields)
 		in
+		let arg_number = match fst e_ast with
+			| EMeta((Meta.Custom ":argNumber",[EConst (Int i),_],_),_) -> i
+			| _ -> "0"
+		in
 		(match follow t with
 		| TMono _ | TDynamic _ when ctx.in_macro -> mk (TConst TNull) t p
-		| _ -> raise (DisplayTypes [t]))
+		| _ -> raise (DisplayTypes ([t],Some arg_number)))
 
 and maybe_type_against_enum ctx f with_type p =
 	try
@@ -4604,7 +4608,7 @@ let make_macro_api ctx p =
 			with DisplayFields fields ->
 				let pctx = print_context() in
 				String.concat "," (List.map (fun (f,t,_,_) -> f ^ ":" ^ s_type pctx t) fields)
-			| DisplayTypes tl ->
+			| DisplayTypes (tl,_) ->
 				let pctx = print_context() in
 				String.concat "," (List.map (s_type pctx) tl)
 			| Parser.TypePath (p,sub,_) ->
