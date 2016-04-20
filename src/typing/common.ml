@@ -99,6 +99,7 @@ type display_mode =
 	| DMResolve of string
 	| DMType
 	| DMDocumentSymbols
+	| DMMissingInterfaceFields
 
 type compiler_callback = {
 	mutable after_typing : (module_type list -> unit) list;
@@ -106,10 +107,15 @@ type compiler_callback = {
 	mutable after_generation : (unit -> unit) list;
 }
 
+type display_data = {
+	mutable missing_interface_fields : (tclass * tclass_field list) list;
+}
+
 type context = {
 	(* config *)
 	version : int;
 	args : string list;
+	display_data : display_data;
 	mutable sys_args : string list;
 	mutable display : display_mode;
 	mutable debug : bool;
@@ -666,6 +672,9 @@ let create version s_version args =
 	{
 		version = version;
 		args = args;
+		display_data = {
+			missing_interface_fields = [];
+		};
 		sys_args = args;
 		debug = false;
 		display = !display_default;

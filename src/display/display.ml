@@ -300,3 +300,21 @@ let print_document_symbols (pack,decls) =
 	let b = Buffer.create 0 in
 	write_json (Buffer.add_string b) js;
 	Buffer.contents b
+
+let print_missing_implements_fields fields =
+	let jl = List.map (fun (c,cfl) ->
+		let l = ExtList.List.filter_map (fun cf ->
+			match follow cf.cf_type with
+				| TFun(args,_) ->
+					let s_args = String.concat ", " (List.map (fun (n,_,t) -> Printf.sprintf "%s: %s" n (s_type (print_context()) t)) args) in
+					(* TODO: should obviously encode proper information instead of a string once we have JSON type output. *)
+					Some (JString (Printf.sprintf "public function %s(%s) {\n\t\t\n}\n" cf.cf_name s_args))
+				| _ ->
+					None
+		) cfl in
+		JObject ["location",pos_to_json_location c.cl_pos;"fields",JArray l]
+	) fields in
+	let js = JArray jl in
+	let b = Buffer.create 0 in
+	write_json (Buffer.add_string b) js;
+	raise (DocumentSymbols(Buffer.contents b))

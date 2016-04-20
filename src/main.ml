@@ -1280,6 +1280,9 @@ try
 					| "document-symbols" ->
 						Common.define com Define.NoCOpt;
 						DMDocumentSymbols;
+					| "missing-interface-fields" ->
+						Common.define com Define.NoCOpt;
+						DMMissingInterfaceFields;
 					| "" ->
 						Parser.use_parser_resume := true;
 						DMDefault
@@ -1576,6 +1579,8 @@ try
 		begin match com.display with
 			| DMNone | DMUsage ->
 				()
+			| DMMissingInterfaceFields ->
+				Display.print_missing_implements_fields com.display_data.missing_interface_fields;
 			| _ ->
 				if ctx.has_next then raise Abort;
 				failwith "No completion point was found";

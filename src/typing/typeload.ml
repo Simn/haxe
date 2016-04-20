@@ -1343,6 +1343,7 @@ module Inheritance = struct
 
 	let rec check_interface ctx c intf params =
 		let p = c.cl_pos in
+		let missing_fields = ref [] in
 		let rec check_field i f =
 			(if ctx.com.config.pf_overload then
 				List.iter (function
@@ -1383,6 +1384,8 @@ module Inheritance = struct
 							display_error ctx (error_msg (Unify l)) p;
 						end
 			with
+				| Not_found when ctx.com.display = DMMissingInterfaceFields ->
+					missing_fields := f :: !missing_fields;
 				| Not_found when not c.cl_interface ->
 					let msg = if !is_overload then
 						let ctx = print_context() in
@@ -1397,7 +1400,9 @@ module Inheritance = struct
 		PMap.iter check_field intf.cl_fields;
 		List.iter (fun (i2,p2) ->
 			check_interface ctx c i2 (List.map (apply_params intf.cl_params params) p2)
-		) intf.cl_implements
+		) intf.cl_implements;
+		if Display.is_display_file c.cl_pos && !missing_fields <> [] then
+			ctx.com.display_data.missing_interface_fields <- (c,!missing_fields) :: ctx.com.display_data.missing_interface_fields
 
 	let check_interfaces ctx c =
 		match c.cl_path with
