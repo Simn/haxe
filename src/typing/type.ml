@@ -292,6 +292,11 @@ and module_def_extra = {
 	mutable m_macro_calls : string list;
 	mutable m_if_feature : (string *(tclass * tclass_field * bool)) list;
 	mutable m_features : (string,bool) Hashtbl.t;
+	mutable m_module_types : module_type list;
+	mutable m_module_using : tclass list;
+	mutable m_module_globals : (string, (module_type * string)) PMap.t;
+	mutable m_wildcard_packages : string list list;
+	mutable m_module_imports : Ast.import list;
 }
 
 and module_kind =
@@ -385,6 +390,11 @@ let module_extra file sign time kind =
 		m_macro_calls = [];
 		m_if_feature = [];
 		m_features = Hashtbl.create 0;
+		m_module_types = [];
+		m_module_using = [];
+		m_module_globals = PMap.empty;
+		m_wildcard_packages = [];
+		m_module_imports = [];
 	}
 
 

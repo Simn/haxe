@@ -301,7 +301,7 @@ let rec load_type_def ctx p t =
 		List.find (fun t2 ->
 			let tp = t_path t2 in
 			tp = (t.tpackage,tname) || (no_pack && snd tp = tname)
-		) (ctx.m.curmod.m_types @ ctx.m.module_types)
+		) (ctx.m.m_types @ ctx.m.m_extra.m_module_types)
 	with
 		Not_found ->
 			let next() =
@@ -332,7 +332,7 @@ let rec load_type_def ctx p t =
 							| Error (Module_not_found _,p2)
 							| Error (Type_not_found _,p2) when p == p2 -> loop l
 				in
-				loop ctx.m.wildcard_packages
+				loop ctx.m.m_extra.m_wildcard_packages
 			with Exit ->
 			(* lookup in our own package - and its upper packages *)
 			let rec loop = function
@@ -346,7 +346,7 @@ let rec load_type_def ctx p t =
 			in
 			try
 				if not no_pack then raise Exit;
-				(match fst ctx.m.curmod.m_path with
+				(match fst ctx.m.m_path with
 				| [] -> raise Exit
 				| x :: _ ->
 					(* this can occur due to haxe remoting : a module can be
@@ -357,7 +357,7 @@ let rec load_type_def ctx p t =
 						| Forbidden -> raise Exit
 						| _ -> ())
 					with Not_found -> ());
-				loop (List.rev (fst ctx.m.curmod.m_path));
+				loop (List.rev (fst ctx.m.m_path));
 			with
 				Exit -> next()
 
@@ -706,14 +706,7 @@ let hide_params ctx =
 	let old_m = ctx.m in
 	let old_type_params = ctx.type_params in
 	let old_deps = ctx.g.std.m_extra.m_deps in
-	ctx.m <- {
-		curmod = ctx.g.std;
-		module_types = [];
-		module_using = [];
-		module_globals = PMap.empty;
-		wildcard_packages = [];
-		module_imports = [];
-	};
+	ctx.m <- ctx.g.std;
 	ctx.type_params <- [];
 	(fun() ->
 		ctx.m <- old_m;
@@ -729,7 +722,7 @@ let load_core_type ctx name =
 	let show = hide_params ctx in
 	let t = load_instance ctx ({ tpackage = []; tname = name; tparams = []; tsub = None; },null_pos) false null_pos in
 	show();
-	add_dependency ctx.m.curmod (match t with
+	add_dependency ctx.m (match t with
 	| TInst (c,_) -> c.cl_module
 	| TType (t,_) -> t.t_module
 	| TAbstract (a,_) -> a.a_module
@@ -742,7 +735,7 @@ let t_iterator ctx =
 	match load_type_def ctx null_pos { tpackage = []; tname = "Iterator"; tparams = []; tsub = None } with
 	| TTypeDecl t ->
 		show();
-		add_dependency ctx.m.curmod t.t_module;
+		add_dependency ctx.m t.t_module;
 		if List.length t.t_params <> 1 then assert false;
 		let pt = mk_mono() in
 		apply_params t.t_params [pt] t.t_type, pt
@@ -1464,7 +1457,7 @@ module Inheritance = struct
 			| [] ->
 				try
 					let find = List.find (fun lt -> snd (t_path lt) = t.tname) in
-					let lt = try find ctx.m.curmod.m_types with Not_found -> find ctx.m.module_types in
+					let lt = try find ctx.m.m_types with Not_found -> find ctx.m.m_extra.m_module_types in
 					{ t with tpackage = fst (t_path lt) },p
 				with
 					Not_found -> t,p
@@ -1527,7 +1520,7 @@ end
 
 let rec type_type_param ?(enum_constructor=false) ctx path get_params p tp =
 	let n = fst tp.tp_name in
-	let c = mk_class ctx.m.curmod (fst path @ [snd path],n) (pos tp.tp_name) in
+	let c = mk_class ctx.m (fst path @ [snd path],n) (pos tp.tp_name) in
 	c.cl_params <- type_type_params ctx c.cl_path get_params p tp.tp_params;
 	c.cl_kind <- KTypeParameter [];
 	c.cl_meta <- tp.Ast.tp_meta;
@@ -2748,7 +2741,7 @@ module ClassInitializer = struct
 				let cf = init_field (ctx,cctx,fctx) f in
 				if fctx.is_static && c.cl_interface && fctx.field_kind <> FKInit && not cctx.is_lib then error "You can't declare static fields in interfaces" p;
 				let set_feature s =
-					ctx.m.curmod.m_extra.m_if_feature <- (s,(c,cf,fctx.is_static)) :: ctx.m.curmod.m_extra.m_if_feature
+					ctx.m.m_extra.m_if_feature <- (s,(c,cf,fctx.is_static)) :: ctx.m.m_extra.m_if_feature
 				in
 				List.iter set_feature cl_if_feature;
 				List.iter set_feature (check_if_feature cf.cf_meta);
@@ -2891,11 +2884,11 @@ let handle_path_display ctx path p =
 *)
 let init_module_type ctx context_init do_init (decl,p) =
 	let get_type name =
-		try List.find (fun t -> snd (t_infos t).mt_path = name) ctx.m.curmod.m_types with Not_found -> assert false
+		try List.find (fun t -> snd (t_infos t).mt_path = name) ctx.m.m_types with Not_found -> assert false
 	in
 	match decl with
 	| EImport (path,mode) ->
-		ctx.m.module_imports <- (path,mode) :: ctx.m.module_imports;
+		ctx.m.m_extra.m_module_imports <- (path,mode) :: ctx.m.m_extra.m_module_imports;
 		if Display.is_display_file p then handle_path_display ctx path p;
 		let rec loop acc = function
 			| x :: l when is_lower_ident (fst x) -> loop (x::acc) l
@@ -2906,7 +2899,7 @@ let init_module_type ctx context_init do_init (decl,p) =
 		| [] ->
 			(match mode with
 			| IAll ->
-				ctx.m.wildcard_packages <- List.map fst pack :: ctx.m.wildcard_packages
+				ctx.m.m_extra.m_wildcard_packages <- List.map fst pack :: ctx.m.m_extra.m_wildcard_packages
 			| _ ->
 				(match List.rev path with
 				| [] -> assert false
@@ -2946,10 +2939,10 @@ let init_module_type ctx context_init do_init (decl,p) =
 				| TClassDecl c ->
 					ignore(c.cl_build());
 					ignore(PMap.find s c.cl_statics);
-					ctx.m.module_globals <- PMap.add name (TClassDecl c,s) ctx.m.module_globals
+					ctx.m.m_extra.m_module_globals <- PMap.add name (TClassDecl c,s) ctx.m.m_extra.m_module_globals
 				| TEnumDecl e ->
 					ignore(PMap.find s e.e_constrs);
-					ctx.m.module_globals <- PMap.add name (TEnumDecl e,s) ctx.m.module_globals
+					ctx.m.m_extra.m_module_globals <- PMap.add name (TEnumDecl e,s) ctx.m.m_extra.m_module_globals
 				| _ ->
 					raise Not_found
 			in
@@ -2960,15 +2953,15 @@ let init_module_type ctx context_init do_init (decl,p) =
 				| [] ->
 					(match name with
 					| None ->
-						ctx.m.module_types <- List.filter no_private types @ ctx.m.module_types
+						ctx.m.m_extra.m_module_types <- List.filter no_private types @ ctx.m.m_extra.m_module_types
 					| Some newname ->
-						ctx.m.module_types <- rebind (get_type tname) newname :: ctx.m.module_types);
+						ctx.m.m_extra.m_module_types <- rebind (get_type tname) newname :: ctx.m.m_extra.m_module_types);
 				| [tsub,p2] ->
 					let p = punion p1 p2 in
 					(try
 						let tsub = List.find (has_name tsub) types in
 						chk_private tsub p;
-						ctx.m.module_types <- (match name with None -> tsub | Some n -> rebind tsub n) :: ctx.m.module_types
+						ctx.m.m_extra.m_module_types <- (match name with None -> tsub | Some n -> rebind tsub n) :: ctx.m.m_extra.m_module_types
 					with Not_found ->
 						(* this might be a static property, wait later to check *)
 						let tmain = get_type tname in
@@ -3001,9 +2994,9 @@ let init_module_type ctx context_init do_init (decl,p) =
 					| TClassDecl c
 					| TAbstractDecl {a_impl = Some c} ->
 						ignore(c.cl_build());
-						PMap.iter (fun _ cf -> if not (has_meta Meta.NoImportGlobal cf.cf_meta) then ctx.m.module_globals <- PMap.add cf.cf_name (TClassDecl c,cf.cf_name) ctx.m.module_globals) c.cl_statics
+						PMap.iter (fun _ cf -> if not (has_meta Meta.NoImportGlobal cf.cf_meta) then ctx.m.m_extra.m_module_globals <- PMap.add cf.cf_name (TClassDecl c,cf.cf_name) ctx.m.m_extra.m_module_globals) c.cl_statics
 					| TEnumDecl e ->
-						PMap.iter (fun _ c -> if not (has_meta Meta.NoImportGlobal c.ef_meta) then ctx.m.module_globals <- PMap.add c.ef_name (TEnumDecl e,c.ef_name) ctx.m.module_globals) e.e_constrs
+						PMap.iter (fun _ c -> if not (has_meta Meta.NoImportGlobal c.ef_meta) then ctx.m.m_extra.m_module_globals <- PMap.add c.ef_name (TEnumDecl e,c.ef_name) ctx.m.m_extra.m_module_globals) e.e_constrs
 					| _ ->
 						error "No statics to import from this type" p
 				) :: !context_init
@@ -3024,11 +3017,11 @@ let init_module_type ctx context_init do_init (decl,p) =
 			| None ->
 				let md = ctx.g.do_load_module ctx (t.tpackage,t.tname) p in
 				let types = List.filter (fun t -> not (t_infos t).mt_private) md.m_types in
-				ctx.m.module_types <- types @ ctx.m.module_types;
+				ctx.m.m_extra.m_module_types <- types @ ctx.m.m_extra.m_module_types;
 				types
 			| Some _ ->
 				let t = load_type_def ctx p t in
-				ctx.m.module_types <- t :: ctx.m.module_types;
+				ctx.m.m_extra.m_module_types <- t :: ctx.m.m_extra.m_module_types;
 				[t]
 		) in
 		(* delay the using since we need to resolve typedefs *)
@@ -3045,7 +3038,7 @@ let init_module_type ctx context_init do_init (decl,p) =
 			in
 			loop [] types
 		in
-		context_init := (fun() -> ctx.m.module_using <- filter_classes types @ ctx.m.module_using) :: !context_init
+		context_init := (fun() -> ctx.m.m_extra.m_module_using <- filter_classes types @ ctx.m.m_extra.m_module_using) :: !context_init
 	| EClass d ->
 		let c = (match get_type (fst d.d_name) with TClassDecl c -> c | _ -> assert false) in
 		if Display.is_display_position (pos d.d_name) then
@@ -3368,14 +3361,7 @@ let type_types_into_module ctx m tdecls p =
 		com = ctx.com;
 		g = ctx.g;
 		t = ctx.t;
-		m = {
-			curmod = m;
-			module_types = ctx.g.std.m_types;
-			module_using = [];
-			module_globals = PMap.empty;
-			wildcard_packages = [];
-			module_imports = [];
-		};
+		m = m;
 		meta = [];
 		this_stack = [];
 		with_type_stack = [];
@@ -3450,6 +3436,7 @@ let type_module ctx mpath file ?(is_extern=false) tdecls p =
 	let m = make_module ctx mpath file p in
 	Hashtbl.add ctx.g.modules m.m_path m;
 	let tdecls = handle_import_hx ctx m tdecls p in
+	m.m_extra.m_module_types <- ctx.g.std.m_types;
 	type_types_into_module ctx m tdecls p;
 	if is_extern then m.m_extra.m_kind <- MExtern;
 	m
@@ -3571,7 +3558,7 @@ let load_module ctx m p =
 			with Forbid_package (inf,pl,pf) when p <> Ast.null_pos ->
 				raise (Forbid_package (inf,p::pl,pf))
 	) in
-	add_dependency ctx.m.curmod m2;
+	add_dependency ctx.m m2;
 	if ctx.pass = PTypeField then flush_pass ctx PBuildClass "load_module";
 	m2
 
@@ -3650,7 +3637,7 @@ let extend_remoting ctx c t p async prot =
 		| _ -> d
 	) decls in
 	let m = type_module ctx (t.tpackage,new_name) file decls p in
-	add_dependency ctx.m.curmod m;
+	add_dependency ctx.m m;
 	try
 		List.find (fun tdecl -> snd (t_path tdecl) = new_name) m.m_types
 	with Not_found ->
@@ -3799,7 +3786,7 @@ let rec build_generic ctx c p tl =
 		load_instance ctx ({ tpackage = pack; tname = name; tparams = []; tsub = None },p) false p
 	with Error(Module_not_found path,_) when path = (pack,name) ->
 		let m = (try Hashtbl.find ctx.g.modules (Hashtbl.find ctx.g.types_module c.cl_path) with Not_found -> assert false) in
-		let ctx = { ctx with m = { ctx.m with module_types = m.m_types @ ctx.m.module_types } } in
+		(* let ctx = { ctx with m = { ctx.m with module_types = m.m_types @ ctx.m.m_extra.module_types } } in *) (* TODO: check why/if this is needed *)
 		ignore(c.cl_build()); (* make sure the super class is already setup *)
 		let mg = {
 			m_id = alloc_mid();
@@ -3812,7 +3799,7 @@ let rec build_generic ctx c p tl =
 		mg.m_types <- [TClassDecl cg];
 		Hashtbl.add ctx.g.modules mg.m_path mg;
 		add_dependency mg m;
-		add_dependency ctx.m.curmod mg;
+		add_dependency ctx.m mg;
 		(* ensure that type parameters are set in dependencies *)
 		let dep_stack = ref [] in
 		let rec loop t =
@@ -4028,7 +4015,7 @@ let get_macro_path ctx e args p =
 				if not (PMap.mem i ctx.curclass.cl_statics) then raise Not_found;
 				ctx.curclass.cl_path
 			with Not_found -> try
-				(t_infos (fst (PMap.find i ctx.m.module_globals))).mt_path
+				(t_infos (fst (PMap.find i ctx.m.m_extra.m_module_globals))).mt_path
 			with Not_found ->
 				error "Invalid macro call" p
 			in

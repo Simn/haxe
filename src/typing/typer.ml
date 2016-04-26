@@ -411,8 +411,8 @@ let collect_toplevel_identifiers ctx =
 				DynArray.add acc (Display.ITEnum(e,ef))
 			) e.e_constrs;
 	in
-	List.iter enum_ctors ctx.m.curmod.m_types;
-	List.iter enum_ctors ctx.m.module_types;
+	List.iter enum_ctors ctx.m.m_types;
+	List.iter enum_ctors ctx.m.m_extra.m_module_types;
 
 	(* imported globals *)
 	PMap.iter (fun _ (mt,s) ->
@@ -426,7 +426,7 @@ let collect_toplevel_identifiers ctx =
 			DynArray.add acc (Display.ITGlobal(mt,s,t))
 		with Not_found ->
 			()
-	) ctx.m.module_globals;
+	) ctx.m.m_extra.m_module_globals;
 
 	let module_types = ref [] in
 
@@ -439,15 +439,15 @@ let collect_toplevel_identifiers ctx =
 	in
 
 	(* module types *)
-	List.iter add_type ctx.m.curmod.m_types;
+	List.iter add_type ctx.m.m_types;
 
 	(* module imports *)
-	List.iter add_type ctx.m.module_types;
+	List.iter add_type ctx.m.m_extra.m_module_types;
 
 	(* module using *)
 	List.iter (fun c ->
 		add_type (TClassDecl c)
-	) ctx.m.module_using;
+	) ctx.m.m_extra.m_module_using;
 
 	(* TODO: wildcard packages. How? *)
 
@@ -1271,11 +1271,11 @@ let rec using_field ctx mode e i p =
 		| Unify_error el | Error (Unify el,_) ->
 			loop l
 	in
-	try loop ctx.m.module_using with Not_found ->
+	try loop ctx.m.m_extra.m_module_using with Not_found ->
 	try
 		let acc = loop ctx.g.global_using in
 		(match acc with
-		| AKUsing (_,c,_,_) -> add_dependency ctx.m.curmod c.cl_module
+		| AKUsing (_,c,_,_) -> add_dependency ctx.m c.cl_module
 		| _ -> assert false);
 		acc
 	with Not_found ->
@@ -1332,7 +1332,7 @@ let rec type_ident_raise ctx i p mode =
 					| MGet -> error "Cannot create closure on inline closure" p
 					| MCall ->
 						(* create a fake class with a fake field to emulate inlining *)
-						let c = mk_class ctx.m.curmod (["local"],v.v_name) e.epos in
+						let c = mk_class ctx.m (["local"],v.v_name) e.epos in
 						let cf = { (mk_field v.v_name v.v_type e.epos) with cf_params = params; cf_expr = Some e; cf_kind = Method MethInline } in
 						c.cl_extern <- true;
 						c.cl_fields <- PMap.add cf.cf_name cf PMap.empty;
@@ -1406,10 +1406,10 @@ let rec type_ident_raise ctx i p mode =
 					with
 						Not_found -> loop l
 		in
-		(try loop (List.rev ctx.m.curmod.m_types) with Not_found -> loop ctx.m.module_types)
+		(try loop (List.rev ctx.m.m_types) with Not_found -> loop ctx.m.m_extra.m_module_types)
 	with Not_found ->
 		(* lookup imported globals *)
-		let t, name = PMap.find i ctx.m.module_globals in
+		let t, name = PMap.find i ctx.m.m_extra.m_module_globals in
 		let e = type_module_type ctx t None p in
 		type_field ctx e name p mode
 
@@ -2696,11 +2696,11 @@ and handle_efield ctx e p mode =
 					(match pack with
 					| [] ->
 						(try
-							let t = List.find (fun t -> snd (t_infos t).mt_path = name) (ctx.m.curmod.m_types @ ctx.m.module_types) in
+							let t = List.find (fun t -> snd (t_infos t).mt_path = name) (ctx.m.m_types @ ctx.m.m_extra.m_module_types) in
 							(* if the static is not found, look for a subtype instead - #1916 *)
 							get_static true t
 						with Not_found ->
-							loop (fst ctx.m.curmod.m_path))
+							loop (fst ctx.m.m_path))
 					| _ ->
 						match check_module (pack,name) sname with
 						| Some r -> r
@@ -3932,7 +3932,7 @@ and handle_display ctx e_ast iscall with_type =
 				loop c params
 			| TAbstract({a_impl = Some c} as a,pl) ->
 				if Meta.has Meta.CoreApi c.cl_meta then merge_core_doc c;
-				ctx.m.module_using <- c :: ctx.m.module_using;
+				ctx.m.m_extra.m_module_using <- c :: ctx.m.m_extra.m_module_using;
 				let fields = try
 					let _,el,_ = Meta.get Meta.Forward a.a_meta in
 					let sl = ExtList.List.filter_map (fun e -> match fst e with
@@ -4017,7 +4017,7 @@ and handle_display ctx e_ast iscall with_type =
 				) c.cl_ordered_statics;
 				!acc
 		in
-		let use_methods = match follow e.etype with TMono _ -> PMap.empty | _ -> loop (loop PMap.empty ctx.g.global_using) ctx.m.module_using in
+		let use_methods = match follow e.etype with TMono _ -> PMap.empty | _ -> loop (loop PMap.empty ctx.g.global_using) ctx.m.m_extra.m_module_using in
 		let fields = PMap.fold (fun f acc -> PMap.add f.cf_name f acc) fields use_methods in
 		let fields = match fst e_ast with
 			| EConst(String s) when String.length s = 1 ->
@@ -4080,15 +4080,15 @@ and maybe_type_against_enum ctx f with_type p =
 					raise Exit
 			in
 			let path,fields,mt = loop t in
-			let old = ctx.m.curmod.m_types in
-			ctx.m.curmod.m_types <- ctx.m.curmod.m_types @ [mt];
+			let old = ctx.m.m_types in
+			ctx.m.m_types <- ctx.m.m_types @ [mt];
 			let e = try
 				f()
 			with Error (Unknown_ident n,_) ->
 				raise_or_display_message ctx (StringError.string_error n fields ("Identifier '" ^ n ^ "' is not part of " ^ s_type_path path)) p;
 				AKExpr (mk (TConst TNull) (mk_mono()) p)
 			in
-			ctx.m.curmod.m_types <- old;
+			ctx.m.m_types <- old;
 			e
 		| _ ->
 			raise Exit
@@ -4731,10 +4731,10 @@ let make_macro_api ctx p =
 			ctx.curfield.cf_name;
 		);
 		Interp.get_local_using = (fun() ->
-			ctx.m.module_using;
+			ctx.m.m_extra.m_module_using;
 		);
 		Interp.get_local_imports = (fun() ->
-			ctx.m.module_imports;
+			ctx.m.m_extra.m_module_imports;
 		);
 		Interp.get_local_vars = (fun () ->
 			ctx.locals;
@@ -4750,9 +4750,9 @@ let make_macro_api ctx p =
 		Interp.define_type = (fun v ->
 			let m, tdef, pos = (try Interp.decode_type_def v with Interp.Invalid_expr -> Interp.exc (Interp.VString "Invalid type definition")) in
 			let add ctx =
-				let mnew = Typeload.type_module ctx m ctx.m.curmod.m_extra.m_file [tdef,pos] pos in
+				let mnew = Typeload.type_module ctx m ctx.m.m_extra.m_file [tdef,pos] pos in
 				mnew.m_extra.m_kind <- MFake;
-				add_dependency mnew ctx.m.curmod;
+				add_dependency mnew ctx.m;
 			in
 			add ctx;
 			(* if we are adding a class which has a macro field, we also have to add it to the macro context (issue #1497) *)
@@ -4779,9 +4779,9 @@ let make_macro_api ctx p =
 				let m = Hashtbl.find ctx.g.modules mpath in
 				Typeload.type_types_into_module ctx m types pos
 			with Not_found ->
-				let mnew = Typeload.type_module ctx mpath ctx.m.curmod.m_extra.m_file types pos in
+				let mnew = Typeload.type_module ctx mpath ctx.m.m_extra.m_file types pos in
 				mnew.m_extra.m_kind <- MFake;
-				add_dependency mnew ctx.m.curmod;
+				add_dependency mnew ctx.m;
 			end
 		);
 		Interp.module_dependency = (fun mpath file ismacro ->
@@ -4792,7 +4792,7 @@ let make_macro_api ctx p =
 				add_dependency m (create_fake_module ctx file);
 		);
 		Interp.current_module = (fun() ->
-			ctx.m.curmod
+			ctx.m
 		);
 		Interp.current_macro_module = (fun () -> assert false);
 		Interp.delayed_macro = (fun i ->
@@ -4941,15 +4941,8 @@ let load_macro ctx display cpath f p =
 	let m = (try Hashtbl.find ctx.g.types_module cpath with Not_found -> cpath) in
 	let mloaded = Typeload.load_module mctx m p in
 	api.Interp.current_macro_module <- (fun() -> mloaded);
-	mctx.m <- {
-		curmod = mloaded;
-		module_types = [];
-		module_using = [];
-		module_globals = PMap.empty;
-		wildcard_packages = [];
-		module_imports = [];
-	};
-	add_dependency ctx.m.curmod mloaded;
+	mctx.m <- mloaded;
+	add_dependency ctx.m mloaded;
 	let mt = Typeload.load_type_def mctx p { tpackage = fst cpath; tname = snd cpath; tparams = []; tsub = sub } in
 	let cl, meth = (match mt with
 		| TClassDecl c ->
@@ -5148,7 +5141,7 @@ let type_macro ctx mode cpath f (el:Ast.expr list) p =
 				| Some e -> Interp.eval mint (Genneko.gen_expr mint.Interp.gen (type_expr ctx e Value))
 			);
 		);
-		ctx.m.curmod.m_extra.m_time <- -1.; (* disable caching for modules having macro-in-macro *)
+		ctx.m.m_extra.m_time <- -1.; (* disable caching for modules having macro-in-macro *)
 		let e = (EConst (Ident "__dollar__delay_call"),p) in
 		Some (EUntyped (ECall (e,[EConst (Int (string_of_int pos)),p]),p),p)
 	end else
@@ -5214,14 +5207,7 @@ let rec create com =
 			do_optimize = Optimizer.reduce_expression;
 			do_build_instance = Typeload.build_instance;
 		};
-		m = {
-			curmod = null_module;
-			module_types = [];
-			module_using = [];
-			module_globals = PMap.empty;
-			wildcard_packages = [];
-			module_imports = [];
-		};
+		m = null_module;
 		meta = [];
 		this_stack = [];
 		with_type_stack = [];
@@ -5250,7 +5236,7 @@ let rec create com =
 		Error (Module_not_found ([],"StdTypes"),_) -> error "Standard library not found" null_pos
 	);
 	(* We always want core types to be available so we add them as default imports (issue #1904 and #3131). *)
-	ctx.m.module_types <- ctx.g.std.m_types;
+	ctx.m.m_extra.m_module_types <- ctx.g.std.m_types;
 	List.iter (fun t ->
 		match t with
 		| TAbstractDecl a ->
