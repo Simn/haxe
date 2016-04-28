@@ -173,6 +173,14 @@ exception Abort of string * Ast.pos
 
 let display_default = ref DMNone
 
+type cache = {
+	mutable c_haxelib : (string list, string list) Hashtbl.t;
+	mutable c_files : (string, float * Ast.package) Hashtbl.t;
+	mutable c_modules : (path * string, module_def) Hashtbl.t;
+}
+
+let global_cache : cache option ref = ref None
+
 module Define = struct
 
 	type strict_defined =

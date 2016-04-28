@@ -57,15 +57,8 @@ type context = {
 	mutable has_error : bool;
 }
 
-type cache = {
-	mutable c_haxelib : (string list, string list) Hashtbl.t;
-	mutable c_files : (string, float * Ast.package) Hashtbl.t;
-	mutable c_modules : (path * string, module_def) Hashtbl.t;
-}
-
 exception Abort
 exception Completion of string
-
 
 let version = 3300
 let version_major = version / 1000
@@ -76,7 +69,6 @@ let version_is_stable = version_minor land 1 = 0
 let measure_times = ref false
 let prompt = ref false
 let start_time = ref (get_time())
-let global_cache = ref None
 
 let path_sep = if Sys.os_type = "Unix" then "/" else "\\"
 
