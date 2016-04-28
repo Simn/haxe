@@ -2598,24 +2598,29 @@ and type_ident ctx i p mode =
 			if ctx.curfun = FunStatic && PMap.mem i ctx.curclass.cl_fields then error ("Cannot access " ^ i ^ " in static function") p;
 			let err = Unknown_ident i in
 			if ctx.in_display then raise (Error (err,p));
-			if ctx.com.display <> DMNone then begin
-				display_error ctx (error_msg err) p;
-				let t = mk_mono() in
-				AKExpr (mk (TLocal (add_local ctx i t p)) t p)
-			end else begin
-				let e = try
-					let t = List.find (fun (i2,_) -> i2 = i) ctx.type_params in
-					let c = match follow (snd t) with TInst(c,_) -> c | _ -> assert false in
-					if Typeload.is_generic_parameter ctx c && Meta.has Meta.Const c.cl_meta then
-						AKExpr (type_module_type ctx (TClassDecl c) None p)
-					else begin
-						display_error ctx ("Type parameter " ^ i ^ " is only available at compilation and is not a runtime value") p;
-						AKExpr (mk (TConst TNull) t_dynamic p)
-					end
-				with Not_found ->
-					raise (Error(err,p))
-				in
-				e
+			begin match ctx.com.display with
+				| DMNone ->
+					let e = try
+						let t = List.find (fun (i2,_) -> i2 = i) ctx.type_params in
+						let c = match follow (snd t) with TInst(c,_) -> c | _ -> assert false in
+						if Typeload.is_generic_parameter ctx c && Meta.has Meta.Const c.cl_meta then
+							AKExpr (type_module_type ctx (TClassDecl c) None p)
+						else begin
+							display_error ctx ("Type parameter " ^ i ^ " is only available at compilation and is not a runtime value") p;
+							AKExpr (mk (TConst TNull) t_dynamic p)
+						end
+					with Not_found ->
+						raise (Error(err,p))
+					in
+					e
+				| DMDiagnostics when ctx.is_display_file ->
+					ctx.com.display_information.unresolved_identifiers <- (i,p) :: ctx.com.display_information.unresolved_identifiers;
+					let t = mk_mono() in
+					AKExpr (mk (TLocal (add_local ctx i t p)) t p)
+				| _ ->
+					display_error ctx (error_msg err) p;
+					let t = mk_mono() in
+					AKExpr (mk (TLocal (add_local ctx i t p)) t p)
 			end
 		end
 

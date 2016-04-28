@@ -107,13 +107,17 @@ type compiler_callback = {
 	mutable after_generation : (unit -> unit) list;
 }
 
-type display_information = {
+type shared_display_information = {
 	mutable import_positions : (pos,bool ref) PMap.t;
+}
+
+type display_information = {
+	mutable unresolved_identifiers : (string * pos) list;
 }
 
 (* This information is shared between normal and macro context. *)
 type shared_context = {
-	display_information : display_information;
+	display_information' : shared_display_information;
 }
 
 type context = {
@@ -121,6 +125,7 @@ type context = {
 	version : int;
 	args : string list;
 	shared : shared_context;
+	display_information : display_information;
 	mutable sys_args : string list;
 	mutable display : display_mode;
 	mutable debug : bool;
@@ -688,9 +693,12 @@ let create version s_version args =
 		version = version;
 		args = args;
 		shared = {
-			display_information = {
+			display_information' = {
 				import_positions = PMap.empty;
 			}
+		};
+		display_information = {
+			unresolved_identifiers = [];
 		};
 		sys_args = args;
 		debug = false;

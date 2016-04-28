@@ -1,6 +1,7 @@
 open Ast
 open Common
 open Type
+open Typecore
 
 (* order of these variants affects output sorting *)
 type display_field_kind =
@@ -338,11 +339,11 @@ let process_expr com e = match com.display with
 	| _ -> e
 
 let add_import_position com p =
-	com.shared.display_information.import_positions <- PMap.add p (ref false) com.shared.display_information.import_positions
+	com.shared.display_information'.import_positions <- PMap.add p (ref false) com.shared.display_information'.import_positions
 
 let mark_import_position com p =
 	try
-		let r = PMap.find p com.shared.display_information.import_positions in
+		let r = PMap.find p com.shared.display_information'.import_positions in
 		r := true
 	with Not_found ->
 		()
@@ -350,9 +351,11 @@ let mark_import_position com p =
 module DiagnosticsKind = struct
 	type t =
 		| DKUnusedImport
+		| DKUnresolvedIdentifier
 
 	let to_int = function
 		| DKUnusedImport -> 0
+		| DKUnresolvedIdentifier -> 1
 end
 
 module Diagnostics = struct
@@ -360,13 +363,35 @@ module Diagnostics = struct
 
 	type t = DiagnosticsKind.t * pos
 
-	let print_diagnostics com =
+	let print_diagnostics ctx =
+		let com = ctx.com in
 		let diag = DynArray.create() in
+		let add dk p args =
+			DynArray.add diag (dk,p,args)
+		in
+		begin match !(Common.global_cache) with
+			| None ->
+				()
+			| Some cache ->
+				let find_type i =
+					let types = ref [] in
+					Hashtbl.iter (fun _ m ->
+						List.iter (fun mt ->
+							let tinfos = t_infos mt in
+							if snd tinfos.mt_path = i then types := (JString (s_type_path m.m_path)) :: !types
+						) m.m_types;
+					) cache.c_modules;
+					!types
+				in
+			List.iter (fun (s,p) ->
+				add DKUnresolvedIdentifier p (find_type s);
+			) com.display_information.unresolved_identifiers;
+		end;
 		PMap.iter (fun p r ->
-			if not !r then DynArray.add diag (DKUnusedImport,p)
-		) com.shared.display_information.import_positions;
-		let jl = DynArray.fold_left (fun acc (dk,p) ->
-			(JObject ["kind",JInt (to_int dk);"range",pos_to_json_range p]) :: acc
+			if not !r then add DKUnusedImport p []
+		) com.shared.display_information'.import_positions;
+		let jl = DynArray.fold_left (fun acc (dk,p,args) ->
+			(JObject ["kind",JInt (to_int dk);"range",pos_to_json_range p;"args",JArray args]) :: acc
 		) [] diag in
 		let js = JArray jl in
 		let b = Buffer.create 0 in
