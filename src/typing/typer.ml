@@ -366,143 +366,147 @@ let parse_expr_string ctx s p inl =
 	| _,[EClass { d_data = [{ cff_name = "main",null_pos; cff_kind = FFun { f_expr = Some e } }]},_] -> if inl then e else loop e
 	| _ -> raise Interp.Invalid_expr
 
-let collect_toplevel_identifiers ctx =
-	let acc = DynArray.create () in
+module ToplevelCollecter = struct
+	open IdentifierType
 
-	(* locals *)
-	PMap.iter (fun _ v ->
-		if not (is_gen_local v) then
-			DynArray.add acc (Display.ITLocal v)
-	) ctx.locals;
+	let run ctx =
+		let acc = DynArray.create () in
 
-	(* member vars *)
-	if ctx.curfun <> FunStatic then begin
-		let rec loop c =
-			List.iter (fun cf ->
-				DynArray.add acc (Display.ITMember(ctx.curclass,cf))
-			) c.cl_ordered_fields;
-			match c.cl_super with
-				| None ->
-					()
-				| Some (csup,tl) ->
-					loop csup; (* TODO: type parameters *)
-		in
-		loop ctx.curclass;
-		(* TODO: local using? *)
-	end;
+		(* locals *)
+		PMap.iter (fun _ v ->
+			if not (is_gen_local v) then
+				DynArray.add acc (ITLocal v)
+		) ctx.locals;
 
-	(* statics *)
-	List.iter (fun cf ->
-		DynArray.add acc (Display.ITStatic(ctx.curclass,cf))
-	) ctx.curclass.cl_ordered_statics;
-
-	(* enum constructors *)
-	let rec enum_ctors t =
-		match t with
-		| TClassDecl _ | TAbstractDecl _ ->
-			()
-		| TTypeDecl t ->
-			begin match follow t.t_type with
-				| TEnum (e,_) -> enum_ctors (TEnumDecl e)
-				| _ -> ()
-			end
-		| TEnumDecl e ->
-			PMap.iter (fun _ ef ->
-				DynArray.add acc (Display.ITEnum(e,ef))
-			) e.e_constrs;
-	in
-	List.iter enum_ctors ctx.m.curmod.m_types;
-	List.iter enum_ctors (List.map fst ctx.m.module_types);
-
-	(* imported globals *)
-	PMap.iter (fun _ (mt,s,_) ->
-		try
-			let t = match Typeload.resolve_typedef mt with
-				| TClassDecl c -> (PMap.find s c.cl_statics).cf_type
-				| TEnumDecl en -> (PMap.find s en.e_constrs).ef_type
-				| TAbstractDecl {a_impl = Some c} -> (PMap.find s c.cl_statics).cf_type
-				| _ -> raise Not_found
-			in
-			DynArray.add acc (Display.ITGlobal(mt,s,t))
-		with Not_found ->
-			()
-	) ctx.m.module_globals;
-
-	let module_types = ref [] in
-
-	let add_type mt =
-		match mt with
-		| TClassDecl {cl_kind = KAbstractImpl _} -> ()
-		| _ ->
-			let path = (t_infos mt).mt_path in
-			if not (List.exists (fun mt2 -> (t_infos mt2).mt_path = path) !module_types) then module_types := mt :: !module_types
-	in
-
-	(* module types *)
-	List.iter add_type ctx.m.curmod.m_types;
-
-	(* module imports *)
-	List.iter add_type (List.map fst ctx.m.module_types);
-
-	(* module using *)
-	List.iter (fun (c,_) ->
-		add_type (TClassDecl c)
-	) ctx.m.module_using;
-
-	(* TODO: wildcard packages. How? *)
-
-	(* packages and toplevel types *)
-	let class_paths = ctx.com.class_path in
-	let class_paths = List.filter (fun s -> s <> "") class_paths in
-
-	let packages = ref [] in
-	let add_package pack =
-		try
-			begin match PMap.find pack ctx.com.package_rules with
-				| Forbidden ->
-					()
-				| _ ->
-					raise Not_found
-			end
-		with Not_found ->
-			if not (List.mem pack !packages) then packages := pack :: !packages
-	in
-
-	List.iter (fun dir ->
-		try
-			let entries = Sys.readdir dir in
-			Array.iter (fun file ->
-				match file with
-					| "." | ".." ->
+		(* member vars *)
+		if ctx.curfun <> FunStatic then begin
+			let rec loop c =
+				List.iter (fun cf ->
+					DynArray.add acc (ITMember(ctx.curclass,cf))
+				) c.cl_ordered_fields;
+				match c.cl_super with
+					| None ->
 						()
-					| _ when Sys.is_directory (dir ^ file) && file.[0] >= 'a' && file.[0] <= 'z' ->
-						add_package file
+					| Some (csup,tl) ->
+						loop csup; (* TODO: type parameters *)
+			in
+			loop ctx.curclass;
+			(* TODO: local using? *)
+		end;
+
+		(* statics *)
+		List.iter (fun cf ->
+			DynArray.add acc (ITStatic(ctx.curclass,cf))
+		) ctx.curclass.cl_ordered_statics;
+
+		(* enum constructors *)
+		let rec enum_ctors t =
+			match t with
+			| TClassDecl _ | TAbstractDecl _ ->
+				()
+			| TTypeDecl t ->
+				begin match follow t.t_type with
+					| TEnum (e,_) -> enum_ctors (TEnumDecl e)
+					| _ -> ()
+				end
+			| TEnumDecl e ->
+				PMap.iter (fun _ ef ->
+					DynArray.add acc (ITEnum(e,ef))
+				) e.e_constrs;
+		in
+		List.iter enum_ctors ctx.m.curmod.m_types;
+		List.iter enum_ctors (List.map fst ctx.m.module_types);
+
+		(* imported globals *)
+		PMap.iter (fun _ (mt,s,_) ->
+			try
+				let t = match Typeload.resolve_typedef mt with
+					| TClassDecl c -> (PMap.find s c.cl_statics).cf_type
+					| TEnumDecl en -> (PMap.find s en.e_constrs).ef_type
+					| TAbstractDecl {a_impl = Some c} -> (PMap.find s c.cl_statics).cf_type
+					| _ -> raise Not_found
+				in
+				DynArray.add acc (ITGlobal(mt,s,t))
+			with Not_found ->
+				()
+		) ctx.m.module_globals;
+
+		let module_types = ref [] in
+
+		let add_type mt =
+			match mt with
+			| TClassDecl {cl_kind = KAbstractImpl _} -> ()
+			| _ ->
+				let path = (t_infos mt).mt_path in
+				if not (List.exists (fun mt2 -> (t_infos mt2).mt_path = path) !module_types) then module_types := mt :: !module_types
+		in
+
+		(* module types *)
+		List.iter add_type ctx.m.curmod.m_types;
+
+		(* module imports *)
+		List.iter add_type (List.map fst ctx.m.module_types);
+
+		(* module using *)
+		List.iter (fun (c,_) ->
+			add_type (TClassDecl c)
+		) ctx.m.module_using;
+
+		(* TODO: wildcard packages. How? *)
+
+		(* packages and toplevel types *)
+		let class_paths = ctx.com.class_path in
+		let class_paths = List.filter (fun s -> s <> "") class_paths in
+
+		let packages = ref [] in
+		let add_package pack =
+			try
+				begin match PMap.find pack ctx.com.package_rules with
+					| Forbidden ->
+						()
 					| _ ->
-						let l = String.length file in
-						if l > 3 && String.sub file (l - 3) 3 = ".hx" then begin
-							try
-								let name = String.sub file 0 (l - 3) in
-								let md = Typeload.load_module ctx ([],name) Ast.null_pos in
-								List.iter (fun mt ->
-									if (t_infos mt).mt_path = md.m_path then add_type mt
-								) md.m_types
-							with _ ->
-								()
-						end
-			) entries;
-		with Sys_error _ ->
-			()
-	) class_paths;
+						raise Not_found
+				end
+			with Not_found ->
+				if not (List.mem pack !packages) then packages := pack :: !packages
+		in
 
-	List.iter (fun pack ->
-		DynArray.add acc (Display.ITPackage pack)
-	) !packages;
+		List.iter (fun dir ->
+			try
+				let entries = Sys.readdir dir in
+				Array.iter (fun file ->
+					match file with
+						| "." | ".." ->
+							()
+						| _ when Sys.is_directory (dir ^ file) && file.[0] >= 'a' && file.[0] <= 'z' ->
+							add_package file
+						| _ ->
+							let l = String.length file in
+							if l > 3 && String.sub file (l - 3) 3 = ".hx" then begin
+								try
+									let name = String.sub file 0 (l - 3) in
+									let md = Typeload.load_module ctx ([],name) Ast.null_pos in
+									List.iter (fun mt ->
+										if (t_infos mt).mt_path = md.m_path then add_type mt
+									) md.m_types
+								with _ ->
+									()
+							end
+				) entries;
+			with Sys_error _ ->
+				()
+		) class_paths;
 
-	List.iter (fun mt ->
-		DynArray.add acc (Display.ITType mt)
-	) !module_types;
+		List.iter (fun pack ->
+			DynArray.add acc (ITPackage pack)
+		) !packages;
 
-	raise (Display.DisplayToplevel (DynArray.to_list acc))
+		List.iter (fun mt ->
+			DynArray.add acc (ITType mt)
+		) !module_types;
+
+		DynArray.to_list acc
+end
 
 (* ---------------------------------------------------------------------- *)
 (* PASS 3 : type expression & check structure *)
@@ -2614,7 +2618,14 @@ and type_ident ctx i p mode =
 					in
 					e
 				| DMDiagnostics when ctx.is_display_file ->
-					ctx.com.display_information.unresolved_identifiers <- (i,p) :: ctx.com.display_information.unresolved_identifiers;
+					let l = ToplevelCollecter.run ctx in
+					let cl = List.map (fun it ->
+						let s = IdentifierType.get_name it in
+						(s,it),StringError.levenshtein i s
+					) l in
+					let cl = List.sort (fun (_,c1) (_,c2) -> compare c1 c2) cl in
+					let cl = StringError.filter_similar (fun (s,_) r -> r <= (min (String.length s) (String.length i)) / 3) cl in
+					ctx.com.display_information.unresolved_identifiers <- (i,p,cl) :: ctx.com.display_information.unresolved_identifiers;
 					let t = mk_mono() in
 					AKExpr (mk (TLocal (add_local ctx i t p)) t p)
 				| _ ->
@@ -3888,7 +3899,7 @@ and handle_display ctx e_ast iscall with_type =
 		let pl = loop e in
 		raise (Display.DisplayPosition pl);
 	| DMToplevel ->
-		collect_toplevel_identifiers ctx;
+		raise (Display.DisplayToplevel (ToplevelCollecter.run ctx))
 	| DMDefault | DMNone | DMModuleSymbols | DMDiagnostics ->
 		let opt_args args ret = TFun(List.map(fun (n,o,t) -> n,true,t) args,ret) in
 		let e,tl_overloads,doc = match e.eexpr with

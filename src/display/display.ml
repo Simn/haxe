@@ -10,15 +10,6 @@ type display_field_kind =
 	| FKType
 	| FKPackage
 
-type identifier_type =
-	| ITLocal of tvar
-	| ITMember of tclass * tclass_field
-	| ITStatic of tclass * tclass_field
-	| ITEnum of tenum * tenum_field
-	| ITGlobal of module_type * string * t
-	| ITType of module_type
-	| ITPackage of string
-
 exception Diagnostics of string
 exception ModuleSymbols of string
 exception DisplaySignatures of (t * documentation) list
@@ -26,7 +17,7 @@ exception DisplayType of t * pos
 exception DisplayPosition of Ast.pos list
 exception DisplaySubExpression of Ast.expr
 exception DisplayFields of (string * t * display_field_kind option * documentation) list
-exception DisplayToplevel of identifier_type list
+exception DisplayToplevel of IdentifierType.t list
 
 let is_display_file file =
 	file <> "?" && Common.unique_full_path file = (!Parser.resume_display).pfile
@@ -359,9 +350,20 @@ module DiagnosticsKind = struct
 end
 
 module Diagnostics = struct
-	open DiagnosticsKind
-
 	type t = DiagnosticsKind.t * pos
+
+	module UnresolvedIdentifierSuggestion = struct
+		type t =
+			| UISImport
+			| UISTypo
+
+		let to_int = function
+			| UISImport -> 0
+			| UISTypo -> 1
+	end
+
+	open UnresolvedIdentifierSuggestion
+	open DiagnosticsKind
 
 	let print_diagnostics ctx =
 		let com = ctx.com in
@@ -378,13 +380,23 @@ module Diagnostics = struct
 					Hashtbl.iter (fun _ m ->
 						List.iter (fun mt ->
 							let tinfos = t_infos mt in
-							if snd tinfos.mt_path = i then types := (JString (s_type_path m.m_path)) :: !types
+							if snd tinfos.mt_path = i then
+								types := JObject [
+									"kind",JInt (UnresolvedIdentifierSuggestion.to_int UISImport);
+									"name",JString (s_type_path m.m_path)
+								] :: !types
 						) m.m_types;
 					) cache.c_modules;
 					!types
 				in
-			List.iter (fun (s,p) ->
-				add DKUnresolvedIdentifier p (find_type s);
+			List.iter (fun (s,p,suggestions) ->
+				let suggestions = List.map (fun (s,_) ->
+					JObject [
+						"kind",JInt (UnresolvedIdentifierSuggestion.to_int UISTypo);
+						"name",JString s
+					]
+				) suggestions in
+				add DKUnresolvedIdentifier p (suggestions @ (find_type s));
 			) com.display_information.unresolved_identifiers;
 		end;
 		PMap.iter (fun p r ->

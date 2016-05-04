@@ -107,12 +107,31 @@ type compiler_callback = {
 	mutable after_generation : (unit -> unit) list;
 }
 
+module IdentifierType = struct
+	type t =
+		| ITLocal of tvar
+		| ITMember of tclass * tclass_field
+		| ITStatic of tclass * tclass_field
+		| ITEnum of tenum * tenum_field
+		| ITGlobal of module_type * string * Type.t
+		| ITType of module_type
+		| ITPackage of string
+
+	let get_name = function
+		| ITLocal v -> v.v_name
+		| ITMember(_,cf) | ITStatic(_,cf) -> cf.cf_name
+		| ITEnum(_,ef) -> ef.ef_name
+		| ITGlobal(_,s,_) -> s
+		| ITType mt -> snd (t_infos mt).mt_path
+		| ITPackage s -> s
+end
+
 type shared_display_information = {
 	mutable import_positions : (pos,bool ref) PMap.t;
 }
 
 type display_information = {
-	mutable unresolved_identifiers : (string * pos) list;
+	mutable unresolved_identifiers : (string * pos * (string * IdentifierType.t) list) list;
 }
 
 (* This information is shared between normal and macro context. *)
