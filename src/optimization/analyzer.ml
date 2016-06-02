@@ -348,6 +348,7 @@ module ConstPropagation = DataFlow(struct
 		| Bottom
 		| Const of tconstant
 		| EnumValue of int * t list
+		| UnsafeCast of t * texpr
 
 	let conditional = true
 	let flag = FlagExecutable
@@ -425,8 +426,11 @@ module ConstPropagation = DataFlow(struct
 					| None -> raise Exit
 					| Some e -> eval bb e
 				end
-			| TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) ->
+			| TParenthesis e1 | TMeta(_,e1) ->
 				eval bb e1
+			| TCast(e1,None) ->
+				let cl1 = eval bb e1 in
+				UnsafeCast(cl1,e)
 			| _ ->
 				let e1 = match ctx.com.platform,e.eexpr with
 					| Js,TArray(e1,{eexpr = TConst(TInt i)}) when Int32.to_int i = 1 -> e1
@@ -448,13 +452,15 @@ module ConstPropagation = DataFlow(struct
 		Hashtbl.clear lattice
 
 	let commit ctx =
-		let inline e i = match get_cell i with
-			| Top | Bottom | EnumValue _ ->
-				raise Not_found
-			| Const ct ->
-				let e' = Codegen.type_constant ctx.com (tconst_to_const ct) e.epos in
-				if not (type_change_ok ctx.com e'.etype e.etype) then raise Not_found;
-				e'
+		let rec do_inline v p = match v with
+			| Top | Bottom | EnumValue _ -> raise Not_found
+			| Const ct -> Codegen.type_constant ctx.com (tconst_to_const ct) p
+			| UnsafeCast(v,e) -> {e with eexpr = TCast(do_inline v e.epos,None)}
+		in
+		let inline e i =
+			let e' = do_inline (get_cell i) e.epos in
+			if not (type_change_ok ctx.com e'.etype e.etype) then raise Not_found;
+			e'
 		in
 		let rec commit e = match e.eexpr with
 			| TLocal v when not v.v_capture ->
