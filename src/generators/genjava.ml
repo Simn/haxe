@@ -3661,10 +3661,10 @@ let add_java_lib com file std =
 						end
 			end
 		with
-		| JReader.Error_message msg ->
+		| JReader.Error_message msg when false ->
 			prerr_endline ("Class reader failed: " ^ msg);
 			None
-		| e ->
+		| e when false ->
 			if com.verbose then begin
 				(* prerr_endline (Printexc.get_backtrace ()); requires ocaml 3.11 *)
 				prerr_endline (Printexc.to_string e)
@@ -3684,3 +3684,805 @@ let add_java_lib com file std =
 	(* TODO: add_dependency m mdep *)
 	com.load_extern_type <- com.load_extern_type @ [build];
 	com.java_libs <- (file, std, close, list_all_files, get_raw_class) :: com.java_libs
+
+
+(* JVM *)
+
+type jvm_context = {
+	com : Common.context;
+	jsig_object : jsignature;
+	jar : Zip.out_file;
+	mutable j_classes : jclass list;
+	mutable cpool : JWriter.jvm_constant_pool;
+}
+
+let rec jsignature_of_type t = match follow t with
+	| TAbstract(a,tl) ->
+		begin match a.a_path with
+			| [],"Int8" -> TByte
+			| [],"Char16" -> TChar
+			| [],"Float" -> TDouble
+			| [],"Single" -> TFloat
+			| [],"Int" -> TInt
+			| ["haxe"],"Int64" -> TLong
+			| [],"Int16" -> TShort
+			| [],"Bool" -> TBool
+			| _ -> TObject(a.a_path,List.map jtype_argument_of_type tl)
+		end
+	| TDynamic t' when t' == t_dynamic -> TObject((["java";"lang"],"Object"),[])
+	| TDynamic _ -> assert false (* TODO: hmm... *)
+	| TMono _ -> TObject((["java";"lang"],"Object"),[])
+	| TInst(c,tl) -> TObject(c.cl_path,List.map jtype_argument_of_type tl)
+	| TEnum(en,tl) -> TObject(en.e_path,List.map jtype_argument_of_type tl)
+	| TFun(tl,tr) -> TMethod(List.map (fun (_,_,t) -> jsignature_of_type t) tl,if ExtType.is_void (follow tr) then None else Some (jsignature_of_type tr))
+	| TAnon an -> assert false (* TODO *)
+	| TType _ | TLazy _ -> assert false
+
+and jtype_argument_of_type t =
+	TType(WNone,jsignature_of_type t)
+
+let jtparam_of_type_param (s,t) =
+	(s,None,[]) (* TODO: constraints? *)
+
+let jerror s =
+	failwith s
+
+open VerificationTypeInfo
+
+(* let other_approach jvm e =
+	let stack = ref [] in
+	let stack_size = ref 0 in
+	let stack_frames = ref [] in
+	let last_stack_frame = ref 0 in
+	let max_stack_size = ref 0 in
+	let ops = DynArray.create () in
+	let op_offsets = DynArray.create () in
+	let locals = ref PMap.empty in
+	let local_count = ref 0 in
+	let fp = ref 0 in
+	let push js =
+		stack := js :: !stack;
+		stack_size := !stack_size + (VerificationTypeInfo.get_size js);
+		if !stack_size > !max_stack_size then max_stack_size := !stack_size
+	in
+	let pop () = match !stack with
+		| js :: l ->
+			stack := l;
+			stack_size := !stack_size - (VerificationTypeInfo.get_size js);
+			js
+		| [] ->
+			assert false
+	in
+	let s_ops () =
+		String.concat "; " (List.map s_jcode (DynArray.to_list ops))
+	in
+	let stack_top () = List.hd !stack in
+	let op opcode length expect return =
+		DynArray.add ops opcode;
+		DynArray.add op_offsets !fp;
+		fp := !fp + length;
+		List.iter (fun js ->
+			let js' = pop() in
+			(* TODO: some unification or something? *)
+			if js <> js' then
+				jerror
+					(Printf.sprintf "Stack error\n\toperation: %s\n\texpected : %s\n\tactual   : %s\n\tops      : %s"
+						(s_jcode opcode)
+						(VerificationTypeInfo.to_string js)
+						(VerificationTypeInfo.to_string js')
+						(s_ops())
+					);
+		) expect;
+		match return with
+			| None -> ()
+			| Some js -> push js
+	in
+	(* OPS BEGIN *)
+	(* loading *)
+	let iload i () = match i with
+		| 0 -> op OpIload_0 1 [] (Some VTIInteger)
+		| 1 -> op OpIload_1 1 [] (Some VTIInteger)
+		| 2 -> op OpIload_2 1 [] (Some VTIInteger)
+		| 3 -> op OpIload_3 1 [] (Some VTIInteger)
+		| i -> op (OpIload i) 2 [] (Some VTIInteger)
+	in
+	let lload i () = match i with
+		| 0 -> op OpLload_0 1 [] (Some VTILong)
+		| 1 -> op OpLload_1 1 [] (Some VTILong)
+		| 2 -> op OpLload_2 1 [] (Some VTILong)
+		| 3 -> op OpLload_3 1 [] (Some VTILong)
+		| i -> op (OpLload i) 2 [] (Some VTILong)
+	in
+	let fload i () = match i with
+		| 0 -> op OpFload_0 1 [] (Some VTIFloat)
+		| 1 -> op OpFload_1 1 [] (Some VTIFloat)
+		| 2 -> op OpFload_2 1 [] (Some VTIFloat)
+		| 3 -> op OpFload_3 1 [] (Some VTIFloat)
+		| i -> op (OpFload i) 2 [] (Some VTIFloat)
+	in
+	let dload i () = match i with
+		| 0 -> op OpDload_0 1 [] (Some VTIDouble)
+		| 1 -> op OpDload_1 1 [] (Some VTIDouble)
+		| 2 -> op OpDload_2 1 [] (Some VTIDouble)
+		| 3 -> op OpDload_3 1 [] (Some VTIDouble)
+		| i -> op (OpDload i) 2 [] (Some VTIDouble)
+	in
+	let aload vtt i () = match i with
+		| 0 -> op OpAload_0 1 [] (Some vtt)
+		| 1 -> op OpAload_1 1 [] (Some vtt)
+		| 2 -> op OpAload_2 1 [] (Some vtt)
+		| 3 -> op OpAload_3 1 [] (Some vtt)
+		| i -> op (OpAload i) 2 [] (Some vtt)
+	in
+	(* storing *)
+	let istore i () = match i with
+		| 0 -> op OpIstore_0 1 [VTIInteger] None
+		| 1 -> op OpIstore_1 1 [VTIInteger] None
+		| 2 -> op OpIstore_2 1 [VTIInteger] None
+		| 3 -> op OpIstore_3 1 [VTIInteger] None
+		| i -> op (OpIstore i) 2 [VTIInteger] None
+	in
+	let lstore i () = match i with
+		| 0 -> op OpLstore_0 1 [VTILong] None
+		| 1 -> op OpLstore_1 1 [VTILong] None
+		| 2 -> op OpLstore_2 1 [VTILong] None
+		| 3 -> op OpLstore_3 1 [VTILong] None
+		| i -> op (OpLstore i) 2 [VTILong] None
+	in
+	let fstore i () = match i with
+		| 0 -> op OpFstore_0 1 [VTIFloat] None
+		| 1 -> op OpFstore_1 1 [VTIFloat] None
+		| 2 -> op OpFstore_2 1 [VTIFloat] None
+		| 3 -> op OpFstore_3 1 [VTIFloat] None
+		| i -> op (OpFstore i) 2 [VTIFloat] None
+	in
+	let dstore i () = match i with
+		| 0 -> op OpDstore_0 1 [VTIDouble] None
+		| 1 -> op OpDstore_1 1 [VTIDouble] None
+		| 2 -> op OpDstore_2 1 [VTIDouble] None
+		| 3 -> op OpDstore_3 1 [VTIDouble] None
+		| i -> op (OpDstore i) 2 [VTIDouble] None
+	in
+	let astore vtt i () = match i with
+		| 0 -> op OpAstore_0 1 [vtt] None
+		| 1 -> op OpAstore_1 1 [vtt] None
+		| 2 -> op OpAstore_2 1 [vtt] None
+		| 3 -> op OpAstore_3 1 [vtt] None
+		| i -> op (OpAstore i) 2 [vtt] None
+	in
+	(* fields *)
+	let getstatic path name jsig =
+		let js = VerificationTypeInfo.of_jsignature jsig in
+		op (OpGetstatic(path,name,jsig)) 3 [] (Some js)
+	in
+	(* casting *)
+	let i2d () = op OpI2d 1 [VTIInteger] (Some VTIDouble) in
+	let i2l () = op OpI2l 1 [VTIInteger] (Some VTILong) in
+	(* arithmetic *)
+	let iadd () = op OpIadd 1 [VTIInteger;VTIInteger] (Some VTIInteger) in
+	let ladd () = op OpLadd 1 [VTILong;VTILong] (Some VTILong) in
+	let dadd () = op OpDadd 1 [VTIDouble;VTIDouble] (Some VTIDouble) in
+	let ixor () = op OpIxor 1 [VTIInteger;VTIInteger] (Some VTIInteger) in
+	(* comparison *)
+	let lcmp () = op OpLcmp 1 [VTILong;VTILong] (Some VTIInteger) in
+	(* invoking *)
+	let invokevirtual path name jmethodsig =
+		let stack = VerificationTypeInfo.of_method_arguments (fst jmethodsig) in
+		op (OpInvokevirtual(path,name,jmethodsig)) 3 stack None
+	in
+	let return () =
+		op OpReturn 1 [] None;
+		stack := [];
+	in
+	(* branching *)
+	let opif cmp fp_target = op (OpIf(cmp,fp_target)) 3 [VTIInteger] None in
+	let opif_ref cmp = let r = ref 0 in opif cmp r; r in
+	let if_icmp cmp fp_target = op (OpIf_icmp(cmp,fp_target)) 3 [VTIInteger;VTIInteger] None in
+	let goto fp_target = op (OpGoto fp_target) 3 [] None in
+	let goto_ref () = let r = ref 0 in goto r; r in
+	let athrow () = let js = stack_top() in op OpAthrow 1 [js] (Some js) in
+	(* other *)
+	(* let nop real_length = op OpNop real_length [] None; DynArray.length ops - 1 in *)
+	let aconst_null () = op OpAconst_null 1 [] (Some VTINull) in
+	(* convenience *)
+	let iconst i32 =
+		let instr,count = match Int32.to_int i32 with
+			| -1 -> OpIconst_m1,1
+			| 0 -> OpIconst_0,1
+			| 1 -> OpIconst_1,1
+			| 2 -> OpIconst_2,1
+			| 3 -> OpIconst_3,1
+			| 4 -> OpIconst_4,1
+			| 5 -> OpIconst_5,1
+			| i ->
+				if i >= -128 && i <= 127 then
+					OpBipush i,2
+				else if i >= -32768 && i <= 32767 then
+					OpSipush i,3
+				else
+					jvm.cpool#add_op (ConstInt i32)
+		in
+		op instr count [] (Some VTIInteger)
+	in
+	let dconst f =
+		let instr,count = match f with
+			| 0.0 -> OpDconst_0,1
+			| 1.0 -> OpDconst_1,1
+			| _ -> jvm.cpool#add_op (ConstDouble f)
+		in
+		op instr count [] (Some VTIDouble)
+	in
+	(* OPS END *)
+	(* var handling *)
+	let add_local v =
+		let jt = jsignature_of_type v.v_type in
+		let vtt = VerificationTypeInfo.of_jsignature jt in
+		let load,store = match jt with
+			| TByte | TChar | TShort | TBool -> iload,istore
+			| TInt -> iload,istore
+			| TLong -> lload,lstore
+			| TFloat -> fload,fstore
+			| TDouble -> dload,dstore
+			| TObject _ | TObjectInner _ | TArray _ | TMethod _ | TTypeParameter _ -> aload vtt,astore vtt
+		in
+		let id = !local_count in
+		incr local_count;
+		let load = load id in
+		let store = store id in
+		locals := PMap.add v.v_id (id,load,store,vtt) !locals;
+		id,load,store
+	in
+	let get_local v =
+		try PMap.find v.v_id !locals
+		with Not_found -> failwith ("Unbound local " ^ v.v_name)
+	in
+	(* casting *)
+	let maybe_cast js = match (stack_top()),js with
+		| VTIInteger,VTIDouble -> i2d(); js
+		| VTIInteger,VTILong -> i2l(); js
+		| js,_ -> js
+	in
+	let cast_op op js = match op with
+		| OpDiv -> maybe_cast VTIDouble
+		| OpEq | OpNotEq -> maybe_cast VTILong
+		| _ -> maybe_cast js
+	in
+	let add_stack_frame (_,locals,stack) =
+		let ff = {
+			ff_offset_delta = !fp - !last_stack_frame - (if !last_stack_frame = 0 then 0 else 1);
+			ff_locals = PMap.fold (fun (_,_,_,vtt) acc ->
+					vtt :: acc
+				) locals [];
+			ff_stack_items = List.rev stack;
+		} in
+		last_stack_frame := !fp;
+		stack_frames := ff :: !stack_frames
+	in
+	let save_state () =
+		fp,!locals,!stack
+	in
+	let branch fthen felse =
+		let fp_from = !fp in
+		let r = opif_ref CmpNe in
+		let frame = save_state() in
+		fthen();
+		let fp_then_from = !fp in
+		let r2 = goto_ref () in
+		add_stack_frame frame;
+		r := !fp - fp_from;
+		felse();
+		add_stack_frame frame;
+		r2 := !fp - fp_then_from;
+	in
+	(* unary/binary *)
+	let binop op js1 js2 =
+		let berror () =
+			jerror (Printf.sprintf "Unimplemented binop: %s %s %s\n\tops: %s" (VerificationTypeInfo.to_string js1) (s_binop op) (VerificationTypeInfo.to_string js2) (s_ops()));
+		in
+		match op with
+		| OpAdd ->
+			begin match js1,js2 with
+				| VTIInteger,VTIInteger -> iadd()
+				| VTILong,VTILong -> ladd()
+				| VTIDouble,VTIDouble -> dadd()
+				| _ -> berror()
+			end
+		| OpEq ->
+			begin match js1,js2 with
+				| VTILong,VTILong ->
+					lcmp();
+					iconst Int32.zero;
+					if_icmp_ref CmpNe 7;
+					let frame = save_state() in
+					iconst Int32.one;
+					goto (ref 4);
+					add_stack_frame frame;
+					let _ = pop() in
+					iconst Int32.zero;
+					add_stack_frame (save_state());
+				| _ -> berror()
+			end
+		| OpNotEq ->
+			begin match js1,js2 with
+				| VTILong,VTILong -> lcmp();
+				| _ -> berror()
+			end
+		| _ ->
+			berror()
+	in
+	(* loop *)
+	let rec loop e = match e.eexpr with
+		| TVar(v,Some e1) ->
+			loop e1;
+			let _,_,store = add_local v in
+			store();
+ 		| TVar(v,eo) ->
+			let _,_,store = add_local v in
+			begin match eo with
+				| Some e ->
+					loop e;
+					store();
+				| None ->
+					()
+			end
+		| TLocal v ->
+			let _,load,_,_ = get_local v in
+			load()
+		| TConst ct ->
+			const ct
+		| TBinop(OpAssign,{eexpr = TLocal v},e2) ->
+			loop e2;
+			let _,_,store,_ = get_local v in
+			store()
+		| TBinop(OpAssignOp op,{eexpr = TLocal v},e2) ->
+			let _,load,store,_ = get_local v in
+			load();
+			let js1 = stack_top() in
+			loop e2;
+			let js2 = cast_op op js1 in
+			binop op js1 js2;
+			store()
+		| TBinop(op,e1,e2) ->
+			loop e1;
+			let js1 = cast_op op (VerificationTypeInfo.of_jsignature (jsignature_of_type e2.etype)) in
+			loop e2;
+			let js2 = cast_op op js1 in
+			binop op js1 js2
+		| TIf(e1,e2,Some e3) ->
+			loop e1;
+			branch (fun () -> loop e2) (fun () -> loop e3)
+		| TIf(e1,e2,eo) ->
+			loop e1;
+			let fp_from = !fp in
+			let r = opif_ref CmpNe in
+			let frame = save_state() in
+			loop e2;
+			begin match eo with
+				| None ->
+					add_stack_frame frame;
+					r := !fp - fp_from;
+				| Some e3 ->
+					let fp_then_from = !fp in
+					let r2 = goto_ref () in
+					add_stack_frame frame;
+					r := !fp - fp_from;
+					loop e3;
+					add_stack_frame frame;
+					r2 := !fp - fp_then_from;
+			end
+		| TWhile(e1,e2,NormalWhile) ->
+			let frame = save_state() in
+			add_stack_frame frame;
+			let fp_to = !fp in
+			loop e1;
+			let fp_from = !fp in
+			let r = opif_ref CmpNe in
+			loop e2;
+			goto (ref (fp_to - !fp));
+			r := !fp - fp_from;
+			add_stack_frame frame;
+		| TCall(_,e1 :: _) ->
+			loop e1
+		| TThrow e1 ->
+			loop e1;
+			athrow();
+		| _ ->
+			Type.iter loop e
+	and const ct = match ct with
+		| TInt i32 -> iconst i32
+		| TFloat f -> dconst (float_of_string f)
+		| TBool true -> iconst Int32.one
+		| TBool false -> iconst Int32.zero
+		| TNull -> aconst_null ()
+		| _ -> assert false
+	in
+	let path = ["java";"io"],"PrintStream" in
+	getstatic (["java";"lang"],"System") "out" (TObject(path,[]));
+	loop e;
+	invokevirtual path "println" ([TInt],None);
+	return();
+	List.iter2(fun fp op ->
+		print_endline (Printf.sprintf "%i: %s" fp (s_jcode op));
+	) (DynArray.to_list op_offsets) (DynArray.to_list ops);
+	DynArray.to_array ops,!max_stack_size,!local_count,List.rev !stack_frames
+ *)
+class jvm_stack = object(self)
+	val mutable stack = [];
+	val mutable stack_size = 0;
+	val mutable max_stack_size = 0;
+	val mutable stack_frames = []
+
+	method push js =
+		stack <- js :: stack;
+		stack_size <- stack_size + (VerificationTypeInfo.get_size js);
+		if stack_size > max_stack_size then max_stack_size <- stack_size
+
+	method pop () = match stack with
+		| js :: l ->
+			stack <- l;
+			stack_size <- stack_size - (VerificationTypeInfo.get_size js);
+			js
+		| [] ->
+			assert false
+
+	method save = (stack,stack_size)
+
+	method top = List.hd stack
+
+	method restore ((stack',stack_size') : (VerificationTypeInfo.t list * int)) =
+		stack <- stack;
+		stack_size <- stack_size'
+
+	method get_max_stack_size = max_stack_size
+end
+
+class instruction_handler jvm = object(self)
+	val jvm = jvm
+	val stack = new jvm_stack;
+	val mutable locals = [];
+	val mutable local_count = 0;
+	val mutable local_lookup = Hashtbl.create 0;
+	val ops = DynArray.create();
+	val op_offsets = DynArray.create();
+	val mutable fp = 0;
+	val mutable last_op_size = 0
+	val mutable stack_frames = []
+	val mutable last_stack_frame_offset = 0
+
+	method s_ops () =
+		String.concat "; " (List.map s_jcode (DynArray.to_list ops))
+
+	method debug () =
+		List.iter2(fun fp op ->
+			print_endline (Printf.sprintf "%i: %s" fp (s_jcode op));
+		) (DynArray.to_list op_offsets) (DynArray.to_list ops);
+		print_endline "Stack frames:";
+		List.iter (fun (fp_from,fp_to,ff) ->
+			print_endline (Printf.sprintf "Stackframe @%i -> @%i" fp_from fp_to);
+			print_endline (s_full_frame ff);
+		) (List.rev stack_frames)
+
+	method op opcode length expect return =
+		DynArray.add ops opcode;
+		DynArray.add op_offsets fp;
+		fp <- fp + length;
+		last_op_size <- length;
+		List.iter (fun js ->
+			let js' = stack#pop() in
+			(* TODO: some unification or something? *)
+			if js <> js' then
+				jerror
+					(Printf.sprintf "Stack error\n\toperation: %s\n\texpected : %s\n\tactual   : %s\n\tops      : %s"
+						(s_jcode opcode)
+						(VerificationTypeInfo.to_string js)
+						(VerificationTypeInfo.to_string js')
+						(self#s_ops())
+					);
+		) expect;
+		match return with
+			| None -> ()
+			| Some js -> stack#push js
+
+	method iload i () = match i with
+		| 0 -> self#op OpIload_0 1 [] (Some VTIInteger)
+		| 1 -> self#op OpIload_1 1 [] (Some VTIInteger)
+		| 2 -> self#op OpIload_2 1 [] (Some VTIInteger)
+		| 3 -> self#op OpIload_3 1 [] (Some VTIInteger)
+		| i -> self#op (OpIload i) 2 [] (Some VTIInteger)
+
+	method lload i () = match i with
+		| 0 -> self#op OpLload_0 1 [] (Some VTILong)
+		| 1 -> self#op OpLload_1 1 [] (Some VTILong)
+		| 2 -> self#op OpLload_2 1 [] (Some VTILong)
+		| 3 -> self#op OpLload_3 1 [] (Some VTILong)
+		| i -> self#op (OpLload i) 2 [] (Some VTILong)
+
+	method fload i () = match i with
+		| 0 -> self#op OpFload_0 1 [] (Some VTIFloat)
+		| 1 -> self#op OpFload_1 1 [] (Some VTIFloat)
+		| 2 -> self#op OpFload_2 1 [] (Some VTIFloat)
+		| 3 -> self#op OpFload_3 1 [] (Some VTIFloat)
+		| i -> self#op (OpFload i) 2 [] (Some VTIFloat)
+
+	method dload i () = match i with
+		| 0 -> self#op OpDload_0 1 [] (Some VTIDouble)
+		| 1 -> self#op OpDload_1 1 [] (Some VTIDouble)
+		| 2 -> self#op OpDload_2 1 [] (Some VTIDouble)
+		| 3 -> self#op OpDload_3 1 [] (Some VTIDouble)
+		| i -> self#op (OpDload i) 2 [] (Some VTIDouble)
+
+	method aload vtt i () = match i with
+		| 0 -> self#op OpAload_0 1 [] (Some vtt)
+		| 1 -> self#op OpAload_1 1 [] (Some vtt)
+		| 2 -> self#op OpAload_2 1 [] (Some vtt)
+		| 3 -> self#op OpAload_3 1 [] (Some vtt)
+		| i -> self#op (OpAload i) 2 [] (Some vtt)
+
+	method istore i () = match i with
+		| 0 -> self#op OpIstore_0 1 [VTIInteger] None
+		| 1 -> self#op OpIstore_1 1 [VTIInteger] None
+		| 2 -> self#op OpIstore_2 1 [VTIInteger] None
+		| 3 -> self#op OpIstore_3 1 [VTIInteger] None
+		| i -> self#op (OpIstore i) 2 [VTIInteger] None
+
+	method lstore i () = match i with
+		| 0 -> self#op OpLstore_0 1 [VTILong] None
+		| 1 -> self#op OpLstore_1 1 [VTILong] None
+		| 2 -> self#op OpLstore_2 1 [VTILong] None
+		| 3 -> self#op OpLstore_3 1 [VTILong] None
+		| i -> self#op (OpLstore i) 2 [VTILong] None
+
+	method fstore i () = match i with
+		| 0 -> self#op OpFstore_0 1 [VTIFloat] None
+		| 1 -> self#op OpFstore_1 1 [VTIFloat] None
+		| 2 -> self#op OpFstore_2 1 [VTIFloat] None
+		| 3 -> self#op OpFstore_3 1 [VTIFloat] None
+		| i -> self#op (OpFstore i) 2 [VTIFloat] None
+
+	method dstore i () = match i with
+		| 0 -> self#op OpDstore_0 1 [VTIDouble] None
+		| 1 -> self#op OpDstore_1 1 [VTIDouble] None
+		| 2 -> self#op OpDstore_2 1 [VTIDouble] None
+		| 3 -> self#op OpDstore_3 1 [VTIDouble] None
+		| i -> self#op (OpDstore i) 2 [VTIDouble] None
+
+	method astore vtt i () = match i with
+		| 0 -> self#op OpAstore_0 1 [vtt] None
+		| 1 -> self#op OpAstore_1 1 [vtt] None
+		| 2 -> self#op OpAstore_2 1 [vtt] None
+		| 3 -> self#op OpAstore_3 1 [vtt] None
+		| i -> self#op (OpAstore i) 2 [vtt] None
+
+	(* fields *)
+
+	method getstatic path name jsig =
+		let js = VerificationTypeInfo.of_jsignature jsig in
+		self#op (OpGetstatic(path,name,jsig)) 3 [] (Some js)
+
+	method invokevirtual path name jmethodsig =
+		let stack = VerificationTypeInfo.of_method_arguments (fst jmethodsig) in
+		self#op (OpInvokevirtual(path,name,jmethodsig)) 3 stack None
+
+	(* control flow *)
+
+	method if_icmp cmp r = self#op (OpIf_icmp(cmp,r)) 3 [VTIInteger;VTIInteger] None
+	method if_icmp_ref cmp = let r = ref 0 in self#if_icmp cmp r; r
+	method goto r = self#op (OpGoto r) 3 [] None
+	method goto_ref () = let r = ref 0 in self#goto r; r
+
+	method return =
+		self#op OpReturn 1 [] None
+		(* stack := []; *)
+
+	(* constants *)
+
+	method aconst_null () = self#op OpAconst_null 1 [] (Some VTINull)
+
+	method iconst i32 =
+		let instr,count = match Int32.to_int i32 with
+			| -1 -> OpIconst_m1,1
+			| 0 -> OpIconst_0,1
+			| 1 -> OpIconst_1,1
+			| 2 -> OpIconst_2,1
+			| 3 -> OpIconst_3,1
+			| 4 -> OpIconst_4,1
+			| 5 -> OpIconst_5,1
+			| i ->
+				if i >= -128 && i <= 127 then
+					OpBipush i,2
+				else if i >= -32768 && i <= 32767 then
+					OpSipush i,3
+				else
+					jvm.cpool#add_op (ConstInt i32)
+		in
+		self#op instr count [] (Some VTIInteger)
+
+	method dconst f =
+		let instr,count = match f with
+			| 0.0 -> OpDconst_0,1
+			| 1.0 -> OpDconst_1,1
+			| _ -> jvm.cpool#add_op (ConstDouble f)
+		in
+		self#op instr count [] (Some VTIDouble)
+
+	method add_local vid vtt =
+		let load,store = match vtt with
+			| VTIInteger -> self#iload,self#istore
+			| VTILong -> self#lload,self#lstore
+			| VTIFloat -> self#fload,self#fstore
+			| VTIDouble -> self#dload,self#dstore
+			| _ -> self#aload vtt,self#astore vtt
+		in
+		let id = local_count in
+		local_count <- local_count;
+		let load = load id in
+		let store = store id in
+		locals <- vtt :: locals;
+		Hashtbl.add local_lookup vid (load,store);
+		load,store
+
+	method get_local v : ((unit -> unit) * (unit -> unit)) =
+		try Hashtbl.find local_lookup v.v_id
+		with Not_found -> failwith ("Unbound local " ^ v.v_name)
+
+	method private branch () =
+		let fp_cur = fp - last_op_size in
+		(fun () ->
+			let ff = {
+				ff_offset_delta = fp - last_stack_frame_offset - (if last_stack_frame_offset = 0 then 0 else 1);
+				ff_locals = List.rev locals;
+				ff_stack_items = List.rev (fst stack#save)
+			} in
+			last_stack_frame_offset <- fp;
+			stack_frames <- (fp_cur,fp,ff) :: stack_frames;
+			fp - fp_cur;
+		)
+
+	method const ct = match ct with
+		| Type.TInt i32 -> self#iconst i32
+		| TFloat f -> self#dconst (float_of_string f)
+		| TBool true -> self#iconst Int32.one
+		| TBool false -> self#iconst Int32.zero
+		| TNull -> self#aconst_null ()
+		| _ -> assert false
+
+	method texpr e = match e.eexpr with
+		| TVar(v,Some e1) ->
+			self#texpr e1;
+			let vtt = VerificationTypeInfo.of_jsignature (jsignature_of_type v.v_type) in
+			let _,store = self#add_local v.v_id vtt in
+			store()
+		| TLocal v ->
+			let load,_ = self#get_local v in
+			load()
+		| TBinop(OpAssign,{eexpr = TLocal v},e2) ->
+			self#texpr e2;
+			let _,store = self#get_local v in
+			store()
+		| TBinop(op,e1,e2) ->
+			self#texpr e1
+		| TConst ct ->
+			self#const ct
+		| TIf(e1,e2,Some e3) ->
+			self#texpr e1;
+			self#iconst Int32.zero;
+			let r1 = self#if_icmp_ref CmpEq in
+			let branch1 = self#branch () in
+			self#texpr e2;
+			let r2 = self#goto_ref () in
+			let branch2 = self#branch () in
+			r1 := branch1();
+			self#texpr e3;
+			r2 := branch2()
+		| TCall(_,e1 :: _) ->
+			self#texpr e1
+		| _ ->
+			Type.iter self#texpr e
+
+	method to_jcode = {
+		jc_max_stack = stack#get_max_stack_size;
+		jc_max_locals = local_count;
+		jc_code = DynArray.to_array ops;
+		jc_exception_table = [||];
+		jc_attributes = [AttrStackMapTable (List.rev_map (fun (_,_,ff) -> ff) stack_frames)];
+	}
+end
+
+let generate_class_field jvm stat kind cf =
+	let pseudo_code = match cf.cf_expr with
+		| None ->
+			None
+		| Some e ->
+			let i = new instruction_handler jvm in
+			let path = ["java";"io"],"PrintStream" in
+			i#getstatic (["java";"lang"],"System") "out" (TObject(path,[]));
+			i#texpr e;
+			i#invokevirtual path "println" ([TInt],None);
+			i#return;
+			i#debug();
+			Some i#to_jcode
+	in
+	let jsig = (* if cf.cf_name = "main" then
+		TMethod([TArray(TObject((["java";"lang"],"String"),[]),None)],None)
+	else *)
+		jsignature_of_type cf.cf_type
+	in
+	let jf = {
+		jf_name = cf.cf_name;
+		jf_kind = kind;
+		jf_vmsignature = jsig;
+		jf_signature = jsig;
+		jf_throws = []; (* TODO (?) *)
+		jf_types = List.map jtparam_of_type_param cf.cf_params;
+		jf_flags = JPublic :: (if stat then [JStatic] else []);
+		jf_attributes = []; (* TODO *)
+		jf_constant = None; (* TODO (?) *)
+		jf_code = pseudo_code;
+	} in
+	jf
+
+let generate_class jvm c =
+	let cpool = new JWriter.jvm_constant_pool in
+	jvm.cpool <- cpool;
+	let fields = DynArray.create() in
+	let methods = DynArray.create() in
+	let field stat cf =
+		let kind,da = match cf.cf_kind with
+			| Method _ -> JKMethod,methods (* TODO: MethDynamic (preprocess) *)
+			| Var _ -> JKField,fields
+		in
+		DynArray.add da (generate_class_field jvm stat kind cf)
+	in
+	List.iter (field false) c.cl_ordered_fields;
+	List.iter (field true) c.cl_ordered_statics;
+	let jc = {
+		cversion = (0x00,0x34);
+		cpath = c.cl_path;
+		csuper = (match c.cl_super with
+			| None -> jvm.jsig_object
+			| Some(c,tl) -> jsignature_of_type (TInst(c,tl))
+		);
+		cflags = JPublic :: (if c.cl_interface then [JInterface] else []);
+		cinterfaces = List.map (fun (c,tl) -> jsignature_of_type (TInst(c,tl))) c.cl_implements;
+		cfields = DynArray.to_list fields;
+		cmethods = DynArray.to_list methods;
+		cattributes = []; (* TODO *)
+		cinner_types = []; (* TODO (?) *)
+		ctypes = List.map jtparam_of_type_param c.cl_params;
+	} in
+	let ch = IO.output_string() in
+	JWriter.write_class ch cpool jc;
+	let dir = match c.cl_path with
+		| ([],s) -> s
+		| (sl,s) -> String.concat "." sl ^ "." ^ s
+	in
+	let path = dir ^ ".class" in
+	Zip.add_entry (IO.close_out ch) jvm.jar path
+
+let generate_module_type jvm mt = match mt with
+	| TClassDecl c when c.cl_path = ([],"Main") (* not c.cl_extern *) -> generate_class jvm c
+	| _ -> () (* TODO *)
+
+let generate_jvm com =
+	mkdir_from_path com.file;
+	let jar_name,manifest_suffix = match com.main_class with
+		| Some path -> snd path,"\nMain-Class: " ^ (s_type_path path)
+		| None -> "jar",""
+	in
+	let jar_path = Printf.sprintf "%s%s.jar" (add_trailing_slash com.file) jar_name in
+	let jvm = {
+		com = com;
+		jsig_object = TObject((["java";"lang"],"Object"),[]);
+		j_classes = [];
+		jar = Zip.open_out jar_path;
+		cpool = new JWriter.jvm_constant_pool;
+	} in
+	let manifest_content =
+		"Manifest-Version: 1.0\n" ^
+		"Created-By: Haxe (Haxe Foundation)" ^
+		manifest_suffix ^
+		"\n\n"
+	in
+	Zip.add_entry manifest_content jvm.jar "META-INF/MANIFEST.MF";
+	List.iter (generate_module_type jvm) com.types;
+	Zip.close_out jvm.jar

@@ -1665,6 +1665,8 @@ try
 					Gencpp.generate,"cpp"
 				| Cs ->
 					Gencs.generate,"cs"
+				| Java when Common.raw_defined com "jvm" ->
+					Genjava.generate_jvm,"jvm"
 				| Java ->
 					Genjava.generate,"java"
 				| Python ->
