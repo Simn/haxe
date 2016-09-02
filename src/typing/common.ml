@@ -149,6 +149,7 @@ type shared_display_information = {
 
 type display_information = {
 	mutable unresolved_identifiers : (string * pos * (string * IdentifierType.t) list) list;
+	mutable missing_interface_fields : (tclass * tclass_field list) list;
 }
 
 (* This information is shared between normal and macro context. *)
@@ -749,6 +750,7 @@ let create version s_version args =
 		};
 		display_information = {
 			unresolved_identifiers = [];
+			missing_interface_fields = [];
 		};
 		sys_args = args;
 		debug = false;

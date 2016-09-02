@@ -1386,6 +1386,7 @@ module Inheritance = struct
 
 	let rec check_interface ctx c intf params =
 		let p = c.cl_pos in
+		let missing_fields = ref [] in
 		let rec check_field i f =
 			(if ctx.com.config.pf_overload then
 				List.iter (function
@@ -1427,20 +1428,30 @@ module Inheritance = struct
 						end
 			with
 				| Not_found when not c.cl_interface ->
-					let msg = if !is_overload then
-						let ctx = print_context() in
-						let args = match follow f.cf_type with | TFun(args,_) -> String.concat ", " (List.map (fun (n,o,t) -> (if o then "?" else "") ^ n ^ " : " ^ (s_type ctx t)) args) | _ -> assert false in
-						"No suitable overload for " ^ i ^ "( " ^ args ^ " ), as needed by " ^ s_type_path intf.cl_path ^ " was found"
-					else
-						("Field " ^ i ^ " needed by " ^ s_type_path intf.cl_path ^ " is missing")
-					in
-					display_error ctx msg p
+					begin match ctx.com.display with
+					| DMDiagnostics _ ->
+						missing_fields := f :: !missing_fields;
+					| _ ->
+						let msg = if !is_overload then
+							let ctx = print_context() in
+							let args = match follow f.cf_type with | TFun(args,_) -> String.concat ", " (List.map (fun (n,o,t) -> (if o then "?" else "") ^ n ^ " : " ^ (s_type ctx t)) args) | _ -> assert false in
+							"No suitable overload for " ^ i ^ "( " ^ args ^ " ), as needed by " ^ s_type_path intf.cl_path ^ " was found"
+						else
+							("Field " ^ i ^ " needed by " ^ s_type_path intf.cl_path ^ " is missing")
+						in
+						display_error ctx msg p
+					end
 				| Not_found -> ()
 		in
 		PMap.iter check_field intf.cl_fields;
 		List.iter (fun (i2,p2) ->
 			check_interface ctx c i2 (List.map (apply_params intf.cl_params params) p2)
-		) intf.cl_implements
+		) intf.cl_implements;
+		match ctx.com.display with
+			| DMDiagnostics b when !missing_fields <> [] && (b || ctx.is_display_file) ->
+				ctx.com.display_information.missing_interface_fields <- (c,!missing_fields) :: ctx.com.display_information.missing_interface_fields
+			| _ ->
+				()
 
 	let check_interfaces ctx c =
 		match c.cl_path with
@@ -1508,7 +1519,7 @@ module Inheritance = struct
 					if not csup.cl_interface then error "Cannot extend by using a class" p;
 					c.cl_implements <- (csup,params) :: c.cl_implements;
 					if not !has_interf then begin
-						if not is_lib then delay ctx PForce (fun() -> check_interfaces ctx c);
+						if not is_lib then delay ctx (match ctx.com.display with DMDiagnostics _ -> PBuildClass | _ -> PForce) (fun() -> check_interfaces ctx c);
 						has_interf := true;
 					end
 				end else begin
@@ -1530,7 +1541,7 @@ module Inheritance = struct
 					if not intf.cl_interface then error "You can only implement an interface" p;
 					c.cl_implements <- (intf, params) :: c.cl_implements;
 					if not !has_interf && not is_lib && not (Meta.has (Meta.Custom "$do_not_check_interf") c.cl_meta) then begin
-						delay ctx PForce (fun() -> check_interfaces ctx c);
+						delay ctx (match ctx.com.display with DMDiagnostics _ -> PBuildClass | _ -> PForce) (fun() -> check_interfaces ctx c);
 						has_interf := true;
 					end;
 					(fun () ->
@@ -3498,7 +3509,7 @@ let type_module ctx mpath file ?(is_extern=false) tdecls p =
 	if is_extern then m.m_extra.m_kind <- MExtern;
 	begin if ctx.is_display_file then match ctx.com.display with
 		| DMDiagnostics false ->
-			flush_pass ctx PBuildClass "diagnostics";
+			flush_pass ctx PForce "diagnostics";
 			List.iter (fun mt -> match mt with
 				| TClassDecl c | TAbstractDecl({a_impl = Some c}) ->
 					ignore(c.cl_build());

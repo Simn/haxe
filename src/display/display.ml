@@ -453,11 +453,13 @@ module Diagnostics = struct
 			| DKUnusedImport
 			| DKUnresolvedIdentifier
 			| DKCompilerError
+			| DKMissingInterfaceFields
 
 		let to_int = function
 			| DKUnusedImport -> 0
 			| DKUnresolvedIdentifier -> 1
 			| DKCompilerError -> 2
+			| DKMissingInterfaceFields -> 3
 	end
 
 	type t = DiagnosticsKind.t * pos
@@ -603,6 +605,20 @@ module Diagnostics = struct
 		List.iter (fun (s,p,sev) ->
 			add DKCompilerError p sev [JString s]
 		) com.shared.shared_display_information.diagnostics_messages;
+		List.iter (fun (c,cfl) ->
+			let sl = List.map (fun cf ->
+				let cff = TExprToExpr.convert_field cf false in
+				if not (List.mem AOverride cff.cff_access) then cff.cff_access <- AOverride :: cff.cff_access;
+				let cff = match cff.cff_kind with
+					| FFun f ->
+						let e = (EBlock [(EThrow(EConst (String "not implemented yet"),null_pos),null_pos)],null_pos) in
+						{cff with cff_kind = FFun {f with f_expr = Some e}}
+					| _ -> cff
+				in
+				JString (HaxeSerializer.serialize (ExprToHx.field cff))
+			) cfl in
+			add DKMissingInterfaceFields c.cl_pos DiagnosticsSeverity.Warning sl
+		) com.display_information.missing_interface_fields;
 		let jl = Hashtbl.fold (fun file diag acc ->
 			let jl = DynArray.fold_left (fun acc (dk,p,sev,args) ->
 				(JObject [
