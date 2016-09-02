@@ -2397,7 +2397,7 @@ let map_expr_type f ft fv e =
 
 module TExprToExpr = struct
 	let tpath p mp pl =
-		if snd mp = snd p then
+		if snd mp = snd p || snd mp = "StdTypes" then
 			CTPath {
 				tpackage = fst p;
 				tname = snd p;
@@ -2535,6 +2535,49 @@ module TExprToExpr = struct
 		| TMeta (m,e) -> EMeta(m,convert_expr e))
 		,e.epos)
 
+	let convert_field cf stat =
+		let access = ref ((if cf.cf_public then APublic else APrivate) :: (if stat then [AStatic] else [])) in
+		let kind = match cf.cf_kind with
+			| Method mkind ->
+				begin match mkind with
+					| MethNormal -> ()
+					| MethInline -> access := AInline :: !access
+					| MethMacro -> access := AMacro :: !access
+					| MethDynamic -> access := ADynamic :: !access
+				end;
+				let args,ret = match follow cf.cf_type with
+					| TFun(args,ret) ->
+						List.map (fun (n,o,t) -> (n,null_pos),o,[],mk_type_hint t null_pos,None) args,mk_type_hint ret null_pos
+					| _ ->
+						assert false
+				in
+				FFun {
+					f_params = []; (* TODO *)
+					f_args = args;
+					f_type = ret;
+					f_expr = match cf.cf_expr with
+						| Some { eexpr = TFunction tf} -> Some (convert_expr tf.tf_expr)
+						| Some e -> Some (convert_expr e)
+						| None -> None
+				}
+			| Var {v_read = r; v_write = w } ->
+				let var () =
+					FVar (mk_type_hint cf.cf_type null_pos,Option.map convert_expr cf.cf_expr)
+				in
+				begin match r,w with
+					| AccNormal,AccNormal -> var ()
+					| AccInline,_ -> access := AInline :: !access; var()
+					| _,_ -> FProp(s_access true r, s_access false w, mk_type_hint cf.cf_type null_pos, Option.map convert_expr cf.cf_expr)
+				end
+		in
+		{
+			cff_name = cf.cf_name,cf.cf_pos;
+			cff_doc = cf.cf_doc;
+			cff_pos = cf.cf_pos;
+			cff_meta = cf.cf_meta;
+			cff_access = !access;
+			cff_kind = kind;
+		}
 end
 
 module Texpr = struct

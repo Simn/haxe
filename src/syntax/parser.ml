@@ -162,7 +162,7 @@ let make_is e (t,_) p =
 let reify in_macro =
 	let cur_pos = ref None in
 	let mk_enum ename n vl p =
-		let constr = (EConst (Ident n),p) in
+		let constr = EField((EField ((EField ((EConst (Ident "haxe"),p),"macro"),p),ename),p),n),p in
 		match vl with
 		| [] -> constr
 		| _ -> (ECall (constr,vl),p)
@@ -514,7 +514,7 @@ let reify in_macro =
 			] p
 		| _ -> assert false
 	in
-	(fun e -> to_expr e (snd e)), to_ctype, to_type_def
+	(fun e -> to_expr e (snd e)), to_ctype, to_type_def, to_cfield
 
 let popt f = parser
 	| [< v = f >] -> Some v
@@ -1213,19 +1213,19 @@ and inline_function = parser
 	| [< '(Kwd Function,p1) >] -> false, p1
 
 and reify_expr e =
-	let to_expr,_,_ = reify !in_macro in
+	let to_expr,_,_,_ = reify !in_macro in
 	let e = to_expr e in
 	(ECheckType (e,(CTPath { tpackage = ["haxe";"macro"]; tname = "Expr"; tsub = None; tparams = [] },null_pos)),pos e)
 
 and parse_macro_expr p = parser
 	| [< '(DblDot,_); t = parse_complex_type >] ->
-		let _, to_type, _  = reify !in_macro in
+		let _, to_type, _, _  = reify !in_macro in
 		let t = to_type t p in
 		(ECheckType (t,(CTPath { tpackage = ["haxe";"macro"]; tname = "Expr"; tsub = Some "ComplexType"; tparams = [] },null_pos)),p)
 	| [< '(Kwd Var,p1); vl = psep Comma parse_var_decl >] ->
 		reify_expr (EVars vl,p1)
 	| [< d = parse_class None [] [] false >] ->
-		let _,_,to_type = reify !in_macro in
+		let _,_,to_type,_ = reify !in_macro in
 		(ECheckType (to_type d,(CTPath { tpackage = ["haxe";"macro"]; tname = "Expr"; tsub = Some "TypeDefinition"; tparams = [] },null_pos)),p)
 	| [< e = secure_expr >] ->
 		reify_expr e

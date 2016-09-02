@@ -341,6 +341,112 @@ let mark_import_position com p =
 	with Not_found ->
 		()
 
+module HaxeSerializer = struct
+	type haxe_symbol =
+		| HxBool of bool
+		| HxInt of int
+		| HxFloat of float
+		| HxNull
+		| HxString of string
+		| HxArray of haxe_symbol list
+		| HxEnumValue of string * string * haxe_symbol list
+		| HxObject of (string * haxe_symbol) list
+
+	let serialize symbol =
+		let buffer = Buffer.create 0 in
+		let add s =
+			Buffer.add_string buffer s
+		in
+		let add_string s =
+			add "y";
+			let s = url_encode s in
+			add (string_of_int (String.length s));
+			add ":";
+			add s
+		in
+		let rec loop symbol = match symbol with
+			| HxArray symbols ->
+				add "a";
+				List.iter loop symbols;
+				add "h"
+			| HxFloat f ->
+				if f = infinity then add "p"
+				else if f = neg_infinity then add "m"
+				else if f <> f then add "k"
+				else begin
+					add "d";
+					add (string_of_float f);
+				end
+			| HxBool b ->
+				if b then add "t" else add "f"
+			| HxInt 0 ->
+				add "z"
+			| HxInt i ->
+				add "d";
+				add (string_of_int i)
+			| HxNull ->
+				add "n"
+			| HxString s ->
+				add_string s
+			| HxEnumValue (enum_name,field_name,symbols) ->
+				add "w";
+				add_string enum_name;
+				add_string field_name;
+				add ":";
+				add (string_of_int (List.length symbols));
+				List.iter loop symbols
+			| HxObject fields ->
+				add "o";
+				List.iter (fun (s,symbol) ->
+					add_string s;
+					loop symbol
+				) fields;
+				add "g"
+		in
+		loop symbol;
+		Buffer.contents buffer
+end
+
+module ExprToHx = struct
+
+	open HaxeSerializer
+
+	let map e =
+		let enum_constructor e = match string_list_of_expr_path_raise e with
+			| s :: sl ->
+				String.concat "." (List.rev sl),s
+			| [] ->
+				assert false
+		in
+		let rec loop (e,p) = match e with
+			| ECall(e1,el) ->
+				let s1,s2 = enum_constructor e1 in
+				HxEnumValue(s1,s2,List.map loop el)
+			| EConst (String s) -> HxString s
+			| EConst (Ident "null") -> HxNull
+			| EConst (Ident "true") -> HxBool true
+			| EConst (Ident "false") -> HxBool false
+			| EField _ ->
+				let s1,s2 = enum_constructor (e,p) in
+				HxEnumValue(s1,s2,[])
+			| EArrayDecl el -> HxArray (List.map loop el)
+			| EObjectDecl fl -> HxObject (List.map (fun (s,e) -> s,loop e) fl)
+			| EUntyped _ -> HxNull
+			| _ -> error ("Unsupported expression: " ^ (Ast.s_expr (e,p))) p
+		in
+		loop e
+
+	let expr e =
+		let to_expr,_,_,_ = Parser.reify true in
+		let e = to_expr e in
+		map e
+
+	let field cff =
+		let _,_,_,to_field = Parser.reify true in
+		let e = to_field cff null_pos in
+		map e
+end
+
 module Diagnostics = struct
 	module DiagnosticsKind = struct
 		type t =
@@ -524,7 +630,6 @@ end
 
 let maybe_mark_import_position ctx p =
 	if Diagnostics.is_diagnostics_run ctx then mark_import_position ctx.com p
-
 
 module Statistics = struct
 	type relation =

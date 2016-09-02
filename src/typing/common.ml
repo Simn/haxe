@@ -1251,3 +1251,18 @@ module PurityState = struct
 		| MaybePure -> "maybe"
 		| ExpectPure _ -> "expect"
 end
+
+let url_encode s =
+	let b = Buffer.create 0 in
+	let hex = "0123456789ABCDEF" in
+	for i = 0 to String.length s - 1 do
+		let c = String.unsafe_get s i in
+		match c with
+		| 'A'..'Z' | 'a'..'z' | '0'..'9' | '_' | '-' | '.' ->
+			Buffer.add_char b c
+		| _ ->
+			Buffer.add_char b '%';
+			Buffer.add_char b (String.unsafe_get hex (int_of_char c lsr 4));
+			Buffer.add_char b (String.unsafe_get hex (int_of_char c land 0xF));
+	done;
+	Buffer.contents b
