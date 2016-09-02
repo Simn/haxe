@@ -100,7 +100,7 @@ let module_pass_1 ctx m tdecls loadp =
 			pt := Some p;
 			let priv = List.mem HPrivate d.d_flags in
 			let path = make_path name priv in
-			let c = mk_class m path p in
+			let c = mk_class m path p (pos d.d_name) in
 			(* we shouldn't load any other type until we propertly set cl_build *)
 			c.cl_build <- (fun() -> assert false);
 			c.cl_module <- m;
@@ -119,6 +119,7 @@ let module_pass_1 ctx m tdecls loadp =
 				e_path = path;
 				e_module = m;
 				e_pos = p;
+				e_name_pos = (pos d.d_name);
 				e_doc = d.d_doc;
 				e_meta = d.d_meta;
 				e_params = [];
@@ -131,6 +132,7 @@ let module_pass_1 ctx m tdecls loadp =
 					t_module = m;
 					t_doc = None;
 					t_pos = p;
+					t_name_pos = null_pos;
 					t_type = mk_mono();
 					t_private = true;
 					t_params = [];
@@ -149,6 +151,7 @@ let module_pass_1 ctx m tdecls loadp =
 				t_path = path;
 				t_module = m;
 				t_pos = p;
+				t_name_pos = pos d.d_name;
 				t_doc = d.d_doc;
 				t_private = priv;
 				t_params = [];
@@ -173,6 +176,7 @@ let module_pass_1 ctx m tdecls loadp =
 				a_private = priv;
 				a_module = m;
 				a_pos = p;
+				a_name_pos = pos d.d_name;
 				a_doc = d.d_doc;
 				a_params = [];
 				a_meta = d.d_meta;
@@ -456,7 +460,7 @@ let rec load_instance ?(allow_display=false) ctx (t,pn) allow_no_params p =
 						| EConst (Float f) -> "F" ^ f
 						| _ -> "Expr"
 					) in
-					let c = mk_class null_module ([],name) p in
+					let c = mk_class null_module ([],name) p (pos e) in
 					c.cl_kind <- KExpr e;
 					TInst (c,[])
 				| TPType t -> load_complex_type ctx true p t
@@ -543,7 +547,7 @@ and load_complex_type ctx allow_display p (t,pn) =
 					error "Cannot structurally extend type parameters" p
 				| TInst (c,tl) ->
 					ctx.com.warning "Structurally extending classes is deprecated and will be removed" p;
-					let c2 = mk_class null_module (fst c.cl_path,"+" ^ snd c.cl_path) p in
+					let c2 = mk_class null_module (fst c.cl_path,"+" ^ snd c.cl_path) p null_pos in
 					c2.cl_private <- true;
 					PMap.iter (fun f _ ->
 						try
@@ -809,7 +813,7 @@ let valid_redefinition ctx f1 t1 f2 t2 = (* child, parent *)
 					| _ ->
 						raise (Unify_error [Unify_custom "Different number of constraints"]))
 				| _ -> ());
-				TInst (mk_class null_module ([],name) Ast.null_pos,[])
+				TInst (mk_class null_module ([],name) Ast.null_pos Ast.null_pos,[])
 			) l1 l2 in
 			List.iter (fun f -> f monos) !to_check;
 			apply_params l1 monos t1, apply_params l2 monos t2
@@ -1550,7 +1554,7 @@ end
 
 let rec type_type_param ?(enum_constructor=false) ctx path get_params p tp =
 	let n = fst tp.tp_name in
-	let c = mk_class ctx.m.curmod (fst path @ [snd path],n) (pos tp.tp_name) in
+	let c = mk_class ctx.m.curmod (fst path @ [snd path],n) (pos tp.tp_name) (pos tp.tp_name) in
 	c.cl_params <- type_type_params ctx c.cl_path get_params p tp.tp_params;
 	c.cl_kind <- KTypeParameter [];
 	c.cl_meta <- tp.Ast.tp_meta;
@@ -2969,6 +2973,7 @@ let init_module_type ctx context_init do_init (decl,p) =
 					t_path = (fst md.m_path @ ["_" ^ snd md.m_path],name);
 					t_module = md;
 					t_pos = p;
+					t_name_pos = null_pos;
 					t_private = true;
 					t_doc = None;
 					t_meta = [];
@@ -3879,7 +3884,7 @@ let rec build_generic ctx c p tl =
 			m_extra = module_extra (s_type_path (pack,name)) m.m_extra.m_sign 0. MFake;
 		} in
 		gctx.mg <- Some mg;
-		let cg = mk_class mg (pack,name) c.cl_pos in
+		let cg = mk_class mg (pack,name) c.cl_pos null_pos in
 		mg.m_types <- [TClassDecl cg];
 		Hashtbl.add ctx.g.modules mg.m_path mg;
 		add_dependency mg m;

@@ -887,6 +887,7 @@ let rec type_module_type ctx t tparams p =
 			t_module = c.cl_module;
 			t_doc = None;
 			t_pos = c.cl_pos;
+			t_name_pos = null_pos;
 			t_type = TAnon {
 				a_fields = c.cl_statics;
 				a_status = ref (Statics c);
@@ -921,6 +922,7 @@ let rec type_module_type ctx t tparams p =
 			t_module = a.a_module;
 			t_doc = None;
 			t_pos = a.a_pos;
+			t_name_pos = null_pos;
 			t_type = TAnon {
 				a_fields = PMap.empty;
 				a_status = ref (AbstractStatics a);
@@ -1081,7 +1083,7 @@ let rec acc_get ctx g p =
 						in
 						loop c.cl_module.m_types
 					with Not_found ->
-						let c2 = mk_class c.cl_module mpath c.cl_pos in
+						let c2 = mk_class c.cl_module mpath c.cl_pos null_pos in
 						c.cl_module.m_types <- (TClassDecl c2) :: c.cl_module.m_types;
 						c2
 				in
@@ -1371,7 +1373,7 @@ let rec type_ident_raise ctx i p mode =
 					| MGet -> error "Cannot create closure on inline closure" p
 					| MCall ->
 						(* create a fake class with a fake field to emulate inlining *)
-						let c = mk_class ctx.m.curmod (["local"],v.v_name) e.epos in
+						let c = mk_class ctx.m.curmod (["local"],v.v_name) e.epos null_pos in
 						let cf = { (mk_field v.v_name v.v_type e.epos) with cf_params = params; cf_expr = Some e; cf_kind = Method MethInline } in
 						c.cl_extern <- true;
 						c.cl_fields <- PMap.add cf.cf_name cf PMap.empty;

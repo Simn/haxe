@@ -656,8 +656,8 @@ module Statistics = struct
 		List.iter (function
 			| TClassDecl c ->
 				declare (if c.cl_interface then SKInterface else SKClass) c.cl_pos;
-				List.iter (fun (c',_,p) -> add_relation c'.cl_pos ((if c.cl_interface then Extended else Implemented),p)) c.cl_implements;
-				(match c.cl_super with None -> () | Some (c',_,p) -> add_relation c'.cl_pos (Extended,p));
+				List.iter (fun (c',_,_) -> add_relation c'.cl_pos ((if c.cl_interface then Extended else Implemented),c.cl_name_pos)) c.cl_implements;
+				(match c.cl_super with None -> () | Some (c',_,_) -> add_relation c'.cl_pos (Extended,c.cl_name_pos));
 				collect_overrides c;
 				let field cf =
 					declare SKField cf.cf_pos;

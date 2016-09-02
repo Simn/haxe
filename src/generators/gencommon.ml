@@ -607,7 +607,7 @@ let new_ctx con =
 	let cl_dyn = match get_type con.types ([], "Dynamic") with
 		| TClassDecl c -> c
 		| TAbstractDecl a ->
-				mk_class a.a_module ([], "Dynamic") a.a_pos
+				mk_class a.a_module ([], "Dynamic") a.a_pos null_pos
 		| _ -> assert false
 	in
 
@@ -1162,7 +1162,7 @@ let mk_class_field name t public pos kind params =
 (* This is so we can use class parameters on function parameters, without running the risk of name clash *)
 (* between both *)
 let map_param cl =
-	let ret = mk_class cl.cl_module (fst cl.cl_path, snd cl.cl_path ^ "_c") cl.cl_pos in
+	let ret = mk_class cl.cl_module (fst cl.cl_path, snd cl.cl_path ^ "_c") cl.cl_pos null_pos in
 	ret.cl_implements <- cl.cl_implements;
 	ret.cl_kind <- cl.cl_kind;
 	ret
@@ -1171,7 +1171,7 @@ let get_cl_t t =
 	match follow t with | TInst (cl,_) -> cl | _ -> assert false
 
 let mk_class m path pos =
-	let cl = Type.mk_class m path pos in
+	let cl = Type.mk_class m path pos null_pos in
 	cl.cl_meta <- [ Meta.CompilerGenerated, [], Ast.null_pos ];
 	cl
 
