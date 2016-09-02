@@ -4345,7 +4345,7 @@ let rec decode_expr v =
 		| 2, [op;e1;e2] ->
 			EBinop (decode_op op, loop e1, loop e2)
 		| 3, [e;f] ->
-			EField (loop e, decode_placed_name (field f "name_pos") (field f "name"))
+			EField (loop e, (dec_string f,null_pos)) (* TODO: hmm... *)
 		| 4, [e] ->
 			EParenthesis (loop e)
 		| 5, [a] ->
