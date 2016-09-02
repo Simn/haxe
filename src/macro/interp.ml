@@ -2171,13 +2171,13 @@ let z_lib =
 (* convert float value to haxe expression, handling inf/-inf/nan *)
 let haxe_float f p =
 	let std = (Ast.EConst (Ast.Ident "std"), p) in
-	let math = (Ast.EField (std, "Math"), p) in
+	let math = (Ast.EField (std, ("Math",p)), p) in
 	if (f = infinity) then
-		(Ast.EField (math, "POSITIVE_INFINITY"), p)
+		(Ast.EField (math, ("POSITIVE_INFINITY",p)), p)
 	else if (f = neg_infinity) then
-		(Ast.EField (math, "NEGATIVE_INFINITY"), p)
+		(Ast.EField (math, ("NEGATIVE_INFINITY",p)), p)
 	else if (f <> f) then
-		(Ast.EField (math, "NaN"), p)
+		(Ast.EField (math, ("NaN",p)), p)
 	else
 		(Ast.EConst (Ast.Float (float_repres f)), p)
 
@@ -2313,7 +2313,7 @@ let macro_lib =
 					let rec loop = function
 						| [] -> assert false
 						| [name] -> (Ast.EConst (Ast.Ident name),p)
-						| name :: l -> (Ast.EField (loop l,name),p)
+						| name :: l -> (Ast.EField (loop l,(name,p)),p)
 					in
 					let t = t_infos t in
 					loop (List.rev (if t.mt_module.m_path = t.mt_path then fst t.mt_path @ [snd t.mt_path] else fst t.mt_module.m_path @ [snd t.mt_module.m_path;snd t.mt_path]))
@@ -2350,7 +2350,7 @@ let macro_lib =
 							| Some (VObject en), _, _, _ ->
 								(match get_field en h_et, get_field o h_tag with
 								| VAbstract (ATDecl t), VString tag ->
-									let e = (Ast.EField (make_path t,tag),p) in
+									let e = (Ast.EField (make_path t,(tag,p)),p) in
 									(match get_field_opt o h_args with
 									| Some (VArray args) ->
 										let args = List.map loop (Array.to_list args) in
@@ -4037,7 +4037,7 @@ and encode_expr e =
 			| EBinop (op,e1,e2) ->
 				2, [encode_binop op;loop e1;loop e2]
 			| EField (e,f) ->
-				3, [loop e;enc_string f]
+				3, [loop e;encode_placed_name f]
 			| EParenthesis e ->
 				4, [loop e]
 			| EObjectDecl fl ->
@@ -4345,7 +4345,7 @@ let rec decode_expr v =
 		| 2, [op;e1;e2] ->
 			EBinop (decode_op op, loop e1, loop e2)
 		| 3, [e;f] ->
-			EField (loop e, dec_string f)
+			EField (loop e, decode_placed_name (field f "name_pos") (field f "name"))
 		| 4, [e] ->
 			EParenthesis (loop e)
 		| 5, [a] ->
@@ -4409,7 +4409,7 @@ let rec decode_expr v =
 		| 29, [m;e] ->
 			EMeta (decode_meta_entry m,loop e)
 		| 30, [e;f] ->
-			EField (loop e, dec_string f) (*** deprecated EType, keep until haxe 3 **)
+			EField (loop e, (dec_string f,null_pos)) (*** deprecated EType, keep until haxe 3 **)
 		| _ ->
 			raise Invalid_expr
 	in

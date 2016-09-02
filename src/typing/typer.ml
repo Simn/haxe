@@ -256,7 +256,7 @@ let rec can_access ctx ?(in_overload=false) c cf stat =
 	in
 	let rec expr_path acc e =
 		match fst e with
-		| EField (e,f) -> expr_path (f :: acc) e
+		| EField (e,(f,_)) -> expr_path (f :: acc) e
 		| EConst (Ident n) -> n :: acc
 		| _ -> []
 	in
@@ -2057,7 +2057,7 @@ let rec type_binop ctx op e1 e2 is_assign_op with_type p =
 			let l = save_locals ctx in
 			let v = gen_local ctx e.etype e.epos in
 			let ev = mk (TLocal v) e.etype p in
-			let get = type_binop ctx op (EField ((EConst (Ident v.v_name),p),cf.cf_name),p) e2 true with_type p in
+			let get = type_binop ctx op (EField ((EConst (Ident v.v_name),p),(cf.cf_name,p)),p) e2 true with_type p in
 			let e' = match get.eexpr with
 				| TBinop _ | TMeta((Meta.RequiresAssign,_,_),_) ->
 					unify ctx get.etype t p;
@@ -2086,7 +2086,7 @@ let rec type_binop ctx op e1 e2 is_assign_op with_type p =
 			let ev = mk (TLocal v) ta p in
 			(* this relies on the fact that cf_name is set_name *)
 			let getter_name = String.sub cf.cf_name 4 (String.length cf.cf_name - 4) in
-			let get = type_binop ctx op (EField ((EConst (Ident v.v_name),p),getter_name),p) e2 true with_type p in
+			let get = type_binop ctx op (EField ((EConst (Ident v.v_name),p),(getter_name,p)),p) e2 true with_type p in
 			unify ctx get.etype ret p;
 			l();
 			let e_call = make_call ctx ef [ev;get] ret p in
@@ -2560,7 +2560,7 @@ and type_unop ctx op flag e p =
 			let ev = mk (TLocal v) e.etype p in
 			let op = (match op with Increment -> OpAdd | Decrement -> OpSub | _ -> assert false) in
 			let one = (EConst (Int "1"),p) in
-			let eget = (EField ((EConst (Ident v.v_name),p),cf.cf_name),p) in
+			let eget = (EField ((EConst (Ident v.v_name),p),(cf.cf_name,p)),p) in
 			match flag with
 			| Prefix ->
 				let get = type_binop ctx op eget one false Value p in
@@ -2793,7 +2793,7 @@ and handle_efield ctx e p mode =
 	let rec loop acc e =
 		let p = pos e in
 		match fst e with
-		| EField (e,s) ->
+		| EField (e,(s,_)) ->
 			loop ((s,not (is_lower_ident s),p) :: acc) e
 		| EConst (Ident i) ->
 			type_path ((i,not (is_lower_ident i),p) :: acc)
@@ -2806,7 +2806,7 @@ and type_access ctx e p mode =
 	match e with
 	| EConst (Ident s) ->
 		type_ident ctx s p mode
-	| EField (e1,"new") ->
+	| EField (e1,("new",_)) ->
 		let e1 = type_expr ctx e1 Value in
 		begin match e1.eexpr with
 			| TTypeExpr (TClassDecl c) ->
@@ -3515,10 +3515,10 @@ and type_array_decl ctx el with_type p =
 
 and type_expr ctx (e,p) (with_type:with_type) =
 	match e with
-	| EField ((EConst (String s),p),"code") ->
+	| EField ((EConst (String s),p),("code",_)) ->
 		if UTF8.length s <> 1 then error "String must be a single UTF8 char" p;
 		mk (TConst (TInt (Int32.of_int (UChar.code (UTF8.get s 0))))) ctx.t.tint p
-	| EField(_,n) when n.[0] = '$' ->
+	| EField(_,(n,_)) when n.[0] = '$' ->
 		error "Field names starting with $ are not allowed" p
 	| EConst (Ident s) ->
 		if s = "super" && with_type <> NoValue && not ctx.in_display then error "Cannot use super as value" p;
@@ -3562,10 +3562,10 @@ and type_expr ctx (e,p) (with_type:with_type) =
 			| EParenthesis e2 -> (EParenthesis (map_compr e2),p)
 			| EBinop(OpArrow,a,b) ->
 				et := (ENew(({tpackage=[];tname="Map";tparams=[];tsub=None},null_pos),[]),p);
-				(ECall ((EField ((EConst (Ident v.v_name),p),"set"),p),[a;b]),p)
+				(ECall ((EField ((EConst (Ident v.v_name),p),("set",p)),p),[a;b]),p)
 			| _ ->
 				et := (EArrayDecl [],p);
-				(ECall ((EField ((EConst (Ident v.v_name),p),"push"),p),[(e,p)]),p)
+				(ECall ((EField ((EConst (Ident v.v_name),p),("push",p)),p),[(e,p)]),p)
 		in
 		let e = map_compr e in
 		let ea = type_expr ctx !et with_type in
@@ -4209,7 +4209,7 @@ and type_call ctx e el (with_type:with_type) p =
 			let v_trace = alloc_unbound_var "`trace" t_dynamic p in
 			mk (TCall (mk (TLocal v_trace) t_dynamic p,[e;infos])) ctx.t.tvoid p
 		else
-			type_expr ctx (ECall ((EField ((EField ((EConst (Ident "haxe"),p),"Log"),p),"trace"),p),[mk_to_string_meta e;infos]),p) NoValue
+			type_expr ctx (ECall ((EField ((EField ((EConst (Ident "haxe"),p),("Log",p)),p),("trace",p)),p),[mk_to_string_meta e;infos]),p) NoValue
 	| (EConst(Ident "callback"),p1),args ->
 		let ecb = try Some (type_ident_raise ctx "callback" p1 MCall) with Not_found -> None in
 		(match ecb with
@@ -4221,7 +4221,7 @@ and type_call ctx e el (with_type:with_type) p =
 			type_bind ctx e args p)
 	| (EField ((EConst (Ident "super"),_),_),_), _ ->
 		def()
-	| (EField (e,"bind"),p), args ->
+	| (EField (e,("bind",_)),p), args ->
 		let e = type_expr ctx e Value in
 		(match follow e.etype with
 			| TFun _ -> type_bind ctx e args p
@@ -4230,7 +4230,7 @@ and type_call ctx e el (with_type:with_type) p =
 		let e = type_expr ctx e Value in
 		ctx.com.warning (s_type (print_context()) e.etype) e.epos;
 		e
-	| (EField(e,"match"),p), [epat] ->
+	| (EField(e,("match",_)),p), [epat] ->
 		let et = type_expr ctx e Value in
 		(match follow et.etype with
 			| TEnum _ ->
@@ -5261,7 +5261,7 @@ let call_init_macro ctx e =
 	| ECall (e,args) ->
 		let rec loop e =
 			match fst e with
-			| EField (e,f) -> f :: loop e
+			| EField (e,(f,_)) -> f :: loop e
 			| EConst (Ident i) -> [i]
 			| _ -> error "Invalid macro call" p
 		in

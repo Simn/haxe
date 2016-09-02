@@ -2497,7 +2497,7 @@ module TExprToExpr = struct
 		| TLocal v -> EConst (mk_ident v.v_name)
 		| TArray (e1,e2) -> EArray (convert_expr e1,convert_expr e2)
 		| TBinop (op,e1,e2) -> EBinop (op, convert_expr e1, convert_expr e2)
-		| TField (e,f) -> EField (convert_expr e, field_name f)
+		| TField (e,f) -> EField (convert_expr e, (field_name f,null_pos)) (* TODO once TField has been changed *)
 		| TTypeExpr t -> fst (mk_path (full_type_path t) e.epos)
 		| TParenthesis e -> EParenthesis (convert_expr e)
 		| TObjectDecl fl -> EObjectDecl (List.map (fun (f,e) -> f, convert_expr e) fl)

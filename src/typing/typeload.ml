@@ -1120,15 +1120,15 @@ let get_native_repr md pos =
 		| hd :: tl ->
 			let rec loop pack expr = match pack with
 				| hd :: tl ->
-					loop tl (EField(expr,hd),pos)
+					loop tl (EField(expr,(hd,null_pos)),pos)
 				| [] ->
-					(EField(expr,name),pos)
+					(EField(expr,(name,null_pos)),pos)
 			in
 			loop tl (EConst(Ident(hd)),pos)
 
 let rec process_meta_argument ?(toplevel=true) ctx expr = match expr.eexpr with
 	| TField(e,f) ->
-		(EField(process_meta_argument ~toplevel:false ctx e,field_name f),expr.epos)
+		(EField(process_meta_argument ~toplevel:false ctx e,(field_name f,null_pos)),expr.epos) (* TODO EFIELDTFIELD *)
 	| TConst(TInt i) ->
 		(EConst(Int (Int32.to_string i)), expr.epos)
 	| TConst(TFloat f) ->
@@ -1146,7 +1146,7 @@ let rec process_meta_argument ?(toplevel=true) ctx expr = match expr.eexpr with
 		if ctx.com.platform = Cs then
 			(ECall( (EConst(Ident "typeof"), p), [get_native_repr md expr.epos] ), p)
 		else
-			(EField(get_native_repr md expr.epos, "class"), p)
+			(EField(get_native_repr md expr.epos, ("class",null_pos)), p)
 	| TTypeExpr md ->
 		get_native_repr md expr.epos
 	| _ ->
@@ -1164,13 +1164,13 @@ let make_meta ctx texpr extra =
 
 let field_to_type_path ctx e =
 	let rec loop e pack name = match e with
-		| EField(e,f),p when Char.lowercase (String.get f 0) <> String.get f 0 -> (match name with
+		| EField(e,(f,_)),p when Char.lowercase (String.get f 0) <> String.get f 0 -> (match name with
 			| [] | _ :: [] ->
 				loop e pack (f :: name)
 			| _ -> (* too many name paths *)
 				display_error ctx ("Unexpected " ^ f) p;
 				raise Exit)
-		| EField(e,f),_ ->
+		| EField(e,(f,_)),_ ->
 			loop e (f :: pack) name
 		| EConst(Ident f),_ ->
 			let pack, name, sub = match name with
@@ -1199,7 +1199,7 @@ let field_to_type_path ctx e =
 let handle_fields ctx fields_to_check with_type_expr =
 	List.map (fun (name,expr) ->
 		let pos = snd expr in
-		let field = (EField(with_type_expr,name), pos) in
+		let field = (EField(with_type_expr,(name,null_pos)), pos) in
 		let fieldexpr = (EConst(Ident name),pos) in
 		let left_side = match ctx.com.platform with
 			| Cs -> field
@@ -3703,8 +3703,8 @@ let extend_remoting ctx c t p async prot =
 			let id = if prot then id else ECall ((EConst (Ident "__unprotect__"),p),[id]),p in
 			let expr = ECall (
 				(EField (
-					(ECall ((EField ((EConst (Ident "__cnx"),p),"resolve"),p),[id]),p),
-					"call")
+					(ECall ((EField ((EConst (Ident "__cnx"),p),("resolve",null_pos)),p),[id]),p),
+					("call",null_pos))
 				,p),eargs),p
 			in
 			let expr = if async || ftype = None then expr else (EReturn (Some expr),p) in
@@ -4094,7 +4094,7 @@ let extend_xml_proxy ctx c t file p =
 let get_macro_path ctx e args p =
 	let rec loop e =
 		match fst e with
-		| EField (e,f) -> f :: loop e
+		| EField (e,(f,_)) -> f :: loop e
 		| EConst (Ident i) -> [i]
 		| _ -> error "Invalid macro call" p
 	in

@@ -155,7 +155,7 @@ let rec make_meta name params ((v,p2) as e) p1 =
 	| _ -> EMeta((name,params,p1),e),punion p1 p2
 
 let make_is e (t,_) p =
-	let e_is = EField((EConst(Ident "Std"),p),"is"),p in
+	let e_is = EField((EConst(Ident "Std"),p),("is",p)),p in
 	let e2 = expr_of_type_path (t.tpackage,t.tname) p in
 	ECall(e_is,[e;e2]),p
 
@@ -248,9 +248,9 @@ let reify in_macro =
 				   type parameters. *)
 				let ea = to_array to_tparam t.tparams p in
 				let fields = [
-					("pack", (EField(ei,"pack"),p));
-					("name", (EField(ei,"name"),p));
-					("sub", (EField(ei,"sub"),p));
+					("pack", (EField(ei,("pack",p)),p));
+					("name", (EField(ei,("name",p)),p));
+					("sub", (EField(ei,("sub",p)),p));
 					("params", ea);
 				] in
 				to_obj fields p
@@ -372,7 +372,7 @@ let reify in_macro =
 			expr "EArray" [loop e1;loop e2]
 		| EBinop (op,e1,e2) ->
 			expr "EBinop" [to_binop op p; loop e1; loop e2]
-		| EField (e,s) ->
+		| EField (e,(s,_)) ->
 			expr "EField" [loop e; to_string s p]
 		| EParenthesis e ->
 			expr "EParenthesis" [loop e]
@@ -472,12 +472,12 @@ let reify in_macro =
 				| EParenthesis (ECheckType (e2, (CTPath{tname="String";tpackage=[]},_)),_) -> expr "EConst" [mk_enum "Constant" "CString" [e2] (pos e2)]
 				| EParenthesis (ECheckType (e2, (CTPath{tname="Int";tpackage=[]},_)),_) -> expr "EConst" [mk_enum "Constant" "CInt" [e2] (pos e2)]
 				| EParenthesis (ECheckType (e2, (CTPath{tname="Float";tpackage=[]},_)),_) -> expr "EConst" [mk_enum "Constant" "CFloat" [e2] (pos e2)]
-				| _ -> (ECall ((EField ((EField ((EField ((EConst (Ident "haxe"),p),"macro"),p),"Context"),p),"makeExpr"),p),[e; to_pos (pos e)]),p)
+				| _ -> (ECall ((EField ((EField ((EField ((EConst (Ident "haxe"),p),("macro",p)),p),("Context",p)),p),("makeExpr",p)),p),[e; to_pos (pos e)]),p)
 				end
 			| Meta.Dollar "i", _ ->
 				expr "EConst" [mk_enum "Constant" "CIdent" [e1] (pos e1)]
 			| Meta.Dollar "p", _ ->
-				(ECall ((EField ((EField ((EField ((EConst (Ident "haxe"),p),"macro"),p),"MacroStringTools"),p),"toFieldExpr"),p),[e]),p)
+				(ECall ((EField ((EField ((EField ((EConst (Ident "haxe"),p),("macro",p)),p),("MacroStringTools",p)),p),("toFieldExpr",p)),p),[e]),p)
 			| Meta.Custom ":pos", [pexpr] ->
 				let old = !cur_pos in
 				cur_pos := Some pexpr;
@@ -1362,11 +1362,11 @@ and expr_next e1 = parser
 	| [< '(Dot,p); s >] ->
 		if is_resuming p then display (EDisplay (e1,false),p);
 		(match s with parser
-		| [< '(Kwd Macro,p2) when p.pmax = p2.pmin; s >] -> expr_next (EField (e1,"macro") , punion (pos e1) p2) s
-		| [< '(Kwd Extern,p2) when p.pmax = p2.pmin; s >] -> expr_next (EField (e1,"extern") , punion (pos e1) p2) s
-		| [< '(Kwd New,p2) when p.pmax = p2.pmin; s >] -> expr_next (EField (e1,"new") , punion (pos e1) p2) s
-		| [< '(Const (Ident f),p2) when p.pmax = p2.pmin; s >] -> expr_next (EField (e1,f) , punion (pos e1) p2) s
-		| [< '(Dollar v,p2); s >] -> expr_next (EField (e1,"$"^v) , punion (pos e1) p2) s
+		| [< '(Kwd Macro,p2) when p.pmax = p2.pmin; s >] -> expr_next (EField (e1,("macro",p2)) , punion (pos e1) p2) s
+		| [< '(Kwd Extern,p2) when p.pmax = p2.pmin; s >] -> expr_next (EField (e1,("extern",p2)) , punion (pos e1) p2) s
+		| [< '(Kwd New,p2) when p.pmax = p2.pmin; s >] -> expr_next (EField (e1,("new",p2)) , punion (pos e1) p2) s
+		| [< '(Const (Ident f),p2) when p.pmax = p2.pmin; s >] -> expr_next (EField (e1,(f,p2)) , punion (pos e1) p2) s
+		| [< '(Dollar v,p2); s >] -> expr_next (EField (e1,("$"^v,p2)) , punion (pos e1) p2) s
 		| [< '(Binop OpOr,p2) when do_resume() >] ->
 			set_resume p;
 			display (EDisplay (e1,false),p) (* help for debug display mode *)

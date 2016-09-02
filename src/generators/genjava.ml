@@ -1602,7 +1602,7 @@ let configure gen =
 	let rec gen_fpart_attrib w = function
 		| EConst( Ident i ), _ ->
 			write w i
-		| EField( ef, f ), _ ->
+		| EField( ef, (f,_) ), _ ->
 			gen_fpart_attrib w ef;
 			write w ".";
 			write w f
@@ -1619,7 +1619,7 @@ let configure gen =
 				write w (escape s);
 				write w "\""
 			| _ -> gen.gcon.error "Invalid expression inside @:meta metadata" p)
-		| EField( ef, f ), _ ->
+		| EField( ef, (f,_) ), _ ->
 			gen_spart w ef;
 			write w ".";
 			write w f

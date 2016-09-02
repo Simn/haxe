@@ -353,7 +353,7 @@ and expr_def =
 	| EConst of constant
 	| EArray of expr * expr
 	| EBinop of binop * expr * expr
-	| EField of expr * string
+	| EField of expr * placed_name
 	| EParenthesis of expr
 	| EObjectDecl of (string * expr) list
 	| EArrayDecl of expr list
@@ -806,7 +806,7 @@ let s_expr e =
 		| EConst c -> s_constant c
 		| EArray (e1,e2) -> s_expr_inner tabs e1 ^ "[" ^ s_expr_inner tabs e2 ^ "]"
 		| EBinop (op,e1,e2) -> s_expr_inner tabs e1 ^ " " ^ s_binop op ^ " " ^ s_expr_inner tabs e2
-		| EField (e,f) -> s_expr_inner tabs e ^ "." ^ f
+		| EField (e,(f,_)) -> s_expr_inner tabs e ^ "." ^ f
 		| EParenthesis e -> "(" ^ (s_expr_inner tabs e) ^ ")"
 		| EObjectDecl fl -> "{ " ^ (String.concat ", " (List.map (fun (n,e) -> n ^ " : " ^ (s_expr_inner tabs e)) fl)) ^ " }"
 		| EArrayDecl el -> "[" ^ s_expr_list tabs el ", " ^ "]"
@@ -929,7 +929,7 @@ let get_value_meta meta =
 let rec string_list_of_expr_path_raise (e,p) =
 	match e with
 	| EConst (Ident i) -> [i]
-	| EField (e,f) -> f :: string_list_of_expr_path_raise e
+	| EField (e,(f,_)) -> f :: string_list_of_expr_path_raise e
 	| _ -> raise Exit
 
 let expr_of_type_path (sl,s) p =
@@ -937,8 +937,8 @@ let expr_of_type_path (sl,s) p =
 	| [] -> (EConst(Ident s),p)
 	| s1 :: sl ->
 		let e1 = (EConst(Ident s1),p) in
-		let e = List.fold_left (fun e s -> (EField(e,s),p)) e1 sl in
-		EField(e,s),p
+		let e = List.fold_left (fun e s -> (EField(e,(s,p)),p)) e1 sl in
+		EField(e,(s,p)),p
 
 let match_path recursive sl sl_pattern =
 	let rec loop sl1 sl2 = match sl1,sl2 with
