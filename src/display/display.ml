@@ -606,7 +606,7 @@ module Statistics = struct
 		let collect_overrides c =
 			List.iter (fun cf ->
 				let rec loop c = match c.cl_super with
-					| Some (c,_) ->
+					| Some (c,_,_) ->
 						begin try
 							let cf' = PMap.find cf.cf_name c.cl_fields in
 							add_relation cf'.cf_pos (Overridden,cf.cf_pos)
@@ -622,7 +622,7 @@ module Statistics = struct
 		let rec find_real_constructor c = match c.cl_constructor,c.cl_super with
 			(* The pos comparison might be a bit week, not sure... *)
 			| Some cf,_ when not (Meta.has Meta.CompilerGenerated cf.cf_meta) && c.cl_pos <> cf.cf_pos -> cf
-			| _,Some(c,_) -> find_real_constructor c
+			| _,Some(c,_,_) -> find_real_constructor c
 			| _,None -> raise Not_found
 		in
 		let collect_references c e =
@@ -644,7 +644,7 @@ module Statistics = struct
 				| TCall({eexpr = TConst TSuper},el) ->
 					List.iter loop el;
 					begin match c.cl_super with
-						| Some(c,_) -> (try add_relation (find_real_constructor c).cf_pos (Referenced,e.epos) with Not_found -> ())
+						| Some(c,_,_) -> (try add_relation (find_real_constructor c).cf_pos (Referenced,e.epos) with Not_found -> ())
 						| None -> ()
 					end
 
@@ -656,8 +656,8 @@ module Statistics = struct
 		List.iter (function
 			| TClassDecl c ->
 				declare (if c.cl_interface then SKInterface else SKClass) c.cl_pos;
-				List.iter (fun (c',_) -> add_relation c'.cl_pos ((if c.cl_interface then Extended else Implemented),c.cl_pos)) c.cl_implements;
-				(match c.cl_super with None -> () | Some (c',_) -> add_relation c'.cl_pos (Extended,c.cl_pos));
+				List.iter (fun (c',_,p) -> add_relation c'.cl_pos ((if c.cl_interface then Extended else Implemented),p)) c.cl_implements;
+				(match c.cl_super with None -> () | Some (c',_,p) -> add_relation c'.cl_pos (Extended,p));
 				collect_overrides c;
 				let field cf =
 					declare SKField cf.cf_pos;

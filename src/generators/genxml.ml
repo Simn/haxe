@@ -198,14 +198,14 @@ let gen_type_params ipos priv path params pos m =
 	let file = (if ipos && pos <> null_pos then [("file",pos.pfile)] else []) in
 	gen_path path priv :: ("params", String.concat ":" (List.map fst params)) :: (file @ mpriv @ mpath)
 
-let gen_class_path name (c,pl) =
+let gen_class_path name (c,pl,_) =
 	node name [("path",s_type_path (tpath (TClassDecl c)))] (List.map gen_type pl)
 
 let rec exists f c =
 	PMap.exists f.cf_name c.cl_fields ||
 			match c.cl_super with
 			| None -> false
-			| Some (csup,_) -> exists f csup
+			| Some (csup,_,_) -> exists f csup
 
 let rec gen_type_decl com pos t =
 	let m = (t_infos t).mt_module in
@@ -220,7 +220,7 @@ let rec gen_type_decl com pos t =
 		) c.cl_ordered_fields in
 		let fields = (match c.cl_super with
 			| None -> List.map (fun f -> f,[]) fields
-			| Some (csup,_) -> List.map (fun f -> if exists f csup then (f,["override","1"]) else (f,[])) fields
+			| Some (csup,_,_) -> List.map (fun f -> if exists f csup then (f,["override","1"]) else (f,[])) fields
 		) in
 		let fields = List.map (fun (f,att) -> gen_field att f) fields in
 		let constr = (match c.cl_constructor with None -> [] | Some f -> [gen_field [] f]) in
@@ -485,9 +485,9 @@ let generate_type com t =
 		p "extern %s %s" (if c.cl_interface then "interface" else "class") (stype (TInst (c,List.map snd c.cl_params)));
 		let ext = (match c.cl_super with
 		| None -> []
-		| Some (c,pl) -> [" extends " ^ stype (TInst (c,pl))]
+		| Some (c,pl,_) -> [" extends " ^ stype (TInst (c,pl))]
 		) in
-		let ext = List.fold_left (fun acc (i,pl) -> ((if c.cl_interface then " extends " else " implements ") ^ stype (TInst (i,pl))) :: acc) ext c.cl_implements in
+		let ext = List.fold_left (fun acc (i,pl,_) -> ((if c.cl_interface then " extends " else " implements ") ^ stype (TInst (i,pl))) :: acc) ext c.cl_implements in
 		let ext = (match c.cl_dynamic with
 			| None -> ext
 			| Some t ->

@@ -554,7 +554,7 @@ and load_complex_type ctx allow_display p (t,pn) =
 					) a.a_fields;
 					(* do NOT tag as extern - for protect *)
 					c2.cl_kind <- KExtension (c,tl);
-					c2.cl_super <- Some (c,tl);
+					c2.cl_super <- Some (c,tl,null_pos);
 					c2.cl_fields <- a.a_fields;
 					TInst (c2,[])
 				| TMono _ ->
@@ -905,12 +905,12 @@ let rec get_overloads c i =
 	in
 	let rsup = match c.cl_super with
 	| None when c.cl_interface ->
-			let ifaces = List.concat (List.map (fun (c,tl) ->
+			let ifaces = List.concat (List.map (fun (c,tl,_) ->
 				List.map (fun (t,f) -> apply_params c.cl_params tl t, f) (get_overloads c i)
 			) c.cl_implements) in
 			ret @ ifaces
 	| None -> ret
-	| Some (c,tl) ->
+	| Some (c,tl,_) ->
 			ret @ ( List.map (fun (t,f) -> apply_params c.cl_params tl t, f) (get_overloads c i) )
 	in
 	ret @ (List.filter (fun (t,f) -> not (List.exists (fun (t2,f2) -> same_overload_args t t2 f f2) ret)) rsup)
@@ -935,7 +935,7 @@ let check_overriding ctx c =
 		| i :: _ ->
 			display_error ctx ("Field " ^ i.cf_name ^ " is declared 'override' but doesn't override any field") i.cf_pos)
 	| _ when c.cl_extern && Meta.has Meta.CsNative c.cl_meta -> () (* -net-lib specific: do not check overrides on extern CsNative classes *)
-	| Some (csup,params) ->
+	| Some (csup,params,po) ->
 		PMap.iter (fun i f ->
 			let p = f.cf_pos in
 			let check_field f get_super_field is_overload = try
@@ -1010,7 +1010,7 @@ let class_field_no_interf c i =
 		match c.cl_super with
 		| None ->
 			raise Not_found
-		| Some (c,tl) ->
+		| Some (c,tl,_) ->
 			(* rec over class_field *)
 			let _, t , f = raw_class_field (fun f -> f.cf_type) c tl i in
 			apply_params c.cl_params tl t , f
@@ -1264,7 +1264,7 @@ let check_strict_meta ctx metas =
 
 let add_constructor ctx c force_constructor p =
 	match c.cl_constructor, c.cl_super with
-	| None, Some ({ cl_constructor = Some cfsup } as csup,cparams) when not c.cl_extern ->
+	| None, Some ({ cl_constructor = Some cfsup } as csup,cparams,_) when not c.cl_extern ->
 		let cf = {
 			cfsup with
 			cf_pos = p;
@@ -1438,7 +1438,7 @@ module Inheritance = struct
 				| Not_found -> ()
 		in
 		PMap.iter check_field intf.cl_fields;
-		List.iter (fun (i2,p2) ->
+		List.iter (fun (i2,p2,_) ->
 			check_interface ctx c i2 (List.map (apply_params intf.cl_params params) p2)
 		) intf.cl_implements
 
@@ -1447,7 +1447,7 @@ module Inheritance = struct
 		| "Proxy" :: _ , _ -> ()
 		| _ when c.cl_extern && Meta.has Meta.CsNative c.cl_meta -> ()
 		| _ ->
-		List.iter (fun (intf,params) -> check_interface ctx c intf params) c.cl_implements
+		List.iter (fun (intf,params,_) -> check_interface ctx c intf params) c.cl_implements
 
 	let set_heritance ctx c herits p =
 		let is_lib = Meta.has Meta.LibType c.cl_meta in
@@ -1499,21 +1499,21 @@ module Inheritance = struct
 		) herits in
 		let herits = List.filter (ctx.g.do_inherit ctx c p) herits in
 		(* Pass 1: Check and set relations *)
-		let fl = List.map (fun (is_extends,t) ->
-			let t = load_instance ~allow_display:true ctx t false p in
+		let fl = List.map (fun (is_extends,(t,p)) ->
+			let t = load_instance ~allow_display:true ctx (t,p) false p in
 			if is_extends then begin
 				if c.cl_super <> None then error "Cannot extend several classes" p;
 				let csup,params = check_extends ctx c t p in
 				if c.cl_interface then begin
 					if not csup.cl_interface then error "Cannot extend by using a class" p;
-					c.cl_implements <- (csup,params) :: c.cl_implements;
+					c.cl_implements <- (csup,params,p) :: c.cl_implements;
 					if not !has_interf then begin
 						if not is_lib then delay ctx PForce (fun() -> check_interfaces ctx c);
 						has_interf := true;
 					end
 				end else begin
 					if csup.cl_interface then error "Cannot extend by using an interface" p;
-					c.cl_super <- Some (csup,params)
+					c.cl_super <- Some (csup,params,p)
 				end;
 				(fun () ->
 					check_cancel_build csup;
@@ -1528,7 +1528,7 @@ module Inheritance = struct
 					if is_parent c intf then error "Recursive class" p;
 					if c.cl_interface then error "Interfaces cannot implement another interface (use extends instead)" p;
 					if not intf.cl_interface then error "You can only implement an interface" p;
-					c.cl_implements <- (intf, params) :: c.cl_implements;
+					c.cl_implements <- (intf, params,p) :: c.cl_implements;
 					if not !has_interf && not is_lib && not (Meta.has (Meta.Custom "$do_not_check_interf") c.cl_meta) then begin
 						delay ctx PForce (fun() -> check_interfaces ctx c);
 						has_interf := true;
@@ -1661,7 +1661,7 @@ let type_function ctx args ret fmode f do_display p =
 		match ctx.curclass.cl_super with
 		| None ->
 			None
-		| Some (csup,tl) ->
+		| Some (csup,tl,_) ->
 			try
 				let _,cf = get_constructor (fun f->f.cf_type) csup in
 				Some (Meta.has Meta.CompilerGenerated cf.cf_meta,TInst(csup,tl))
@@ -1985,7 +1985,7 @@ module ClassInitializer = struct
 			Meta.has Meta.PublicFields c.cl_meta ||
 			match c.cl_super with
 			| None -> false
-			| Some (c,_) -> extends_public c
+			| Some (c,_,_) -> extends_public c
 		in
 		let cctx = {
 			tclass = c;
@@ -2047,7 +2047,7 @@ module ClassInitializer = struct
 	let rec get_parent c name =
 		match c.cl_super with
 		| None -> None
-		| Some (csup,_) ->
+		| Some (csup,_,_) ->
 			try
 				Some (PMap.find name csup.cl_fields)
 			with
@@ -2151,9 +2151,9 @@ module ClassInitializer = struct
 		let p = cf.cf_pos in
 		let rec get_declared f = function
 			| None -> None
-			| Some (c,a) when PMap.exists f c.cl_fields ->
-				Some (c,a)
-			| Some (c,_) ->
+			| Some (c,a,p) when PMap.exists f c.cl_fields ->
+				Some (c,a,p)
+			| Some (c,_,_) ->
 				let ret = get_declared f c.cl_super in
 				match ret with
 					| Some r -> Some r
@@ -2168,7 +2168,7 @@ module ClassInitializer = struct
 		in
 		if not fctx.is_static && not cctx.is_lib then begin match get_declared cf.cf_name c.cl_super with
 				| None -> ()
-				| Some (csup,_) ->
+				| Some (csup,_,_) ->
 					(* this can happen on -net-lib generated classes if a combination of explicit interfaces and variables with the same name happens *)
 					if not (csup.cl_interface && Meta.has Meta.CsNative c.cl_meta) then
 						error ("Redefinition of variable " ^ cf.cf_name ^ " in subclass is not allowed. Previously declared at " ^ (Ast.s_type_path csup.cl_path) ) p
@@ -2741,7 +2741,7 @@ module ClassInitializer = struct
 		end;
 		let rec has_field f = function
 			| None -> false
-			| Some (c,_) ->
+			| Some (c,_,_) ->
 				PMap.exists f c.cl_fields || has_field f c.cl_super || List.exists (fun i -> has_field f (Some i)) c.cl_implements
 		in
 		let rec check_require = function
@@ -3728,7 +3728,7 @@ let extend_remoting ctx c t p async prot =
 		error ("Module " ^ s_type_path path ^ " does not define type " ^ t.tname) p
 	) in
 	match t with
-	| TClassDecl c2 when c2.cl_params = [] -> ignore(c2.cl_build()); c.cl_super <- Some (c2,[]);
+	| TClassDecl c2 when c2.cl_params = [] -> ignore(c2.cl_build()); c.cl_super <- Some (c2,[],null_pos);
 	| _ -> error "Remoting proxy must be a class without parameters" p
 
 (* -------------------------------------------------------------------------- *)
@@ -3968,7 +3968,7 @@ let rec build_generic ctx c p tl =
 		) c.cl_ordered_statics;
 		cg.cl_super <- (match c.cl_super with
 			| None -> None
-			| Some (cs,pl) ->
+			| Some (cs,pl,_) ->
 				let find_class subst =
 					let rec loop subst = match subst with
 						| (TInst(c,[]),t) :: subst when c == cs -> t
@@ -3998,9 +3998,9 @@ let rec build_generic ctx c p tl =
 				match cs.cl_kind with
 				| KGeneric ->
 					(match build_generic ctx cs p pl with
-					| TInst (cs,pl) -> Some (cs,pl)
+					| TInst (cs,pl) -> Some (cs,pl,null_pos)
 					| _ -> assert false)
-				| _ -> Some(cs,pl)
+				| _ -> Some(cs,pl,null_pos)
 		);
 		add_constructor ctx cg false p;
 		cg.cl_kind <- KGenericInstance (c,tl);
@@ -4013,9 +4013,9 @@ let rec build_generic ctx c p tl =
 			| None, None, None -> None
 			| _ -> error "Please define a constructor for this class in order to use it as generic" c.cl_pos
 		);
-		cg.cl_implements <- List.map (fun (i,tl) ->
+		cg.cl_implements <- List.map (fun (i,tl,p) ->
 			(match follow (generic_substitute_type gctx (TInst (i, List.map (generic_substitute_type gctx) tl))) with
-			| TInst (i,tl) -> i, tl
+			| TInst (i,tl) -> i, tl, p
 			| _ -> assert false)
 		) c.cl_implements;
 		cg.cl_ordered_fields <- List.map (fun f ->

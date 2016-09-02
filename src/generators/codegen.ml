@@ -120,7 +120,7 @@ let rec has_properties c =
 		| Var { v_write = AccCall } -> true
 		| _ when Meta.has Meta.Accessor f.cf_meta -> true
 		| _ -> false
-	) c.cl_ordered_fields || (match c.cl_super with Some (c,_) -> has_properties c | _ -> false)
+	) c.cl_ordered_fields || (match c.cl_super with Some (c,_,_) -> has_properties c | _ -> false)
 
 let get_properties fields =
 	List.fold_left (fun acc f ->
@@ -532,7 +532,7 @@ let detect_usage com =
 					Type.iter expr e;
 				| TCall({eexpr = TConst TSuper},_) ->
 					begin match c.cl_super with
-						| Some (c,_) ->
+						| Some (c,_,_) ->
 							check_constructor c e.epos
 						| _ ->
 							()
@@ -708,9 +708,9 @@ let rec find_field com c f =
 		(match c.cl_super with
 		| None ->
 			raise Not_found
-		| Some ( {cl_path = (["cpp"],"FastIterator")}, _ ) ->
+		| Some ( {cl_path = (["cpp"],"FastIterator")}, _, _ ) ->
 			raise Not_found (* This is a strongly typed 'extern' and the usual rules don't apply *)
-		| Some (c,_) ->
+		| Some (c,_,_) ->
 			find_field com c f)
 	with Not_found -> try
 		if com.platform = Cpp then (* Cpp uses delegation for interfaces *)
@@ -718,7 +718,7 @@ let rec find_field com c f =
 		let rec loop = function
 			| [] ->
 				raise Not_found
-			| (c,_) :: l ->
+			| (c,_,_) :: l ->
 				try
 					find_field com c f
 				with
@@ -959,8 +959,8 @@ module Dump = struct
 					List.iter (fun f -> print_field stat f) f.cf_overloads
 				in
 				print "%s%s%s%s %s%s" (s_metas c.cl_meta "") (if c.cl_private then "private " else "") (if c.cl_extern then "extern " else "") (if c.cl_interface then "interface" else "class") (s_type_path path) (params c.cl_params);
-				(match c.cl_super with None -> () | Some (c,pl) -> print " extends %s" (s_type (TInst (c,pl))));
-				List.iter (fun (c,pl) -> print " implements %s" (s_type (TInst (c,pl)))) c.cl_implements;
+				(match c.cl_super with None -> () | Some (c,pl,_) -> print " extends %s" (s_type (TInst (c,pl))));
+				List.iter (fun (c,pl,_) -> print " implements %s" (s_type (TInst (c,pl)))) c.cl_implements;
 				(match c.cl_dynamic with None -> () | Some t -> print " implements Dynamic<%s>" (s_type t));
 				(match c.cl_array_access with None -> () | Some t -> print " implements ArrayAccess<%s>" (s_type t));
 				print " {\n";
@@ -1119,14 +1119,14 @@ struct
 				match !stack with
 				| [] -> (let acc, ca, tla = !cur in match ca.cl_super with
 					| None -> raise Not_found
-					| Some (sup,tls) ->
+					| Some (sup,tls,_) ->
 						cur := (acc+1,sup,List.map (apply_params ca.cl_params tla) tls);
 						stack := [!cur];
 						loop())
 				| (acc,ca,tla) :: _ when ca == cf ->
 					acc,tla
 				| (acc,ca,tla) :: s ->
-					stack := s @ List.map (fun (c,tl) -> (acc+1,c,List.map (apply_params ca.cl_params tla) tl)) ca.cl_implements;
+					stack := s @ List.map (fun (c,tl,_) -> (acc+1,c,List.map (apply_params ca.cl_params tla) tl)) ca.cl_implements;
 					loop()
 			in
 			let acc, tla = loop() in
@@ -1137,7 +1137,7 @@ struct
 					acc, tla
 				else match ca.cl_super with
 				| None -> raise Not_found
-				| Some(sup,stl) ->
+				| Some(sup,stl,_) ->
 					loop (acc+1) sup (List.map (apply_params ca.cl_params tla) stl)
 			in
 			let acc, tla = loop 0 ca tla in

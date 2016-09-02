@@ -192,8 +192,8 @@ and tclass = {
 	mutable cl_kind : tclass_kind;
 	mutable cl_extern : bool;
 	mutable cl_interface : bool;
-	mutable cl_super : (tclass * tparams) option;
-	mutable cl_implements : (tclass * tparams) list;
+	mutable cl_super : (tclass * tparams * Ast.pos) option;
+	mutable cl_implements : (tclass * tparams * Ast.pos) list;
 	mutable cl_fields : (string , tclass_field) PMap.t;
 	mutable cl_statics : (string, tclass_field) PMap.t;
 	mutable cl_ordered_statics : tclass_field list;
@@ -452,11 +452,11 @@ let t_infos t : tinfos =
 let t_path t = (t_infos t).mt_path
 
 let rec is_parent csup c =
-	if c == csup || List.exists (fun (i,_) -> is_parent csup i) c.cl_implements then
+	if c == csup || List.exists (fun (i,_,_) -> is_parent csup i) c.cl_implements then
 		true
 	else match c.cl_super with
 		| None -> false
-		| Some (c,_) -> is_parent csup c
+		| Some (c,_,_) -> is_parent csup c
 
 let map loop t =
 	match t with
@@ -753,7 +753,7 @@ let rec raw_class_field build_type c tl i =
 		match c.cl_super with
 		| None ->
 			raise Not_found
-		| Some (c,tl) ->
+		| Some (c,tl,_) ->
 			let c2 , t , f = raw_class_field build_type c (List.map apply tl) i in
 			c2, apply_params c.cl_params tl t , f
 	with Not_found ->
@@ -789,7 +789,7 @@ let rec raw_class_field build_type c tl i =
 			let rec loop = function
 				| [] ->
 					raise Not_found
-				| (c,tl) :: l ->
+				| (c,tl,_) :: l ->
 					try
 						let c2, t , f = raw_class_field build_type c (List.map apply tl) i in
 						c2, apply_params c.cl_params tl t, f
@@ -837,7 +837,7 @@ let rec get_constructor build_type c =
 	match c.cl_constructor, c.cl_super with
 	| Some c, _ -> build_type c, c
 	| None, None -> raise Not_found
-	| None, Some (csup,cparams) ->
+	| None, Some (csup,cparams,_) ->
 		let t, c = get_constructor build_type csup in
 		apply_params csup.cl_params cparams t, c
 
@@ -1292,8 +1292,8 @@ module Printer = struct
 			"cl_kind",s_class_kind c.cl_kind;
 			"cl_extern",string_of_bool c.cl_extern;
 			"cl_interface",string_of_bool c.cl_interface;
-			"cl_super",s_opt (fun (c,tl) -> s_type (TInst(c,tl))) c.cl_super;
-			"cl_implements",s_list ", " (fun (c,tl) -> s_type (TInst(c,tl))) c.cl_implements;
+			"cl_super",s_opt (fun (c,tl,_) -> s_type (TInst(c,tl))) c.cl_super;
+			"cl_implements",s_list ", " (fun (c,tl,_) -> s_type (TInst(c,tl))) c.cl_implements;
 			"cl_dynamic",s_opt s_type c.cl_dynamic;
 			"cl_array_access",s_opt s_type c.cl_array_access;
 			"cl_overrides",s_list "," (fun cf -> cf.cf_name) c.cl_overrides;
@@ -1734,9 +1734,9 @@ let rec unify a b =
 				true
 			end else (match c.cl_super with
 				| None -> false
-				| Some (cs,tls) ->
+				| Some (cs,tls,_) ->
 					loop cs (List.map (apply_params c.cl_params tl) tls)
-			) || List.exists (fun (cs,tls) ->
+			) || List.exists (fun (cs,tls,_) ->
 				loop cs (List.map (apply_params c.cl_params tl) tls)
 			) c.cl_implements
 			|| (match c.cl_kind with

@@ -363,7 +363,7 @@ let property ctx p t =
 			with Not_found ->
 				let rec loop2 = function
 					| [] -> raise Not_found
-					| (i,_) :: l ->
+					| (i,_,_) :: l ->
 						try loop i with Not_found -> loop2 l
 				in
 				loop2 c.cl_implements
@@ -460,7 +460,7 @@ let pop ctx n =
 
 let is_member ctx name =
 	let rec loop c =
-		PMap.mem name c.cl_fields || (match c.cl_super with None -> false | Some (c,_) -> loop c)
+		PMap.mem name c.cl_fields || (match c.cl_super with None -> false | Some (c,_,_) -> loop c)
 	in
 	loop ctx.cur_class
 
@@ -1866,7 +1866,7 @@ let generate_class_init ctx c hc =
 	if c.cl_interface then
 		write ctx HNull
 	else begin
-		let path = (match c.cl_super with None -> ([],"Object") | Some (sup,_) -> sup.cl_path) in
+		let path = (match c.cl_super with None -> ([],"Object") | Some (sup,_,_) -> sup.cl_path) in
 		write ctx (HGetLex (type_path ctx path));
 		write ctx HScope;
 		write ctx (HGetLex (type_path ctx path));
@@ -1961,7 +1961,7 @@ let generate_field_kind ctx f c stat =
 		let rec loop c name =
 			match c.cl_super with
 			| None -> false
-			| Some (c,_) ->
+			| Some (c,_,_) ->
 				PMap.exists name c.cl_fields || loop c name
 		in
 		(match f.cf_kind with
@@ -2072,7 +2072,7 @@ let generate_class ctx c =
 				match c.cl_super with
 				| None -> []
 				| Some _ when stat -> []
-				| Some (c,_) -> find_meta c
+				| Some (c,_,_) -> find_meta c
 		in
 		let protect() =
 			let p = (match c.cl_path with [], n -> n | p, n -> String.concat "." p ^ ":" ^ n) in
@@ -2169,17 +2169,17 @@ let generate_class ctx c =
 		if c.cl_dynamic <> None || c.cl_array_access <> None then true
 		else match c.cl_super with
 		| None -> false
-		| Some (c,_) -> is_dynamic c
+		| Some (c,_,_) -> is_dynamic c
 	in
 	{
 		hlc_index = 0;
 		hlc_name = name;
-		hlc_super = (if c.cl_interface then None else Some (type_path ctx (match c.cl_super with None -> [],"Object" | Some (c,_) -> c.cl_path)));
+		hlc_super = (if c.cl_interface then None else Some (type_path ctx (match c.cl_super with None -> [],"Object" | Some (c,_,_) -> c.cl_path)));
 		hlc_sealed = not (is_dynamic c);
 		hlc_final = Meta.has Meta.Final c.cl_meta;
 		hlc_interface = c.cl_interface;
 		hlc_namespace = (match !has_protected with None -> None | Some p -> Some (HNProtected p));
-		hlc_implements = Array.of_list (List.map (fun (c,_) ->
+		hlc_implements = Array.of_list (List.map (fun (c,_,_) ->
 			if not c.cl_interface then error "Can't implement class in Flash9" c.cl_pos;
 			let pack, name = real_path c.cl_path in
 			HMMultiName (Some name,[HNPublic (Some (String.concat "." pack))])
@@ -2342,7 +2342,7 @@ let resource_path name =
 
 let generate_resource ctx name =
 	let c = mk_class null_module (resource_path name) null_pos in
-	c.cl_super <- Some (mk_class null_module (["flash";"utils"],"ByteArray") null_pos,[]);
+	c.cl_super <- Some (mk_class null_module (["flash";"utils"],"ByteArray") null_pos,[],null_pos);
 	let t = TClassDecl c in
 	match generate_type ctx t with
 	| Some (m,f) -> (t,m,f)

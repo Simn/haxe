@@ -289,7 +289,7 @@ let inline_default_config cf t =
 	let rec get_params c pl =
 		match c.cl_super with
 		| None -> c.cl_params, pl
-		| Some (csup,spl) ->
+		| Some (csup,spl,_) ->
 			let spl = (match apply_params c.cl_params pl (TInst (csup,spl)) with
 			| TInst (_,pl) -> pl
 			| _ -> assert false

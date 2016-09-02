@@ -283,10 +283,10 @@ let rec can_access ctx ?(in_overload=false) c cf stat =
 	let rec loop c =
 		cur_paths := make_path c ctx.curfield :: !cur_paths;
 		begin match c.cl_super with
-			| Some (csup,_) -> loop csup
+			| Some (csup,_,_) -> loop csup
 			| None -> ()
 		end;
-		List.iter (fun (c,_) -> loop c) c.cl_implements;
+		List.iter (fun (c,_,_) -> loop c) c.cl_implements;
 	in
 	loop ctx.curclass;
 	let is_constr = cf.cf_name = "new" in
@@ -299,7 +299,7 @@ let rec can_access ctx ?(in_overload=false) c cf stat =
 			false
 		)
 		|| (match c.cl_super with
-		| Some (csup,_) -> loop csup
+		| Some (csup,_,_) -> loop csup
 		| None -> false)
 		|| has Meta.Access ctx.curclass ctx.curfield (make_path c cf)
 	in
@@ -416,7 +416,7 @@ module ToplevelCollecter = struct
 				match c.cl_super with
 					| None ->
 						()
-					| Some (csup,tl) ->
+					| Some (csup,tl,_) ->
 						loop csup; (* TODO: type parameters *)
 			in
 			loop ctx.curclass;
@@ -547,11 +547,11 @@ let rec unify_min_raise ctx (el:texpr list) : t =
 				(match cl.cl_kind with
 				| KTypeParameter tl -> List.iter loop tl
 				| _ -> ());
-				List.iter (fun (ic, ip) ->
+				List.iter (fun (ic, ip, _) ->
 					let t = apply_params cl.cl_params params (TInst (ic,ip)) in
 					loop t
 				) cl.cl_implements;
-				(match cl.cl_super with None -> () | Some (csup, pl) ->
+				(match cl.cl_super with None -> () | Some (csup, pl, _) ->
 					let t = apply_params cl.cl_params params (TInst (csup,pl)) in
 					loop t);
 				tl := t :: !tl;
@@ -633,7 +633,7 @@ let rec unify_min_raise ctx (el:texpr list) : t =
 			let common_types = base_types t in
 			let dyn_types = List.fold_left (fun acc t ->
 				let rec loop c =
-					Meta.has Meta.UnifyMinDynamic c.cl_meta || (match c.cl_super with None -> false | Some (c,_) -> loop c)
+					Meta.has Meta.UnifyMinDynamic c.cl_meta || (match c.cl_super with None -> false | Some (c,_,_) -> loop c)
 				in
 				match t with
 				| TInst (c,params) when params <> [] && loop c ->
@@ -1345,7 +1345,7 @@ let rec type_ident_raise ctx i p mode =
 	| "super" ->
 		let t = (match ctx.curclass.cl_super with
 			| None -> error "Current class does not have a superclass" p
-			| Some (c,params) -> TInst(c,params)
+			| Some (c,params,_) -> TInst(c,params)
 		) in
 		(match ctx.curfun with
 		| FunMember | FunConstructor -> ()
@@ -1518,7 +1518,7 @@ and type_field ?(resume=false) ctx e i p mode =
 			| None ->
 				match c.cl_super with
 				| None -> raise Not_found
-				| Some (c,params) -> loop_dyn c params
+				| Some (c,params,_) -> loop_dyn c params
 		in
 		(try
 			let c2, t , f = class_field ctx c params i p in
@@ -2857,7 +2857,7 @@ and type_access ctx e p mode =
 			match follow et with
 			| TInst ({ cl_array_access = Some t; cl_params = pl },tl) ->
 				apply_params pl tl t
-			| TInst ({ cl_super = Some (c,stl); cl_params = pl },tl) ->
+			| TInst ({ cl_super = Some (c,stl,_); cl_params = pl },tl) ->
 				apply_params pl tl (loop (TInst (c,stl)))
 			| TInst ({ cl_path = [],"ArrayAccess" },[t]) ->
 				t
@@ -3861,7 +3861,7 @@ and handle_display ctx e_ast iscall with_type =
 	ctx.in_call_args <- snd old;
 	let get_super_constructor () = match ctx.curclass.cl_super with
 		| None -> error "Current class does not have a super" p
-		| Some (c,params) ->
+		| Some (c,params,_) ->
 			let _, f = get_constructor ctx c params p in
 			f
 	in
@@ -3904,7 +3904,7 @@ and handle_display ctx e_ast iscall with_type =
 		| TConst TSuper ->
 			begin match ctx.curclass.cl_super with
 				| None -> ()
-				| Some (c,_) -> c.cl_meta <- (Meta.Usage,[],p) :: c.cl_meta;
+				| Some (c,_,_) -> c.cl_meta <- (Meta.Usage,[],p) :: c.cl_meta;
 			end
 		| TCall(e1,_) ->
 			loop e1
@@ -3936,7 +3936,7 @@ and handle_display ctx e_ast iscall with_type =
 		| TConst TSuper ->
 			begin match ctx.curclass.cl_super with
 				| None -> []
-				| Some (c,_) -> [c.cl_pos]
+				| Some (c,_,_) -> [c.cl_pos]
 			end
 		| TCall(e1,_) ->
 			loop e1
@@ -3994,12 +3994,12 @@ and handle_display ctx e_ast iscall with_type =
 					PMap.foldi (fun k f m -> if cond f then PMap.add k f m else m) a b
 				in
 				let rec loop c params =
-					let m = List.fold_left (fun m (i,params) ->
+					let m = List.fold_left (fun m (i,params,_) ->
 						merge m (loop i params)
 					) PMap.empty c.cl_implements in
 					let m = (match c.cl_super with
 						| None -> m
-						| Some (csup,cparams) -> merge m (loop csup cparams)
+						| Some (csup,cparams,_) -> merge m (loop csup cparams)
 					) in
 					let m = merge ~cond:(fun f -> priv || can_access ctx c f false) c.cl_fields m in
 					let m = (match c.cl_kind with
@@ -4252,7 +4252,7 @@ and type_call ctx e el (with_type:with_type) p =
 		if ctx.curfun <> FunConstructor then error "Cannot call super constructor outside class constructor" p;
 		let el, t = (match ctx.curclass.cl_super with
 		| None -> error "Current class does not have a super" p
-		| Some (c,params) ->
+		| Some (c,params,_) ->
 			let ct, f = get_constructor ctx c params p in
 			if (Meta.has Meta.CompilerGenerated f.cf_meta) then display_error ctx (s_type_path c.cl_path ^ " does not have a constructor") p;
 			let el = (match follow ct with
@@ -4339,7 +4339,7 @@ and build_call ctx acc el (with_type:with_type) p =
 					else
 						match c.cl_super with
 						| None -> assert false
-						| Some (csup,_) -> loop csup
+						| Some (csup,_,_) -> loop csup
 				in
 				loop c
 			| _ -> assert false))
@@ -4532,7 +4532,7 @@ let generate ctx =
 					| _ -> ());
 					match c.cl_super with
 					| None -> ()
-					| Some (csup,_) -> loop csup
+					| Some (csup,_,_) -> loop csup
 				end
 			in
 			loop c
@@ -4543,8 +4543,8 @@ let generate ctx =
 			iter (walk_expr p) e
 
 	and walk_class p c =
-		(match c.cl_super with None -> () | Some (c,_) -> loop_class p c);
-		List.iter (fun (c,_) -> loop_class p c) c.cl_implements;
+		(match c.cl_super with None -> () | Some (c,_,_) -> loop_class p c);
+		List.iter (fun (c,_,_) -> loop_class p c) c.cl_implements;
 		(match c.cl_init with
 		| None -> ()
 		| Some e -> walk_expr p e);

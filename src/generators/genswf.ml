@@ -616,7 +616,7 @@ let build_dependencies t =
 		| None -> ()
 		| Some e -> add_expr e
 	in
-	let add_inherit (c,pl) =
+	let add_inherit (c,pl,_) =
 		add_path c.cl_path DKInherit;
 		List.iter add_type pl;
 	in

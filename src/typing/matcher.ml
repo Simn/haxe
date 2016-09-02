@@ -361,7 +361,7 @@ module Pattern = struct
 							let fields = List.fold_left (fun acc cf -> (cf,apply_params c.cl_params tl cf.cf_type) :: acc) fields c.cl_ordered_fields in
 							match c.cl_super with
 								| None -> fields
-								| Some (csup,tlsup) -> loop fields csup (List.map (apply_params c.cl_params tl) tlsup)
+								| Some (csup,tlsup,_) -> loop fields csup (List.map (apply_params c.cl_params tl) tlsup)
 						in
 						loop [] c tl
 					| TAbstract({a_impl = Some c} as a,tl) ->

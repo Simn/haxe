@@ -969,7 +969,7 @@ module Purity = struct
 			List.iter taint node.pn_dependents;
 			let rec loop c = match c.cl_super with
 				| None -> ()
-				| Some(c,_) ->
+				| Some(c,_,_) ->
 					begin try
 						let cf = PMap.find node.pn_field.cf_name c.cl_fields in
 						taint (get_node c cf);
@@ -1024,7 +1024,7 @@ module Purity = struct
 				end
 			| TCall({eexpr = TConst TSuper},el) ->
 				begin match c.cl_super with
-					| Some({cl_constructor = Some cf} as c,_) ->
+					| Some({cl_constructor = Some cf} as c,_,_) ->
 						check_field c cf;
 						List.iter loop el
 					| _ ->

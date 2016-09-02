@@ -2039,7 +2039,7 @@ let configure gen =
 			match is_static, cl.cl_super with
 				| false, _ -> []
 				| true, None -> []
-				| true, Some(cl,_) ->
+				| true, Some(cl,_,_) ->
 					 (try
 							let cf2 = PMap.find cf.cf_name cl.cl_statics in
 							CastDetect.type_eq gen EqStrict cf.cf_type cf2.cf_type;
@@ -2243,7 +2243,7 @@ let configure gen =
 					t_s (run_follow gen arg_t), t_s (run_follow gen ret_t)
 				| _ -> gen.gcon.error "The __get function must be a function with one argument. " get.cf_pos; assert false
 			in
-			List.iter (fun (cl,args) ->
+			List.iter (fun (cl,args,_) ->
 				match cl.cl_array_access with
 					| None -> ()
 					| Some t ->
@@ -2419,7 +2419,7 @@ let configure gen =
 		print w "%s %s %s" (String.concat " " modifiers) clt (change_clname (snd cl.cl_path));
 		(* type parameters *)
 		let params, params_ext = get_string_params cl cl.cl_params in
-		let extends_implements = (match cl.cl_super with | None -> [] | Some (cl,p) -> [path_param_s (TClassDecl cl) cl.cl_path p]) @ (List.map (fun (cl,p) -> path_param_s (TClassDecl cl) cl.cl_path p) cl.cl_implements) in
+		let extends_implements = (match cl.cl_super with | None -> [] | Some (cl,p,_) -> [path_param_s (TClassDecl cl) cl.cl_path p]) @ (List.map (fun (cl,p,_) -> path_param_s (TClassDecl cl) cl.cl_path p) cl.cl_implements) in
 		(match extends_implements with
 			| [] -> print w "%s%s " params params_ext
 			| _ -> print w "%s : %s%s " params (String.concat ", " extends_implements) params_ext);
@@ -2662,7 +2662,7 @@ let configure gen =
 	(* like multitype selection *)
 	let run_follow_gen = run_follow gen in
 	let rec type_map e = Type.map_expr_type (fun e->type_map e) (run_follow_gen)	(fun tvar-> tvar.v_type <- (run_follow_gen tvar.v_type); tvar) e in
-	let super_map (cl,tl) = (cl, List.map run_follow_gen tl) in
+	let super_map (cl,tl,p) = (cl, List.map run_follow_gen tl, p) in
 	List.iter (function
 		| TClassDecl cl ->
 				let all_fields = (Option.map_default (fun cf -> [cf]) [] cl.cl_constructor) @ cl.cl_ordered_fields @ cl.cl_ordered_statics in
@@ -3074,7 +3074,7 @@ let configure gen =
 				if cl == base_exception then
 					true
 				else
-					(match cl.cl_super with | None -> false | Some (cl,arg) -> is_exception (TInst(cl,arg)))
+					(match cl.cl_super with | None -> false | Some (cl,arg,_) -> is_exception (TInst(cl,arg)))
 			| _ -> false
 	in
 

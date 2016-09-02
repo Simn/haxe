@@ -540,7 +540,7 @@ and gen_call ctx e el =
 	| TConst TSuper , params ->
 		(match ctx.curclass.cl_super with
 		| None -> assert false
-		| Some (c,_) ->
+		| Some (c,_,_) ->
 			spr ctx "parent::__construct(";
 			concat ctx "," (gen_value ctx) params;
 			spr ctx ")";
@@ -548,7 +548,7 @@ and gen_call ctx e el =
 	| TField ({ eexpr = TConst TSuper },f) , params ->
 		(match ctx.curclass.cl_super with
 		| None -> assert false
-		| Some (c,_) ->
+		| Some (c,_,_) ->
 			print ctx "parent::%s(" (s_ident (field_name f));
 			concat ctx "," (gen_value ctx) params;
 			spr ctx ")";
@@ -1824,7 +1824,7 @@ let rec is_instance_method_defined cls m =
 		true
 	else
 		match cls.cl_super with
-		| Some (scls, _) ->
+		| Some (scls, _, _) ->
 			is_instance_method_defined scls m
 		| None ->
 			false
@@ -1975,7 +1975,7 @@ let generate_static_field_assign ctx path f =
 let rec super_has_dynamic c =
 	match c.cl_super with
 	| None -> false
-	| Some (csup, _) -> (match csup.cl_dynamic with
+	| Some (csup, _, _) -> (match csup.cl_dynamic with
 		| Some _ -> true
 		| _ -> super_has_dynamic csup)
 
@@ -2031,15 +2031,15 @@ let generate_class ctx c =
 	print ctx "%s %s " (if c.cl_interface then "interface" else "class") (s_path ctx c.cl_path c.cl_extern c.cl_pos);
 	(match c.cl_super with
 	| None -> ()
-	| Some (csup,_) ->
+	| Some (csup,_,_) ->
 		requires_constructor := false;
 		print ctx "extends %s " (s_path ctx csup.cl_path csup.cl_extern c.cl_pos));
-	let implements = ExtList.List.unique ~cmp:(fun a b -> (fst a).cl_path = (fst b).cl_path) c.cl_implements in
+	let implements = ExtList.List.unique ~cmp:(fun (a,_,_) (b,_,_) -> a.cl_path = b.cl_path) c.cl_implements in
 	(match implements with
 	| [] -> ()
 	| l ->
 		spr ctx (if c.cl_interface then "extends " else "implements ");
-		concat ctx ", " (fun (i,_) ->
+		concat ctx ", " (fun (i,_,_) ->
 		print ctx "%s" (s_path ctx i.cl_path i.cl_extern c.cl_pos)) l);
 	spr ctx "{";
 
@@ -2087,7 +2087,7 @@ let generate_class ctx c =
 	let rec fields c =
 		let list = Codegen.get_properties (c.cl_ordered_statics @ c.cl_ordered_fields) in
 		match c.cl_super with
-		| Some (csup, _) ->
+		| Some (csup, _, _) ->
 			list @ fields csup
 		| None ->
 			list
@@ -2271,7 +2271,7 @@ let generate com =
 		in
 		let rec _check_class_fields cl =
 			(match cl.cl_super with
-			| Some (s,_) -> _check_class_fields s
+			| Some (s,_,_) -> _check_class_fields s
 			| _ -> ());
 			loop cl cl.cl_ordered_statics true;
 			loop cl cl.cl_ordered_fields false

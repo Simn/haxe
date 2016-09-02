@@ -351,8 +351,8 @@ struct
 				if cl.cl_path = (["haxe";"lang"], "IEquatable") then
 					true
 				else
-					List.exists (fun (cl,p) -> is_equatable gen (TInst(cl,p))) cl.cl_implements
-						|| (match cl.cl_super with | Some(cl,p) -> is_equatable gen (TInst(cl,p)) | None -> false)
+					List.exists (fun (cl,p,_) -> is_equatable gen (TInst(cl,p))) cl.cl_implements
+						|| (match cl.cl_super with | Some(cl,p,_) -> is_equatable gen (TInst(cl,p)) | None -> false)
 			| _ -> false
 
 	(*
@@ -700,12 +700,12 @@ let rec is_checked_exc cl =
 			true
 		| _ -> match cl.cl_super with
 			| None -> false
-			| Some(c,_) -> is_checked_exc c
+			| Some(c,_,_) -> is_checked_exc c
 
 let rec cls_any_super cl supers =
 	PMap.mem cl.cl_path supers || match cl.cl_super with
 		| None -> false
-		| Some(c,_) -> cls_any_super c supers
+		| Some(c,_,_) -> cls_any_super c supers
 
 let rec handle_throws gen cf =
 	List.iter (handle_throws gen) cf.cf_overloads;
@@ -1902,7 +1902,7 @@ let configure gen =
 
 		(* type parameters *)
 		let params, _ = get_string_params cl.cl_params in
-		let cl_p_to_string (c,p) =
+		let cl_p_to_string (c,p,_) =
 			let p = List.map (fun t -> match follow t with
 				| TMono _ | TDynamic _ -> t_empty
 				| _ -> t) p
@@ -1925,7 +1925,7 @@ let configure gen =
 			List.iter (fun cf -> add_scope cf.cf_name) cl.cl_ordered_fields;
 			List.iter (fun cf -> add_scope cf.cf_name) cl.cl_ordered_statics;
 			match cl.cl_super with
-				| Some(c,_) -> loop c
+				| Some(c,_,_) -> loop c
 				| None -> ()
 		in
 		loop cl;
@@ -2047,7 +2047,7 @@ let configure gen =
 	(* like multitype selection *)
 	let run_follow_gen = run_follow gen in
 	let rec type_map e = Type.map_expr_type (fun e->type_map e) (run_follow_gen)	(fun tvar-> tvar.v_type <- (run_follow_gen tvar.v_type); tvar) e in
-	let super_map (cl,tl) = (cl, List.map run_follow_gen tl) in
+	let super_map (cl,tl,p) = (cl, List.map run_follow_gen tl,p) in
 	List.iter (function
 		| TClassDecl cl ->
 				let all_fields = (Option.map_default (fun cf -> [cf]) [] cl.cl_constructor) @ cl.cl_ordered_fields @ cl.cl_ordered_statics in
@@ -2333,7 +2333,7 @@ let configure gen =
 				if cl == base_exception then
 					true
 				else
-					(match cl.cl_super with | None -> false | Some (cl,arg) -> is_exception (TInst(cl,arg)))
+					(match cl.cl_super with | None -> false | Some (cl,arg,_) -> is_exception (TInst(cl,arg)))
 			| _ -> false
 	in
 
@@ -2409,7 +2409,7 @@ let configure gen =
 
 	(* add native String as a String superclass *)
 	let str_cl = match gen.gcon.basic.tstring with | TInst(cl,_) -> cl | _ -> assert false in
-	str_cl.cl_super <- Some (get_cl (get_type gen (["haxe";"lang"], "NativeString")), []);
+	str_cl.cl_super <- Some (get_cl (get_type gen (["haxe";"lang"], "NativeString")), [], null_pos);
 
 	let mkdir dir = if not (Sys.file_exists dir) then Unix.mkdir dir 0o755 in
 	mkdir gen.gcon.file;

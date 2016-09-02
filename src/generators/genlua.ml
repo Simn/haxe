@@ -320,7 +320,7 @@ let rec gen_call ctx e el in_value =
 	| TConst TSuper , params ->
 		(match ctx.current.cl_super with
 		| None -> error "Missing api.setCurrentClass" e.epos
-		| Some (c,_) ->
+		| Some (c,_,_) ->
 			print ctx "%s.super(%s" (ctx.type_accessor (TClassDecl c)) (this ctx);
 			List.iter (fun p -> print ctx ","; gen_value ctx p) params;
 			spr ctx ")";
@@ -328,7 +328,7 @@ let rec gen_call ctx e el in_value =
 	| TField ({ eexpr = TConst TSuper },f) , params ->
 		(match ctx.current.cl_super with
 		| None -> error "Missing api.setCurrentClass" e.epos
-		| Some (c,_) ->
+		| Some (c,_,_) ->
 			let name = field_name f in
 			print ctx "%s.prototype%s(%s" (ctx.type_accessor (TClassDecl c)) (field name) (this ctx);
 			List.iter (fun p -> print ctx ","; gen_value ctx p) params;
@@ -1483,7 +1483,7 @@ let generate_class ctx c =
 	(match c.cl_implements with
 	| [] -> ()
 	| l ->
-		println ctx "%s.__interfaces__ = {%s}" p (String.concat "," (List.map (fun (i,_) -> ctx.type_accessor (TClassDecl i)) l));
+		println ctx "%s.__interfaces__ = {%s}" p (String.concat "," (List.map (fun (i,_,_) -> ctx.type_accessor (TClassDecl i)) l));
 	);
 
 	let gen_props props =
@@ -1529,7 +1529,7 @@ let generate_class ctx c =
 		println ctx ")";
 		(match c.cl_super with
 		| None -> ()
-		| Some (csup,_) ->
+		| Some (csup,_,_) ->
 			let psup = ctx.type_accessor (TClassDecl csup) in
 			println ctx "%s.__super__ = %s" p psup;
 			println ctx "setmetatable(%s.prototype,{__index=%s.prototype})" p psup;

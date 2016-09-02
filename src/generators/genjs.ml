@@ -371,7 +371,7 @@ let rec gen_call ctx e el in_value =
 	| TConst TSuper , params ->
 		(match ctx.current.cl_super with
 		| None -> error "Missing api.setCurrentClass" e.epos
-		| Some (c,_) ->
+		| Some (c,_,_) ->
 			print ctx "%s.call(%s" (ctx.type_accessor (TClassDecl c)) (this ctx);
 			List.iter (fun p -> print ctx ","; gen_value ctx p) params;
 			spr ctx ")";
@@ -379,7 +379,7 @@ let rec gen_call ctx e el in_value =
 	| TField ({ eexpr = TConst TSuper },f) , params ->
 		(match ctx.current.cl_super with
 		| None -> error "Missing api.setCurrentClass" e.epos
-		| Some (c,_) ->
+		| Some (c,_,_) ->
 			let name = field_name f in
 			print ctx "%s.prototype%s.call(%s" (ctx.type_accessor (TClassDecl c)) (field name) (this ctx);
 			List.iter (fun p -> print ctx ","; gen_value ctx p) params;
@@ -1091,7 +1091,7 @@ let generate_class ctx c =
 	(match c.cl_implements with
 	| [] -> ()
 	| l ->
-		print ctx "%s.__interfaces__ = [%s]" p (String.concat "," (List.map (fun (i,_) -> ctx.type_accessor (TClassDecl i)) l));
+		print ctx "%s.__interfaces__ = [%s]" p (String.concat "," (List.map (fun (i,_,_) -> ctx.type_accessor (TClassDecl i)) l));
 		newline ctx;
 	);
 
@@ -1115,7 +1115,7 @@ let generate_class ctx c =
 	if has_prototype then begin
 		(match c.cl_super with
 		| None -> print ctx "%s.prototype = {" p;
-		| Some (csup,_) ->
+		| Some (csup,_,_) ->
 			let psup = ctx.type_accessor (TClassDecl csup) in
 			print ctx "%s.__super__ = %s" p psup;
 			newline ctx;
@@ -1133,7 +1133,7 @@ let generate_class ctx c =
 			let props = Codegen.get_properties c.cl_ordered_fields in
 			(match c.cl_super with
 			| _ when props = [] -> ()
-			| Some (csup,_) when Codegen.has_properties csup ->
+			| Some (csup,_,_) when Codegen.has_properties csup ->
 				newprop ctx;
 				let psup = s_path ctx csup.cl_path in
 				print ctx "__properties__: $extend(%s.prototype.__properties__,{%s})" psup (gen_props props)

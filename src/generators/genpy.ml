@@ -1360,8 +1360,8 @@ module Printer = struct
 					match Abstract.follow_with_abstracts t with
 					| TInst ({ cl_path = [],"BaseException" }, _) ->
 						true
-					| TInst ({ cl_super = Some csup }, _) ->
-						is_native_exception (TInst(fst csup, snd csup))
+					| TInst ({ cl_super = Some (c,tl,_) }, _) ->
+						is_native_exception (TInst(c, tl))
 					| _ ->
 						false
 				in
@@ -2056,10 +2056,10 @@ module Generator = struct
 			let p_super = match c.cl_super with
 				| None ->
 					None
-				| Some (csup,_) ->
+				| Some (csup,_,_) ->
 					Some (get_path (t_infos (TClassDecl csup)))
 			in
-			let p_interfaces = List.map (fun (c,tl) ->
+			let p_interfaces = List.map (fun (c,tl,_) ->
 				get_path (t_infos (TClassDecl c))
 			) c.cl_implements in
 

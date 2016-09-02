@@ -4597,9 +4597,9 @@ and encode_tclass c =
 		"isInterface", VBool c.cl_interface;
 		"superClass", (match c.cl_super with
 			| None -> VNull
-			| Some (c,pl) -> enc_obj ["t",encode_clref c;"params",encode_tparams pl]
+			| Some (c,pl,p) -> enc_obj ["t",encode_clref c;"params",encode_tparams pl;"name_pos",encode_pos p]
 		);
-		"interfaces", enc_array (List.map (fun (c,pl) -> enc_obj ["t",encode_clref c;"params",encode_tparams pl]) c.cl_implements);
+		"interfaces", enc_array (List.map (fun (c,pl,p) -> enc_obj ["t",encode_clref c;"params",encode_tparams pl;"name_pos",encode_pos p]) c.cl_implements);
 		"fields", encode_ref c.cl_ordered_fields (encode_array encode_cfield) (fun() -> "class fields");
 		"statics", encode_ref c.cl_ordered_statics (encode_array encode_cfield) (fun() -> "class fields");
 		"constructor", (match c.cl_constructor with None -> VNull | Some cf -> encode_cfref cf);

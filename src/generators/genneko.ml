@@ -444,10 +444,10 @@ let gen_class ctx c =
 	let fserialize = "__serialize" , ident p "@serialize" in
 	let others = (match c.cl_implements with
 		| [] -> []
-		| l -> ["__interfaces__",array p (List.map (fun (c,_) -> gen_type_path p c.cl_path) l)]
+		| l -> ["__interfaces__",array p (List.map (fun (c,_,_) -> gen_type_path p c.cl_path) l)]
 	) @ (match c.cl_super with
 		| None -> []
-		| Some (c,_) -> ["__super__", gen_type_path p c.cl_path]
+		| Some (c,_,_) -> ["__super__", gen_type_path p c.cl_path]
 	) in
 	let build (f,e) = (EBinop ("=",field p (ident p "@tmp") f,e),p) in
 	let tmp = (EVars ["@tmp",Some (call p (builtin p "new") [null p])],p) in
@@ -474,7 +474,7 @@ let gen_class ctx c =
 		| _ ->
 			let props = gen_props props in
 			let props = (match c.cl_super with
-				| Some (csup,_) when Codegen.has_properties csup ->
+				| Some (csup,_,_) when Codegen.has_properties csup ->
 					(EBlock [
 						(EVars ["@tmp",Some props],p);
 						call p (builtin p "objsetproto") [ident p "@tmp";field p (field p (gen_type_path p csup.cl_path) "prototype") "__properties__"];
@@ -494,7 +494,7 @@ let gen_class ctx c =
 	in
 	let eextends = (match c.cl_super with
 		| None -> []
-		| Some (c,_) ->
+		| Some (c,_,_) ->
 			let esuper = gen_type_path p (fst c.cl_path,"@" ^ snd c.cl_path) in
 			[call p (builtin p "objsetproto") [clpath; esuper]]
 	) in

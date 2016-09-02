@@ -41,7 +41,7 @@ type dce = {
 (* check for @:keepSub metadata, which forces @:keep on child classes *)
 let rec super_forces_keep c =
 	Meta.has Meta.KeepSub c.cl_meta || match c.cl_super with
-	| Some (csup,_) -> super_forces_keep csup
+	| Some (csup,_,_) -> super_forces_keep csup
 	| _ -> false
 
 let is_std_file dce file =
@@ -105,7 +105,7 @@ and mark_field dce c cf stat =
 				| None -> ()
 			end;
 			match c.cl_super with
-			| Some(csup,_) -> loop csup
+			| Some(csup,_,_) -> loop csup
 			| None -> ()
 		in
 		loop c
@@ -113,7 +113,7 @@ and mark_field dce c cf stat =
 		if not (PMap.mem cf.cf_name (if stat then c.cl_statics else c.cl_fields)) then begin
 			match c.cl_super with
 			| None -> add cf
-			| Some (c,_) -> mark_field dce c cf stat
+			| Some (c,_,_) -> mark_field dce c cf stat
 		end else
 			add cf
 	end
@@ -128,8 +128,8 @@ let rec update_marked_class_fields dce c =
 	) c.cl_ordered_fields;
 	(* we always have to keep super classes and implemented interfaces *)
 	(match c.cl_init with None -> () | Some init -> dce.follow_expr dce init);
-	List.iter (fun (c,_) -> mark_class dce c) c.cl_implements;
-	(match c.cl_super with None -> () | Some (csup,pl) -> mark_class dce csup)
+	List.iter (fun (c,_,_) -> mark_class dce c) c.cl_implements;
+	(match c.cl_super with None -> () | Some (csup,pl,_) -> mark_class dce csup)
 
 (* mark a class as kept. If the class has fields marked as @:?keep, make sure to keep them *)
 and mark_class dce c = if not (Meta.has Meta.Used c.cl_meta) then begin
@@ -219,7 +219,7 @@ let rec mark_dependent_fields dce csup n stat =
 					end
 				with Not_found ->
 					(* if the field is not present on current class, it might come from a base class *)
-					(match c.cl_super with None -> () | Some (csup,_) -> loop csup))
+					(match c.cl_super with None -> () | Some (csup,_,_) -> loop csup))
 			in
 			loop c
 		| _ -> ()
@@ -271,11 +271,11 @@ and field dce c n stat =
 		if c.cl_interface then begin
 			let rec loop cl = match cl with
 				| [] -> raise Not_found
-				| (c,_) :: cl ->
+				| (c,_,_) :: cl ->
 					try field dce c n stat with Not_found -> loop cl
 			in
 			loop c.cl_implements
-		end else match c.cl_super with Some (csup,_) -> field dce csup n stat | None -> raise Not_found
+		end else match c.cl_super with Some (csup,_,_) -> field dce csup n stat | None -> raise Not_found
 	with Not_found -> try
 		match c.cl_kind with
 		| KTypeParameter tl ->
@@ -547,7 +547,7 @@ let fix_accessors com =
 		| (TClassDecl c) ->
 			let rec has_accessor c n stat =
 				PMap.mem n (if stat then c.cl_statics else c.cl_fields)
-				|| match c.cl_super with Some (csup,_) -> has_accessor csup n stat | None -> false
+				|| match c.cl_super with Some (csup,_,_) -> has_accessor csup n stat | None -> false
 			in
 			let check_prop stat cf =
 				(match cf.cf_kind with
@@ -735,8 +735,8 @@ let run com main full =
 			c.cl_overrides <- List.filter (fun s ->
 				let rec loop c =
 					match c.cl_super with
-					| Some (csup,_) when PMap.mem s.cf_name csup.cl_fields -> true
-					| Some (csup,_) -> loop csup
+					| Some (csup,_,_) when PMap.mem s.cf_name csup.cl_fields -> true
+					| Some (csup,_,_) -> loop csup
 					| None -> false
 				in
 				loop c
@@ -748,10 +748,10 @@ let run com main full =
 		Mark extern classes as really used if they are extended by non-extern ones.
 	*)
 	List.iter (function
-		| TClassDecl ({cl_extern = false; cl_super = Some ({cl_extern = true} as csup, _)}) ->
+		| TClassDecl ({cl_extern = false; cl_super = Some ({cl_extern = true} as csup, _, _)}) ->
 			mark_directly_used_class csup
 		| TClassDecl ({cl_extern = false} as c) when c.cl_implements <> [] ->
-			List.iter (fun (iface,_) -> if (iface.cl_extern) then mark_directly_used_class iface) c.cl_implements;
+			List.iter (fun (iface,_,_) -> if (iface.cl_extern) then mark_directly_used_class iface) c.cl_implements;
 		| _ -> ()
 	) com.types;
 

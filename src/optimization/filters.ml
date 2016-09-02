@@ -65,7 +65,7 @@ let rec wrap_js_exceptions com e =
 	let rec is_error t =
 		match follow t with
 		| TInst ({cl_path = (["js"],"Error")},_) -> true
-		| TInst ({cl_super = Some (csup,tl)}, _) -> is_error (TInst (csup,tl))
+		| TInst ({cl_super = Some (csup,tl,_)}, _) -> is_error (TInst (csup,tl))
 		| _ -> false
 	in
 	let rec loop e =
@@ -666,7 +666,7 @@ let rec is_removable_class c =
 	| KGeneric ->
 		(Meta.has Meta.Remove c.cl_meta ||
 		(match c.cl_super with
-			| Some (c,_) -> is_removable_class c
+			| Some (c,_,_) -> is_removable_class c
 			| _ -> false) ||
 		List.exists (fun (_,t) -> match follow t with
 			| TInst(c,_) ->
@@ -786,7 +786,7 @@ let apply_native_paths ctx t =
 (* Adds the __rtti field if required *)
 let add_rtti ctx t =
 	let rec has_rtti c =
-		Meta.has Meta.Rtti c.cl_meta || match c.cl_super with None -> false | Some (csup,_) -> has_rtti csup
+		Meta.has Meta.Rtti c.cl_meta || match c.cl_super with None -> false | Some (csup,_,_) -> has_rtti csup
 	in
 	match t with
 	| TClassDecl c when has_rtti c && not (PMap.mem "__rtti" c.cl_statics) ->
@@ -971,7 +971,7 @@ let check_cs_events com t = match t with
 (* Removes interfaces tagged with @:remove metadata *)
 let check_remove_metadata ctx t = match t with
 	| TClassDecl c ->
-		c.cl_implements <- List.filter (fun (c,_) -> not (Meta.has Meta.Remove c.cl_meta)) c.cl_implements;
+		c.cl_implements <- List.filter (fun (c,_,_) -> not (Meta.has Meta.Remove c.cl_meta)) c.cl_implements;
 	| _ ->
 		()
 
@@ -992,7 +992,7 @@ let check_void_field ctx t = match t with
 let promote_first_interface_to_super ctx t = match t with
 	| TClassDecl c when c.cl_interface ->
 		begin match c.cl_implements with
-		| ({ cl_path = ["cpp";"rtti"],_ },_ ) :: _ -> ()
+		| ({ cl_path = ["cpp";"rtti"],_ },_,_ ) :: _ -> ()
 		| first_interface  :: remaining ->
 			c.cl_super <- Some first_interface;
 			c.cl_implements <- remaining

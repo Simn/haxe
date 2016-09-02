@@ -1006,7 +1006,7 @@ let generate_field ctx static f =
 		let rec loop c =
 			match c.cl_super with
 			| None -> ()
-			| Some (c,_) ->
+			| Some (c,_,_) ->
 				if PMap.mem f.cf_name c.cl_fields then
 					spr ctx "override "
 				else
@@ -1086,7 +1086,7 @@ let rec define_getset ctx stat c =
 	in
 	List.iter field (if stat then c.cl_ordered_statics else c.cl_ordered_fields);
 	match c.cl_super with
-	| Some (c,_) when not stat -> define_getset ctx stat c
+	| Some (c,_,_) when not stat -> define_getset ctx stat c
 	| _ -> ()
 
 let generate_class ctx c =
@@ -1098,12 +1098,12 @@ let generate_class ctx c =
 	print ctx "\tpublic %s%s%s %s " (final c.cl_meta) (match c.cl_dynamic with None -> "" | Some _ -> if c.cl_interface then "" else "dynamic ") (if c.cl_interface then "interface" else "class") (snd c.cl_path);
 	(match c.cl_super with
 	| None -> ()
-	| Some (csup,_) -> print ctx "extends %s " (s_path ctx true csup.cl_path c.cl_pos));
+	| Some (csup,_,_) -> print ctx "extends %s " (s_path ctx true csup.cl_path c.cl_pos));
 	(match c.cl_implements with
 	| [] -> ()
 	| l ->
 		spr ctx (if c.cl_interface then "extends " else "implements ");
-		concat ctx ", " (fun (i,_) -> print ctx "%s" (s_path ctx true i.cl_path c.cl_pos)) l);
+		concat ctx ", " (fun (i,_,_) -> print ctx "%s" (s_path ctx true i.cl_path c.cl_pos)) l);
 	spr ctx "{";
 	let cl = open_block ctx in
 	(match c.cl_constructor with

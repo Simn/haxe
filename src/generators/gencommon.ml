@@ -1117,7 +1117,7 @@ let t_to_mt t =
 		| _ -> assert false
 
 let rec get_last_ctor cl =
-	Option.map_default (fun (super,_) -> if is_some super.cl_constructor then Some(get super.cl_constructor) else get_last_ctor super) None cl.cl_super
+	Option.map_default (fun (super,_,_) -> if is_some super.cl_constructor then Some(get super.cl_constructor) else get_last_ctor super) None cl.cl_super
 
 let add_constructor cl cf =
 	match cl.cl_constructor with
@@ -1204,14 +1204,14 @@ let find_first_declared_field gen orig_cl ?get_vmtype ?exact_field field =
 				) (ret :: ret.cf_overloads)
 		with | Not_found -> ());
 		(match c.cl_super with
-		| Some (sup,stl) ->
+		| Some (sup,stl,_) ->
 			let tl = List.map (apply_params c.cl_params tl) stl in
 			let stl = gen.greal_type_param (TClassDecl sup) stl in
 			let tlch = List.map (apply_params c.cl_params tlch) stl in
 			loop_cl (depth+1) sup tl tlch
 		| None -> ());
 		if c.cl_interface then
-			List.iter (fun (sup,stl) ->
+			List.iter (fun (sup,stl,_) ->
 				let tl = List.map (apply_params c.cl_params tl) stl in
 				let stl = gen.greal_type_param (TClassDecl sup) stl in
 				let tlch = List.map (apply_params c.cl_params tlch) stl in
@@ -1258,7 +1258,7 @@ let field_access gen (t:t) (field:string) : (tfield_access) =
 					| None ->
 						match cl.cl_super with
 							| None -> FNotFound
-							| Some (super,p) ->  not_found super p
+							| Some (super,p,_) ->  not_found super p
 			in
 
 			let not_found () =
@@ -1395,7 +1395,7 @@ struct
 			| TClassDecl { cl_kind = KAbstractImpl a } ->
 				is_hxgen (TAbstractDecl a)
 			| TClassDecl cl ->
-				let rec is_hxgen_class (c,_) =
+				let rec is_hxgen_class (c,_,_) =
 					if c.cl_extern then begin
 						if Meta.has Meta.HxGen c.cl_meta then
 							true
@@ -1405,8 +1405,8 @@ struct
 						if Meta.has Meta.NativeChildren c.cl_meta || Meta.has Meta.NativeGen c.cl_meta then
 							Option.map_default is_hxgen_class false c.cl_super || List.exists is_hxgen_class c.cl_implements
 						else
-							let rec has_nativec (c,p) =
-								if is_hxgen_class (c,p) then
+							let rec has_nativec (c,p,_) =
+								if is_hxgen_class (c,p,null_pos) then
 									false
 								else
 									(Meta.has Meta.NativeChildren c.cl_meta && not (Option.map_default is_hxgen_class false c.cl_super || List.exists is_hxgen_class c.cl_implements))
@@ -1418,7 +1418,7 @@ struct
 								true
 					end
 				in
-				is_hxgen_class (cl,[])
+				is_hxgen_class (cl,[],null_pos)
 			| TEnumDecl e ->
 				if e.e_extern then
 					Meta.has Meta.HxGen e.e_meta
@@ -1490,14 +1490,14 @@ struct
 			match c.cl_super with
 			| None ->
 				raise Not_found
-			| Some (sup,stl) ->
+			| Some (sup,stl,_) ->
 				cur_ctor sup (List.map (apply_params c.cl_params tl) stl)
 
 	let rec prev_ctor c tl =
 		match c.cl_super with
 		| None ->
 			raise Not_found
-		| Some (sup,stl) ->
+		| Some (sup,stl,_) ->
 			let stl = List.map (apply_params c.cl_params tl) stl in
 			match sup.cl_constructor with
 			| None -> prev_ctor sup stl
@@ -1513,7 +1513,7 @@ struct
 			match c.cl_super with
 			| None ->
 				raise Not_found
-			| Some(sup,stl) ->
+			| Some(sup,stl,_) ->
 				let stl = List.map (apply_params c.cl_params tl) stl in
 				try
 					let static_ctor_name = make_static_ctor_name gen sup in
@@ -1706,7 +1706,7 @@ struct
 	let rec descends_from_native_or_skipctor cl =
 		not (is_hxgen (TClassDecl cl)) || Meta.has Meta.SkipCtor cl.cl_meta || match cl.cl_super with
 		| None -> false
-		| Some(c,_) -> descends_from_native_or_skipctor c
+		| Some(c,_,_) -> descends_from_native_or_skipctor c
 
 	let ensure_super_is_first gen cf =
 		let rec loop e =
@@ -1737,7 +1737,7 @@ struct
 			with | Not_found ->
 				match cl.cl_super with
 				| None -> raise Not_found
-				| Some (sup,_) -> get_last_empty sup
+				| Some (sup,_,_) -> get_last_empty sup
 		in
 
 		let rec change cl =
@@ -1745,7 +1745,7 @@ struct
 				Hashtbl.add processed cl.cl_path true;
 
 				(* make sure we've processed the super types *)
-				Option.may (fun (super,_) -> if should_change super then change super) cl.cl_super;
+				Option.may (fun (super,_,_) -> if should_change super then change super) cl.cl_super;
 
 				(* implement static hx_ctor and reimplement constructors *)
 				(try
@@ -1800,7 +1800,7 @@ struct
 						match cl.cl_super with
 						| None -> (* implement empty *)
 								[]
-						| Some (sup,_) ->
+						| Some (sup,_,_) ->
 							try
 								ignore (get_last_empty sup);
 								let esuper = mk (TConst TSuper) (TInst (cl, List.map snd cl.cl_params)) cl.cl_pos in
@@ -3037,7 +3037,7 @@ struct
 			(* create the constructor *)
 			(* todo properly abstract how type var is set *)
 
-			cls.cl_super <- Some(ft.func_class, []);
+			cls.cl_super <- Some(ft.func_class, [], null_pos);
 			let pos = cls.cl_pos in
 			let super_call =
 			{
@@ -3894,7 +3894,7 @@ struct
 							*)
 							(* on the first pass, our job is to find any evidence that makes it not be hxgeneric. Otherwise it will be hxgeneric *)
 							match cl.cl_super with
-								| Some (c,_) when is_false (set_hxgeneric gen mds isfirst (TClassDecl c)) ->
+								| Some (c,_,_) when is_false (set_hxgeneric gen mds isfirst (TClassDecl c)) ->
 									cl.cl_meta <- (Meta.NativeGeneric, [], cl.cl_pos) :: cl.cl_meta;
 									Some false
 								| _ ->
@@ -4071,7 +4071,7 @@ struct
 						| _ -> acc
 				) [] cl.cl_ordered_fields in
 				match cl.cl_super with
-					| Some(cs, tls) ->
+					| Some(cs, tls,_) ->
 						get_fields gen cs (List.map (apply_params cl.cl_params params_cl) tls) (List.map (apply_params cl.cl_params params_cf) tls) (fields @ acc)
 					| None -> (fields @ acc)
 
@@ -4132,9 +4132,9 @@ struct
 					in
 					(match cls.cl_super with
 					| None -> ()
-					| Some(super, supertl) ->
+					| Some(super, supertl, _) ->
 						loop super supertl (level + 1) (get_reverse super supertl));
-					List.iter (fun (iface, ifacetl) ->
+					List.iter (fun (iface, ifacetl, _) ->
 						loop iface ifacetl level (get_reverse iface ifacetl)
 					) cls.cl_implements
 				in
@@ -4407,11 +4407,11 @@ struct
 					match md with
 						| TClassDecl ({ cl_params = [] } as cl) ->
 							(* see if we're implementing any generic interface *)
-							let rec check (iface,tl) =
+							let rec check (iface,tl,_) =
 								if tl <> [] && set_hxgeneric gen (TClassDecl iface) then
 									(* implement cast stub *)
 									implement_stub_cast cl iface tl;
-								List.iter (fun (s,stl) -> check (s, List.map (apply_params iface.cl_params tl) stl)) iface.cl_implements;
+								List.iter (fun (s,stl,_) -> check (s, List.map (apply_params iface.cl_params tl) stl, null_pos)) iface.cl_implements;
 							in
 							List.iter (check) cl.cl_implements;
 							md
@@ -4429,9 +4429,9 @@ struct
 								iface.cl_meta;
 							Hashtbl.add ifaces cl.cl_path iface;
 
-							iface.cl_implements <- (base_generic, []) :: iface.cl_implements;
+							iface.cl_implements <- (base_generic, [], null_pos) :: iface.cl_implements;
 							iface.cl_interface <- true;
-							cl.cl_implements <- (iface, []) :: cl.cl_implements;
+							cl.cl_implements <- (iface, [], null_pos) :: cl.cl_implements;
 
 							let name = get_cast_name cl in
 							let cast_cf = create_cast_cfield gen cl name in
@@ -4439,9 +4439,9 @@ struct
 
 							let rec loop c = match c.cl_super with
 								| None -> ()
-								| Some(sup,_) -> try
+								| Some(sup,_,_) -> try
 									let siface = Hashtbl.find ifaces sup.cl_path in
-									iface.cl_implements <- (siface,[]) :: iface.cl_implements;
+									iface.cl_implements <- (siface,[],null_pos) :: iface.cl_implements;
 									()
 								with | Not_found -> loop sup
 							in
@@ -5437,13 +5437,13 @@ struct
 			else
 				(match c.cl_super with
 					| None -> false
-					| Some (cs,tls) ->
+					| Some (cs,tls,_) ->
 						let tls = gen.greal_type_param (TClassDecl cs) tls in
 						loop cs (List.map (apply_params c.cl_params tl) tls)
 				)
 				||
 				(if also_implements then
-					List.exists (fun (cs,tls) -> loop cs (List.map (apply_params c.cl_params tl) tls)) c.cl_implements
+					List.exists (fun (cs,tls,_) -> loop cs (List.map (apply_params c.cl_params tl) tls)) c.cl_implements
 				else
 					false)
 		in
@@ -5811,11 +5811,11 @@ struct
 	let is_static_overload c name =
 		match c.cl_super with
 		| None -> false
-		| Some (sup,_) ->
+		| Some (sup,_,_) ->
 			let rec loop c =
 				(PMap.mem name c.cl_statics) || (match c.cl_super with
 					| None -> false
-					| Some (sup,_) -> loop sup)
+					| Some (sup,_,_) -> loop sup)
 			in
 			loop sup
 
@@ -5868,7 +5868,7 @@ struct
 				tl
 			else match c.cl_super with
 			| None -> stl
-			| Some(sup,stl) -> get_changed_stl sup (List.map (apply_params c.cl_params tl) stl)
+			| Some(sup,stl,_) -> get_changed_stl sup (List.map (apply_params c.cl_params tl) stl)
 		in
 		let ret_tparams = List.map (fun t -> match follow t with
 		| TDynamic _ | TMono _ -> t_empty
@@ -6662,7 +6662,7 @@ struct
 			let acc = collect_cfs cl.cl_ordered_fields acc in
 			match cl.cl_super with
 				| None -> acc
-				| Some(cl,_) ->
+				| Some(cl,_,_) ->
 					if not (is_hxgen (TClassDecl cl)) then loop cl acc else acc
 		in
 
@@ -6849,7 +6849,7 @@ struct
 					let conflict_ctx = Option.get ctx.rcf_hash_conflict_ctx in
 					let ehead = mk_this (gen.gmk_internal_name "hx" "conflicts") conflict_ctx.t in
 					let vconflict = alloc_var "conflict" conflict_ctx.t in
-					let local_conflict = mk_local vconflict pos in 
+					let local_conflict = mk_local vconflict pos in
 					[mk (TIf (
 						mk (TBinop (OpLt, hash_local, ExprBuilder.make_int gen.gcon 0 pos)) basic.tbool pos,
 						mk (TBlock [
@@ -6860,7 +6860,7 @@ struct
 								None
 							)) basic.tvoid pos;
 						]) basic.tvoid pos,
-						Some (mk (TBlock block) basic.tvoid pos) 
+						Some (mk (TBlock block) basic.tvoid pos)
 					)) basic.tvoid pos]
 				else
 					block
@@ -6928,7 +6928,7 @@ struct
 						[mk (TIf (
 							mk (TBinop (OpLt, hash_local, ExprBuilder.make_int gen.gcon 0 pos)) basic.tbool pos,
 							conflict_ctx.set ehead hash_local field_local value_local,
-							Some (mk (TBlock block) basic.tvoid pos) 
+							Some (mk (TBlock block) basic.tvoid pos)
 						)) basic.tvoid pos]
 					else
 						block
@@ -7009,7 +7009,7 @@ struct
 				let v_name = match tf_args with (v,_) :: _ -> v | _ -> assert false in
 				let local_name = mk_local v_name pos in
 				let conflict_ctx = Option.get ctx.rcf_hash_conflict_ctx in
-				let ehead = mk_this (gen.gmk_internal_name "hx" "conflicts") conflict_ctx.t in 
+				let ehead = mk_this (gen.gmk_internal_name "hx" "conflicts") conflict_ctx.t in
 				(mk (TIf (
 					mk (TBinop (OpLt, local_switch_var, ExprBuilder.make_int gen.gcon 0 pos)) basic.tbool pos,
 					mk (TReturn (Some (conflict_ctx.delete ehead local_switch_var local_name))) basic.tvoid pos,
@@ -7034,12 +7034,12 @@ struct
 
 	let rec is_first_dynamic cl =
 		match cl.cl_super with
-			| Some(cl,_) ->
+			| Some(cl,_,_) ->
 				if is_some cl.cl_dynamic then false else is_first_dynamic cl
 			| None -> true
 
 	let is_override cl = match cl.cl_super with
-		| Some (cl, _) when is_hxgen (TClassDecl cl) -> true
+		| Some (cl, _, _) when is_hxgen (TClassDecl cl) -> true
 		| _ -> false
 
 	let get_args t = match follow t with
@@ -7450,7 +7450,7 @@ struct
 			let mk_do_default args do_default =
 				match cl.cl_super with
 					| None -> fun () -> maybe_cast (do_default ())
-					| Some (super, sparams) when not (is_hxgen (TClassDecl super)) ->
+					| Some (super, sparams,_) when not (is_hxgen (TClassDecl super)) ->
 						fun () -> maybe_cast (do_default ())
 					| _ ->
 						fun () ->
@@ -7632,7 +7632,7 @@ struct
 			in
 
 			let is_override = match cl.cl_super with
-				| Some (cl, _) when is_hxgen (TClassDecl cl) -> true
+				| Some (cl, _, _) when is_hxgen (TClassDecl cl) -> true
 				| _ -> false
 			in
 
@@ -7761,7 +7761,7 @@ struct
 		let rec extends_hxobject cl =
 			match cl.cl_super with
 				| None -> true
-				| Some (cl,_) when is_hxgen (TClassDecl cl) -> is_override := true; extends_hxobject cl
+				| Some (cl,_,_) when is_hxgen (TClassDecl cl) -> is_override := true; extends_hxobject cl
 				| _ -> false
 		in
 
@@ -8122,17 +8122,17 @@ struct
 				if is_hxgen md then
 					match md with
 					| TClassDecl ({ cl_interface = true } as cl) when cl.cl_path <> baseclass.cl_path && cl.cl_path <> baseinterface.cl_path && cl.cl_path <> basedynamic.cl_path ->
-						cl.cl_implements <- (baseinterface, []) :: cl.cl_implements
+						cl.cl_implements <- (baseinterface, [], null_pos) :: cl.cl_implements
 					| TClassDecl ({ cl_kind = KAbstractImpl _ }) ->
 						(* don't add any base classes to abstract implementations *)
 						()
 					| TClassDecl ({ cl_super = None } as cl) when cl.cl_path <> baseclass.cl_path && cl.cl_path <> baseinterface.cl_path && cl.cl_path <> basedynamic.cl_path ->
 						if is_some cl.cl_dynamic then
-							cl.cl_super <- Some (basedynamic,[])
+							cl.cl_super <- Some (basedynamic,[],null_pos)
 						else
-							cl.cl_super <- Some (baseclass,[])
-					| TClassDecl ({ cl_super = Some(super,_) } as cl) when cl.cl_path <> baseclass.cl_path && cl.cl_path <> baseinterface.cl_path && not (is_hxgen (TClassDecl super)) ->
-						cl.cl_implements <- (baseinterface, []) :: cl.cl_implements
+							cl.cl_super <- Some (baseclass,[],null_pos)
+					| TClassDecl ({ cl_super = Some(super,_,_) } as cl) when cl.cl_path <> baseclass.cl_path && cl.cl_path <> baseinterface.cl_path && not (is_hxgen (TClassDecl super)) ->
+						cl.cl_implements <- (baseinterface, [], null_pos) :: cl.cl_implements
 					| _ ->
 						()
 			in
@@ -8254,7 +8254,7 @@ struct
 
 			let super, has_params = if Meta.has Meta.FlatEnum en.e_meta then base_class, false else base_param_class, true in
 
-			cl.cl_super <- Some(super,[]);
+			cl.cl_super <- Some(super,[],null_pos);
 			cl.cl_extern <- en.e_extern;
 			en.e_meta <- (Meta.Class, [], pos) :: en.e_meta;
 			cl.cl_module <- en.e_module;
@@ -9513,7 +9513,7 @@ struct
 								else match cl.cl_super with
 									| None ->
 										raise Not_found
-									| Some (cl,_) ->
+									| Some (cl,_,_) ->
 										check cl
 							in
 							(match gen.gcurrent_class with
@@ -9652,7 +9652,7 @@ struct
 		let run md =
 			match md with
 			| TClassDecl ({ cl_interface = false; cl_extern = false } as cl) ->
-				let vars = List.fold_left (fun acc (iface,_) ->
+				let vars = List.fold_left (fun acc (iface,_,_) ->
 					if Meta.has Meta.CsNative iface.cl_meta then
 						List.filter (fun cf -> match cf.cf_kind with
 							| Var { v_read = AccCall } | Var { v_write = AccCall } -> true
@@ -9862,7 +9862,7 @@ struct
 				let this = { eexpr = TConst TThis; etype = TInst(c,List.map snd c.cl_params); epos = c.cl_pos } in
 				(* look through all interfaces, and try to find a type that applies exactly *)
 				let rec loop_iface (iface:tclass) itl =
-					List.iter (fun (s,stl) -> loop_iface s (List.map (apply_params iface.cl_params itl) stl)) iface.cl_implements;
+					List.iter (fun (s,stl,_) -> loop_iface s (List.map (apply_params iface.cl_params itl) stl)) iface.cl_implements;
 					let real_itl = gen.greal_type_param (TClassDecl iface) itl in
 					let rec loop_f f =
 						List.iter loop_f f.cf_overloads;
@@ -9957,7 +9957,7 @@ struct
 					in
 					List.iter (fun f -> match f.cf_kind with | Var _ -> () | _ -> loop_f f) iface.cl_ordered_fields
 				in
-				List.iter (fun (iface,itl) -> loop_iface iface itl) c.cl_implements;
+				List.iter (fun (iface,itl,_) -> loop_iface iface itl) c.cl_implements;
 				(* now go through all overrides, *)
 				let rec check_f f =
 					(* find the first declared field *)

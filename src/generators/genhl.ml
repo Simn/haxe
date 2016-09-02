@@ -825,7 +825,7 @@ and field_type ctx f p =
 				PMap.find f.cf_name c.cl_fields
 			with Not_found ->
 				match c.cl_super with
-				| Some (csup,_) -> loop csup
+				| Some (csup,_,_) -> loop csup
 				| None -> error (s_type_path creal.cl_path ^ " is missing field " ^ f.cf_name) p
 		in
 		(loop creal).cf_type
@@ -866,7 +866,7 @@ and class_type ?(tref=None) ctx c pl statics =
 		let t = HVirtual vp in
 		ctx.cached_types <- PMap.add c.cl_path t ctx.cached_types;
 		let rec loop c =
-			let fields = List.fold_left (fun acc (i,_) -> loop i @ acc) [] c.cl_implements in
+			let fields = List.fold_left (fun acc (i,_,_) -> loop i @ acc) [] c.cl_implements in
 			PMap.fold (fun cf acc -> (cf.cf_name,alloc_string ctx cf.cf_name,to_type ctx cf.cf_type) :: acc) c.cl_fields fields
 		in
 		let fields = loop c in
@@ -898,7 +898,7 @@ and class_type ?(tref=None) ctx c pl statics =
 			p.pnfields <- 1;
 		end;
 		let tsup = (match c.cl_super with
-			| Some (csup,pl) when not statics -> Some (class_type ctx csup [] statics)
+			| Some (csup,pl,_) when not statics -> Some (class_type ctx csup [] statics)
 			| _ -> if statics then Some (class_type ctx ctx.base_class [] false) else None
 		) in
 		let start_field, virtuals = (match tsup with
@@ -1386,7 +1386,7 @@ and get_access ctx e =
 		| FInstance (cdef,pl,({ cf_kind = Method m } as f)), TInst (c,_) when m <> MethDynamic && not (c.cl_interface || (is_overriden ctx c f && ethis.eexpr <> TConst(TSuper))) ->
 			(* cdef is the original definition, we want the last redefinition *)
 			let rec loop c =
-				if PMap.mem f.cf_name c.cl_fields then c else (match c.cl_super with None -> cdef | Some (c,_) -> loop c)
+				if PMap.mem f.cf_name c.cl_fields then c else (match c.cl_super with None -> cdef | Some (c,_,_) -> loop c)
 			in
 			let last_def = loop c in
 			AInstanceFun (ethis, alloc_fid ctx (resolve_class ctx last_def pl false) f)
@@ -2986,7 +2986,7 @@ let generate_static_init ctx =
 				let gather_implements() =
 					let classes = ref [] in
 					let rec lookup cv =
-						List.exists (fun (i,_) -> i == c || lookup i) cv.cl_implements
+						List.exists (fun (i,_,_) -> i == c || lookup i) cv.cl_implements
 					in
 					let check = function
 						| TClassDecl c when c.cl_interface = false && not c.cl_extern -> if lookup c then classes := c :: !classes
@@ -6972,7 +6972,7 @@ let generate com =
 		| TClassDecl c ->
 			let rec loop p f =
 				match p with
-				| Some (p,_) when PMap.mem f.cf_name p.cl_fields || loop p.cl_super f ->
+				| Some (p,_,_) when PMap.mem f.cf_name p.cl_fields || loop p.cl_super f ->
 					Hashtbl.replace ctx.overrides (f.cf_name,p.cl_path) true;
 					true
 				| _ ->

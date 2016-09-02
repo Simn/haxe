@@ -82,7 +82,7 @@ let should_prefix_include = function
 
 
 let verbatim_include file =
-   if (String.sub file 0 1)="@" then 
+   if (String.sub file 0 1)="@" then
       ("@import " ^ (String.sub file 1 ((String.length file) - 1 )) ^ ";\n")
    else
       ("#include \"" ^ file ^ "\"\n")
@@ -507,7 +507,7 @@ let gen_forward_decl writer class_path isNative =
 end;;
 
 let real_interfaces =
-List.filter (function (t,pl) ->
+List.filter (function (t,pl,_) ->
    match t, pl with
    | { cl_path = ["cpp";"rtti"],_ },[] -> false
    | _ -> true
@@ -522,10 +522,10 @@ let is_var_field field =
 ;;
 
 let rec has_rtti_interface c interface =
-   List.exists (function (t,pl) ->
+   List.exists (function (t,pl,_) ->
       (snd t.cl_path) = interface && (match fst t.cl_path with | ["cpp";"rtti"] -> true | _ -> false )
    ) c.cl_implements ||
-      (match c.cl_super with None -> false | Some (c,_) -> has_rtti_interface c interface);;
+      (match c.cl_super with None -> false | Some (c,_,_) -> has_rtti_interface c interface);;
 
 let has_field_integer_lookup class_def =
    has_rtti_interface class_def "FieldIntegerLookup";;
@@ -947,7 +947,7 @@ let is_scalar_abstract abstract_def =
 
 
 let real_non_native_interfaces =
-List.filter (function (t,pl) ->
+List.filter (function (t,pl,_) ->
    match t, pl with
    | { cl_path = ["cpp";"rtti"],_ },[] -> false
    | _ -> not (is_native_gen_class t)
@@ -965,7 +965,7 @@ let is_extern_class_instance obj =
 let rec is_dynamic_accessor name acc field class_def =
  ( ( acc ^ "_" ^ field.cf_name) = name ) &&
    ( not (List.exists (fun f -> f.cf_name=name) class_def.cl_ordered_fields) )
-   && (match class_def.cl_super with None -> true | Some (parent,_) -> is_dynamic_accessor name acc field parent )
+   && (match class_def.cl_super with None -> true | Some (parent,_,_) -> is_dynamic_accessor name acc field parent )
 ;;
 
 
@@ -974,7 +974,7 @@ let implement_dynamic_here class_def =
    let implements_dynamic c = match c.cl_dynamic with None -> false | _ -> true  in
    let rec super_implements_dynamic c = match c.cl_super with
       | None -> false
-      | Some (csup, _) -> if (implements_dynamic csup) then true else
+      | Some (csup, _,_) -> if (implements_dynamic csup) then true else
             super_implements_dynamic csup;
    in
    ( (implements_dynamic class_def) && (not (super_implements_dynamic class_def) ) );;
@@ -2527,7 +2527,7 @@ let retype_expression ctx request_type function_args expression_tree forInjectio
                       retype (cpp_tfun_arg_type_of ctx opt t) arg
                       ) args arg_types in
                   CppCall(func,retypedArgs), returnType
- 
+
                |  CppFunction(func,returnType) ->
                      CppCall(func,retypedArgs), returnType
 
@@ -3572,7 +3572,7 @@ let gen_cpp_ast_expression_tree ctx class_name func_name function_args injection
          out (tcpp_objc_block_struct args ret ^ "::create( ");
          gen expr;
          out ")"
-       
+
 
       | CppCastNative(expr) ->
          out "("; gen expr; out ").mPtr"
@@ -3789,7 +3789,7 @@ let current_virtual_functions clazz =
 let all_virtual_functions clazz =
   let rec all_virtual_functions clazz =
    (match clazz.cl_super with
-   | Some def -> all_virtual_functions (fst def)
+   | Some (def,_,_) -> all_virtual_functions def
    | _ -> [] ) @ current_virtual_functions clazz
    in
    all_virtual_functions clazz
@@ -4689,16 +4689,16 @@ let has_new_gc_references ctx class_def =
 
 let rec has_gc_references ctx class_def =
    ( match class_def.cl_super with
-   | Some def when has_gc_references ctx (fst def) -> true
+   | Some (def,_,_) when has_gc_references ctx def -> true
    | _ -> false )
    || has_new_gc_references ctx class_def
 ;;
 
 let rec find_next_super_iteration ctx class_def =
    match class_def.cl_super with
-   | Some  (klass,params) when has_new_gc_references ctx klass ->
+   | Some  (klass,params,_) when has_new_gc_references ctx klass ->
         tcpp_to_string_suffix "_obj" (cpp_instance_type ctx klass params)
-   | Some  (klass,_) -> find_next_super_iteration ctx klass
+   | Some  (klass,_,_) -> find_next_super_iteration ctx klass
    | _ -> "";
 ;;
 
@@ -4794,7 +4794,7 @@ let find_class_implementation ctx class_def name interface =
    let rec find def =
       List.iter (fun f -> if f.cf_name=name then raise (FieldFound f) ) def.cl_ordered_fields;
       match def.cl_super with
-      | Some (def,_) -> find def
+      | Some (def,_,_) -> find def
       | _ -> ()
    in
    try
@@ -4910,8 +4910,7 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
    let implemented_hash = Hashtbl.create 0 in
    let native_implemented = Hashtbl.create 0 in
    List.iter (fun imp ->
-      let rec descend_interface interface =
-         let intf_def = (fst interface) in
+      let rec descend_interface (intf_def,_,_) =
          let interface_name = cpp_interface_impl_name baseCtx intf_def in
          let hash = if is_native_gen_class intf_def then native_implemented else implemented_hash in
          if ( not (Hashtbl.mem hash interface_name) ) then begin
@@ -4919,7 +4918,7 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
             List.iter descend_interface intf_def.cl_implements;
          end;
          match intf_def.cl_super with
-         | Some (interface,params) -> descend_interface (interface,params)
+         | Some def -> descend_interface def
          | _ -> ()
       in descend_interface imp
    ) (real_interfaces class_def.cl_implements);
@@ -4986,7 +4985,7 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
    let ctx = file_context baseCtx cpp_file debug in
 
    let class_super_name = (match class_def.cl_super with
-      | Some (klass, params) -> (tcpp_to_string_suffix "_obj" (cpp_instance_type ctx klass params) )
+      | Some (klass, params, _) -> (tcpp_to_string_suffix "_obj" (cpp_instance_type ctx klass params) )
       | _ -> "") in
    if (debug>1) then print_endline ("Found class definition:" ^ (join_class_path class_def.cl_path "::"));
 
@@ -5082,7 +5081,7 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
                       | _ -> () )
                       in
                       (match interface.cl_super with
-                      | Some super -> gen_interface_funcs (fst super)
+                      | Some (super,_,_) -> gen_interface_funcs super
                       | _ -> ());
                       List.iter gen_field interface.cl_ordered_fields;
                       in
@@ -5630,7 +5629,7 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
 
 
    let parent,super = match class_def.cl_super with
-      | Some (klass,params) ->
+      | Some (klass,params,_) ->
             let name = (tcpp_to_string_suffix "_obj" (cpp_instance_type ctx klass params) ) in
             (if class_def.cl_interface && nativeGen then "virtual " else "" ) ^ name, name
       | None when nativeGen && class_def.cl_interface  -> "virtual hx::NativeInterface", "hx::NativeInterface"
@@ -5646,14 +5645,13 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
 
    (* Include the real header file for the super class *)
    (match class_def.cl_super with
-   | Some super ->
-      let super_path = (fst super).cl_path in
+   | Some (super,_,_) ->
+      let super_path = super.cl_path in
       h_file#add_include super_path
    | _ -> () );
 
    (* And any interfaces ... *)
-   List.iter (fun imp->
-      let interface = fst imp in
+   List.iter (fun (interface,_,_)->
       let include_file = get_meta_string_path interface.cl_meta Meta.Include in
       h_file#add_include (if include_file="" then interface.cl_path else path_of_string include_file) )
       (real_interfaces class_def.cl_implements);
@@ -5677,9 +5675,9 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
    let attribs = "HXCPP_" ^ (if extern_class then "EXTERN_" else "") ^ "CLASS_ATTRIBUTES" in
 
    let dump_native_interfaces () =
-      List.iter ( fun(c,params) ->
+      List.iter ( fun(c,params,_) ->
          output_h (" , public virtual " ^ (join_class_path c.cl_path "::") )
-      ) (List.filter  (fun (t,_) -> is_native_gen_class t) class_def.cl_implements);
+      ) (List.filter  (fun (t,_,_) -> is_native_gen_class t) class_def.cl_implements);
    in
 
    if (class_def.cl_interface && not nativeGen) then begin
@@ -5945,10 +5943,10 @@ let create_member_types common_ctx =
                let class_name = (join_class_path to_super.cl_path ".") in
                List.iter (fun member -> Hashtbl.add result (class_name ^ "." ^ member.cf_name) "virtual " ) class_def.cl_ordered_fields;
                match to_super.cl_super with
-               | Some super -> add_override (fst super)
+               | Some (super,_,_) -> add_override super
                | _ -> ()
              in
-             (match  class_def.cl_super with Some super -> add_override (fst super) | _->())
+             (match  class_def.cl_super with Some (super,_,_) -> add_override super | _->())
          | _ -> ()
          ) ) common_ctx.types;
    result;;
@@ -5960,11 +5958,11 @@ let create_super_dependencies common_ctx =
       (match object_def with
       | TClassDecl class_def when not class_def.cl_extern ->
          let deps = ref [] in
-         (match class_def.cl_super with Some super ->
-            if not (fst super).cl_extern then
-               deps := ((fst super).cl_path) :: !deps
+         (match class_def.cl_super with Some (super,_,_) ->
+            if not super.cl_extern then
+               deps := (super.cl_path) :: !deps
          | _ ->() );
-         List.iter (fun imp -> if not (fst imp).cl_extern then deps := (fst imp).cl_path :: !deps) (real_non_native_interfaces class_def.cl_implements);
+         List.iter (fun (imp,_,_) -> if not imp.cl_extern then deps := imp.cl_path :: !deps) (real_non_native_interfaces class_def.cl_implements);
          Hashtbl.add result class_def.cl_path !deps;
       | TEnumDecl enum_def when not enum_def.e_extern ->
          Hashtbl.add result enum_def.e_path [];
@@ -6664,7 +6662,7 @@ class script_writer ctx filename asciiOut =
    | TNew (clazz,params,arg_list) ->
       this#write ((this#op IaNew) ^ (this#typeText (TInst(clazz,params))) ^ (string_of_int (List.length arg_list)) ^ "\n");
       let rec matched_args clazz = match clazz.cl_constructor, clazz.cl_super with
-         | None, Some super -> matched_args (fst super)
+         | None, Some (super,_,_) -> matched_args super
          | None, _ -> false
          | Some ctr, _ ->
             (match ctr.cf_type with
@@ -6750,9 +6748,9 @@ let generate_script_class common_ctx script class_def =
    script#instName class_def;
    (match class_def.cl_super with
       | None -> script#ident ""
-      | Some (c,_) -> script#instName c);
+      | Some (c,_,_) -> script#instName c);
    script#wint (List.length class_def.cl_implements);
-   List.iter (fun(c,_) -> script#instName c) class_def.cl_implements;
+   List.iter (fun(c,_,_) -> script#instName c) class_def.cl_implements;
    script#write "\n";
    (* Looks like some map impl classes have their bodies discarded - not sure best way to filter *)
    let non_dodgy_function field =
