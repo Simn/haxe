@@ -616,7 +616,7 @@ let is_objc_type t = match follow t with
 let is_lvalue var =
    match (remove_parens var).eexpr with
    | TLocal _ -> true
-   | TField (_,FStatic(_,field) ) | TField (_,FInstance(_,_,field) ) -> is_var_field field
+   | TField (_,FStatic(_,field),_ ) | TField (_,FInstance(_,_,field),_ ) -> is_var_field field
    | _ -> false
 ;;
 
@@ -891,7 +891,7 @@ let is_static_access obj =
 
 let is_native_with_space func =
    match (remove_parens func).eexpr with
-   | TField(obj,field) when is_static_access obj ->
+   | TField(obj,field,_) when is_static_access obj ->
       String.contains (get_field_access_meta field Meta.Native) ' '
    | _ -> false
 ;;
@@ -906,7 +906,7 @@ let is_native_pointer expr =
 
 let rec is_cpp_function_member func =
    match (remove_parens func).eexpr with
-   | TField(obj,field) when is_cpp_function_instance obj.etype -> true
+   | TField(obj,field,_) when is_cpp_function_instance obj.etype -> true
    | TCall(obj,_) -> is_cpp_function_member obj
    | _ -> false
 ;;
@@ -1159,7 +1159,7 @@ let rec is_dynamic_in_cpp ctx expr =
       let result = (
       match expr.eexpr with
       | TEnumParameter( obj, _, index ) -> true (* TODO? *)
-      | TField( obj, field ) ->
+      | TField( obj, field, _ ) ->
             (is_dynamic_member_lookup_in_cpp ctx obj field) ||
             (is_dynamic_member_return_in_cpp ctx obj field)
       | TArray (obj,index) -> (is_dynamic_in_cpp ctx obj || is_virtual_array obj)
@@ -1167,15 +1167,15 @@ let rec is_dynamic_in_cpp ctx expr =
       | TCall(func,args) ->
          let is_IaCall =
             (match (remove_parens_cast func).eexpr with
-            | TField ( { eexpr = TLocal  { v_name = "__global__" }}, field ) -> false
-            | TField (obj,FStatic (class_def,field) ) when is_real_function field -> false
-            | TField (obj,FInstance (_,_,field) ) when (is_this obj) && (is_real_function field) -> false
-            | TField (obj,FInstance (_,_,field) ) when is_super obj -> false
-            | TField (obj,FInstance (_,_,field) ) when field.cf_name = "_hx_getIndex" -> false
-            | TField (obj,FInstance (_,_,field) ) when field.cf_name = "__Index" || (not (is_dynamic_in_cppia ctx obj) && is_real_function field) -> false
-            | TField (obj,FDynamic (name) )  when (is_internal_member name || (type_string obj.etype = "::String" && name="cca") ) -> false
+            | TField ( { eexpr = TLocal  { v_name = "__global__" }}, field, _ ) -> false
+            | TField (obj,FStatic (class_def,field),_ ) when is_real_function field -> false
+            | TField (obj,FInstance (_,_,field),_ ) when (is_this obj) && (is_real_function field) -> false
+            | TField (obj,FInstance (_,_,field),_ ) when is_super obj -> false
+            | TField (obj,FInstance (_,_,field),_ ) when field.cf_name = "_hx_getIndex" -> false
+            | TField (obj,FInstance (_,_,field),_ ) when field.cf_name = "__Index" || (not (is_dynamic_in_cppia ctx obj) && is_real_function field) -> false
+            | TField (obj,FDynamic (name),_ )  when (is_internal_member name || (type_string obj.etype = "::String" && name="cca") ) -> false
             | TConst TSuper -> false
-            | TField (_,FEnum (enum,field)) -> false
+            | TField (_,FEnum (enum,field),_) -> false
             | _ -> true
             ) in
          if is_IaCall then
@@ -2324,7 +2324,7 @@ let retype_expression ctx request_type function_args expression_tree forInjectio
             let cppType = retype return_type e in
             cppType.cppexpr, cppType.cpptype
 
-         | TField( obj, field ) ->
+         | TField( obj, field, _ ) ->
             (match field with
             | FInstance (clazz,params,member)
             | FClosure (Some (clazz,params),member) ->
@@ -4179,7 +4179,7 @@ let find_referenced_types_flags ctx obj super_deps constructor_deps header_only 
             | TFunction func_def ->
                List.iter (fun (v,_) -> visit_type v.v_type) func_def.tf_args;
 
-            | TField( obj, field ) ->
+            | TField( obj, field, _ ) ->
                (match field with
                | FInstance (clazz,params,_)
                | FClosure (Some (clazz,params),_) ->
@@ -6549,32 +6549,32 @@ class script_writer ctx filename asciiOut =
       let argN = (string_of_int (List.length arg_list)) ^ " " in
       let gen_call () =
          (match (remove_parens_cast func).eexpr with
-         | TField ( { eexpr = TLocal  { v_name = "__global__" }}, field ) ->
+         | TField ( { eexpr = TLocal  { v_name = "__global__" }}, field, _ ) ->
                   this#write ( (this#op IaCallGlobal) ^ (this#stringText (field_name field)) ^ argN ^ (this#commentOf (field_name field)) ^ "\n");
-         | TField (obj,FStatic (class_def,field) ) when is_real_function field ->
+         | TField (obj,FStatic (class_def,field),_ ) when is_real_function field ->
                   this#write ( (this#op IaCallStatic) ^ (this#instText class_def) ^ " " ^ (this#stringText field.cf_name) ^
                      argN ^ (this#commentOf ( join_class_path class_def.cl_path "." ^ "." ^ field.cf_name) ) ^ "\n");
-         | TField (obj,FInstance (_,_,field) ) when (is_this obj) && (is_real_function field) ->
+         | TField (obj,FInstance (_,_,field),_ ) when (is_this obj) && (is_real_function field) ->
                   this#write ( (this#op IaCallThis) ^ (this#typeText obj.etype) ^ " " ^ (this#stringText field.cf_name) ^
                      argN ^ (this#commentOf field.cf_name) ^ "\n");
-         | TField (obj,FInstance (_,_,field) ) when is_super obj ->
+         | TField (obj,FInstance (_,_,field),_ ) when is_super obj ->
                   this#write ( (this#op IaCallSuper) ^ (this#typeText obj.etype) ^ " " ^ (this#stringText field.cf_name) ^
                      argN ^ (this#commentOf field.cf_name) ^ "\n");
          (* Cppia does not have a "GetEnumIndex" op code - must use IaCallMember hx::EnumBase.__Index *)
-         | TField (obj,FInstance (_,_,field) ) when field.cf_name = "_hx_getIndex" && (script_type_string obj.etype)="hx::EnumBase" ->
+         | TField (obj,FInstance (_,_,field),_ ) when field.cf_name = "_hx_getIndex" && (script_type_string obj.etype)="hx::EnumBase" ->
                   this#write ( (this#op IaCallMember) ^ (this#typeTextString "hx::EnumBase") ^ " " ^ (this#stringText "__Index") ^
                      argN ^ (this#commentOf ("Enum index") ) ^ "\n");
                   this#gen_expression obj;
-         | TField (obj,FInstance (_,_,field) ) when field.cf_name = "__Index" || (not (is_dynamic_in_cppia ctx obj) && is_real_function field) ->
+         | TField (obj,FInstance (_,_,field),_ ) when field.cf_name = "__Index" || (not (is_dynamic_in_cppia ctx obj) && is_real_function field) ->
                   this#write ( (this#op IaCallMember) ^ (this#typeText obj.etype) ^ " " ^ (this#stringText field.cf_name) ^
                      argN ^ (this#commentOf field.cf_name) ^ "\n");
                   this#gen_expression obj;
-         | TField (obj,FDynamic (name) )  when (is_internal_member name || (type_string obj.etype = "::String" && name="cca") ) ->
+         | TField (obj,FDynamic (name),_ )  when (is_internal_member name || (type_string obj.etype = "::String" && name="cca") ) ->
                   this#write ( (this#op IaCallMember) ^ (this#typeText obj.etype) ^ " " ^ (this#stringText name) ^
                      argN ^ (this#commentOf name) ^ "\n");
                   this#gen_expression obj;
          | TConst TSuper -> this#write ((this#op IaCallSuperNew) ^ (this#typeText func.etype) ^ " " ^ argN ^ "\n");
-         | TField (_,FEnum (enum,field)) -> this#write ((this#op IaCreateEnum) ^ (this#enumText enum) ^ " " ^ (this#stringText field.ef_name) ^ argN ^
+         | TField (_,FEnum (enum,field),_) -> this#write ((this#op IaCreateEnum) ^ (this#enumText enum) ^ " " ^ (this#stringText field.ef_name) ^ argN ^
                    (this#commentOf field.ef_name) ^ "\n");
          | _ -> this#write ( (this#op IaCall) ^ argN ^ "\n");
                   this#gen_expression func;
@@ -6591,7 +6591,7 @@ class script_writer ctx filename asciiOut =
             List.iter this#gen_expression arg_list;
       in
       (match (remove_parens_cast func).eexpr with
-         | TField(obj,field) when is_array_or_dyn_array obj.etype && (field_name field)="map" ->
+         | TField(obj,field,_) when is_array_or_dyn_array obj.etype && (field_name field)="map" ->
             (match this#get_array_type expression.etype with
             | ArrayData t ->
                 this#write ( (this#op IaToDataArray) ^ (this#typeTextString ("Array." ^ t)) ^ "\n");
@@ -6609,7 +6609,7 @@ class script_writer ctx filename asciiOut =
             )
          | _ -> gen_call();
       );
-   | TField (obj, acc) ->
+   | TField (obj, acc, _) ->
       let objType = if is_dynamic_in_cppia ctx obj then "Dynamic" else script_type_string obj.etype in
       let typeText = if is_dynamic_in_cppia ctx obj then this#typeTextString "Dynamic" else this#typeText obj.etype in
       (match acc with

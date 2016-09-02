@@ -40,7 +40,7 @@ module Utils = struct
 			let ta = TAnon { a_fields = c.cl_statics; a_status = ref (Statics c) } in
 			let ethis = mk (TTypeExpr (TClassDecl c)) ta p in
 			let t = monomorphs cf.cf_params cf.cf_type in
-			mk (TField (ethis,(FStatic (c,cf)))) t p
+			mk (TField (ethis,(FStatic (c,cf)),p)) t p
 
 	let mk_static_call c cf el p =
 		let ef = mk_static_field c cf p in
@@ -342,7 +342,7 @@ module Transformer = struct
 					   of Array.push even if the value is not used *)
 					let is_removable_statement e = (not is_value || i < size-1) &&
 						match e.eexpr with
-						| TField(_, FInstance({cl_path = [],"list"},_,{ cf_name = "length" })) -> true
+						| TField(_, FInstance({cl_path = [],"list"},_,{ cf_name = "length" }), _) -> true
 						| _ -> false
 					in
 					if not (is_removable_statement e) then
@@ -438,7 +438,7 @@ module Transformer = struct
 			) length_map [] in
 			let c_string = match !t_string with TInst(c,_) -> c | _ -> assert false in
 			let cf_length = PMap.find "length" c_string.cl_fields in
-			let ef = mk (TField(e1,FInstance(c_string,[],cf_length))) !t_int e1.epos in
+			let ef = mk (TField(e1,FInstance(c_string,[],cf_length),e1.epos)) !t_int e1.epos in
 			let res_var = alloc_var (ae.a_next_id()) ef.etype ef.epos in
 			let res_local = {ef with eexpr = TLocal res_var} in
 			let var_expr = {ef with eexpr = TVar(res_var,Some ef)} in
@@ -474,7 +474,7 @@ module Transformer = struct
 		in
 		match e1_.a_expr.eexpr with
 			| TArray({eexpr = TLocal _},{eexpr = TLocal _})
-			| TField({eexpr = TLocal _},_)
+			| TField({eexpr = TLocal _},_,_)
 			| TLocal _ ->
 				handle_as_local e1_.a_expr
 			| TArray(e1,e2) ->
@@ -502,14 +502,14 @@ module Transformer = struct
 					lift_expr f.a_expr ~is_value:true ~next_id:(Some ae.a_next_id) ~blocks:f.a_blocks
 				end else
 					transform_exprs_to_block block ae.a_expr.etype false ae.a_expr.epos ae.a_next_id
-			| TField(e1,fa) ->
+			| TField(e1,fa,pf) ->
 				let temp_var_l = alloc_var (ae.a_next_id()) e1.etype e1.epos in
 				let temp_local_l = {e1 with eexpr = TLocal temp_var_l} in
 				let temp_var_l = {e1 with eexpr = TVar(temp_var_l,Some e1)} in
 
 				let temp_var = alloc_var (ae.a_next_id()) e1_.a_expr.etype e1_.a_expr.epos in
 				let temp_local = {e1_.a_expr with eexpr = TLocal temp_var} in
-				let temp_var_expr = {e1_.a_expr with eexpr = TField(temp_local_l,fa)} in
+				let temp_var_expr = {e1_.a_expr with eexpr = TField(temp_local_l,fa,pf)} in
 				let temp_var = {e1_.a_expr with eexpr = TVar(temp_var,Some temp_var_expr)} in
 
 				let plus = {ae.a_expr with eexpr = TBinop(op,temp_local,one)} in
@@ -597,7 +597,7 @@ module Transformer = struct
 		in
 		match e, params with
 		(* the foreach block should not be handled as a value *)
-		| ({ eexpr = TField(_, FStatic({cl_path = ["python";],"Syntax"},{ cf_name = "_foreach" }))} as e, [e1;e2;e3]) ->
+		| ({ eexpr = TField(_, FStatic({cl_path = ["python";],"Syntax"},{ cf_name = "_foreach" }), _)} as e, [e1;e2;e3]) ->
 			trans1 e [trans true [] e1; trans true [] e2; trans false [] e3]
 		| (e, params) ->
 			trans1 e (List.map (trans true []) params)
@@ -643,7 +643,7 @@ module Transformer = struct
 
 			transform_var_expr ae None v
 
- 		| (false, TVar(v,Some({ eexpr = TUnop((Increment | Decrement as unop),post_fix,({eexpr = TLocal _ | TField({eexpr = TConst TThis},_)} as ve))} as e1))) ->
+ 		| (false, TVar(v,Some({ eexpr = TUnop((Increment | Decrement as unop),post_fix,({eexpr = TLocal _ | TField({eexpr = TConst TThis},_,_)} as ve))} as e1))) ->
 			let one = {e1 with eexpr = TConst (TInt (Int32.of_int 1))} in
 			let op = if unop = Increment then OpAdd else OpSub in
 			let inc = {e1 with eexpr = TBinop(op,ve,one)} in
@@ -663,10 +663,10 @@ module Transformer = struct
 			let t_var = alloc_var name e1.etype e1.epos in
 
 			let ev = make_local t_var e1.epos in
-			let ehasnext = mk (TField(ev,quick_field e1.etype "hasNext")) (tfun [] (!t_bool) ) e1.epos in
+			let ehasnext = mk (TField(ev,quick_field e1.etype "hasNext",e1.epos)) (tfun [] (!t_bool) ) e1.epos in
 			let ehasnext = mk (TCall(ehasnext,[])) ehasnext.etype ehasnext.epos in
 
-			let enext = mk (TField(ev,quick_field e1.etype "next")) (tfun [] v.v_type) e1.epos in
+			let enext = mk (TField(ev,quick_field e1.etype "next",e1.epos)) (tfun [] v.v_type) e1.epos in
 			let enext = mk (TCall(enext,[])) v.v_type e1.epos in
 
 			let var_assign = mk (TVar (v,Some enext)) v.v_type a_expr.epos in
@@ -800,13 +800,13 @@ module Transformer = struct
 					transform_switch ae is_value e cases edef
 			end
 		(* anon field access on optional params *)
-		| (is_value, TField(e,FAnon cf)) when Meta.has Meta.Optional cf.cf_meta ->
+		| (is_value, TField(e,FAnon cf,_)) when Meta.has Meta.Optional cf.cf_meta ->
 			let e = dynamic_field_read e cf.cf_name ae.a_expr.etype in
 			transform_expr ~is_value:is_value e
-		| (is_value, TBinop(OpAssign,{eexpr = TField(e1,FAnon cf)},e2)) when Meta.has Meta.Optional cf.cf_meta ->
+		| (is_value, TBinop(OpAssign,{eexpr = TField(e1,FAnon cf,_)},e2)) when Meta.has Meta.Optional cf.cf_meta ->
 			let e = dynamic_field_write e1 cf.cf_name e2 in
 			transform_expr ~is_value:is_value e
-		| (is_value, TBinop(OpAssignOp op,{eexpr = TField(e1,FAnon cf); etype = t},e2)) when Meta.has Meta.Optional cf.cf_meta ->
+		| (is_value, TBinop(OpAssignOp op,{eexpr = TField(e1,FAnon cf,_); etype = t},e2)) when Meta.has Meta.Optional cf.cf_meta ->
 			let e = dynamic_field_read_write ae.a_next_id e1 cf.cf_name op e2 t in
 			transform_expr ~is_value:is_value e
 		(* TODO we need to deal with Increment, Decrement too!
@@ -836,16 +836,16 @@ module Transformer = struct
 			let r = { a_expr with eexpr = TUnop(op, Prefix, e1.a_expr) } in
 			lift_expr ~blocks:e1.a_blocks r
 
-		| (is_value, TField(e,FDynamic s)) ->
+		| (is_value, TField(e,FDynamic s,_)) ->
 			let e = dynamic_field_read e s ae.a_expr.etype in
 			transform_expr ~is_value:is_value e
-		| (is_value, TBinop(OpAssign,{eexpr = TField(e1,FDynamic s)},e2)) ->
+		| (is_value, TBinop(OpAssign,{eexpr = TField(e1,FDynamic s,_)},e2)) ->
 			let e = dynamic_field_write e1 s e2 in
 			transform_expr ~is_value:is_value e
-		| (is_value, TBinop(OpAssignOp op,{eexpr = TField(e1,FDynamic s); etype = t},e2)) ->
+		| (is_value, TBinop(OpAssignOp op,{eexpr = TField(e1,FDynamic s,_); etype = t},e2)) ->
 			let e = dynamic_field_read_write ae.a_next_id e1 s op e2 t in
 			transform_expr ~is_value:is_value e
-		| (is_value, TField(e1, FClosure(Some ({cl_path = [],("str" | "list")},_),cf))) ->
+		| (is_value, TField(e1, FClosure(Some ({cl_path = [],("str" | "list")},_),cf), _)) ->
 			let e = dynamic_field_read e1 cf.cf_name ae.a_expr.etype in
 			transform_expr ~is_value:is_value e
 		| (is_value, TBinop(OpAssign, left, right))->
@@ -931,9 +931,9 @@ module Transformer = struct
 			let e = trans is_value [] e in
 			let r = { a_expr with eexpr = TCast(e.a_expr, None)} in
 			lift_expr ~blocks:e.a_blocks r
-		| (_, TField(e,f)) ->
+		| (_, TField(e,f,pf)) ->
 			let e = trans true [] e in
-			let r = { a_expr with eexpr = TField(e.a_expr, f) } in
+			let r = { a_expr with eexpr = TField(e.a_expr, f, pf) } in
 			lift_expr ~blocks:e.a_blocks r
 		| (is_value, TMeta(m, e)) ->
 			let e = trans is_value [] e in
@@ -1161,7 +1161,7 @@ module Printer = struct
 		in
 		match e1.eexpr with
 		| TLocal _ -> handle_index
-		| TField ({eexpr=(TConst TThis | TLocal _)},_) -> handle_index
+		| TField ({eexpr=(TConst TThis | TLocal _)},_,_) -> handle_index
 		| _ -> default
 
 	and is_safe_string pctx x =
@@ -1203,7 +1203,7 @@ module Printer = struct
 				Printf.sprintf "HxOverrides.arraySet(%s,%s,%s)" (print_expr pctx e1) (print_expr pctx e2) (print_expr pctx e3)
 			| TBinop(OpAssign,{eexpr = TArray(e1,e2)},e3) ->
 				Printf.sprintf "%s[%s] = %s" (print_expr pctx e1) (print_expr pctx e2) (print_expr pctx (remove_outer_parens e3) )
-			| TBinop(OpAssign,{eexpr = TField(ef1,fa)},e2) ->
+			| TBinop(OpAssign,{eexpr = TField(ef1,fa,_)},e2) ->
 				Printf.sprintf "%s = %s" (print_field pctx ef1 fa true) (print_op_assign_right pctx e2)
 			| TBinop(OpAssign,e1,e2) ->
 				Printf.sprintf "%s = %s" (print_expr pctx e1) (print_expr pctx (remove_outer_parens e2))
@@ -1299,7 +1299,7 @@ module Printer = struct
 				Printf.sprintf "python_Boot._add_dynamic(%s,%s)" (print_expr pctx e1) (print_expr pctx e2)
 			| TBinop(op,e1,e2) ->
 				Printf.sprintf "(%s %s %s)" (print_expr pctx e1) (print_binop op) (print_expr pctx e2)
-			| TField(e1,fa) ->
+			| TField(e1,fa,_) ->
 				print_field pctx e1 fa false
 			| TParenthesis e1 ->
 				Printf.sprintf "(%s)" (print_expr pctx e1)
@@ -1621,11 +1621,11 @@ module Printer = struct
 					"print(" ^ (print_expr pctx e) ^ ")"
 				else
 					"print(str(" ^ (print_expr pctx e) ^ "))"
-			| TField(e1,((FAnon {cf_name = (("join" | "push" | "map" | "filter") as s)}) | FDynamic (("join" | "push" | "map" | "filter") as s))), [x] ->
+			| TField(e1,((FAnon {cf_name = (("join" | "push" | "map" | "filter") as s)}) | FDynamic (("join" | "push" | "map" | "filter") as s)),_), [x] ->
 				Printf.sprintf "HxOverrides.%s(%s, %s)" s (print_expr pctx e1) (print_expr pctx x)
-			| TField(e1,((FAnon {cf_name = (("iterator" | "toUpperCase" | "toLowerCase" | "pop" | "shift") as s)}) | FDynamic (("iterator" | "toUpperCase" | "toLowerCase" | "pop" | "shift") as s))), [] ->
+			| TField(e1,((FAnon {cf_name = (("iterator" | "toUpperCase" | "toLowerCase" | "pop" | "shift") as s)}) | FDynamic (("iterator" | "toUpperCase" | "toLowerCase" | "pop" | "shift") as s)),_), [] ->
 				Printf.sprintf "HxOverrides.%s(%s)" s (print_expr pctx e1)
-			| TField(_, (FStatic({cl_path = ["python"; "_KwArgs"], "KwArgs_Impl_"},{ cf_name="fromT" }))), [e2]  ->
+			| TField(_,(FStatic({cl_path = ["python"; "_KwArgs"], "KwArgs_Impl_"},{ cf_name="fromT" })),_), [e2]  ->
 				let t = match follow call_expr.etype with
 				| TAbstract(_, [t]) -> t
 				| _ -> assert false
@@ -1636,7 +1636,7 @@ module Printer = struct
 				else
 					let s1 = native_fields_str native_fields in
 					Printf.sprintf "python__KwArgs_KwArgs_Impl_.fromT(HxOverrides.mapKwArgs(%s, {%s}))" (print_expr pctx e2) s1
-			| TField(_, (FStatic({cl_path = ["python"; "_KwArgs"], "KwArgs_Impl_"},{ cf_name="toDictHelper" }))), [e2; et]  ->
+			| TField(_, (FStatic({cl_path = ["python"; "_KwArgs"], "KwArgs_Impl_"},{ cf_name="toDictHelper" })), _), [e2; et]  ->
 				let native_fields = get_native_fields et.etype in
 				if PMap.is_empty native_fields then
 					print_call2 pctx e1 el
@@ -1655,8 +1655,8 @@ module Printer = struct
 			in
 			let prefix = match e1.eexpr, follow x.etype with
 				(* the should not apply for the instance methods of the abstract itself *)
-				| TField(_, FStatic({cl_path = ["python"; "_KwArgs"],"KwArgs_Impl_"},f)), _ when i == 0 && Meta.has Meta.Impl f.cf_meta -> ""
-				| TField(_, FStatic({cl_path = ["python"; "_VarArgs"],"VarArgs_Impl_"},f)), _ when i == 0 && Meta.has Meta.Impl f.cf_meta -> ""
+				| TField(_, FStatic({cl_path = ["python"; "_KwArgs"],"KwArgs_Impl_"},f),_), _ when i == 0 && Meta.has Meta.Impl f.cf_meta -> ""
+				| TField(_, FStatic({cl_path = ["python"; "_VarArgs"],"VarArgs_Impl_"},f),_), _ when i == 0 && Meta.has Meta.Impl f.cf_meta -> ""
 				| _, TAbstract({a_path = ["python"],"KwArgs"},_) -> "**"
 				| _, TAbstract({a_path = ["python"],"VarArgs"},_) -> "*"
 				| _, _ -> ""
@@ -1919,7 +1919,7 @@ module Generator = struct
 				   `super`, `return` or `throw` appears (regardless of control flow). *)
 				let collect_assignments e =
 					let rec loop e = match e.eexpr with
-						| TBinop(OpAssign,{eexpr = TField({eexpr = TConst TThis}, FInstance(_,_,cf))},e2) ->
+						| TBinop(OpAssign,{eexpr = TField({eexpr = TConst TThis}, FInstance(_,_,cf), _)},e2) ->
 							loop e2;
 							assigned_fields := cf :: !assigned_fields
 						| TConst (TSuper | TThis) | TThrow _ | TReturn _ ->
@@ -1935,7 +1935,7 @@ module Generator = struct
 				collect_assignments f.tf_expr;
 				let member_data = List.fold_left (fun acc cf ->
 					if not (List.memq cf !assigned_fields) then begin
-						let ef = mk (TField(ethis,FInstance(c,[],cf))) cf.cf_type cf.cf_pos in (* TODO *)
+						let ef = mk (TField(ethis,FInstance(c,[],cf),cf.cf_pos)) cf.cf_type cf.cf_pos in (* TODO *)
 						let e = mk (TBinop(OpAssign,ef,null ef.etype ef.epos)) ef.etype ef.epos in
 						e :: acc
 					end else

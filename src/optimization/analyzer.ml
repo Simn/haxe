@@ -408,9 +408,9 @@ module ConstPropagation = DataFlow(struct
 					eval bb e'
 				else
 					unwrap e'
-			| TField(_,FEnum(_,ef)) ->
+			| TField(_,FEnum(_,ef),_) ->
 				EnumValue(ef.ef_index,[])
-			| TCall({eexpr = TField(_,FEnum(_,ef))},el) ->
+			| TCall({eexpr = TField(_,FEnum(_,ef),_)},el) ->
 				let cll = List.map (fun e -> try eval bb e with Exit -> Bottom) el in
 				EnumValue(ef.ef_index,cll)
 			| TEnumParameter(e1,_,i) ->
@@ -418,7 +418,7 @@ module ConstPropagation = DataFlow(struct
 					| EnumValue(_,el) -> (try List.nth el i with Failure _ -> raise Exit)
 					| _ -> raise Exit
 				end;
-			| TCall ({ eexpr = TField (_,FStatic(c,cf))},el) ->
+			| TCall ({ eexpr = TField (_,FStatic(c,cf),_)},el) ->
 				let el = List.map (eval bb) el in
 				let el = List.map wrap el in
 				begin match Optimizer.api_inline2 ctx.com c cf.cf_name el e.epos with
@@ -430,8 +430,8 @@ module ConstPropagation = DataFlow(struct
 			| _ ->
 				let e1 = match ctx.com.platform,e.eexpr with
 					| Js,TArray(e1,{eexpr = TConst(TInt i)}) when Int32.to_int i = 1 -> e1
-					| Cpp,TCall({eexpr = TField(e1,FDynamic "__Index")},[]) -> e1
-					| Neko,TField(e1,FDynamic "index") -> e1
+					| Cpp,TCall({eexpr = TField(e1,FDynamic "__Index",_)},[]) -> e1
+					| Neko,TField(e1,FDynamic "index",_) -> e1
 					| _ -> raise Exit
 				in
 				begin match follow e1.etype,eval bb e1 with
@@ -811,10 +811,10 @@ module LocalDce = struct
 		let rec loop e =
 			match e.eexpr with
 			| TConst _ | TLocal _ | TTypeExpr _ | TFunction _ -> ()
-			| TCall ({ eexpr = TField(_,FStatic({ cl_path = ([],"Std") },{ cf_name = "string" })) },args) -> Type.iter loop e
-			| TCall ({eexpr = TField(_,FEnum _)},_) -> Type.iter loop e
+			| TCall ({ eexpr = TField(_,FStatic({ cl_path = ([],"Std") },{ cf_name = "string" }),_) },args) -> Type.iter loop e
+			| TCall ({eexpr = TField(_,FEnum _,_)},_) -> Type.iter loop e
 			| TCall ({eexpr = TConst (TString ("phi" | "fun"))},_) -> ()
-			| TCall({eexpr = TField(e1,fa)},el) when PurityState.is_pure_field_access fa -> loop e1; List.iter loop el
+			| TCall({eexpr = TField(e1,fa,_)},el) when PurityState.is_pure_field_access fa -> loop e1; List.iter loop el
 			| TNew _ | TCall _ | TBinop ((OpAssignOp _ | OpAssign),_,_) | TUnop ((Increment|Decrement),_,_) -> raise Exit
 			| TReturn _ | TBreak | TContinue | TThrow _ | TCast (_,Some _) -> raise Exit
 			| TFor _ -> raise Exit

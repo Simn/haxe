@@ -33,7 +33,7 @@ module ExprBuilder = struct
 
 	let make_static_field c cf p =
 		let e_this = make_static_this c p in
-		mk (TField(e_this,FStatic(c,cf))) cf.cf_type p
+		mk (TField(e_this,FStatic(c,cf),p)) cf.cf_type p
 
 	let make_int com i p =
 		mk (TConst (TInt (Int32.of_int i))) com.basic.tint p
@@ -63,7 +63,7 @@ module ExprBuilder = struct
 end
 
 let field e name t p =
-	mk (TField (e,try quick_field e.etype name with Not_found -> assert false)) t p
+	mk (TField (e,(try quick_field e.etype name with Not_found -> assert false),p)) t p
 
 let fcall e name el ret p =
 	let ft = tfun (List.map (fun e -> e.etype) el) ret in
@@ -427,7 +427,7 @@ module AbstractCast = struct
 					let e = make_static_call ctx c cf a pl ((mk (TConst TNull) (TAbstract(a,pl)) e.epos) :: el) m e.epos in
 					{e with etype = m}
 				end
-			| TCall({eexpr = TField(_,FStatic({cl_path=[],"Std"},{cf_name = "string"}))},[e1]) when (match follow e1.etype with TAbstract({a_impl = Some _},_) -> true | _ -> false) ->
+			| TCall({eexpr = TField(_,FStatic({cl_path=[],"Std"},{cf_name = "string"}),_)},[e1]) when (match follow e1.etype with TAbstract({a_impl = Some _},_) -> true | _ -> false) ->
 				begin match follow e1.etype with
 					| TAbstract({a_impl = Some c} as a,tl) ->
 						begin try
@@ -455,7 +455,7 @@ module AbstractCast = struct
 						match e1.eexpr with
 						| TCast(e2,None) ->
 							{e1 with eexpr = TCast(find_field e2,None)}
-						| TField(e2,fa) ->
+						| TField(e2,fa,pf) ->
 							let a,pl,e2 = find_abstract e2 e2.etype in
 							let m = Abstract.get_underlying_type a pl in
 							let fname = field_name fa in
@@ -472,7 +472,7 @@ module AbstractCast = struct
 									| FAnon cf -> get_fun_type cf.cf_type
 									| _ -> raise Not_found
 								in
-								let ef = mk (TField({e2 with etype = m},fa)) tf e2.epos in
+								let ef = mk (TField({e2 with etype = m},fa,pf)) tf e2.epos in
 								let ecall = make_call ctx ef el tr e.epos in
 								if not (type_iseq ecall.etype e.etype) then
 									mk (TCast(ecall,None)) e.etype e.epos
@@ -515,11 +515,11 @@ let detect_usage com =
 					()
 			in
 			let rec expr e = match e.eexpr with
-				| TField(_,FEnum(_,ef)) when Meta.has Meta.Usage ef.ef_meta ->
+				| TField(_,FEnum(_,ef),_) when Meta.has Meta.Usage ef.ef_meta ->
 					let p = {e.epos with pmin = e.epos.pmax - (String.length ef.ef_name)} in
 					usage := p :: !usage;
 					Type.iter expr e
-				| TField(_,(FAnon cf | FInstance (_,_,cf) | FStatic (_,cf) | FClosure (_,cf))) when Meta.has Meta.Usage cf.cf_meta ->
+				| TField(_,(FAnon cf | FInstance (_,_,cf) | FStatic (_,cf) | FClosure (_,cf)),_) when Meta.has Meta.Usage cf.cf_meta ->
 					let p = {e.epos with pmin = e.epos.pmax - (String.length cf.cf_name)} in
 					usage := p :: !usage;
 					Type.iter expr e
@@ -856,7 +856,7 @@ let rec constructor_side_effects e =
 	match e.eexpr with
 	| TBinop (op,_,_) when op <> OpAssign ->
 		true
-	| TField (_,FEnum _) ->
+	| TField (_,FEnum _,_) ->
 		false
 	| TUnop _ | TArray _ | TField _ | TEnumParameter _ | TCall _ | TNew _ | TFor _ | TWhile _ | TSwitch _ | TReturn _ | TThrow _ ->
 		true
@@ -1065,7 +1065,7 @@ let default_cast ?(vtmp="$t") com e texpr t p =
 			assert false
 	) in
 	let std = mk (TTypeExpr std) (mk_texpr std) p in
-	let is = mk (TField (std,fis)) (tfun [t_dynamic;t_dynamic] api.tbool) p in
+	let is = mk (TField (std,fis,p)) (tfun [t_dynamic;t_dynamic] api.tbool) p in
 	let is = mk (TCall (is,[vexpr;texpr])) api.tbool p in
 	let exc = mk (TThrow (mk (TConst (TString "Class cast error")) api.tstring p)) t p in
 	let check = mk (TIf (mk_parent is,mk (TCast (vexpr,None)) t p,Some exc)) t p in
@@ -1391,7 +1391,7 @@ module DeprecationCheck = struct
 
 	let run com =
 		let rec expr e = match e.eexpr with
-			| TField(e1,fa) ->
+			| TField(e1,fa,_) ->
 				expr e1;
 				begin match fa with
 					| FStatic(c,cf) | FInstance(c,_,cf) ->
@@ -1486,7 +1486,7 @@ module ExtClass = struct
 
 	let add_static_init c cf e p =
 		let ethis = ExprBuilder.make_static_this c p in
-		let ef1 = mk (TField(ethis,FStatic(c,cf))) cf.cf_type p in
+		let ef1 = mk (TField(ethis,FStatic(c,cf),p)) cf.cf_type p in
 		let e_assign = mk (TBinop(OpAssign,ef1,e)) e.etype p in
 		add_cl_init c e_assign
 end

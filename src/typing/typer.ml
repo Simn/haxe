@@ -758,7 +758,7 @@ let unify_call_args ctx el args r p inline force_inline =
 	let el,tf = unify_call_args' ctx el args r p inline force_inline in
 	List.map fst el,tf
 
-let unify_field_call ctx fa el args ret p inline =
+let unify_field_call ctx fa pf el args ret p inline =
 	let map_cf cf0 map cf =
 		let t = map (monomorphs cf.cf_params cf.cf_type) in
 		begin match cf.cf_expr,cf.cf_kind with
@@ -803,7 +803,7 @@ let unify_field_call ctx fa el args ret p inline =
 		| TFun(args,ret) ->
 			let el,tf = unify_call_args' ctx el args ret p inline is_forced_inline in
 			let mk_call ethis p_field =
-				let ef = mk (TField(ethis,mk_fa cf)) tf p_field in
+				let ef = mk (TField(ethis,mk_fa cf,p_field)) tf p_field in (* TODO: check TField pos *)
 				make_call ctx ef (List.map fst el) ret p
 			in
 			el,tf,mk_call
@@ -828,7 +828,7 @@ let unify_field_call ctx fa el args ret p inline =
 	let fail_fun () =
 		let tf = TFun(args,ret) in
 		[],tf,(fun ethis p_field ->
-			let e1 = mk (TField(ethis,mk_fa cf)) tf p_field in
+			let e1 = mk (TField(ethis,mk_fa cf,pf)) tf p_field in
 			mk (TCall(e1,[])) ret p)
 	in
 	match candidates with
@@ -865,9 +865,9 @@ let unify_field_call ctx fa el args ret p inline =
 			| (el,tf,mk_call) :: _ -> List.map fst el,tf,mk_call
 		end
 
-let fast_enum_field e ef p =
+(*let fast_enum_field e ef p =
 	let et = mk (TTypeExpr (TEnumDecl e)) (TAnon { a_fields = PMap.empty; a_status = ref (EnumStatics e) }) p in
-	TField (et,FEnum (e,ef))
+	TField (et,FEnum (e,ef))*)
 
 let rec type_module_type ctx t tparams p =
 	match t with
@@ -949,7 +949,7 @@ let get_constructor ctx c params p =
 let make_call ctx e params t p =
 	try
 		let ethis,cl,f = match e.eexpr with
-			| TField (ethis,fa) ->
+			| TField (ethis,fa,_) ->
 				let co,cf = match fa with
 					| FInstance(c,_,cf) | FStatic(c,cf) -> Some c,cf
 					| FAnon cf -> None,cf
@@ -1007,7 +1007,7 @@ let mk_array_get_call ctx (cf,tf,r,e1,e2o) c ebase p = match cf.cf_expr with
 		mk (TArray(ebase,e1)) r p
 	| Some _ ->
 		let et = type_module_type ctx (TClassDecl c) None p in
-		let ef = mk (TField(et,(FStatic(c,cf)))) tf p in
+		let ef = mk (TField(et,(FStatic(c,cf)),p)) tf p in
 		make_call ctx ef [ebase;e1] r p
 
 let mk_array_set_call ctx (cf,tf,r,e1,e2o) c ebase p =
@@ -1019,7 +1019,7 @@ let mk_array_set_call ctx (cf,tf,r,e1,e2o) c ebase p =
 			mk (TBinop(OpAssign,ea,evalue)) r p
 		| Some _ ->
 			let et = type_module_type ctx (TClassDecl c) None p in
-			let ef = mk (TField(et,(FStatic(c,cf)))) tf p in
+			let ef = mk (TField(et,(FStatic(c,cf)),p)) tf p in
 			make_call ctx ef [ebase;e1;evalue] r p
 
 let rec acc_get ctx g p =
@@ -1034,7 +1034,7 @@ let rec acc_get ctx g p =
 			| TFun (_ :: args,ret) -> TFun(args,ret)
 			| _ -> et.etype
 		in
-		mk (TField(ec,FStatic(c,cf))) t et.epos
+		mk (TField(ec,FStatic(c,cf),et.epos)) t et.epos
 	| AKUsing (et,_,cf,e) ->
 		(* build a closure with first parameter applied *)
 		(match follow et.etype with
@@ -1066,7 +1066,7 @@ let rec acc_get ctx g p =
 		ignore(follow f.cf_type); (* force computing *)
 		(match f.cf_expr with
 		| _ when ctx.com.display <> DMNone ->
-			mk (TField (e,cmode)) t p
+			mk (TField (e,cmode,p)) t p
 		| None ->
 			error "Recursive inline is not supported" p
 		| Some { eexpr = TFunction _ } ->
@@ -1096,9 +1096,9 @@ let rec acc_get ctx g p =
 					cf
 				in
 				let e_t = type_module_type ctx (TClassDecl c2) None p in
-				mk (TField(e_t,FStatic(c2,cf))) t p
+				mk (TField(e_t,FStatic(c2,cf),p)) t p
 			in
-			let e_def = mk (TField (e,cmode)) t p in
+			let e_def = mk (TField (e,cmode,p)) t p in
 			begin match follow e.etype with
 				| TInst (c,_) when chk_class c ->
 					display_error ctx "Can't create closure on an extern inline member method" p;
@@ -1160,7 +1160,7 @@ let get_this ctx p =
 		mk (TConst TThis) ctx.tthis p
 
 let field_access ctx mode f fmode t e p =
-	let fnormal() = AKExpr (mk (TField (e,fmode)) t p) in
+	let fnormal() = AKExpr (mk (TField (e,fmode,p)) t p) in
 	let normal() =
 		match follow e.etype with
 		| TAnon a ->
@@ -1168,7 +1168,7 @@ let field_access ctx mode f fmode t e p =
 			| EnumStatics en ->
 				let c = (try PMap.find f.cf_name en.e_constrs with Not_found -> assert false) in
 				let fmode = FEnum (en,c) in
-				AKExpr (mk (TField (e,fmode)) t p)
+				AKExpr (mk (TField (e,fmode,p)) t p)
 			| _ -> fnormal())
 		| _ -> fnormal()
 	in
@@ -1177,7 +1177,7 @@ let field_access ctx mode f fmode t e p =
 		if mode = MSet && m <> MethDynamic && not ctx.untyped then error "Cannot rebind this method : please use 'dynamic' before method declaration" p;
 		begin match ctx.curfun,e.eexpr with
 		| (FunMemberAbstract | FunMemberAbstractLocal),TTypeExpr(TClassDecl ({cl_kind = KAbstractImpl a} as c)) when c == ctx.curclass && Meta.has Meta.Impl f.cf_meta ->
-			let e = mk (TField(e,fmode)) t p in
+			let e = mk (TField(e,fmode,p)) t p in
 			let ethis = get_this ctx p in
 			let ethis = {ethis with etype = TAbstract(a,List.map snd a.a_params)} in
 			AKUsing(e,ctx.curclass,f,ethis)
@@ -1194,7 +1194,7 @@ let field_access ctx mode f fmode t e p =
 					| FAnon f -> FClosure (None, f)
 					| FDynamic _ | FClosure _ -> assert false
 				) in
-				AKExpr (mk (TField (e,cmode)) t p)
+				AKExpr (mk (TField (e,cmode,p)) t p)
 			| _ -> normal())
 		end
 	| Var v ->
@@ -1224,7 +1224,7 @@ let field_access ctx mode f fmode t e p =
 				| _ -> false
 			in
 			if mode = MGet && is_maybe_method() then
-				AKExpr (mk (TField (e,FClosure (None,f))) t p)
+				AKExpr (mk (TField (e,FClosure (None,f),p)) t p)
 			else
 				normal()
 		| AccCall ->
@@ -1241,7 +1241,7 @@ let field_access ctx mode f fmode t e p =
 					display_error ctx "This field cannot be accessed because it is not a real variable" p;
 					display_error ctx "Add @:isVar here to enable it" f.cf_pos;
 				end;
-				AKExpr (mk (TField (e,if prefix = "" then fmode else FDynamic (prefix ^ f.cf_name))) t p)
+				AKExpr (mk (TField (e,(if prefix = "" then fmode else FDynamic (prefix ^ f.cf_name)),p)) t p)
 			else if is_abstract_this_access() then begin
 				let this = get_this ctx p in
 				if mode = MSet then begin
@@ -1250,18 +1250,18 @@ let field_access ctx mode f fmode t e p =
 					(* we don't have access to the type parameters here, right? *)
 					(* let t = apply_params a.a_params pl (field_type ctx c [] f p) in *)
 					let t = (field_type ctx c [] f p) in
-					let ef = mk (TField (e,FStatic (c,f))) t p in
+					let ef = mk (TField (e,FStatic (c,f),p)) t p in
 					AKUsing (ef,c,f,this)
 				end else
-					AKExpr (make_call ctx (mk (TField (e,quick_field_dynamic e.etype m)) (tfun [this.etype] t) p) [this] t p)
+					AKExpr (make_call ctx (mk (TField (e,quick_field_dynamic e.etype m,p)) (tfun [this.etype] t) p) [this] t p)
 			end else if mode = MSet then
 				AKSet (e,t,f)
 			else
-				AKExpr (make_call ctx (mk (TField (e,quick_field_dynamic e.etype m)) (tfun [] t) p) [] t p)
+				AKExpr (make_call ctx (mk (TField (e,quick_field_dynamic e.etype m,p)) (tfun [] t) p) [] t p)
 		| AccResolve ->
 			let fstring = mk (TConst (TString f.cf_name)) ctx.t.tstring p in
 			let tresolve = tfun [ctx.t.tstring] t in
-			AKExpr (make_call ctx (mk (TField (e,FDynamic "resolve")) tresolve p) [fstring] t p)
+			AKExpr (make_call ctx (mk (TField (e,FDynamic "resolve",p)) tresolve p) [fstring] t p)
 		| AccNever ->
 			if ctx.untyped then normal() else AKNo f.cf_name
 		| AccInline ->
@@ -1301,7 +1301,7 @@ let rec using_field ctx mode e i p =
 					) monos cf.cf_params;
 					let et = type_module_type ctx (TClassDecl c) None p in
 					Display.maybe_mark_import_position ctx pc;
-					AKUsing (mk (TField (et,FStatic (c,cf))) t p,c,cf,e)
+					AKUsing (mk (TField (et,FStatic (c,cf),p)) t p,c,cf,e)
 				| _ ->
 					raise Not_found
 			end
@@ -1426,7 +1426,7 @@ let rec type_ident_raise ctx i p mode =
 							Display.maybe_mark_import_position ctx pt;
 							begin match cf.cf_kind with
 								| Var {v_read = AccInline} -> AKInline(et,cf,fa,t)
-								| _ -> AKExpr (mk (TField(et,fa)) t p)
+								| _ -> AKExpr (mk (TField(et,fa,p)) t p)
 							end
 						end
 					with Not_found ->
@@ -1445,7 +1445,7 @@ let rec type_ident_raise ctx i p mode =
 						let monos = List.map (fun _ -> mk_mono()) e.e_params in
 						let monos2 = List.map (fun _ -> mk_mono()) ef.ef_params in
 						Display.maybe_mark_import_position ctx pt;
-						wrap (mk (TField (et,FEnum (e,ef))) (enum_field_type ctx e ef monos monos2 p) p)
+						wrap (mk (TField (et,FEnum (e,ef),p)) (enum_field_type ctx e ef monos monos2 p) p)
 					with
 						Not_found -> loop l
 		in
@@ -1480,7 +1480,7 @@ and type_field ?(resume=false) ctx e i p mode =
 			| _ ->
 				display_error ctx (StringError.string_error i (string_source t) (s_type (print_context()) t ^ " has no field " ^ i)) p;
 		end;
-		AKExpr (mk (TField (e,FDynamic i)) (mk_mono()) p)
+		AKExpr (mk (TField (e,FDynamic i,p)) (mk_mono()) p)
 	in
 	let does_forward a stat =
 		try
@@ -1514,9 +1514,9 @@ and type_field ?(resume=false) ctx e i p mode =
 					with Unify_error l ->
 						display_error ctx "Field resolve has an invalid type" f.cf_pos;
 						display_error ctx (error_msg (Unify [Cannot_unify(tfield,texpect)])) f.cf_pos);
-					AKExpr (make_call ctx (mk (TField (e,FInstance (c,params,f))) tfield p) [Codegen.type_constant ctx.com (String i) p] t p)
+					AKExpr (make_call ctx (mk (TField (e,FInstance (c,params,f),p)) tfield p) [Codegen.type_constant ctx.com (String i) p] t p)
 				end else
-					AKExpr (mk (TField (e,FDynamic i)) t p)
+					AKExpr (mk (TField (e,FDynamic i,p)) t p)
 			| None ->
 				match c.cl_super with
 				| None -> raise Not_found
@@ -1573,7 +1573,7 @@ and type_field ?(resume=false) ctx e i p mode =
 		(try
 			using_field ctx mode e i p
 		with Not_found ->
-			AKExpr (mk (TField (e,FDynamic i)) t p))
+			AKExpr (mk (TField (e,FDynamic i,p)) t p))
 	| TAnon a ->
 		(try
 			let f = PMap.find i a.a_fields in
@@ -1660,7 +1660,7 @@ and type_field ?(resume=false) ctx e i p mode =
 				apply_params a.a_params pl t
 			in
 			let et = type_module_type ctx (TClassDecl c) None p in
-			let field_expr f t = mk (TField (et,FStatic (c,f))) t p in
+			let field_expr f t = mk (TField (et,FStatic (c,f),p)) t p in
 			(match mode, f.cf_kind with
 			| (MGet | MCall), Var {v_read = AccCall } ->
 				(* getter call *)
@@ -1717,7 +1717,7 @@ and type_field ?(resume=false) ctx e i p mode =
 			in
 			let et = type_module_type ctx (TClassDecl c) None p in
 			let t = apply_params a.a_params pl (field_type ctx c [] cf p) in
-			let ef = mk (TField (et,FStatic (c,cf))) t p in
+			let ef = mk (TField (et,FStatic (c,cf),p)) t p in
 			AKExpr ((!build_call_ref) ctx (AKUsing(ef,c,cf,e)) [EConst (String i),p] NoValue p)
 		with Not_found ->
 			if !static_abstract_access_through_instance then error ("Invalid call to static function " ^ i ^ " through abstract instance") p
@@ -1830,7 +1830,7 @@ let unify_int ctx e k =
 		match e.eexpr with
 		| TLocal _ -> is_dynamic e.etype
 		| TArray({ etype = t } as e,_) -> is_dynamic_array t || maybe_dynamic_rec e t
-		| TField({ etype = t } as e,f) -> is_dynamic_field t (field_name f) || maybe_dynamic_rec e t
+		| TField({ etype = t } as e,f,_) -> is_dynamic_field t (field_name f) || maybe_dynamic_rec e t
 		| TCall({ etype = t } as e,_) -> is_dynamic_return t || maybe_dynamic_rec e t
 		| TParenthesis e | TMeta(_,e) -> maybe_dynamic_mono e
 		| TIf (_,a,Some b) -> maybe_dynamic_mono a || maybe_dynamic_mono b
@@ -1946,7 +1946,7 @@ let unify_int ctx e k =
 		in
 		let e = if stat then type_type ctx path p else e in
 		let fa = if stat then FStatic (c,cf2) else FInstance (c,tl,cf2) in
-		let e = mk (TField(e,fa)) cf2.cf_type p in
+		let e = mk (TField(e,fa,p)) cf2.cf_type p in
 		make_call ctx e el ret p
 	with Typeload.Generic_Exception (msg,p) ->
 		error msg p)
@@ -1979,13 +1979,13 @@ let rec type_binop ctx op e1 e2 is_assign_op with_type p =
 			check_assign ctx e1;
 			(match e1.eexpr , e2.eexpr with
 			| TLocal i1 , TLocal i2 when i1 == i2 -> error "Assigning a value to itself" p
-			| TField ({ eexpr = TConst TThis },FInstance (_,_,f1)) , TField ({ eexpr = TConst TThis },FInstance (_,_,f2)) when f1 == f2 ->
+			| TField ({ eexpr = TConst TThis },FInstance (_,_,f1),_) , TField ({ eexpr = TConst TThis },FInstance (_,_,f2),_) when f1 == f2 ->
 				error "Assigning a value to itself" p
 			| _ , _ -> ());
 			mk (TBinop (op,e1,e2)) e1.etype p
 		| AKSet (e,t,cf) ->
 			let e2 = Codegen.AbstractCast.cast_or_unify ctx t e2 p in
-			make_call ctx (mk (TField (e,quick_field_dynamic e.etype ("set_" ^ cf.cf_name))) (tfun [t] t) p) [e2] t p
+			make_call ctx (mk (TField (e,quick_field_dynamic e.etype ("set_" ^ cf.cf_name),p)) (tfun [t] t) p) [e2] t p
 		| AKAccess(a,tl,c,ebase,ekey) ->
 			mk_array_set_call ctx (Codegen.AbstractCast.find_array_access ctx a tl ekey (Some e2) p) c ebase p
 		| AKUsing(ef,_,_,et) ->
@@ -2031,10 +2031,10 @@ let rec type_binop ctx op e1 e2 is_assign_op with_type p =
 							mk (TVar(v,Some e)) ctx.t.tvoid p;
 							mk (TBinop (OpAssign,e,e2)) e.etype p;
 						]) e.etype p
-					| TField(ea1,fa) when has_side_effect ->
+					| TField(ea1,fa,pf) when has_side_effect ->
 						let v1 = gen_local ctx ea1.etype ea1.epos in
 						let ev1 = mk (TLocal v1) v1.v_type p in
-						let e = {e with eexpr = TField(ev1,fa)} in
+						let e = {e with eexpr = TField(ev1,fa,pf)} in
 						mk (TBlock [
 							mk (TVar(v1,Some ea1)) ctx.t.tvoid p;
 							mk (TVar(v,Some e)) ctx.t.tvoid p;
@@ -2061,7 +2061,7 @@ let rec type_binop ctx op e1 e2 is_assign_op with_type p =
 			let e' = match get.eexpr with
 				| TBinop _ | TMeta((Meta.RequiresAssign,_,_),_) ->
 					unify ctx get.etype t p;
-					make_call ctx (mk (TField (ev,quick_field_dynamic ev.etype ("set_" ^ cf.cf_name))) (tfun [t] t) p) [get] t p
+					make_call ctx (mk (TField (ev,quick_field_dynamic ev.etype ("set_" ^ cf.cf_name),p)) (tfun [t] t) p) [get] t p
 				| _ ->
 					(* abstract setter *)
 					get
@@ -2119,7 +2119,7 @@ let rec type_binop ctx op e1 e2 is_assign_op with_type p =
 					let ea = mk (TArray(ebase,ekey)) r_get p in
 					mk (TBinop(OpAssignOp op,ea,type_expr ctx e2 (WithType r_get))) r_set p
 				| Some _,Some _ ->
-					let ef_set = mk (TField(et,(FStatic(c,cf_set)))) tf_set p in
+					let ef_set = mk (TField(et,(FStatic(c,cf_set)),p)) tf_set p in
 					(match l() with
 					| None -> make_call ctx ef_set [ebase;ekey;eget] r_set p
 					| Some e ->
@@ -2166,7 +2166,7 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 				let std = type_type ctx ([],"Std") e.epos in
 				let acc = acc_get ctx (type_field ctx std "string" e.epos MCall) e.epos in
 				ignore(follow acc.etype);
-				let acc = (match acc.eexpr with TField (e,FClosure (Some (c,tl),f)) -> { acc with eexpr = TField (e,FInstance (c,tl,f)) } | _ -> acc) in
+				let acc = (match acc.eexpr with TField (e,FClosure (Some (c,tl),f),pf) -> { acc with eexpr = TField (e,FInstance (c,tl,f),pf) } | _ -> acc) in
 				make_call ctx acc [e] ctx.t.tstring e.epos
 			| KAbstract (a,tl) ->
 				try
@@ -2518,7 +2518,7 @@ and type_unop ctx op flag e p =
 					e
 				| Some _ ->
 					let et = type_module_type ctx (TClassDecl c) None p in
-					let ef = mk (TField (et,FStatic (c,cf))) t p in
+					let ef = mk (TField (et,FStatic (c,cf),p)) t p in
 					make_call ctx ef [e] r p)
 			| _ -> raise Not_found
 		) with Not_found ->
@@ -2568,7 +2568,7 @@ and type_unop ctx op flag e p =
 				l();
 				mk (TBlock [
 					mk (TVar (v,Some e)) ctx.t.tvoid p;
-					make_call ctx (mk (TField (ev,quick_field_dynamic ev.etype ("set_" ^ cf.cf_name))) (tfun [t] t) p) [get] t p
+					make_call ctx (mk (TField (ev,quick_field_dynamic ev.etype ("set_" ^ cf.cf_name),p)) (tfun [t] t) p) [get] t p
 				]) t p
 			| Postfix ->
 				let v2 = gen_local ctx t p in
@@ -2580,7 +2580,7 @@ and type_unop ctx op flag e p =
 				mk (TBlock [
 					mk (TVar (v,Some e)) ctx.t.tvoid p;
 					mk (TVar (v2,Some get)) ctx.t.tvoid p;
-					make_call ctx (mk (TField (ev,quick_field_dynamic ev.etype ("set_" ^ cf.cf_name))) (tfun [plusone.etype] t) p) [plusone] t p;
+					make_call ctx (mk (TField (ev,quick_field_dynamic ev.etype ("set_" ^ cf.cf_name),p)) (tfun [plusone.etype] t) p) [plusone] t p;
 					ev2
 				]) t p
 	in
@@ -2806,7 +2806,7 @@ and type_access ctx e p mode =
 	match e with
 	| EConst (Ident s) ->
 		type_ident ctx s p mode
-	| EField (e1,("new",_)) ->
+	| EField (e1,("new",pf)) ->
 		let e1 = type_expr ctx e1 Value in
 		begin match e1.eexpr with
 			| TTypeExpr (TClassDecl c) ->
@@ -2821,7 +2821,7 @@ and type_access ctx e p mode =
 				let ec,t = match c.cl_kind with
 					| KAbstractImpl a ->
 						let e = type_module_type ctx (TClassDecl c) None p in
-						let e = mk (TField (e,(FStatic (c,cf)))) ct p in
+						let e = mk (TField (e,(FStatic (c,cf)),pf)) ct p in
 						let t = TAbstract(a,monos) in
 						make_call ctx e el t p,t
 					| _ ->
@@ -3157,7 +3157,7 @@ and type_new ctx path el with_type p =
 	let unify_constructor_call c params f ct = match follow ct with
 		| TFun (args,r) ->
 			(try
-				let el,_,_ = unify_field_call ctx (FInstance(c,params,f)) el args r p false in
+				let el,_,_ = unify_field_call ctx (FInstance(c,params,f)) p el args r p false in
 				el
 			with Error (e,p) ->
 				display_error ctx (error_msg e) p;
@@ -3236,7 +3236,7 @@ and type_new ctx path el with_type p =
 		let el,cf,ct = build_constructor_call c tl in
 		let ta = TAnon { a_fields = c.cl_statics; a_status = ref (Statics c) } in
 		let e = mk (TTypeExpr (TClassDecl c)) ta p in
-		let e = mk (TField (e,(FStatic (c,cf)))) ct p in
+		let e = mk (TField (e,(FStatic (c,cf)),p)) ct p in
 		make_call ctx e el t p
 	| TInst (c,params) | TAbstract({a_impl = Some c},params) ->
 		let el,_,_ = build_constructor_call c params in
@@ -3371,7 +3371,7 @@ and type_map_declaration ctx e1 el with_type p =
 	let v = gen_local ctx tmap p in
 	let ev = mk (TLocal v) tmap p in
 	let ec = type_module_type ctx (TClassDecl c) None p in
-	let ef = mk (TField(ec,FStatic(c,cf))) (tfun [tkey;tval] ctx.t.tvoid) p in
+	let ef = mk (TField(ec,FStatic(c,cf),p)) (tfun [tkey;tval] ctx.t.tvoid) p in
 	let el = ev :: List.map2 (fun e1 e2 -> (make_call ctx ef [ev;e1;e2] ctx.com.basic.tvoid p)) el_k el_v in
 	let enew = mk (TNew(c,[tkey;tval],[])) tmap p in
 	let el = (mk (TVar (v,Some enew)) t_dynamic p) :: (List.rev el) in
@@ -3880,9 +3880,9 @@ and handle_display ctx e_ast iscall with_type =
 		raise (Display.DisplayType (t,p))
 	| DMUsage ->
 		let rec loop e = match e.eexpr with
-		| TField(_,FEnum(_,ef)) ->
+		| TField(_,FEnum(_,ef),p) ->
 			ef.ef_meta <- (Meta.Usage,[],p) :: ef.ef_meta;
-		| TField(_,(FAnon cf | FInstance (_,_,cf) | FStatic (_,cf) | FClosure (_,cf))) ->
+		| TField(_,(FAnon cf | FInstance (_,_,cf) | FStatic (_,cf) | FClosure (_,cf)),p) ->
 			cf.cf_meta <- (Meta.Usage,[],p) :: cf.cf_meta;
 		| TLocal v | TVar(v,_) ->
 			v.v_meta <- (Meta.Usage,[],p) :: v.v_meta;
@@ -3917,8 +3917,8 @@ and handle_display ctx e_ast iscall with_type =
 		e
 	| DMPosition ->
 		let rec loop e = match e.eexpr with
-		| TField(_,FEnum(_,ef)) -> [ef.ef_pos]
-		| TField(_,(FAnon cf | FInstance (_,_,cf) | FStatic (_,cf) | FClosure (_,cf))) -> [cf.cf_pos]
+		| TField(_,FEnum(_,ef),_) -> [ef.ef_pos]
+		| TField(_,(FAnon cf | FInstance (_,_,cf) | FStatic (_,cf) | FClosure (_,cf)),_) -> [cf.cf_pos]
 		| TLocal v | TVar(v,_) -> [v.v_pos]
 		| TTypeExpr mt -> [(t_infos mt).mt_pos]
 		| TNew(c,tl,_) ->
@@ -3952,7 +3952,7 @@ and handle_display ctx e_ast iscall with_type =
 	| DMDefault | DMNone | DMModuleSymbols | DMDiagnostics _ | DMStatistics ->
 		let opt_args args ret = TFun(List.map(fun (n,o,t) -> n,true,t) args,ret) in
 		let e,tl_overloads,doc = match e.eexpr with
-			| TField (e1,fa) ->
+			| TField (e1,fa,_) ->
 				let tl,doc = match extract_field fa with
 					| Some cf when iscall -> (List.map (fun cf -> (cf.cf_type,cf.cf_doc)) cf.cf_overloads),cf.cf_doc
 					| _ -> [],None
@@ -4259,7 +4259,7 @@ and type_call ctx e el (with_type:with_type) p =
 			if (Meta.has Meta.CompilerGenerated f.cf_meta) then display_error ctx (s_type_path c.cl_path ^ " does not have a constructor") p;
 			let el = (match follow ct with
 			| TFun (args,r) ->
-				let el,_,_ = unify_field_call ctx (FInstance(c,params,f)) el args r p false in
+				let el,_,_ = unify_field_call ctx (FInstance(c,params,f)) sp el args r p false in
 				el
 			| _ ->
 				error "Constructor is not a function" p
@@ -4277,14 +4277,14 @@ and build_call ctx acc el (with_type:with_type) p =
 	| AKInline (ethis,f,fmode,t) ->
 		(match follow t with
 			| TFun (args,r) ->
-				let _,_,mk_call = unify_field_call ctx fmode el args r p true in
+				let _,_,mk_call = unify_field_call ctx fmode p el args r p true in
 				mk_call ethis p
 			| _ ->
 				error (s_type (print_context()) t ^ " cannot be called") p
 		)
 	| AKUsing (et,cl,ef,eparam) when Meta.has Meta.Generic ef.cf_meta ->
 		(match et.eexpr with
-		| TField(ec,fa) ->
+		| TField(ec,fa,_) ->
 			type_generic_function ctx (ec,fa) el ~using_param:(Some eparam) with_type p
 		| _ -> assert false)
 	| AKUsing (et,cl,ef,eparam) ->
@@ -4376,12 +4376,12 @@ and build_call ctx acc el (with_type:with_type) p =
 		let rec loop t = match follow t with
 		| TFun (args,r) ->
 			begin match e.eexpr with
-				| TField(e1,fa) when not (match fa with FEnum _ -> true | _ -> false) ->
+				| TField(e1,fa,pf) when not (match fa with FEnum _ -> true | _ -> false) ->
 					begin match fa with
 						| FInstance(_,_,cf) | FStatic(_,cf) when Meta.has Meta.Generic cf.cf_meta ->
 							type_generic_function ctx (e1,fa) el with_type p
 						| _ ->
-							let _,_,mk_call = unify_field_call ctx fa el args r p false in
+							let _,_,mk_call = unify_field_call ctx fa pf el args r p false in
 							mk_call e1 e.epos
 					end
 				| _ ->
@@ -4431,7 +4431,7 @@ let get_main ctx types =
 				Not_found -> error ("Invalid -main : " ^ s_type_path cl ^ " does not have static function main") c.cl_pos
 		) in
 		let emain = type_type ctx cl null_pos in
-		let main = mk (TCall (mk (TField (emain,fmode)) ft null_pos,[])) r null_pos in
+		let main = mk (TCall (mk (TField (emain,fmode,null_pos)) ft null_pos,[])) r null_pos in
 		(* add haxe.EntryPoint.run() call *)
 		let main = (try
 			let et = List.find (fun t -> t_path t = (["haxe"],"EntryPoint")) types in
@@ -4439,7 +4439,7 @@ let get_main ctx types =
 			let ef = PMap.find "run" ec.cl_statics in
 			let p = null_pos in
 			let et = mk (TTypeExpr et) (TAnon { a_fields = PMap.empty; a_status = ref (Statics ec) }) p in
-			let call = mk (TCall (mk (TField (et,FStatic (ec,ef))) ef.cf_type p,[])) ctx.t.tvoid p in
+			let call = mk (TCall (mk (TField (et,FStatic (ec,ef),p)) ef.cf_type p,[])) ctx.t.tvoid p in
 			mk (TBlock [main;call]) ctx.t.tvoid p
 		with Not_found ->
 			main
@@ -4538,7 +4538,7 @@ let generate ctx =
 				end
 			in
 			loop c
-		| TField(e1,FStatic(c,cf)) ->
+		| TField(e1,FStatic(c,cf),_) ->
 			walk_expr p e1;
 			walk_static_field p c cf;
 		| _ ->
@@ -4696,7 +4696,7 @@ let make_macro_api ctx p =
 		Interp.type_macro_expr = (fun e ->
 			let e = typing_timer ctx true (fun() -> type_expr ctx e Value) in
 			let rec loop e = match e.eexpr with
-				| TField(_,FStatic(c,({cf_kind = Method _} as cf))) -> ignore(!load_macro_ref ctx false c.cl_path cf.cf_name e.epos)
+				| TField(_,FStatic(c,({cf_kind = Method _} as cf)),_) -> ignore(!load_macro_ref ctx false c.cl_path cf.cf_name e.epos)
 				| _ -> Type.iter loop e
 			in
 			loop e;

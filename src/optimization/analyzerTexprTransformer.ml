@@ -101,8 +101,8 @@ let rec func ctx bb tf t p =
 			call bb e e1 el
 		| TBinop(OpAssignOp op,({eexpr = TArray(e1,e2)} as ea),e3) ->
 			array_assign_op bb op e ea e1 e2 e3
-		| TBinop(OpAssignOp op,({eexpr = TField(e1,fa)} as ef),e2) ->
-			field_assign_op bb op e ef e1 fa e2
+		| TBinop(OpAssignOp op,({eexpr = TField(e1,fa,pf)} as ef),e2) ->
+			field_assign_op bb op e ef e1 fa pf e2
 		| TBinop((OpAssign | OpAssignOp _) as op,e1,e2) ->
 			let bb,e1 = value bb e1 in
 			let bb,e2 = value bb e2 in
@@ -123,11 +123,11 @@ let rec func ctx bb tf t p =
 			let el = List.map snd fl in
 			let bb,el = ordered_value_list bb el in
 			bb,{e with eexpr = TObjectDecl (List.map2 (fun (s,_) e -> s,e) fl el)}
-		| TField({eexpr = TTypeExpr _},fa) ->
+		| TField({eexpr = TTypeExpr _},fa,_) ->
 			bb,e
-		| TField(e1,fa) ->
+		| TField(e1,fa,pf) ->
 			let bb,e1 = value bb e1 in
-			bb,{e with eexpr = TField(e1,fa)}
+			bb,{e with eexpr = TField(e1,fa,pf)}
 		| TArray(e1,e2) ->
 			let bb,e1,e2 = match ordered_value_list bb [e1;e2] with
 				| bb,[e1;e2] -> bb,e1,e2
@@ -207,14 +207,14 @@ let rec func ctx bb tf t p =
 				| _ -> false
 		in
 		let rec loop fl e = match e.eexpr with
-			| TField(e1,fa) when is_probably_not_affected e e1 fa ->
-				loop ((fun e' -> {e with eexpr = TField(e',fa)}) :: fl) e1
-			| TField(e1,fa) ->
+			| TField(e1,fa,pf) when is_probably_not_affected e e1 fa ->
+				loop ((fun e' -> {e with eexpr = TField(e',fa,pf)}) :: fl) e1
+			| TField(e1,fa,pf) ->
 				let fa = match fa with
 					| FInstance(c,tl,({cf_kind = Method _ } as cf)) -> FClosure(Some(c,tl),cf)
 					| _ -> fa
 				in
-				fl,{e with eexpr = TField(e1,fa)}
+				fl,{e with eexpr = TField(e1,fa,pf)}
 			| _ ->
 				fl,e
 		in
@@ -297,9 +297,9 @@ let rec func ctx bb tf t p =
 		let eop = {e with eexpr = TBinop(op,e4,e3)} in
 		add_texpr bb {e with eexpr = TBinop(OpAssign,ea,eop)};
 		bb,ea
-	and field_assign_op bb op e ef e1 fa e2 =
+	and field_assign_op bb op e ef e1 fa pf e2 =
 		let bb,e1 = bind_to_temp bb false e1 in
-		let ef = {ef with eexpr = TField(e1,fa)} in
+		let ef = {ef with eexpr = TField(e1,fa,pf)} in
 		let bb,e3 = bind_to_temp bb false ef in
 		let bb,e2 = bind_to_temp bb false e2 in
 		let eop = {e with eexpr = TBinop(op,e3,e2)} in
@@ -543,8 +543,8 @@ let rec func ctx bb tf t p =
 		| TBinop(OpAssignOp op,({eexpr = TArray(e1,e2)} as ea),e3) ->
 			let bb,_ = array_assign_op bb op e ea e1 e2 e3 in
 			bb
-		| TBinop(OpAssignOp op,({eexpr = TField(e1,fa)} as ef),e2) ->
-			let bb,_ = field_assign_op bb op e ef e1 fa e2 in
+		| TBinop(OpAssignOp op,({eexpr = TField(e1,fa,pf)} as ef),e2) ->
+			let bb,_ = field_assign_op bb op e ef e1 fa pf e2 in
 			bb
 		| TBinop(OpAssign,({eexpr = TArray(e1,e2)} as ea),e3) ->
 			let bb,e1,e2,e3 = match ordered_value_list bb [e1;e2;e3] with
@@ -569,7 +569,7 @@ let rec func ctx bb tf t p =
 		| TEnumParameter _ | TFunction _ | TConst _ | TTypeExpr _ | TLocal _ ->
 			bb
 		(* no-side-effect composites *)
-		| TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) | TField(e1,_) | TUnop(_,_,e1) ->
+		| TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) | TField(e1,_,_) | TUnop(_,_,e1) ->
 			block_element bb e1
 		| TArray(e1,e2) | TBinop(_,e1,e2) ->
 			let bb = block_element bb e1 in

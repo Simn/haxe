@@ -1127,8 +1127,8 @@ let get_native_repr md pos =
 			loop tl (EConst(Ident(hd)),pos)
 
 let rec process_meta_argument ?(toplevel=true) ctx expr = match expr.eexpr with
-	| TField(e,f) ->
-		(EField(process_meta_argument ~toplevel:false ctx e,(field_name f,null_pos)),expr.epos) (* TODO EFIELDTFIELD *)
+	| TField(e,f,p) ->
+		(EField(process_meta_argument ~toplevel:false ctx e,(field_name f,p)),expr.epos)
 	| TConst(TInt i) ->
 		(EConst(Int (Int32.to_string i)), expr.epos)
 	| TConst(TFloat f) ->
@@ -1353,7 +1353,7 @@ let check_struct_init_constructor ctx c p = match c.cl_constructor with
 				let opt = Meta.has Meta.Optional cf.cf_meta in
 				let t = if opt then ctx.t.tnull cf.cf_type else cf.cf_type in
 				let v = alloc_var cf.cf_name t p in
-				let ef = mk (TField(ethis,FInstance(c,params,cf))) t p in
+				let ef = mk (TField(ethis,FInstance(c,params,cf),p)) t p in
 				let ev = mk (TLocal v) v.v_type p in
 				let e = mk (TBinop(OpAssign,ef,ev)) ev.etype p in
 				(v,None) :: args,e :: el,(cf.cf_name,opt,t) :: tl
@@ -3810,7 +3810,7 @@ let generic_substitute_expr gctx e =
 	in
 	let rec build_expr e =
 		match e.eexpr with
-		| TField(e1, FInstance({cl_kind = KGeneric} as c,tl,cf)) ->
+		| TField(e1, FInstance({cl_kind = KGeneric} as c,tl,cf),p) ->
 			let _, _, f = gctx.ctx.g.do_build_instance gctx.ctx (TClassDecl c) gctx.p in
 			let t = f (List.map (generic_substitute_type gctx) tl) in
 			let fa = try
@@ -3818,7 +3818,7 @@ let generic_substitute_expr gctx e =
 			with Not_found ->
 				error (Printf.sprintf "Type %s has no field %s (possible typing order issue)" (s_type (print_context()) t) cf.cf_name) e.epos
 			in
-			build_expr {e with eexpr = TField(e1,fa)}
+			build_expr {e with eexpr = TField(e1,fa,p)}
 		| TTypeExpr (TClassDecl ({cl_kind = KTypeParameter _;} as c)) when Meta.has Meta.Const c.cl_meta ->
 			let rec loop subst = match subst with
 				| (t1,t2) :: subst ->

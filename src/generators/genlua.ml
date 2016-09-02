@@ -222,7 +222,7 @@ let is_dynamic_iterator ctx e =
 		)
 	in
 	match e.eexpr with
-	| TField (x,f) when field_name f = "iterator" -> check x
+	| TField (x,f,_) when field_name f = "iterator" -> check x
 	| _ ->
 		false
 
@@ -325,7 +325,7 @@ let rec gen_call ctx e el in_value =
 			List.iter (fun p -> print ctx ","; gen_value ctx p) params;
 			spr ctx ")";
 		);
-	| TField ({ eexpr = TConst TSuper },f) , params ->
+	| TField ({ eexpr = TConst TSuper },f,_) , params ->
 		(match ctx.current.cl_super with
 		| None -> error "Missing api.setCurrentClass" e.epos
 		| Some (c,_,_) ->
@@ -430,13 +430,13 @@ let rec gen_call ctx e el in_value =
 			gen_value ctx e;
 			spr ctx ")";
 		end
-	| TField ( { eexpr = TConst(TInt _ | TFloat _| TString _| TBool _) } as e , ((FInstance _ | FAnon _) as ef)), el ->
+	| TField ( { eexpr = TConst(TInt _ | TFloat _| TString _| TBool _) } as e , ((FInstance _ | FAnon _) as ef) , _), el ->
 		spr ctx ("(");
 		gen_value ctx e;
 		print ctx ("):%s(") (field_name ef);
 		concat ctx "," (gen_value ctx) el;
 		spr ctx ")";
-	| TField (e, ((FInstance _ | FAnon _ | FDynamic _) as ef)), el ->
+	| TField (e, ((FInstance _ | FAnon _ | FDynamic _) as ef), _), el ->
 		let s = (field_name ef) in
 		if Hashtbl.mem kwds s || not (valid_lua_ident s) then begin
 		    match e.eexpr with
@@ -485,12 +485,12 @@ and gen_expr ?(local=true) ctx e = begin
 		spr ctx "]";
 	| TBinop (op,e1,e2) ->
 		gen_tbinop ctx op e1 e2;
-	| TField (x,f) when field_name f = "iterator" && is_dynamic_iterator ctx e ->
+	| TField (x,f,_) when field_name f = "iterator" && is_dynamic_iterator ctx e ->
 		add_feature ctx "use._iterator";
 		print ctx "_iterator(";
 		gen_value ctx x;
 		print ctx ")";
-	| TField (x,FClosure (_,f)) ->
+	| TField (x,FClosure (_,f),_) ->
 		add_feature ctx "use._hx_bind";
 		(match x.eexpr with
 		| TConst _ | TLocal _ ->
@@ -506,21 +506,21 @@ and gen_expr ?(local=true) ctx e = begin
 	| TEnumParameter (x,_,i) ->
 		gen_value ctx x;
 		print ctx "[%i]" (i + 2)
-	| TField (x, (FInstance(_,_,f) | FStatic(_,f) | FAnon(f))) when Meta.has Meta.SelfCall f.cf_meta ->
+	| TField (x, (FInstance(_,_,f) | FStatic(_,f) | FAnon(f)), _) when Meta.has Meta.SelfCall f.cf_meta ->
 		gen_value ctx x;
-	| TField ({ eexpr = TConst(TInt _ | TFloat _| TString _| TBool _) } as e , ((FInstance _ | FAnon _) as ef)) ->
+	| TField ({ eexpr = TConst(TInt _ | TFloat _| TString _| TBool _) } as e , ((FInstance _ | FAnon _) as ef) , _) ->
 		spr ctx ("(");
 		gen_value ctx e;
 		print ctx (").%s") (field_name ef);
-	| TField ({ eexpr = TConst (TInt _ | TFloat _) } as x,f) ->
-		gen_expr ctx { e with eexpr = TField(mk (TParenthesis x) x.etype x.epos,f) }
-	| TField ({ eexpr = TObjectDecl fields }, ef ) ->
+	| TField ({ eexpr = TConst (TInt _ | TFloat _) } as x,f,pf) ->
+		gen_expr ctx { e with eexpr = TField(mk (TParenthesis x) x.etype x.epos,f,pf) }
+	| TField ({ eexpr = TObjectDecl fields }, ef, _ ) ->
 		spr ctx "(function(x) return x.";
 		print ctx "%s" (field_name ef);
 		spr ctx " end )({";
 		concat ctx ", " (fun (f,e) -> print ctx "%s = " (anon_field f); gen_value ctx e) fields;
 		spr ctx "})";
-	| TField (x,f) ->
+	| TField (x,f,_) ->
 		gen_value ctx x;
 		let name = field_name f in
 		spr ctx (match f with FStatic _ | FEnum _ | FInstance _ | FAnon _ | FDynamic _ | FClosure _ -> field name)
@@ -644,7 +644,7 @@ and gen_expr ?(local=true) ctx e = begin
 				    spr ctx "local _ = _hx_arr[_hx_idx]"; semicolon ctx; newline ctx;
 			    | _ -> ());
 			spr ctx "_hx_arr[_hx_idx] = _hx_arr[_hx_idx]";
-		    | TField(e1,e2), _ ->
+		    | TField(e1,e2,_), _ ->
 			spr ctx "local _hx_obj = "; gen_value ctx e1; semicolon ctx; newline ctx;
 			spr ctx "local _hx_fld = ";
 			(match e2 with
@@ -684,7 +684,7 @@ and gen_expr ?(local=true) ctx e = begin
 			    spr ctx "_";
 		    | _, TArray(e1,e2) ->
 			    spr ctx "_hx_arr[_hx_idx]";
-		    | _, TField(e1,e2) ->
+		    | _, TField(e1,e2,_) ->
 			    spr ctx "_hx_obj[_hx_fld]";
 		    | _, _ ->
 			    gen_value ctx e;
@@ -1113,7 +1113,7 @@ and is_function_type ctx t =
 
 and gen_tbinop ctx op e1 e2 =
     (match op, e1.eexpr, e2.eexpr with
-    | Ast.OpAssign, TField(e3, FInstance _), TFunction f ->
+    | Ast.OpAssign, TField(e3, FInstance _, _), TFunction f ->
 	    gen_expr ctx e1;
 	    spr ctx " = " ;
 	    print ctx "function(%s) " (String.concat "," ("self" :: List.map ident (List.map arg_name f.tf_args)));
@@ -1148,14 +1148,14 @@ and gen_tbinop ctx op e1 e2 =
 		gen_value ctx e1;
 		spr ctx " = ";
 		gen_value ctx e3;
-	    | TField(e3, FInstance _ ), TField(e4, FClosure _ )  ->
+	    | TField(e3, FInstance _, _ ), TField(e4, FClosure _, _ )  ->
 		gen_value ctx e1;
 		print ctx " %s " (Ast.s_binop op);
 		add_feature ctx "use._hx_funcToField";
 		spr ctx "_hx_funcToField(";
 		gen_value ctx e2;
 		spr ctx ")";
-	    | TField(_, FInstance _ ), TLocal t  when (is_function_type ctx t.v_type)   ->
+	    | TField(_, FInstance _, _ ), TLocal t  when (is_function_type ctx t.v_type)   ->
 		gen_value ctx e1;
 		print ctx " %s " (Ast.s_binop op);
 		add_feature ctx "use._hx_funcToField";
@@ -1189,7 +1189,7 @@ and gen_tbinop ctx op e1 e2 =
 	    gen_tbinop ctx op2 arr_expr e2; semicolon ctx; newline ctx;
 	    spr ctx "return arr[idx]";
 	    spr ctx " end)()";
-    | Ast.OpAssignOp(op2), TField(e3,e4), _ ->
+    | Ast.OpAssignOp(op2), TField(e3,e4,_), _ ->
 	    (* TODO: Figure out how to rewrite this expression more cleanly *)
 	    println ctx "(function() ";
 	    let obj = alloc_var "obj" e3.etype e3.epos in
@@ -1210,7 +1210,7 @@ and gen_tbinop ctx op e1 e2 =
 	    newline ctx;
 	    let obj_expr = (mk (TField(
 	    	(mk ( TLocal(obj)) e3.etype e3.epos),
-		e4
+		e4, e3.epos
 	    	)) e3.etype e3.epos) in
 	    spr ctx "obj[fld] = ";
 	    gen_tbinop ctx op2 obj_expr e2; semicolon ctx; newline ctx;
@@ -1865,7 +1865,7 @@ let generate com =
 	let rec chk_features e =
 		if is_dynamic_iterator ctx e then add_feature ctx "use._iterator";
 		match e.eexpr with
-		| TField (_,FClosure _) ->
+		| TField (_,FClosure _, _) ->
 			add_feature ctx "use._hx_bind"
 		| _ ->
 			Type.iter chk_features e

@@ -880,7 +880,7 @@ let rec gen_access ctx e (forset : 'a) : 'a access =
 	match e.eexpr with
 	| TLocal v ->
 		gen_local_access ctx v e.epos forset
-	| TField ({ eexpr = TConst TSuper } as e1,f) ->
+	| TField ({ eexpr = TConst TSuper } as e1,f,_) ->
 		let f = field_name f in
 		let id, _, _ = property ctx f e1.etype in
 		write ctx HThis;
@@ -890,7 +890,7 @@ let rec gen_access ctx e (forset : 'a) : 'a access =
 		write ctx (HGetProp (ident "params"));
 		write ctx (HSmallInt i);
 		VArray
-	| TField (e1,fa) ->
+	| TField (e1,fa,_) ->
 		let f = field_name fa in
 		let id, k, closure = property ctx f e1.etype in
 		if closure && not ctx.for_call then error "In Flash9, this method cannot be accessed this way : please define a local function" e1.epos;
@@ -966,8 +966,8 @@ let gen_access_rw ctx e : (read access * write access) =
 	match e.eexpr with
 	| TArray ({ eexpr = TLocal _ }, { eexpr = TConst _ })
 	| TArray ({ eexpr = TLocal _ }, { eexpr = TLocal _ })
-	| TField ({ eexpr = TLocal _ },_)
-	| TField ({ eexpr = TConst _ },_)
+	| TField ({ eexpr = TLocal _ },_,_)
+	| TField ({ eexpr = TConst _ },_,_)
 	->
 		let w = gen_access ctx e Write in
 		let r = gen_access ctx e Read in
@@ -1356,7 +1356,7 @@ and gen_call ctx retval e el r =
 		gen_expr ctx true e;
 		gen_expr ctx true t;
 		write ctx (HOp A3OIs)
-	| TField (_,FStatic ({ cl_path = [],"Std" },{ cf_name = "is" })),[e;{ eexpr = TTypeExpr (TClassDecl _) } as t] ->
+	| TField (_,FStatic ({ cl_path = [],"Std" },{ cf_name = "is" }),_),[e;{ eexpr = TTypeExpr (TClassDecl _) } as t] ->
 		(* fast inlining of Std.is with known values *)
 		gen_expr ctx true e;
 		gen_expr ctx true t;
@@ -1490,13 +1490,13 @@ and gen_call ctx retval e el r =
 		write ctx HThis;
 		List.iter (gen_expr ctx true) el;
 		write ctx (HConstructSuper (List.length el));
-	| TField ({ eexpr = TConst TSuper },f) , _ ->
+	| TField ({ eexpr = TConst TSuper },f,_) , _ ->
 		let id = ident (field_name f) in
 		write ctx (HFindPropStrict id);
 		List.iter (gen_expr ctx true) el;
 		write ctx (HCallSuper (id,List.length el));
 		coerce ctx (classify ctx r);
-	| TField ({ eexpr = TConst TThis },f) , _ when not ctx.in_static ->
+	| TField ({ eexpr = TConst TThis },f,_) , _ when not ctx.in_static ->
 		let id = ident (field_name f) in
 		write ctx (HFindProp id);
 		List.iter (gen_expr ctx true) el;
@@ -1505,7 +1505,7 @@ and gen_call ctx retval e el r =
 			coerce ctx (classify ctx r);
 		end else
 			write ctx (HCallPropVoid (id,List.length el))
-	| TField (e1,f) , _ ->
+	| TField (e1,f,_) , _ ->
 		let old = ctx.for_call in
 		ctx.for_call <- true;
 		gen_expr ctx true e1;
@@ -1625,7 +1625,7 @@ and gen_binop ctx retval op e1 e2 t p =
 			gen_op A3OEq
 		| Some c ->
 			let f = FStatic (c,try PMap.find "compare" c.cl_statics with Not_found -> assert false) in
-			gen_expr ctx true (mk (TCall (mk (TField (mk (TTypeExpr (TClassDecl c)) t_dynamic p,f)) t_dynamic p,[e1;e2])) ctx.com.basic.tbool p);
+			gen_expr ctx true (mk (TCall (mk (TField (mk (TTypeExpr (TClassDecl c)) t_dynamic p,f,p)) t_dynamic p,[e1;e2])) ctx.com.basic.tbool p);
 	in
 	match op with
 	| OpAssign ->
@@ -2016,7 +2016,7 @@ let check_constructor ctx c f =
 		Type.iter loop e;
 		match e.eexpr with
 		| TCall ({ eexpr = TConst TSuper },_) -> raise Exit
-		| TBinop (OpAssign,{ eexpr = TField({ eexpr = TConst TThis },FInstance (cc,_,cf)) },_) when c != cc && (match classify ctx cf.cf_type with KFloat | KDynamic -> true | _ -> false) ->
+		| TBinop (OpAssign,{ eexpr = TField({ eexpr = TConst TThis },FInstance (cc,_,cf),_) },_) when c != cc && (match classify ctx cf.cf_type with KFloat | KDynamic -> true | _ -> false) ->
 			error "You cannot assign some super class vars before calling super() in flash, this will reset them to default value" e.epos
 		| _ -> ()
 	in

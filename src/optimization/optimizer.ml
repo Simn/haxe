@@ -30,7 +30,7 @@ let has_side_effect e =
 	let rec loop e =
 		match e.eexpr with
 		| TConst _ | TLocal _ | TTypeExpr _ | TFunction _ -> ()
-		| TCall({eexpr = TField(e1,fa)},el) when PurityState.is_pure_field_access fa -> loop e1; List.iter loop el
+		| TCall({eexpr = TField(e1,fa,_)},el) when PurityState.is_pure_field_access fa -> loop e1; List.iter loop el
 		| TNew(c,_,el) when (match c.cl_constructor with Some cf when PurityState.is_pure c cf -> true | _ -> false) -> List.iter loop el
 		| TNew _ | TCall _ | TBinop ((OpAssignOp _ | OpAssign),_,_) | TUnop ((Increment|Decrement),_,_) -> raise Exit
 		| TReturn _ | TBreak | TContinue | TThrow _ | TCast (_,Some _) -> raise Exit
@@ -56,7 +56,7 @@ let mk_untyped_call name p params =
 
 let api_inline2 com c field params p =
 	match c.cl_path, field, params with
-	| ([],"Type"),"enumIndex",[{ eexpr = TField (_,FEnum (en,f)) }] -> (match com.platform with
+	| ([],"Type"),"enumIndex",[{ eexpr = TField (_,FEnum (en,f),_) }] -> (match com.platform with
 		| Cs when en.e_extern && not (Meta.has Meta.HxGen en.e_meta) ->
 			(* We don't want to optimize enums from external sources; as they might change unexpectedly *)
 			(* and since native C# enums don't have the concept of index - they have rather a value, *)
@@ -64,7 +64,7 @@ let api_inline2 com c field params p =
 			None
 		| _ ->
 			Some (mk (TConst (TInt (Int32.of_int f.ef_index))) com.basic.tint p))
-	| ([],"Type"),"enumIndex",[{ eexpr = TCall({ eexpr = TField (_,FEnum (en,f)) },pl) }] when List.for_all (fun e -> not (has_side_effect e)) pl ->
+	| ([],"Type"),"enumIndex",[{ eexpr = TCall({ eexpr = TField (_,FEnum (en,f),_) },pl) }] when List.for_all (fun e -> not (has_side_effect e)) pl ->
 		(match com.platform with
 			| Cs when en.e_extern && not (Meta.has Meta.HxGen en.e_meta) ->
 				(* see comment above *)
@@ -88,7 +88,7 @@ let api_inline2 com c field params p =
 			None)
 	| ([],"Std"),"string",[{ eexpr = TIf (_,{ eexpr = TConst (TString _)},Some { eexpr = TConst (TString _) }) } as e] ->
 		Some e
-	| ([],"Std"),"string",[{ eexpr = TLocal v | TField({ eexpr = TLocal v },_) } as ev] when (com.platform = Js || com.platform = Flash) && not (Meta.has Meta.CompilerGenerated v.v_meta) ->
+	| ([],"Std"),"string",[{ eexpr = TLocal v | TField({ eexpr = TLocal v },_,_) } as ev] when (com.platform = Js || com.platform = Flash) && not (Meta.has Meta.CompilerGenerated v.v_meta) ->
 		let pos = ev.epos in
 		let stringv() =
 			let to_str = mk (TBinop (Ast.OpAdd, mk (TConst (TString "")) com.basic.tstring pos, ev)) com.basic.tstring pos in
@@ -189,7 +189,7 @@ let api_inline ctx c field params p = match c.cl_path, field, params with
 			(* generate (o instanceof Array) && o.__enum__ == null check *)
 			let iof = mk_local ctx "__instanceof__" (tfun [o.etype;t.etype] tbool) p in
 			let iof = mk (TCall (iof, [o; t])) tbool p in
-			let enum = mk (TField (o, FDynamic "__enum__")) (mk_mono()) p in
+			let enum = mk (TField (o, FDynamic "__enum__",p)) (mk_mono()) p in
 			let null = mk (TConst TNull) (mk_mono()) p in
 			let not_enum = mk (TBinop (Ast.OpEq, enum, null)) tbool p in
 			Some (mk (TBinop (Ast.OpBoolAnd, iof, not_enum)) tbool p)
@@ -249,7 +249,7 @@ let create_affection_checker () =
 		let rec loop e = match e.eexpr with
 			| TConst _ | TFunction _ | TTypeExpr _ -> ()
 			| TLocal v when Hashtbl.mem modified_locals v.v_id -> raise Exit
-			| TField(e1,fa) when not (is_read_only_field_access e1 fa) -> raise Exit
+			| TField(e1,fa,_) when not (is_read_only_field_access e1 fa) -> raise Exit
 			| TCall _ | TNew _ -> raise Exit
 			| _ -> Type.iter loop e
 		in
@@ -584,7 +584,7 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 			| TLocal _
 			| TConst TThis (* not really, but should not be move inside a function body *)
 				-> raise Exit
-			| TField (_,FEnum _)
+			| TField (_,FEnum _,_)
 			| TTypeExpr _
 			| TConst _ -> ()
 			| _ ->
@@ -715,8 +715,8 @@ let rec optimize_for_loop ctx (i,pi) e1 e2 p =
 	let t_void = ctx.t.tvoid in
 	let t_int = ctx.t.tint in
 	let lblock el = Some (mk (TBlock el) t_void p) in
-	let mk_field e n =
-		TField (e,try quick_field e.etype n with Not_found -> assert false)
+	let mk_field e n p =
+		TField (e,(try quick_field e.etype n with Not_found -> assert false),p)
 	in
 	let gen_int_iter pt f_get f_length =
 		let i = add_local ctx i pt pi in
@@ -751,7 +751,7 @@ let rec optimize_for_loop ctx (i,pi) e1 e2 p =
 		(mk (TArray (arr,iexpr)) pt p)
 	in
 	let get_array_length arr p =
-		mk (mk_field arr "length") ctx.com.basic.tint p
+		mk (mk_field arr "length" p) ctx.com.basic.tint p
 	in
 	match e1.eexpr, follow e1.etype with
 	| TNew ({ cl_path = ([],"IntIterator") },[],[i1;i2]) , _ ->
@@ -883,14 +883,14 @@ let rec optimize_for_loop ctx (i,pi) e1 e2 p =
 		let cell = gen_local ctx tcell p in
 		let cexpr = mk (TLocal cell) tcell p in
 		let e2 = type_expr ctx e2 NoValue in
-		let evar = mk (TVar (i,Some (mk (mk_field cexpr "elt") t p))) t_void pi in
-		let enext = mk (TBinop (OpAssign,cexpr,mk (mk_field cexpr "next") tcell p)) tcell p in
+		let evar = mk (TVar (i,Some (mk (mk_field cexpr "elt" p) t p))) t_void pi in
+		let enext = mk (TBinop (OpAssign,cexpr,mk (mk_field cexpr "next" p) tcell p)) tcell p in
 		let block = match e2.eexpr with
 			| TBlock el -> mk (TBlock (evar :: enext :: el)) t_void e2.epos
 			| _ -> mk (TBlock [evar;enext;e2]) t_void p
 		in
 		lblock [
-			mk (TVar (cell,Some (mk (mk_field e1 "head") tcell p))) t_void p;
+			mk (TVar (cell,Some (mk (mk_field e1 "head" p) tcell p))) t_void p;
 			mk (TWhile (
 				mk (TBinop (OpNotEq, cexpr, mk (TConst TNull) tcell p)) ctx.t.tbool p,
 				block,
@@ -906,8 +906,8 @@ let optimize_for_loop_iterator ctx v e1 e2 p =
 	if fhasnext.cf_kind <> Method MethInline then raise Exit;
 	let tmp = gen_local ctx e1.etype e1.epos in
 	let eit = mk (TLocal tmp) e1.etype p in
-	let ehasnext = make_call ctx (mk (TField (eit,FInstance (c, tl, fhasnext))) (TFun([],ctx.t.tbool)) p) [] ctx.t.tbool p in
-	let enext = mk (TVar (v,Some (make_call ctx (mk (TField (eit,quick_field_dynamic eit.etype "next")) (TFun ([],v.v_type)) p) [] v.v_type p))) ctx.t.tvoid p in
+	let ehasnext = make_call ctx (mk (TField (eit,FInstance (c, tl, fhasnext),p)) (TFun([],ctx.t.tbool)) p) [] ctx.t.tbool p in
+	let enext = mk (TVar (v,Some (make_call ctx (mk (TField (eit,quick_field_dynamic eit.etype "next",p)) (TFun ([],v.v_type)) p) [] v.v_type p))) ctx.t.tvoid p in
 	let eblock = (match e2.eexpr with
 		| TBlock el -> { e2 with eexpr = TBlock (enext :: el) }
 		| _ -> mk (TBlock [enext;e2]) ctx.t.tvoid p
@@ -1043,8 +1043,8 @@ let sanitize_expr com e =
 		if need_parent e2 then { e with eexpr = TCall(parent e2,args) } else e
 	| TEnumParameter (e2,ef,i) ->
 		if need_parent e2 then { e with eexpr = TEnumParameter(parent e2,ef,i) } else e
-	| TField (e2,f) ->
-		if need_parent e2 then { e with eexpr = TField(parent e2,f) } else e
+	| TField (e2,f,p) ->
+		if need_parent e2 then { e with eexpr = TField(parent e2,f,p) } else e
 	| TArray (e1,e2) ->
 		if need_parent e1 then { e with eexpr = TArray(parent e1,e2) } else e
 	| TTry (e1,catches) ->
@@ -1065,7 +1065,7 @@ let reduce_expr com e =
 		List.iter (fun (cl,_) ->
 			List.iter (fun e ->
 				match e.eexpr with
-				| TCall ({ eexpr = TField (_,FEnum _) },_) -> error "Not-constant enum in switch cannot be matched" e.epos
+				| TCall ({ eexpr = TField (_,FEnum _,_) },_) -> error "Not-constant enum in switch cannot be matched" e.epos
 				| _ -> ()
 			) cl
 		) cases;
@@ -1225,12 +1225,12 @@ let optimize_binop e op e1 e2 =
 		| OpBoolAnd when a  -> e1
 		| OpBoolOr when not a -> e1
 		| _ -> e)
-	| TField (_,FEnum (e1,f1)), TField (_,FEnum (e2,f2)) when e1 == e2 ->
+	| TField (_,FEnum (e1,f1),_), TField (_,FEnum (e2,f2),_) when e1 == e2 ->
 		(match op with
 		| OpEq -> { e with eexpr = TConst (TBool (f1 == f2)) }
 		| OpNotEq -> { e with eexpr = TConst (TBool (f1 != f2)) }
 		| _ -> e)
-	| _, TCall ({ eexpr = TField (_,FEnum _) },_) | TCall ({ eexpr = TField (_,FEnum _) },_), _ ->
+	| _, TCall ({ eexpr = TField (_,FEnum _,_) },_) | TCall ({ eexpr = TField (_,FEnum _,_) },_), _ ->
 		(match op with
 		| OpAssign -> e
 		| _ ->
@@ -1308,7 +1308,7 @@ let reduce_control_flow ctx e = match e.eexpr with
 let rec reduce_loop ctx e =
 	let e = Type.map_expr (reduce_loop ctx) e in
 	sanitize_expr ctx.com (match e.eexpr with
-	| TCall ({ eexpr = TField ({ eexpr = TTypeExpr (TClassDecl c) },field) },params) ->
+	| TCall ({ eexpr = TField ({ eexpr = TTypeExpr (TClassDecl c) },field,_) },params) ->
 		(match api_inline ctx c (field_name field) params e.epos with
 		| None -> reduce_expr ctx e
 		| Some e -> reduce_loop ctx e)
@@ -1320,9 +1320,9 @@ let rec reduce_loop ctx e =
 		(match inl with
 		| None -> reduce_expr ctx e
 		| Some e -> reduce_loop ctx e)
-	| TCall ({ eexpr = TField (o,FClosure (c,cf)) } as f,el) ->
+	| TCall ({ eexpr = TField (o,FClosure (c,cf),p) } as f,el) ->
 		let fmode = (match c with None -> FAnon cf | Some (c,tl) -> FInstance (c,tl,cf)) in
-		{ e with eexpr = TCall ({ f with eexpr = TField (o,fmode) },el) }
+		{ e with eexpr = TCall ({ f with eexpr = TField (o,fmode,p) },el) }
 	| _ ->
 		reduce_expr ctx (reduce_control_flow ctx e))
 
@@ -1471,7 +1471,7 @@ let inline_constructors ctx e =
 						let ev = mk (TLocal v) v.v_type e.epos in
 						let el_init = List.fold_left (fun acc cf -> match cf.cf_kind,cf.cf_expr with
 							| Var _,Some e ->
-								let ef = mk (TField(ev,FInstance(c,tl,cf))) cf.cf_type e.epos in
+								let ef = mk (TField(ev,FInstance(c,tl,cf),e.epos)) cf.cf_type e.epos in
 								let e = mk (TBinop(OpAssign,ef,e)) cf.cf_type e.epos in
 								e :: acc
 							| _ -> acc
@@ -1489,7 +1489,7 @@ let inline_constructors ctx e =
 						let ev = mk (TLocal v) v.v_type e.epos in
 						let el = List.fold_left (fun acc (s,e) ->
 							if not (is_valid_ident s) then raise Exit;
-							let ef = mk (TField(ev,FDynamic s)) e.etype e.epos in
+							let ef = mk (TField(ev,FDynamic s,e.epos)) e.etype e.epos in
 							let e = mk (TBinop(OpAssign,ef,e)) e.etype e.epos in
 							e :: acc
 						) el_init fl in
@@ -1501,7 +1501,7 @@ let inline_constructors ctx e =
 				| TArrayDecl el ->
 					let ev = mk (TLocal v) v.v_type e.epos in
 					let el,_ = List.fold_left (fun (acc,i) e ->
-						let ef = mk (TField(ev,FDynamic (string_of_int i))) e.etype e.epos in
+						let ef = mk (TField(ev,FDynamic (string_of_int i),e.epos)) e.etype e.epos in
 						let e = mk (TBinop(OpAssign,ef,e)) e.etype e.epos in
 						e :: acc,i + 1
 					) (el_init,0) el in
@@ -1513,11 +1513,11 @@ let inline_constructors ctx e =
 					()
 			in
 			loop [] e1
-		| TBinop(OpAssign,({eexpr = TField({eexpr = TLocal v},fa)} as e1),e2) when v.v_id < 0 ->
+		| TBinop(OpAssign,({eexpr = TField({eexpr = TLocal v},fa,_)} as e1),e2) when v.v_id < 0 ->
 			let s = field_name fa in
 			(try ignore(get_field_var v s) with Not_found -> ignore(add_field_var v s e1.etype));
 			find_locals e2
-		| TField({eexpr = TLocal v},fa) when v.v_id < 0 ->
+		| TField({eexpr = TLocal v},fa,_) when v.v_id < 0 ->
 			begin match extract_field fa with
 			| Some {cf_kind = Var _} -> ()
 			| _ -> cancel v e.epos
@@ -1595,10 +1595,10 @@ let inline_constructors ctx e =
 				cancel v e.epos;
 				e
 			end
-		| TBinop(OpAssign,({eexpr = TField({eexpr = TLocal v},fa)} as e1),e2) when v.v_id < 0 ->
+		| TBinop(OpAssign,({eexpr = TField({eexpr = TLocal v},fa,_)} as e1),e2) when v.v_id < 0 ->
 			let e2 = loop e2 in
 			assign_or_declare v (field_name fa) e2 e1.etype e.epos
-		| TField({eexpr = TLocal v},fa) when v.v_id < 0 ->
+		| TField({eexpr = TLocal v},fa,_) when v.v_id < 0 ->
 			use_local_or_null v (field_name fa) e.etype e.epos
 		| TBinop(OpAssign,({eexpr = TArray({eexpr = TLocal v},{eexpr = TConst (TInt i)})} as e1),e2) when v.v_id < 0 ->
 			let e2 = loop e2 in

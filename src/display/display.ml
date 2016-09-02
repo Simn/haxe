@@ -432,7 +432,7 @@ module Diagnostics = struct
 			| TCast(e1,None) -> compound "cast" [e1] e.epos
 			| TBinop(op,e1,e2) -> compound (Printf.sprintf "'%s' operator" (s_binop op)) [e1;e2] e.epos
 			| TUnop(op,_,e1) -> compound (Printf.sprintf "'%s' operator" (s_unop op)) [e1] e.epos
-			| TField(e1,_) -> compound "field access" [e1] e.epos
+			| TField(e1,_,_) -> compound "field access" [e1] e.epos
 			| TArrayDecl el -> compound "array declaration" el e.epos
 			| TObjectDecl fl -> compound "object declaration" (List.map snd fl) e.epos
 		in
@@ -627,14 +627,14 @@ module Statistics = struct
 		in
 		let collect_references c e =
 			let rec loop e = match e.eexpr with
-				| TField(e1,FEnum(_,ef)) ->
+				| TField(e1,FEnum(_,ef),p) ->
 					loop e1;
-					add_relation ef.ef_pos (Referenced,e.epos);
-				| TField(e1,fa) ->
+					add_relation ef.ef_pos (Referenced,p);
+				| TField(e1,fa,p) ->
 					loop e1;
 					begin match extract_field fa with
 						| Some cf when is_display_file cf.cf_pos.pfile ->
-							add_relation cf.cf_pos (Referenced,e.epos)
+							add_relation cf.cf_pos (Referenced,p)
 						| _ ->
 							()
 					end

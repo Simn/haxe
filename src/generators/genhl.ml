@@ -836,7 +836,7 @@ and field_type ctx f p =
 and real_type ctx e =
 	let rec loop e =
 		match e.eexpr with
-		| TField (_,f) ->
+		| TField (_,f,_) ->
 			let ft = field_type ctx f e.epos in
 			(*
 				Handle function variance:
@@ -1375,7 +1375,7 @@ and object_access ctx eobj t f =
 
 and get_access ctx e =
 	match e.eexpr with
-	| TField (ethis, a) ->
+	| TField (ethis, a, _) ->
 		(match a, follow ethis.etype with
 		| FStatic (c,({ cf_kind = Var _ | Method MethDynamic } as f)), _ ->
 			let g, t = class_global ctx c in
@@ -1930,11 +1930,11 @@ and eval_expr ctx e =
 			def_ret := Some (unsafe_cast_to ctx ret (to_type ctx e.etype) e.epos);
 		);
 		(match !def_ret with None -> unsafe_cast_to ctx ret (to_type ctx e.etype) e.epos | Some r -> r)
-	| TField (ec,FInstance({ cl_path = [],"Array" },[t],{ cf_name = "length" })) when to_type ctx t = HDyn ->
+	| TField (ec,FInstance({ cl_path = [],"Array" },[t],{ cf_name = "length" }),_) when to_type ctx t = HDyn ->
 		let r = alloc_tmp ctx HI32 in
 		op ctx (OCall1 (r,alloc_fun_path ctx (["hl";"types"],"ArrayDyn") "get_length", eval_null_check ctx ec));
 		r
-	| TField (ec,a) ->
+	| TField (ec,a,_) ->
 		let r = alloc_tmp ctx (to_type ctx (field_type ctx a e.epos)) in
 		(match get_access ctx e with
 		| AGlobal g ->
@@ -2901,9 +2901,9 @@ let rec generate_member ctx c f =
 			let p = f.cf_pos in
 			(* function __string() return this.toString().bytes *)
 			let ethis = mk (TConst TThis) (TInst (c,List.map snd c.cl_params)) p in
-			let tstr = mk (TCall (mk (TField (ethis,FInstance(c,List.map snd c.cl_params,f))) f.cf_type p,[])) ctx.com.basic.tstring p in
+			let tstr = mk (TCall (mk (TField (ethis,FInstance(c,List.map snd c.cl_params,f),p)) f.cf_type p,[])) ctx.com.basic.tstring p in
 			let cstr, cf_bytes = (try (match ctx.com.basic.tstring with TInst(c,_) -> c, PMap.find "bytes" c.cl_fields | _ -> assert false) with Not_found -> assert false) in
-			let estr = mk (TReturn (Some (mk (TField (tstr,FInstance (cstr,[],cf_bytes))) cf_bytes.cf_type p))) ctx.com.basic.tvoid p in
+			let estr = mk (TReturn (Some (mk (TField (tstr,FInstance (cstr,[],cf_bytes),p)) cf_bytes.cf_type p))) ctx.com.basic.tvoid p in
 			ignore(make_fun ctx (underscore_class_name c,"__string") (alloc_fun_path ctx c.cl_path "__string") { tf_expr = estr; tf_args = []; tf_type = cf_bytes.cf_type; } (Some c) None)
 		end
 
@@ -3119,7 +3119,7 @@ let generate_static_init ctx =
 				match f.cf_kind, f.cf_expr with
 				| Var _, Some e ->
 					let p = e.epos in
-					let e = mk (TBinop (OpAssign,(mk (TField (mk (TTypeExpr t) t_dynamic p,FStatic (c,f))) f.cf_type p), e)) f.cf_type p in
+					let e = mk (TBinop (OpAssign,(mk (TField (mk (TTypeExpr t) t_dynamic p,FStatic (c,f),p)) f.cf_type p), e)) f.cf_type p in
 					exprs := e :: !exprs;
 				| _ ->
 					()

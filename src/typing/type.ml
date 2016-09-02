@@ -106,7 +106,7 @@ and texpr_expr =
 	| TLocal of tvar
 	| TArray of texpr * texpr
 	| TBinop of Ast.binop * texpr * texpr
-	| TField of texpr * tfield_access
+	| TField of texpr * tfield_access * pos
 	| TTypeExpr of module_type
 	| TParenthesis of texpr
 	| TObjectDecl of (string * texpr) list
@@ -950,7 +950,7 @@ let s_expr_kind e =
 	| TArray (_,_) -> "Array"
 	| TBinop (_,_,_) -> "Binop"
 	| TEnumParameter (_,_,_) -> "EnumParameter"
-	| TField (_,_) -> "Field"
+	| TField (_,_,_) -> "Field"
 	| TTypeExpr _ -> "TypeExpr"
 	| TParenthesis _ -> "Parenthesis"
 	| TObjectDecl _ -> "ObjectDecl"
@@ -998,7 +998,7 @@ let rec s_expr s_type e =
 		sprintf "(%s %s %s)" (loop e1) (s_binop op) (loop e2)
 	| TEnumParameter (e1,_,i) ->
 		sprintf "%s[%i]" (loop e1) i
-	| TField (e,f) ->
+	| TField (e,f,_) ->
 		let fstr = (match f with
 			| FStatic (c,f) -> "static(" ^ s_type_path c.cl_path ^ "." ^ f.cf_name ^ ")"
 			| FInstance (c,_,f) -> "inst(" ^ s_type_path c.cl_path ^ "." ^ f.cf_name ^ " : " ^ s_type f.cf_type ^ ")"
@@ -1072,7 +1072,7 @@ let rec s_expr_pretty print_var_ids tabs top_level s_type e =
 	| TArray (e1,e2) -> sprintf "%s[%s]" (loop e1) (loop e2)
 	| TBinop (op,e1,e2) -> sprintf "%s %s %s" (loop e1) (s_binop op) (loop e2)
 	| TEnumParameter (e1,_,i) -> sprintf "%s[%i]" (loop e1) i
-	| TField (e1,s) -> sprintf "%s.%s" (loop e1) (field_name s)
+	| TField (e1,s,_) -> sprintf "%s.%s" (loop e1) (field_name s)
 	| TTypeExpr mt -> (s_type_path (t_path mt))
 	| TParenthesis e1 -> sprintf "(%s)" (loop e1)
 	| TObjectDecl fl -> sprintf "{%s}" (clist (fun (f,e) -> sprintf "%s : %s" f (loop e)) fl)
@@ -1155,7 +1155,7 @@ let rec s_expr_ast print_var_ids tabs s_type e =
 	| TBinop (op,e1,e2) -> tag "Binop" [loop e1; s_binop op; loop e2]
 	| TUnop (op,flag,e1) -> tag "Unop" [s_unop op; if flag = Postfix then "Postfix" else "Prefix"; loop e1]
 	| TEnumParameter (e1,ef,i) -> tag "EnumParameter" [loop e1; ef.ef_name; string_of_int i]
-	| TField (e1,fa) ->
+	| TField (e1,fa,_) ->
 		let sfa = match fa with
 			| FInstance(c,tl,cf) -> tag "FInstance" ~extra_tabs:"\t" [s_type (TInst(c,tl)); cf.cf_name]
 			| FStatic(c,cf) -> tag "FStatic" ~extra_tabs:"\t" [s_type_path c.cl_path; cf.cf_name]
@@ -2214,7 +2214,7 @@ let iter f e =
 		f e1;
 		f e2;
 	| TThrow e
-	| TField (e,_)
+	| TField (e,_,_)
 	| TEnumParameter (e,_,_)
 	| TParenthesis e
 	| TCast (e,_)
@@ -2272,8 +2272,8 @@ let map_expr f e =
 		{ e with eexpr = TThrow (f e1) }
 	| TEnumParameter (e1,ef,i) ->
 		 { e with eexpr = TEnumParameter(f e1,ef,i) }
-	| TField (e1,v) ->
-		{ e with eexpr = TField (f e1,v) }
+	| TField (e1,v,p) ->
+		{ e with eexpr = TField (f e1,v,p) }
 	| TParenthesis e1 ->
 		{ e with eexpr = TParenthesis (f e1) }
 	| TUnop (op,pre,e1) ->
@@ -2337,7 +2337,7 @@ let map_expr_type f ft fv e =
 		{ e with eexpr = TThrow (f e1); etype = ft e.etype }
 	| TEnumParameter (e1,ef,i) ->
 		{ e with eexpr = TEnumParameter(f e1,ef,i); etype = ft e.etype }
-	| TField (e1,v) ->
+	| TField (e1,v,p) ->
 		let e1 = f e1 in
 		let v = try
 			let n = match v with
@@ -2350,7 +2350,7 @@ let map_expr_type f ft fv e =
 		with Not_found ->
 			v
 		in
-		{ e with eexpr = TField (e1,v); etype = ft e.etype }
+		{ e with eexpr = TField (e1,v,p); etype = ft e.etype }
 	| TParenthesis e1 ->
 		{ e with eexpr = TParenthesis (f e1); etype = ft e.etype }
 	| TUnop (op,pre,e1) ->
@@ -2497,7 +2497,7 @@ module TExprToExpr = struct
 		| TLocal v -> EConst (mk_ident v.v_name)
 		| TArray (e1,e2) -> EArray (convert_expr e1,convert_expr e2)
 		| TBinop (op,e1,e2) -> EBinop (op, convert_expr e1, convert_expr e2)
-		| TField (e,f) -> EField (convert_expr e, (field_name f,null_pos)) (* TODO once TField has been changed *)
+		| TField (e,f,p) -> EField (convert_expr e, (field_name f,p))
 		| TTypeExpr t -> fst (mk_path (full_type_path t) e.epos)
 		| TParenthesis e -> EParenthesis (convert_expr e)
 		| TObjectDecl fl -> EObjectDecl (List.map (fun (f,e) -> f, convert_expr e) fl)
@@ -2561,7 +2561,7 @@ module Texpr = struct
 		| TLocal v1,TLocal v2 -> v1 == v2
 		| TArray(eb1,ei1),TArray(eb2,ei2) -> equal eb1 eb2 && equal ei1 ei2
 		| TBinop(op1,lhs1,rhs1),TBinop(op2,lhs2,rhs2) -> op1 = op2 && equal lhs1 lhs2 && equal rhs1 rhs2
-		| TField(e1,fa1),TField(e2,fa2) -> equal e1 e2 && equal_fa fa1 fa2
+		| TField(e1,fa1,_),TField(e2,fa2,_) -> equal e1 e2 && equal_fa fa1 fa2
 		| TTypeExpr mt1,TTypeExpr mt2 -> mt1 == mt2
 		| TParenthesis e1,TParenthesis e2 -> equal e1 e2
 		| TObjectDecl fl1,TObjectDecl fl2 -> safe_for_all2 (fun (s1,e1) (s2,e2) -> s1 = s2 && equal e1 e2) fl1 fl2
@@ -2685,9 +2685,9 @@ module Texpr = struct
 		| TEnumParameter (e1,ef,i) ->
 			let acc,e1 = f acc e1 in
 			acc,{ e with eexpr = TEnumParameter(e1,ef,i) }
-		| TField (e1,v) ->
+		| TField (e1,v,p) ->
 			let acc,e1 = f acc e1 in
-			acc,{ e with eexpr = TField (e1,v) }
+			acc,{ e with eexpr = TField (e1,v,p) }
 		| TParenthesis e1 ->
 			let acc,e1 = f acc e1 in
 			acc,{ e with eexpr = TParenthesis (e1) }

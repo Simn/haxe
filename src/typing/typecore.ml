@@ -251,7 +251,7 @@ let make_static_this c p =
 
 let make_static_field_access c cf t p =
 	let ethis = make_static_this c p in
-	mk (TField (ethis,(FStatic (c,cf)))) t p
+	mk (TField (ethis,(FStatic (c,cf)),p)) t p
 
 let make_static_call ctx c cf map args t p =
 	let monos = List.map (fun _ -> mk_mono()) cf.cf_params in

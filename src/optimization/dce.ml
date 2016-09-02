@@ -382,8 +382,8 @@ and expr dce e =
 		expr dce e;
 
 	(* keep toString method when the class is argument to Std.string or haxe.Log.trace *)
-	| TCall ({eexpr = TField({eexpr = TTypeExpr (TClassDecl ({cl_path = (["haxe"],"Log")} as c))},FStatic (_,{cf_name="trace"}))} as ef, ((e2 :: el) as args))
-	| TCall ({eexpr = TField({eexpr = TTypeExpr (TClassDecl ({cl_path = ([],"Std")} as c))},FStatic (_,{cf_name="string"}))} as ef, ((e2 :: el) as args)) ->
+	| TCall ({eexpr = TField({eexpr = TTypeExpr (TClassDecl ({cl_path = (["haxe"],"Log")} as c))},FStatic (_,{cf_name="trace"}), _)} as ef, ((e2 :: el) as args))
+	| TCall ({eexpr = TField({eexpr = TTypeExpr (TClassDecl ({cl_path = ([],"Std")} as c))},FStatic (_,{cf_name="string"}), _)} as ef, ((e2 :: el) as args)) ->
 		mark_class dce c;
 		to_string dce e2.etype;
 		begin match el with
@@ -438,22 +438,22 @@ and expr dce e =
 		check_and_add_feature dce "array_write";
 		expr dce e1;
 		expr dce e2;
-	| TBinop(OpAssign,({eexpr = TField(_,(FDynamic _ as fa) )} as e1),e2) ->
+	| TBinop(OpAssign,({eexpr = TField(_,(FDynamic _ as fa),_ )} as e1),e2) ->
 		check_dynamic_write dce fa;
 		expr dce e1;
 		expr dce e2;
-	| TBinop(OpAssign,({eexpr = TField(_,(FAnon cf as fa) )} as e1),e2) ->
+	| TBinop(OpAssign,({eexpr = TField(_,(FAnon cf as fa),_ )} as e1),e2) ->
 		if Meta.has Meta.Optional cf.cf_meta then
 			check_anon_optional_write dce fa
 		else
 			check_anon_write dce fa;
 		expr dce e1;
 		expr dce e2;
-	| TBinop(OpAssignOp op,({eexpr = TField(_,(FDynamic _ as fa) )} as e1),e2) ->
+	| TBinop(OpAssignOp op,({eexpr = TField(_,(FDynamic _ as fa),_ )} as e1),e2) ->
 		check_dynamic_write dce fa;
 		expr dce e1;
 		expr dce e2;
-	| TBinop(OpAssignOp op,({eexpr = TField(_,(FAnon cf as fa) )} as e1),e2) ->
+	| TBinop(OpAssignOp op,({eexpr = TField(_,(FAnon cf as fa),_ )} as e1),e2) ->
 		if Meta.has Meta.Optional cf.cf_meta then
 			check_anon_optional_write dce fa
 		else
@@ -476,7 +476,7 @@ and expr dce e =
 		check_and_add_feature dce "binop_>>>";
 		expr dce e1;
 		expr dce e2;
-	| TField(e,fa) ->
+	| TField(e,fa,_) ->
 		begin match fa with
 			| FStatic(c,cf) ->
 				mark_class dce c;
@@ -582,7 +582,7 @@ let run com main full =
 		curclass = null_class;
 	} in
 	begin match main with
-		| Some {eexpr = TCall({eexpr = TField(e,(FStatic(c,cf)))},_)} | Some {eexpr = TBlock ({ eexpr = TCall({eexpr = TField(e,(FStatic(c,cf)))},_)} :: _)} ->
+		| Some {eexpr = TCall({eexpr = TField(e,(FStatic(c,cf)),_)},_)} | Some {eexpr = TBlock ({ eexpr = TCall({eexpr = TField(e,(FStatic(c,cf)),_)},_)} :: _)} ->
 			cf.cf_meta <- (Meta.Keep,[],cf.cf_pos) :: cf.cf_meta
 		| _ ->
 			()

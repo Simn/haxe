@@ -192,28 +192,28 @@ struct
 		let rec run e =
 			match e.eexpr with
 				(* Math changes *)
-				| TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "NaN" }) ) ->
+				| TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "NaN" }), _ ) ->
 					mk_static_field_access_infer float_cl "NaN" e.epos []
-				| TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "NEGATIVE_INFINITY" }) ) ->
+				| TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "NEGATIVE_INFINITY" }), _ ) ->
 					mk_static_field_access_infer float_cl "NEGATIVE_INFINITY" e.epos []
-				| TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "POSITIVE_INFINITY" }) ) ->
+				| TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "POSITIVE_INFINITY" }), _ ) ->
 					mk_static_field_access_infer float_cl "POSITIVE_INFINITY" e.epos []
-				| TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "isNaN"}) ) ->
+				| TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "isNaN"}), _ ) ->
 					mk_static_field_access_infer float_cl "isNaN" e.epos []
-				| TCall( ({ eexpr = TField( (_ as ef), FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = ("ffloor" as f) }) ) } as fe), p)
-				| TCall( ({ eexpr = TField( (_ as ef), FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = ("fceil" as f) }) ) } as fe), p) ->
-						Type.map_expr run { e with eexpr = TCall({ fe with eexpr = TField(ef, FDynamic (String.sub f 1 (String.length f - 1)))	}, p) }
-				| TCall( { eexpr = TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "floor" }) ) }, _)
-				| TCall( { eexpr = TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "round" }) ) }, _)
-				| TCall( { eexpr = TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "ceil" }) ) }, _) ->
+				| TCall( ({ eexpr = TField( (_ as ef), FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = ("ffloor" as f) }), _ ) } as fe), p)
+				| TCall( ({ eexpr = TField( (_ as ef), FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = ("fceil" as f) }), _ ) } as fe), p) ->
+						Type.map_expr run { e with eexpr = TCall({ fe with eexpr = TField(ef, FDynamic (String.sub f 1 (String.length f - 1)), ef.epos) }, p) }
+				| TCall( { eexpr = TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "floor" }), _ ) }, _)
+				| TCall( { eexpr = TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "round" }), _ ) }, _)
+				| TCall( { eexpr = TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "ceil" }), _ ) }, _) ->
 						mk_cast basic.tint (Type.map_expr run { e with etype = basic.tfloat })
-				| TCall( ( { eexpr = TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "isFinite" }) ) } as efield ), [v]) ->
+				| TCall( ( { eexpr = TField( _, FStatic({ cl_path = (["java";"lang"], "Math") }, { cf_name = "isFinite" }), _ ) } as efield ), [v]) ->
 					{ e with eexpr = TCall( mk_static_field_access_infer runtime_cl "isFinite" efield.epos [], [run v] ) }
 				(* end of math changes *)
 
 				(* Std.is() *)
 				| TCall(
-						{ eexpr = TField( _, FStatic({ cl_path = ([], "Std") }, { cf_name = "is" })) },
+						{ eexpr = TField( _, FStatic({ cl_path = ([], "Std") }, { cf_name = "is" }), _) },
 						[ obj; { eexpr = TTypeExpr(md) } ]
 					) ->
 					let mk_is is_basic obj md =
@@ -411,7 +411,7 @@ struct
 
 		let local_hashcode = ref { local with
 			eexpr = TCall({ local with
-				eexpr = TField(local, FDynamic "hashCode");
+				eexpr = TField(local, FDynamic "hashCode", local.epos);
 				etype = TFun([], basic.tint);
 			}, []);
 			etype = basic.tint
@@ -483,7 +483,7 @@ struct
 					| TConst(TString s) ->
 						let hashed = java_hash s in
 						let equals_test = {
-							eexpr = TCall({ e with eexpr = TField(local, FDynamic "equals"); etype = TFun(["obj",false,t_dynamic],basic.tbool) }, [ e ]);
+							eexpr = TCall({ e with eexpr = TField(local, FDynamic "equals", e.epos); etype = TFun(["obj",false,t_dynamic],basic.tbool) }, [ e ]);
 							etype = basic.tbool;
 							epos = e.epos
 						} in
@@ -574,20 +574,20 @@ struct
 
 				(* Std.int() *)
 				| TCall(
-						{ eexpr = TField( _, FStatic({ cl_path = ([], "Std") }, { cf_name = "int" })) },
+						{ eexpr = TField( _, FStatic({ cl_path = ([], "Std") }, { cf_name = "int" }), _) },
 						[obj]
 					) ->
 					run (mk_cast basic.tint obj)
 				(* end Std.int() *)
 
-				| TField( ef, FInstance({ cl_path = ([], "String") }, _, { cf_name = "length" }) ) ->
+				| TField( ef, FInstance({ cl_path = ([], "String") }, _, { cf_name = "length" }), _ ) ->
 					{ e with eexpr = TCall(Type.map_expr run e, []) }
-				| TField( ef, field ) when field_name field = "length" && is_string ef.etype ->
+				| TField( ef, field, _ ) when field_name field = "length" && is_string ef.etype ->
 					{ e with eexpr = TCall(Type.map_expr run e, []) }
-				| TCall( ( { eexpr = TField(ef, field) } as efield ), args ) when is_string ef.etype && String.get (field_name field) 0 = '_' ->
+				| TCall( ( { eexpr = TField(ef, field, _) } as efield ), args ) when is_string ef.etype && String.get (field_name field) 0 = '_' ->
 					let field = field_name field in
-					{ e with eexpr = TCall({ efield with eexpr = TField(run ef, FDynamic (String.sub field 1 ( (String.length field) - 1)) )}, List.map run args) }
-				| TCall( ( { eexpr = TField(ef, FInstance({ cl_path = [], "String" }, _, field )) } as efield ), args ) ->
+					{ e with eexpr = TCall({ efield with eexpr = TField(run ef, FDynamic (String.sub field 1 ( (String.length field) - 1)), ef.epos )}, List.map run args) }
+				| TCall( ( { eexpr = TField(ef, FInstance({ cl_path = [], "String" }, _, field ), _) } as efield ), args ) ->
 					let field = field.cf_name in
 					(match field with
 						| "charAt" | "charCodeAt" | "split" | "indexOf"
@@ -741,7 +741,7 @@ let rec handle_throws gen cf =
 				) ecatches;
 				if !needs_check_block then Type.iter iter etry;
 				throws := old
-			| TField(e, (FInstance(_,_,f) | FStatic(_,f) | FClosure(_,f))) ->
+			| TField(e, (FInstance(_,_,f) | FStatic(_,f) | FClosure(_,f)), _) ->
 				let tdefs = collect_throws [] f.cf_meta in
 				if tdefs <> [] && not (List.for_all (fun c -> cls_any_super c !throws) tdefs) then
 					raise Exit;
@@ -1284,7 +1284,7 @@ let configure gen =
 					write w ".undefined";
 				| TLocal var ->
 					write_id w var.v_name
-				| TField(_, FEnum(en,ef)) ->
+				| TField(_, FEnum(en,ef), _) ->
 					let s = ef.ef_name in
 					print w "%s." (path_s_import e.epos en.e_path en.e_meta); write_field w s
 				| TArray (e1, e2) ->
@@ -1296,7 +1296,7 @@ let configure gen =
 					write w "( ";
 					expr_s w e1; write w ( " " ^ (Ast.s_binop op) ^ " " ); expr_s w e2;
 					write w " )"
-				| TField (e, FStatic(_, cf)) when Meta.has Meta.Native cf.cf_meta ->
+				| TField (e, FStatic(_, cf), _) when Meta.has Meta.Native cf.cf_meta ->
 					let rec loop meta = match meta with
 						| (Meta.Native, [EConst (String s), _],_) :: _ ->
 							expr_s w e; write w "."; write_field w s
@@ -1304,7 +1304,7 @@ let configure gen =
 						| [] -> expr_s w e; write w "."; write_field w (cf.cf_name)
 					in
 					loop cf.cf_meta
-				| TField (e, s) ->
+				| TField (e, s, _) ->
 					expr_s w e; write w "."; write_field w (field_name s)
 				| TTypeExpr (TClassDecl { cl_path = (["haxe"], "Int32") }) ->
 					write w (path_s_import e.epos (["haxe"], "Int32") [])
@@ -1316,7 +1316,7 @@ let configure gen =
 				| TMeta (_,e) ->
 					expr_s w e
 				| TCall ({ eexpr = TLocal { v_name = "__array__" } }, el)
-				| TCall ({ eexpr = TField(_, FStatic({ cl_path = (["java"],"NativeArray") }, { cf_name = "make" })) }, el)
+				| TCall ({ eexpr = TField(_, FStatic({ cl_path = (["java"],"NativeArray") }, { cf_name = "make" }), _) }, el)
 				| TArrayDecl el when t_has_type_param e.etype ->
 					let _, el = extract_tparams [] el in
 					print w "( (%s) (new %s " (t_s e.epos e.etype) (t_s e.epos (replace_type_param e.etype));
@@ -1328,7 +1328,7 @@ let configure gen =
 					) 0 el);
 					write w "}) )"
 				| TCall ({ eexpr = TLocal { v_name = "__array__" } }, el)
-				| TCall ({ eexpr = TField(_, FStatic({ cl_path = (["java"],"NativeArray") }, { cf_name = "make" })) }, el)
+				| TCall ({ eexpr = TField(_, FStatic({ cl_path = (["java"],"NativeArray") }, { cf_name = "make" }), _) }, el)
 				| TArrayDecl el ->
 					let _, el = extract_tparams [] el in
 					print w "new %s" (param_t_s e.epos (transform_nativearray_t e.etype));
@@ -1347,7 +1347,7 @@ let configure gen =
 						acc + 1
 					) 0 el);
 					write w "}"
-				| TCall( ( { eexpr = TField(_, FStatic({ cl_path = ([], "String") }, { cf_name = "fromCharCode" })) } ), [cc] ) ->
+				| TCall( ( { eexpr = TField(_, FStatic({ cl_path = ([], "String") }, { cf_name = "fromCharCode" }), _) } ), [cc] ) ->
 						write w "Character.toString((char) ";
 						expr_s w cc;
 						write w ")"
@@ -1535,7 +1535,7 @@ let configure gen =
 							write w "case ";
 							in_value := true;
 							(match e.eexpr with
-								| TField(_, FEnum(e, ef)) ->
+								| TField(_, FEnum(e, ef), _) ->
 									let changed_name = change_id ef.ef_name in
 									write w changed_name
 								| _ ->
@@ -2094,7 +2094,7 @@ let configure gen =
 	let empty_en = match get_type gen (["haxe";"lang"], "EmptyObject") with TEnumDecl e -> e | _ -> assert false in
 	let empty_ctor_type = TEnum(empty_en, []) in
 	let empty_en_expr = mk (TTypeExpr (TEnumDecl empty_en)) (TAnon { a_fields = PMap.empty; a_status = ref (EnumStatics empty_en) }) null_pos in
-	let empty_ctor_expr = mk (TField (empty_en_expr, FEnum(empty_en, PMap.find "EMPTY" empty_en.e_constrs))) empty_ctor_type null_pos in
+	let empty_ctor_expr = mk (TField (empty_en_expr, FEnum(empty_en, PMap.find "EMPTY" empty_en.e_constrs), null_pos)) empty_ctor_type null_pos in
 	OverloadingConstructor.configure ~empty_ctor_type:empty_ctor_type ~empty_ctor_expr:empty_ctor_expr gen;
 
 	let rcf_static_find = mk_static_field_access_infer (get_cl (get_type gen (["haxe";"lang"], "FieldLookup"))) "findHash" Ast.null_pos [] in
@@ -2229,7 +2229,7 @@ let configure gen =
 
 	let is_dynamic_expr e =
 		is_dynamic e.etype || match e.eexpr with
-		| TField(tf, f) ->
+		| TField(tf, f, _) ->
 			field_is_dynamic tf.etype f
 		| _ ->
 			false

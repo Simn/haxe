@@ -106,7 +106,7 @@ module Constructor = struct
 		| ConEnum(en,ef) ->
 			if Meta.has Meta.FakeEnum en.e_meta then begin
 				let e_mt = !type_module_type_ref ctx (TEnumDecl en) None p in
- 				mk (TField(e_mt,FEnum(en,ef))) ef.ef_type p
+ 				mk (TField(e_mt,FEnum(en,ef),p)) ef.ef_type p
  			end else if match_debug then mk (TConst (TString ef.ef_name)) ctx.t.tstring p
 			else mk (TConst (TInt (Int32.of_int ef.ef_index))) ctx.t.tint p
 		| ConConst ct -> Codegen.ExprBuilder.make_const_texpr ctx.com ct p
@@ -186,11 +186,11 @@ module Pattern = struct
 		in
 		let check_expr e =
 			let rec loop e = match e.eexpr with
-				| TField(_,FEnum(en,ef)) ->
+				| TField(_,FEnum(en,ef),_) ->
 					(* Let the unification afterwards fail so we don't recover. *)
 					(* (match follow ef.ef_type with TFun _ -> raise Exit | _ -> ()); *)
 					PatConstructor(ConEnum(en,ef),[])
-				| TField(_,FStatic(c,({cf_kind = Var {v_write = AccNever}} as cf))) ->
+				| TField(_,FStatic(c,({cf_kind = Var {v_write = AccNever}} as cf)),_) ->
 					PatConstructor(ConStatic(c,cf),[])
 				| TConst ct ->
 					PatConstructor(ConConst ct,[])
@@ -291,7 +291,7 @@ module Pattern = struct
 				let t = tfun (List.map (fun _ -> mk_mono()) el) t in
 				let e1 = type_expr ctx e1 (WithType t) in
 				begin match e1.eexpr,follow e1.etype with
-					| TField(_, FEnum(en,ef)),TFun(_,TEnum(_,tl)) ->
+					| TField(_, FEnum(en,ef),_),TFun(_,TEnum(_,tl)) ->
 						let monos = List.map (fun _ -> mk_mono()) ef.ef_params in
 						let map t = apply_params en.e_params tl (apply_params ef.ef_params monos t) in
 						(* We cannot use e1.etype here because it has applied type parameters (issue #1310). *)
@@ -1092,7 +1092,7 @@ module TexprConverter = struct
 
 	let s_subject s e =
 		let rec loop s e = match e.eexpr with
-			| TField(e1,fa) ->
+			| TField(e1,fa,_) ->
 				loop (Printf.sprintf "{ %s: %s }" (field_name fa) s) e1
 			| TEnumParameter(e1,ef,i) ->
 				let arity = match follow ef.ef_type with TFun(args,_) -> List.length args | _ -> assert false in

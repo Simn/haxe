@@ -353,7 +353,7 @@ let is_dynamic_iterator ctx e =
 		has_feature ctx "HxOverrides.iter" && loop x.etype
 	in
 	match e.eexpr with
-	| TField (x,f) when field_name f = "iterator" -> check x
+	| TField (x,f,_) when field_name f = "iterator" -> check x
 	| _ ->
 		false
 
@@ -376,7 +376,7 @@ let rec gen_call ctx e el in_value =
 			List.iter (fun p -> print ctx ","; gen_value ctx p) params;
 			spr ctx ")";
 		);
-	| TField ({ eexpr = TConst TSuper },f) , params ->
+	| TField ({ eexpr = TConst TSuper },f,_) , params ->
 		(match ctx.current.cl_super with
 		| None -> error "Missing api.setCurrentClass" e.epos
 		| Some (c,_,_) ->
@@ -499,7 +499,7 @@ and gen_expr ctx e =
 		spr ctx "[";
 		gen_value ctx e2;
 		spr ctx "]";
-	| TBinop (op,{ eexpr = TField (x,f) },e2) when field_name f = "iterator" ->
+	| TBinop (op,{ eexpr = TField (x,f,_) },e2) when field_name f = "iterator" ->
 		gen_value ctx x;
 		spr ctx (field "iterator");
 		print ctx " %s " (Ast.s_binop op);
@@ -508,18 +508,18 @@ and gen_expr ctx e =
 		gen_value ctx e1;
 		print ctx " %s " (Ast.s_binop op);
 		gen_value ctx e2;
-	| TField (x,f) when field_name f = "iterator" && is_dynamic_iterator ctx e ->
+	| TField (x,f,_) when field_name f = "iterator" && is_dynamic_iterator ctx e ->
 		add_feature ctx "use.$iterator";
 		print ctx "$iterator(";
 		gen_value ctx x;
 		print ctx ")";
-	| TField (x,FClosure (Some ({cl_path=[],"Array"},_), {cf_name="push"})) ->
+	| TField (x,FClosure (Some ({cl_path=[],"Array"},_), {cf_name="push"}),_) ->
 		(* see https://github.com/HaxeFoundation/haxe/issues/1997 *)
 		add_feature ctx "use.$arrayPushClosure";
 		print ctx "$arrayPushClosure(";
 		gen_value ctx x;
 		print ctx ")"
-	| TField (x,FClosure (_,f)) ->
+	| TField (x,FClosure (_,f),_) ->
 		add_feature ctx "use.$bind";
 		(match x.eexpr with
 		| TConst _ | TLocal _ ->
@@ -535,9 +535,9 @@ and gen_expr ctx e =
 	| TEnumParameter (x,_,i) ->
 		gen_value ctx x;
 		print ctx "[%i]" (i + 2)
-	| TField (x, (FInstance(_,_,f) | FStatic(_,f) | FAnon(f))) when Meta.has Meta.SelfCall f.cf_meta ->
+	| TField (x, (FInstance(_,_,f) | FStatic(_,f) | FAnon(f)),_) when Meta.has Meta.SelfCall f.cf_meta ->
 		gen_value ctx x;
-	| TField (x,f) ->
+	| TField (x,f,_) ->
 		let rec skip e = match e.eexpr with
 			| TCast(e1,None) | TMeta(_,e1) -> skip e1
 			| TConst(TInt _ | TFloat _) | TObjectDecl _ -> {e with eexpr = TParenthesis e}
@@ -1470,7 +1470,7 @@ let generate com =
 	let rec chk_features e =
 		if is_dynamic_iterator ctx e then add_feature ctx "use.$iterator";
 		match e.eexpr with
-		| TField (_,FClosure _) ->
+		| TField (_,FClosure _,_) ->
 			add_feature ctx "use.$bind"
 		| _ ->
 			Type.iter chk_features e

@@ -4800,7 +4800,7 @@ and encode_texpr e =
 			| TLocal v -> 1,[encode_tvar v]
 			| TArray(e1,e2) -> 2,[loop e1; loop e2]
 			| TBinop(op,e1,e2) -> 3,[encode_binop op;loop e1;loop e2]
-			| TField(e1,fa) -> 4,[loop e1;encode_field_access fa]
+			| TField(e1,fa,_) -> 4,[loop e1;encode_field_access fa] (* TODO: pipe through position somehow *)
 			| TTypeExpr mt -> 5,[encode_module_type mt]
 			| TParenthesis e1 -> 6,[loop e1]
 			| TObjectDecl fl -> 7, [enc_array (List.map (fun (f,e) ->
@@ -4963,7 +4963,7 @@ let rec decode_texpr v =
 		| 1, [v] -> TLocal(decode_tvar v)
 		| 2, [v1;v2] -> TArray(loop v1,loop v2)
 		| 3, [op;v1;v2] -> TBinop(decode_op op,loop v1,loop v2)
-		| 4, [v1;fa] -> TField(loop v1,decode_field_access fa)
+		| 4, [v1;fa] -> TField(loop v1,decode_field_access fa,null_pos)
 		| 5, [mt] -> TTypeExpr(decode_module_type mt)
 		| 6, [v1] -> TParenthesis(loop v1)
 		| 7, [v] -> TObjectDecl(List.map (fun v -> dec_string (field v "name"),loop (field v "expr")) (dec_array v))

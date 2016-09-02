@@ -254,9 +254,9 @@ module TexprFilter = struct
 			let v' = alloc_var "tmp" e1.etype e1.epos in
 			let ev' = mk (TLocal v') e1.etype e1.epos in
 			let t1 = (Abstract.follow_with_abstracts e1.etype) in
-			let ehasnext = mk (TField(ev',quick_field t1 "hasNext")) (tfun [] com.basic.tbool) e1.epos in
+			let ehasnext = mk (TField(ev',quick_field t1 "hasNext",e1.epos)) (tfun [] com.basic.tbool) e1.epos in
 			let ehasnext = mk (TCall(ehasnext,[])) com.basic.tbool ehasnext.epos in
-			let enext = mk (TField(ev',quick_field t1 "next")) (tfun [] v.v_type) e1.epos in
+			let enext = mk (TField(ev',quick_field t1 "next",e1.epos)) (tfun [] v.v_type) e1.epos in
 			let enext = mk (TCall(enext,[])) v.v_type e1.epos in
 			let eassign = mk (TVar(v,Some enext)) com.basic.tvoid e.epos in
 			let ebody = Type.concat eassign e2 in
@@ -366,20 +366,20 @@ module InterferenceReport = struct
 				set_var_read ir v;
 				set_var_write ir v;
 			(* fields *)
-			| TField(e1,fa) ->
+			| TField(e1,fa,_) ->
 				loop e1;
 				if not (Optimizer.is_read_only_field_access e1 fa) then set_field_read ir (field_name fa);
-			| TBinop(OpAssign,{eexpr = TField(e1,fa)},e2) ->
+			| TBinop(OpAssign,{eexpr = TField(e1,fa,_)},e2) ->
 				set_field_write ir (field_name fa);
 				loop e1;
 				loop e2;
-			| TBinop(OpAssignOp _,{eexpr = TField(e1,fa)},e2) ->
+			| TBinop(OpAssignOp _,{eexpr = TField(e1,fa,_)},e2) ->
 				let name = field_name fa in
 				set_field_read ir name;
 				set_field_write ir name;
 				loop e1;
 				loop e2;
-			| TUnop((Increment | Decrement),_,{eexpr = TField(e1,fa)}) ->
+			| TUnop((Increment | Decrement),_,{eexpr = TField(e1,fa,_)}) ->
 				let name = field_name fa in
 				set_field_read ir name;
 				set_field_write ir name;
@@ -411,10 +411,10 @@ module InterferenceReport = struct
 			| TNew(c,_,el) when (match c.cl_constructor with Some cf when PurityState.is_pure c cf -> true | _ -> false) ->
 				set_state_read ir;
 				List.iter loop el;
-			| TCall({eexpr = TField(e1,FEnum _)},el) ->
+			| TCall({eexpr = TField(e1,FEnum _,_)},el) ->
 				loop e1;
 				List.iter loop el;
-			| TCall({eexpr = TField(e1,fa)},el) when PurityState.is_pure_field_access fa ->
+			| TCall({eexpr = TField(e1,fa,_)},el) when PurityState.is_pure_field_access fa ->
 				set_state_read ir;
 				loop e1;
 				List.iter loop el
@@ -564,16 +564,16 @@ module Fusion = struct
 				block_element acc el
 			| {eexpr = TMeta((Meta.Pure,_,_),_)} :: el ->
 				block_element acc el
-			| {eexpr = TCall({eexpr = TField(e1,fa)},el1)} :: el2 when PurityState.is_pure_field_access fa && config.local_dce ->
+			| {eexpr = TCall({eexpr = TField(e1,fa,_)},el1)} :: el2 when PurityState.is_pure_field_access fa && config.local_dce ->
 				block_element acc (e1 :: el1 @ el2)
 			| {eexpr = TNew(c,tl,el1)} :: el2 when (match c.cl_constructor with Some cf when PurityState.is_pure c cf -> true | _ -> false) && config.local_dce ->
 				block_element acc (el1 @ el2)
 			(* no-side-effect composites *)
-			| {eexpr = TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) | TField(e1,_) | TUnop(_,_,e1)} :: el ->
+			| {eexpr = TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) | TField(e1,_,_) | TUnop(_,_,e1)} :: el ->
 				block_element acc (e1 :: el)
 			| {eexpr = TArray(e1,e2) | TBinop(_,e1,e2)} :: el ->
 				block_element acc (e1 :: e2 :: el)
-			| {eexpr = TArrayDecl el1 | TCall({eexpr = TField(_,FEnum _)},el1)} :: el2 -> (* TODO: check e1 of FEnum *)
+			| {eexpr = TArrayDecl el1 | TCall({eexpr = TField(_,FEnum _,_)},el1)} :: el2 -> (* TODO: check e1 of FEnum *)
 				block_element acc (el1 @ el2)
 			| {eexpr = TObjectDecl fl} :: el ->
 				block_element acc ((List.map snd fl) @ el)
@@ -712,23 +712,23 @@ module Fusion = struct
 						| TUnop((Increment | Decrement),_,{eexpr = TLocal v}) when has_var_read ir v || has_var_write ir v ->
 							raise Exit
 						(* fields *)
-						| TField(e1,fa) ->
+						| TField(e1,fa,pf) ->
 							let e1 = replace e1 in
 							if not !found && not (Optimizer.is_read_only_field_access e1 fa) && (has_field_write ir (field_name fa) || has_state_write ir) then raise Exit;
-							{e with eexpr = TField(e1,fa)}
-						| TBinop(OpAssign,({eexpr = TField(e1,fa)} as ef),e2) ->
+							{e with eexpr = TField(e1,fa,pf)}
+						| TBinop(OpAssign,({eexpr = TField(e1,fa,pf)} as ef),e2) ->
 							let e1 = replace e1 in
 							let e2 = replace e2 in
 							if not !found && (has_field_read ir (field_name fa) || has_state_read ir) then raise Exit;
-							{e with eexpr = TBinop(OpAssign,{ef with eexpr = TField(e1,fa)},e2)}
-						| TBinop(OpAssignOp _ as op,({eexpr = TField(e1,fa)} as ef),e2) ->
+							{e with eexpr = TBinop(OpAssign,{ef with eexpr = TField(e1,fa,pf)},e2)}
+						| TBinop(OpAssignOp _ as op,({eexpr = TField(e1,fa,pf)} as ef),e2) ->
 							let e1 = replace e1 in
 							let s = field_name fa in
 							if not !found && (has_field_write ir s || has_state_write ir) then raise Exit;
 							let e2 = replace e2 in
 							if not !found && (has_field_read ir s || has_state_read ir) then raise Exit;
-							{e with eexpr = TBinop(op,{ef with eexpr = TField(e1,fa)},e2)}
-						| TUnop((Increment | Decrement),_,{eexpr = TField(e1,fa)}) when has_field_read ir (field_name fa) || has_state_read ir
+							{e with eexpr = TBinop(op,{ef with eexpr = TField(e1,fa,pf)},e2)}
+						| TUnop((Increment | Decrement),_,{eexpr = TField(e1,fa,_)}) when has_field_read ir (field_name fa) || has_state_read ir
 							|| has_field_write ir (field_name fa) || has_state_write ir ->
 							raise Exit
 						(* state *)
@@ -742,10 +742,10 @@ module Fusion = struct
 							let el = List.map replace el in
 							if not !found && (has_state_write ir || has_state_read ir || has_any_field_read ir || has_any_field_write ir) then raise Exit;
 							{e with eexpr = TNew(c,tl,el)}
-						| TCall({eexpr = TField(_,FEnum _)} as ef,el) ->
+						| TCall({eexpr = TField(_,FEnum _,_)} as ef,el) ->
 							let el = List.map replace el in
 							{e with eexpr = TCall(ef,el)}
-						| TCall({eexpr = TField(_,fa)} as ef,el) when PurityState.is_pure_field_access fa ->
+						| TCall({eexpr = TField(_,fa,_)} as ef,el) when PurityState.is_pure_field_access fa ->
 							let ef,el = handle_call ef el in
 							if not !found && (has_state_write ir || has_any_field_write ir) then raise Exit;
 							{e with eexpr = TCall(ef,el)}
@@ -918,7 +918,7 @@ module Cleanup = struct
 					| _ ->
 						{e with eexpr = TWhile(e1,e2,NormalWhile)}
 				end
-			| TField({eexpr = TTypeExpr _},_) ->
+			| TField({eexpr = TTypeExpr _},_,_) ->
 				e
 			| TTypeExpr (TClassDecl c) ->
 				List.iter (fun cf -> if not (Meta.has Meta.MaybeUsed cf.cf_meta) then cf.cf_meta <- (Meta.MaybeUsed,[],cf.cf_pos) :: cf.cf_meta;) c.cl_ordered_statics;
@@ -998,7 +998,7 @@ module Purity = struct
 				| TLocal v ->
 					if is_ref_type v.v_type then taint_raise node; (* Writing to a ref type means impurity. *)
 					() (* Writing to locals does not violate purity. *)
-				| TField({eexpr = TConst TThis},_) when is_ctor ->
+				| TField({eexpr = TConst TThis},_,_) when is_ctor ->
 					() (* A constructor can write to its own fields without violating purity. *)
 				| _ ->
 					taint_raise node
@@ -1013,7 +1013,7 @@ module Purity = struct
 				loop e2;
 			| TUnop((Increment | Decrement),_,e1) ->
 				check_write e1;
-			| TCall({eexpr = TField(_,FStatic(c,cf))},el) ->
+			| TCall({eexpr = TField(_,FStatic(c,cf),_)},el) ->
 				List.iter loop el;
 				check_field c cf;
 			| TNew(c,_,el) ->

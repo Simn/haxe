@@ -232,7 +232,7 @@ let as_string_expr ctx e =	match e.eexpr with
 	| TConst (TNull) ->  to_string ctx e
 	| TConst (TString s) -> e
 	| TBinop (op,_,_) when (is_string_expr e)-> e
-	| TCall ({eexpr = TField({eexpr = TTypeExpr(TClassDecl {cl_path = ([],"Std")})},FStatic(c,f) )}, [_]) when (f.cf_name="string") -> e
+	| TCall ({eexpr = TField({eexpr = TTypeExpr(TClassDecl {cl_path = ([],"Std")})},FStatic(c,f), _ )}, [_]) when (f.cf_name="string") -> e
 	| TCall ({eexpr = TLocal _}, [{eexpr = TConst (TString ("_hx_string_rec" | "_hx_str_or_null"))}]) -> e
 	| _ when not (is_string_expr e) -> to_string ctx e
 	| _ -> to_string_null ctx e
@@ -545,7 +545,7 @@ and gen_call ctx e el =
 			concat ctx "," (gen_value ctx) params;
 			spr ctx ")";
 		);
-	| TField ({ eexpr = TConst TSuper },f) , params ->
+	| TField ({ eexpr = TConst TSuper },f,_) , params ->
 		(match ctx.curclass.cl_super with
 		| None -> assert false
 		| Some (c,_,_) ->
@@ -753,7 +753,7 @@ and gen_uncertain_string_call ctx s e el =
 
 and gen_field_op ctx e =
 	match e.eexpr with
-	| TField (f,s) ->
+	| TField (f,s,_) ->
 		(match follow e.etype with
 		| TFun _ ->
 			gen_field_access ctx true f (field_name s)
@@ -1070,13 +1070,13 @@ and gen_expr ctx e =
 				spr ctx "->a[";
 				gen_value ctx te2;
 				spr ctx "]";
-			| TField (e1,s) ->
+			| TField (e1,s,_) ->
 				gen_field_access ctx true e1 (field_name s)
 			| _ ->
 				gen_field_op ctx e1;) in
 		let leftsidef e =
 			(match e.eexpr with
-			| TField (e1,s) ->
+			| TField (e1,s,_) ->
 				gen_field_access ctx true e1 (field_name s)
 			| _ ->
 				gen_field_op ctx e1;
@@ -1184,7 +1184,7 @@ and gen_expr ctx e =
 				|| e2.eexpr = TConst (TNull)
 			then begin
 				(match e1.eexpr with
-				| TField (f, s) when is_anonym_expr e1 || is_unknown_expr e1 ->
+				| TField (f, s, _) when is_anonym_expr e1 || is_unknown_expr e1 ->
 					spr ctx "_hx_field(";
 					gen_value ctx f;
 					print ctx ", \"%s\")" (field_name s);
@@ -1194,7 +1194,7 @@ and gen_expr ctx e =
 				spr ctx s_phop;
 
 				(match e2.eexpr with
-				| TField (f, s) when is_anonym_expr e2 || is_unknown_expr e2 ->
+				| TField (f, s, _) when is_anonym_expr e2 || is_unknown_expr e2 ->
 					spr ctx "_hx_field(";
 					gen_value ctx f;
 					print ctx ", \"%s\")" (field_name s);
@@ -1274,7 +1274,7 @@ and gen_expr ctx e =
 		gen_value ctx e1;
 		spr ctx ")";
 		print ctx "->params[%d]" i;
-	| TField (e1,s) ->
+	| TField (e1,s,_) ->
 		gen_tfield ctx e e1 (field_name s)
 	| TTypeExpr t ->
 		print ctx "_hx_qtype(\"%s\")" (s_path_haxe (t_path t))
@@ -1403,11 +1403,11 @@ and gen_expr ctx e =
 			spr ctx ", array(";
 			concat ctx ", " (gen_value ctx) el;
 			spr ctx "))";
-		| TField (ef,s) when is_static ef.etype && is_string_expr ef ->
+		| TField (ef,s,_) when is_static ef.etype && is_string_expr ef ->
 			gen_string_static_call ctx (field_name s) ef el
-		| TField (ef,s) when is_string_expr ef ->
+		| TField (ef,s,_) when is_string_expr ef ->
 			gen_string_call ctx (field_name s) ef el
-		| TField (ef,s) when is_anonym_expr ef && could_be_string_call (field_name s) ->
+		| TField (ef,s,_) when is_anonym_expr ef && could_be_string_call (field_name s) ->
 			gen_uncertain_string_call ctx (field_name s) ef el
 		| _ ->
 			gen_call ctx ec el);
@@ -1487,7 +1487,7 @@ and gen_expr ctx e =
 				gen_value ctx te2;
 				spr ctx "]";
 			);
-		| TField (e1,s) ->
+		| TField (e1,s,_) ->
 			spr ctx (Ast.s_unop op);
 			gen_tfield ctx e e1 (field_name s)
 		| _ ->
@@ -1500,7 +1500,7 @@ and gen_expr ctx e =
 			spr ctx "->a[";
 			gen_value ctx te2;
 			spr ctx "]";
-		| TField (e1,s) ->
+		| TField (e1,s,_) ->
 			gen_field_access ctx true e1 (field_name s)
 		| _ ->
 			gen_value ctx e);
@@ -1537,7 +1537,7 @@ and gen_expr ctx e =
 		(match it.eexpr with
 		| TCall (e,_) ->
 			(match e.eexpr with
-			| TField (e,f) ->
+			| TField (e,f,_) ->
 				spr ctx "if(null == ";
 				gen_value ctx e;
 				spr ctx ") throw new HException('null iterable')";
@@ -1731,7 +1731,7 @@ and canbe_ternary_param e =
 	| TTypeExpr _
 	| TConst _
 	| TLocal _
-	| TField (_,FEnum _)
+	| TField (_,FEnum _,_)
 	| TParenthesis _
 	| TMeta _
 	| TObjectDecl _
