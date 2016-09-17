@@ -486,6 +486,7 @@ class Context {
 		Defines a new type from `TypeDefinition` `t`.
 	**/
 	public static function defineType( t : TypeDefinition, ?dependencies : Array<String> ) : Void {
+		if (dependencies == null) dependencies = [];
 		load("define_type", 2)(t, untyped dependencies.__neko());
 	}
 
