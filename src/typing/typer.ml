@@ -4733,12 +4733,23 @@ let make_macro_api ctx p =
 		Interp.get_pattern_locals = (fun e t ->
 			!get_pattern_locals_ref ctx e t
 		);
-		Interp.define_type = (fun v ->
+		Interp.define_type = (fun v vdep ->
 			let m, tdef, pos = (try Interp.decode_type_def v with Interp.Invalid_expr -> Interp.exc (Interp.VString "Invalid type definition")) in
+			let dependencies = match vdep with
+				| Interp.VArray vl -> Some (List.map Interp.dec_string (Array.to_list vl))
+				| _ -> None
+			in
 			let add ctx =
-				let mnew = Typeload.type_module ctx m ctx.m.curmod.m_extra.m_file [tdef,pos] pos in
+				let mnew = Typeload.type_module ctx m pos.pfile [tdef,pos] pos in
 				mnew.m_extra.m_kind <- MFake;
-				add_dependency mnew ctx.m.curmod;
+				match dependencies with
+				| None -> add_dependency mnew ctx.m.curmod;
+				| Some dependencies ->
+					List.iter (fun s ->
+						let path = Path.parse_type_path s in
+						let mdep = Typeload.load_module ctx path pos in
+						add_dependency mnew mdep;
+					) dependencies
 			in
 			add ctx;
 			(* if we are adding a class which has a macro field, we also have to add it to the macro context (issue #1497) *)

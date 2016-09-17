@@ -120,7 +120,7 @@ type extern_api = {
 	get_local_vars : unit -> (string, Type.tvar) PMap.t;
 	get_build_fields : unit -> value;
 	get_pattern_locals : Ast.expr -> Type.t -> (string,Type.tvar * Ast.pos) PMap.t;
-	define_type : value -> unit;
+	define_type : value -> value -> unit;
 	define_module : string -> value list -> ((string * Ast.pos) list * Ast.import_mode) list -> Ast.type_path list -> unit;
 	module_dependency : string -> string -> bool -> unit;
 	current_module : unit -> module_def;
@@ -2639,8 +2639,9 @@ let macro_lib =
 		"build_fields", Fun0 (fun() ->
 			(get_ctx()).curapi.get_build_fields()
 		);
-		"define_type", Fun1 (fun v ->
-			(get_ctx()).curapi.define_type v;
+		"define_type", Fun2 (fun v vdep ->
+			print_endline (s_value_kind vdep);
+			(get_ctx()).curapi.define_type v vdep;
 			VNull
 		);
 		"define_module", Fun4 (fun p v i u ->
