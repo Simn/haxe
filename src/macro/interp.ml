@@ -4235,6 +4235,11 @@ let dec_bool = function
 	| VBool b -> b
 	| _ -> raise Invalid_expr
 
+let dec_bool_or_null = function
+	| VBool b -> b
+	| VNull -> false
+	| _ -> raise Invalid_expr
+
 let dec_string v =
 	match field v "__s" with
 	| VString s -> s
@@ -4421,7 +4426,7 @@ let rec decode_expr v =
 			EParenthesis (loop e)
 		| 5, [a] ->
 			EObjectDecl (List.map (fun o ->
-				(decode_placed_name (field v "name_pos") (field o "field")),(dec_bool (field o "quoted")),loop (field o "expr")
+				(decode_placed_name (field o "name_pos") (field o "field")),(dec_bool_or_null (field o "quoted")),loop (field o "expr")
 			) (dec_array a))
 		| 6, [a] ->
 			EArrayDecl (List.map loop (dec_array a))
