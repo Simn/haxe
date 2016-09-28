@@ -173,7 +173,7 @@ and expr_def =
 	| EBinop of binop * expr * expr
 	| EField of expr * string
 	| EParenthesis of expr
-	| EObjectDecl of (placed_name * expr) list
+	| EObjectDecl of (placed_name * bool * expr) list
 	| EArrayDecl of expr list
 	| ECall of expr * expr list
 	| ENew of placed_type_path * expr list
@@ -556,7 +556,7 @@ let map_expr loop (e,p) =
 	| EBinop (op,e1,e2) -> EBinop (op,loop e1, loop e2)
 	| EField (e,f) -> EField (loop e, f)
 	| EParenthesis e -> EParenthesis (loop e)
-	| EObjectDecl fl -> EObjectDecl (List.map (fun ((f,p),e) -> (f,p),loop e) fl)
+	| EObjectDecl fl -> EObjectDecl (List.map (fun ((f,p),b,e) -> (f,p),b,loop e) fl)
 	| EArrayDecl el -> EArrayDecl (List.map loop el)
 	| ECall (e,el) -> ECall (loop e, List.map loop el)
 	| ENew (t,el) -> ENew (tpath t,List.map loop el)
@@ -595,7 +595,7 @@ let iter_expr loop (e,p) =
 	| ETernary(e1,e2,e3) | EIf(e1,e2,Some e3) -> loop e1; loop e2; loop e3;
 	| EArrayDecl el | ENew(_,el) | EBlock el -> List.iter loop el
 	| ECall(e1,el) -> loop e1; exprs el;
-	| EObjectDecl fl -> List.iter (fun (_,e) -> loop e) fl;
+	| EObjectDecl fl -> List.iter (fun (_,_,e) -> loop e) fl;
 	| ETry(e1,catches) ->
 		loop e1;
 		List.iter (fun (_,_,e,_) -> loop e) catches
@@ -620,7 +620,7 @@ let s_expr e =
 		| EBinop (op,e1,e2) -> s_expr_inner tabs e1 ^ " " ^ s_binop op ^ " " ^ s_expr_inner tabs e2
 		| EField (e,f) -> s_expr_inner tabs e ^ "." ^ f
 		| EParenthesis e -> "(" ^ (s_expr_inner tabs e) ^ ")"
-		| EObjectDecl fl -> "{ " ^ (String.concat ", " (List.map (fun ((n,_),e) -> n ^ " : " ^ (s_expr_inner tabs e)) fl)) ^ " }"
+		| EObjectDecl fl -> "{ " ^ (String.concat ", " (List.map (fun ((n,_),_,e) -> n ^ " : " ^ (s_expr_inner tabs e)) fl)) ^ " }"
 		| EArrayDecl el -> "[" ^ s_expr_list tabs el ", " ^ "]"
 		| ECall (e,el) -> s_expr_inner tabs e ^ "(" ^ s_expr_list tabs el ", " ^ ")"
 		| ENew (t,el) -> "new " ^ s_complex_type_path tabs t ^ "(" ^ s_expr_list tabs el ", " ^ ")"
@@ -728,7 +728,7 @@ let s_expr e =
 let get_value_meta meta =
 	try
 		begin match Meta.get Meta.Value meta with
-			| (_,[EObjectDecl values,_],_) -> List.fold_left (fun acc ((s,_),e) -> PMap.add s e acc) PMap.empty values
+			| (_,[EObjectDecl values,_],_) -> List.fold_left (fun acc ((s,_),_,e) -> PMap.add s e acc) PMap.empty values
 			| _ -> raise Not_found
 		end
 	with Not_found ->
@@ -788,7 +788,7 @@ module Expr = struct
 
 	let field_assoc name fl =
 		let rec loop fl = match fl with
-			| ((name',_),e) :: fl -> if name' = name then e else loop fl
+			| ((name',_),_,e) :: fl -> if name' = name then e else loop fl
 			| [] -> raise Not_found
 		in
 		loop fl
