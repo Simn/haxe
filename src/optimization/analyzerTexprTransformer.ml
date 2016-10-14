@@ -94,6 +94,10 @@ let rec func ctx bb tf t p =
 	let e_one p =
 		mk (TConst (TInt (Int32.of_int 1))) ctx.com.basic.tint p
 	in
+	let push_name s =
+		ctx.name_stack <- s :: ctx.name_stack;
+		(fun () -> ctx.name_stack <- List.tl ctx.name_stack)
+	in
 	let rec value' bb e = match e.eexpr with
 		| TLocal v ->
 			bb,e
@@ -224,7 +228,14 @@ let rec func ctx bb tf t p =
 				fl,e
 		in
 		let fl,e = loop [] e in
-		let v = alloc_var ctx.temp_var_name e.etype e.epos in
+		let rec loop e = match e.eexpr with
+			| TLocal v -> v.v_name
+			| TArray(e1,_) | TField(e1,_) | TParenthesis e1 | TCast(e1,None) | TMeta(_,e1) -> loop e1
+			| _ -> match ctx.name_stack with
+				| s :: _ -> s
+				| [] -> ctx.temp_var_name
+		in
+		let v = alloc_var (loop e) e.etype e.epos in
 		begin match ctx.com.platform with
 			| Globals.Cpp when sequential && not (Common.defined ctx.com Define.Cppia) -> ()
 			| _ -> v.v_meta <- [Meta.CompilerGenerated,[],e.epos];
@@ -263,13 +274,16 @@ let rec func ctx bb tf t p =
 			end;
 			mk (TBinop(OpAssign,ev,e)) ev.etype ev.epos
 		in
-		begin try
+		let close = push_name v.v_name in
+		let bb = try
 			block_element_plus bb (map_values assign e) (fun e -> mk (TVar(v,Some e)) ctx.com.basic.tvoid ev.epos)
 		with Exit ->
 			let bb,e = value bb e in
 			add_texpr bb (mk (TVar(v,Some e)) ctx.com.basic.tvoid ev.epos);
 			bb
-		end
+		in
+		close();
+		bb
 	and block_element_plus bb (e,efinal) f =
 		let bb = block_element bb e in
 		let bb = match efinal with
@@ -323,8 +337,10 @@ let rec func ctx bb tf t p =
 			assert false
 	and assign bb e e1 e2 =
 		match e1.eexpr with
-		| TLocal _ ->
+		| TLocal v ->
+			let close = push_name v.v_name in
 			let bb,e2 = value bb e2 in
+			close();
 			add_texpr bb {e with eexpr = TBinop(OpAssign,e1,e2)};
 			bb,e1
 		| TField(e3,fa) ->

@@ -279,9 +279,9 @@ class TestJs {
 	#else
 	@:js('
 		var x = TestJs.getInt();
-		var tmp = x;
+		var x1 = x;
 		++x;
-		TestJs.call(tmp,TestJs.getInt());
+		TestJs.call(x1,TestJs.getInt());
 	')
 	#end
 	static function testMightBeAffected3() {
