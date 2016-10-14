@@ -39,6 +39,8 @@ type t = {
 	detail_times : bool;
 	user_var_fusion : bool;
 	fusion_debug : bool;
+	reconstruct_assign_ops : bool;
+	reconstruct_unops : bool;
 }
 
 let flag_const_propagation = "const_propagation"
@@ -95,6 +97,8 @@ let get_base_config com =
 		detail_times = Common.raw_defined com "analyzer-times";
 		user_var_fusion = (match com.platform with Flash | Java -> false | _ -> true) && (Common.raw_defined com "analyzer-user-var-fusion" || (not com.debug && not (Common.raw_defined com "analyzer-no-user-var-fusion")));
 		fusion_debug = false;
+		reconstruct_assign_ops = (match com.platform with Python | Lua | Php -> false | _ -> true);
+		reconstruct_unops = (match com.platform with Python | Lua -> false | _ -> true);
 	}
 
 let update_config_from_meta com config meta =

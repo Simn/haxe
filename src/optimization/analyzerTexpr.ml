@@ -99,7 +99,7 @@ let rec can_be_inlined e = match e.eexpr with
 	| TParenthesis e1 | TMeta(_,e1) -> can_be_inlined e1
 	| _ -> false
 
-let target_handles_unops com = match com.platform with
+(*let target_handles_unops com = match com.platform with
 	| Lua | Python -> false
 	| _ -> true
 
@@ -108,7 +108,7 @@ let target_handles_assign_ops com = match com.platform with
 	   equivalent to x = x + y in case y has side-effects. *)
 	| Lua | Php -> false
 	| Cpp when not (Common.defined com Define.Cppia) -> false
-	| _ -> true
+	| _ -> true*)
 
 let target_handles_side_effect_order com = match com.platform with
 	| Cpp -> Common.defined com Define.Cppia
@@ -122,7 +122,7 @@ let rec can_be_used_as_value com e =
 		| TCall({eexpr = TConst (TString "phi")},_) -> raise Exit
 		(* | TCall _ | TNew _ when (match com.platform with Cpp | Php -> true | _ -> false) -> raise Exit *)
 		| TReturn _ | TThrow _ | TBreak | TContinue -> raise Exit
-		| TUnop((Increment | Decrement),_,_) when not (target_handles_unops com) -> raise Exit
+		(*| TUnop((Increment | Decrement),_,_) when not (target_handles_unops com) -> raise Exit*)
 		| TNew _ when com.platform = Php -> raise Exit
 		| TFunction _ -> ()
 		| _ -> Type.iter loop e
@@ -538,8 +538,8 @@ module Fusion = struct
 		| OpArrow ->
 			false
 
-	let use_assign_op com op e1 e2 =
-		is_assign_op op && target_handles_assign_ops com && Texpr.equal e1 e2 && not (has_side_effect e1) && match com.platform with
+	let use_assign_op com config op e1 e2 =
+		is_assign_op op && config.reconstruct_assign_ops && Texpr.equal e1 e2 && not (has_side_effect e1) && match com.platform with
 			| Cs when is_null e1.etype || is_null e2.etype -> false (* C# hates OpAssignOp on Null<T> *)
 			| _ -> true
 
@@ -605,269 +605,281 @@ module Fusion = struct
 		in
 		let is_this e = match e.eexpr with
 			| TConst (TThis | TSuper) -> true
-			(*| TTypeExpr _ -> true*)
+			| TTypeExpr _ -> true
 			| _ -> false
 		in
-		let rec fuse acc el = match el with
-			| ({eexpr = TVar(v1,None)} as e1) :: {eexpr = TBinop(OpAssign,{eexpr = TLocal v2},e2)} :: el when v1 == v2 ->
-				state#changed;
-				let e1 = {e1 with eexpr = TVar(v1,Some e2)} in
-				state#dec_writes v1;
-				fuse (e1 :: acc) el
-			| ({eexpr = TVar(v1,None)} as e1) :: ({eexpr = TIf(eif,_,Some _)} as e2) :: el when can_be_used_as_value com e2 && not (ExtType.is_void e2.etype) && (match com.platform with Php -> false | Cpp when not (Common.defined com Define.Cppia) -> false | _ -> true) ->
-				begin try
-					let i = ref 0 in
-					let check_assign e = match e.eexpr with
-						| TBinop(OpAssign,{eexpr = TLocal v2},e2) when v1 == v2 -> incr i; e2
-						| _ -> raise Exit
-					in
-					let e,_ = map_values ~allow_control_flow:false check_assign e2 in
-					let e1 = {e1 with eexpr = TVar(v1,Some e)} in
-					state#changed;
-					state#change_writes v1 (- !i);
-					fuse (e1 :: acc) el
-				with Exit ->
-					fuse (e1 :: acc) (e2 :: el)
-				end
-			| {eexpr = TVar(v1,Some e1)} :: el when config.optimize && config.local_dce && state#get_reads v1 = 0 && state#get_writes v1 = 0 ->
-				fuse acc (e1 :: el)
-			| ({eexpr = TVar(v1,Some e1)}) :: el when not v1.v_capture && is_this e1 && state#get_writes v1 = 0 ->
-				let rec replace e = match e.eexpr with
-					| TLocal v2 when v1 == v2 ->
-						state#changed;
-						if type_change_ok com v1.v_type e1.etype then e1 else mk (TCast(e1,None)) v1.v_type e.epos;
+		let rec generic_fusion v1 ev e1 el acc =
+			let found = ref false in
+			let blocked = ref false in
+			let ir = InterferenceReport.from_texpr e1 in
+			if config.fusion_debug then print_endline (Printf.sprintf "\tInterferenceReport: %s\n\t%s"
+				(InterferenceReport.to_string ir) (Type.s_expr_pretty true "\t" false (s_type (print_context())) (mk (TBlock el) t_dynamic null_pos)));
+			(* This function walks the AST in order of evaluation and tries to find an occurrence of v1. If successful, that occurrence is
+			replaced with e1. If there's an interference "on the way" the replacement is canceled. *)
+			let rec replace e =
+				let explore e =
+					let old = !blocked in
+					blocked := true;
+					let e = replace e in
+					blocked := old;
+					e
+				in
+				let handle_el el =
+					(* This mess deals with the fact that the order of evaluation is undefined for call
+						arguments on these targets. Even if we find a replacement, we pretend that we
+						didn't in order to find possible interferences in later call arguments. *)
+					let temp_found = false in
+					let really_found = ref !found in
+					let el = List.map (fun e ->
+						found := temp_found;
+						let e = replace e in
+						if !found then really_found := true;
+						e
+					) el in
+					found := !really_found;
+					el
+				in
+				let handle_el = if not (target_handles_side_effect_order com) then handle_el else List.map replace in
+				let handle_call e2 el = match com.platform with
+					| Neko ->
+						(* Neko has this reversed at the moment (issue #4787) *)
+						let el = List.map replace el in
+						let e2 = replace e2 in
+						e2,el
+					| Php | Cpp  when not (Common.defined com Define.Cppia) ->
+						let is_php_safe e1 =
+							let rec loop e = match e.eexpr with
+								| TCall _ -> raise Exit
+								| TCast(e1,_) | TParenthesis e1 | TMeta(_,e1) -> loop e1
+								| _ -> ()
+							in
+							try loop e1; true with Exit -> false
+						in
+						(* PHP doesn't like call()() expressions. *)
+						let e2 = if com.platform = Php && not (is_php_safe e1) then explore e2 else replace e2 in
+						let el = handle_el el in
+						e2,el
+					| _ ->
+						let e2 = replace e2 in
+						let el = List.map replace el in
+						e2,el
+				in
+				if !found then e else match e.eexpr with
+					| TWhile _ | TTry _ ->
+						raise Exit
+					| TFunction _ ->
+						e
+					| TIf(e1,e2,eo) ->
+						let e1 = replace e1 in
+						if not !found && (has_state_write ir || has_any_field_write ir || has_any_var_write ir) then raise Exit;
+						let e2 = replace e2 in
+						let eo = Option.map replace eo in
+						{e with eexpr = TIf(e1,e2,eo)}
+					| TSwitch(e1,cases,edef) ->
+						let e1 = match com.platform with
+							| Lua | Python -> explore e1
+							| _ -> replace e1
+						in
+						if not !found then raise Exit;
+						{e with eexpr = TSwitch(e1,cases,edef)}
+					(* locals *)
+					| TLocal v2 when v1 == v2 && not !blocked ->
+						found := true;
+						if type_change_ok com v1.v_type e1.etype then e1 else mk (TCast(e1,None)) v1.v_type e.epos
+					| TLocal v ->
+						if has_var_write ir v || ((v.v_capture || is_ref_type v.v_type) && (has_state_write ir)) then raise Exit;
+						e
+					| TBinop(OpAssign,({eexpr = TLocal v} as e1),e2) ->
+						let e2 = replace e2 in
+						if not !found && has_var_read ir v then raise Exit;
+						{e with eexpr = TBinop(OpAssign,e1,e2)}
+					| TBinop(OpAssignOp _ as op,({eexpr = TLocal v} as e1),e2) ->
+						let e2 = replace e2 in
+						if not !found && (has_var_read ir v || has_var_write ir v) then raise Exit;
+						{e with eexpr = TBinop(op,e1,e2)}
+					| TUnop((Increment | Decrement),_,{eexpr = TLocal v}) when has_var_read ir v || has_var_write ir v ->
+						raise Exit
+					(* fields *)
+					| TField(e1,fa) ->
+						let e1 = replace e1 in
+						if not !found && not (is_read_only_field_access e1 fa) && (has_field_write ir (field_name fa) || has_state_write ir) then raise Exit;
+						{e with eexpr = TField(e1,fa)}
+					| TBinop(OpAssign,({eexpr = TField(e1,fa)} as ef),e2) ->
+						let e1 = replace e1 in
+						let e2 = replace e2 in
+						if not !found && (has_field_read ir (field_name fa) || has_state_read ir) then raise Exit;
+						{e with eexpr = TBinop(OpAssign,{ef with eexpr = TField(e1,fa)},e2)}
+					| TBinop(OpAssignOp _ as op,({eexpr = TField(e1,fa)} as ef),e2) ->
+						let e1 = replace e1 in
+						let s = field_name fa in
+						if not !found && (has_field_write ir s || has_state_write ir) then raise Exit;
+						let e2 = replace e2 in
+						if not !found && (has_field_read ir s || has_state_read ir) then raise Exit;
+						{e with eexpr = TBinop(op,{ef with eexpr = TField(e1,fa)},e2)}
+					| TUnop((Increment | Decrement),_,{eexpr = TField(e1,fa)}) when has_field_read ir (field_name fa) || has_state_read ir
+						|| has_field_write ir (field_name fa) || has_state_write ir ->
+						raise Exit
+					(* state *)
+					| TCall({eexpr = TLocal v},el) when not (is_unbound_call_that_might_have_side_effects v el) ->
+						e
+					| TNew(c,tl,el) when (match c.cl_constructor with Some cf when PurityState.is_pure c cf -> true | _ -> false) ->
+						let el = handle_el el in
+						if not !found && (has_state_write ir || has_any_field_write ir) then raise Exit;
+						{e with eexpr = TNew(c,tl,el)}
+					| TNew(c,tl,el) ->
+						let el = handle_el el in
+						if not !found && (has_state_write ir || has_state_read ir || has_any_field_read ir || has_any_field_write ir) then raise Exit;
+						{e with eexpr = TNew(c,tl,el)}
+					| TCall({eexpr = TField(_,FEnum _)} as ef,el) ->
+						let el = List.map replace el in
+						{e with eexpr = TCall(ef,el)}
+					| TCall({eexpr = TField(_,fa)} as ef,el) when PurityState.is_pure_field_access fa ->
+						let ef,el = handle_call ef el in
+						if not !found && (has_state_write ir || has_any_field_write ir) then raise Exit;
+						{e with eexpr = TCall(ef,el)}
+					| TCall(e1,el) ->
+						let e1,el = match e1.eexpr with
+							| TLocal v when is_really_unbound v -> e1,el
+							| _ -> handle_call e1 el
+						in
+						if not !found && (((has_state_read ir || has_any_field_read ir)) || has_state_write ir || has_any_field_write ir) then raise Exit;
+						{e with eexpr = TCall(e1,el)}
+					| TObjectDecl fl ->
+						let el = handle_el (List.map snd fl) in
+						if not !found && (has_state_write ir || has_any_field_write ir) then raise Exit;
+						{e with eexpr = TObjectDecl (List.map2 (fun (s,_) e -> s,e) fl el)}
+					| TArrayDecl el ->
+						let el = handle_el el in
+						(*if not !found && (has_state_write ir || has_any_field_write ir) then raise Exit;*)
+						{e with eexpr = TArrayDecl el}
+					| TBinop(OpAssign,({eexpr = TArray(e1,e2)} as ea),e3) ->
+						let e1 = replace e1 in
+						let e2 = replace e2 in
+						let e3 = replace e3 in
+						if not !found && has_state_read ir then raise Exit;
+						{e with eexpr = TBinop(OpAssign,{ea with eexpr = TArray(e1,e2)},e3)}
+					| TBinop(op,e1,e2) when (match com.platform with Cpp | Php -> true | _ -> false) ->
+						let e1 = replace e1 in
+						let temp_found = !found in
+						found := false;
+						let e2 = replace e2 in
+						found := !found || temp_found;
+						{e with eexpr = TBinop(op,e1,e2)}
+					| TArray(e1,e2) ->
+						let e1 = replace e1 in
+						let e2 = replace e2 in
+						if not !found && has_state_write ir then raise Exit;
+						{e with eexpr = TArray(e1,e2)}
 					| _ ->
 						Type.map_expr replace e
-				in
-				let el = List.map replace el in
-				fuse acc el
-			| ({eexpr = TVar(v1,Some e1)} as ev) :: el when can_be_fused v1 e1 ->
-				let found = ref false in
-				let blocked = ref false in
-				let ir = InterferenceReport.from_texpr e1 in
-				if config.fusion_debug then print_endline (Printf.sprintf "\tInterferenceReport: %s\n\t%s"
-					 (InterferenceReport.to_string ir) (Type.s_expr_pretty true "\t" false (s_type (print_context())) (mk (TBlock el) t_dynamic null_pos)));
-				(* This function walks the AST in order of evaluation and tries to find an occurrence of v1. If successful, that occurrence is
-				   replaced with e1. If there's an interference "on the way" the replacement is canceled. *)
-				let rec replace e =
-					let explore e =
-						let old = !blocked in
-						blocked := true;
+			in
+			begin try
+				let rec loop acc el = match el with
+					| e :: el ->
 						let e = replace e in
-						blocked := old;
-						e
-					in
-					let handle_el el =
-						(* This mess deals with the fact that the order of evaluation is undefined for call
-							arguments on these targets. Even if we find a replacement, we pretend that we
-							didn't in order to find possible interferences in later call arguments. *)
-						let temp_found = false in
-						let really_found = ref !found in
-						let el = List.map (fun e ->
-							found := temp_found;
-							let e = replace e in
-							if !found then really_found := true;
-							e
-						) el in
-						found := !really_found;
-						el
-					in
-					let handle_el = if not (target_handles_side_effect_order com) then handle_el else List.map replace in
-					let handle_call e2 el = match com.platform with
-						| Neko ->
-							(* Neko has this reversed at the moment (issue #4787) *)
-							let el = List.map replace el in
-							let e2 = replace e2 in
-							e2,el
-						| Php | Cpp  when not (Common.defined com Define.Cppia) ->
-							let is_php_safe e1 =
-								let rec loop e = match e.eexpr with
-									| TCall _ -> raise Exit
-									| TCast(e1,_) | TParenthesis e1 | TMeta(_,e1) -> loop e1
-									| _ -> ()
-								in
-								try loop e1; true with Exit -> false
-							in
-							(* PHP doesn't like call()() expressions. *)
-							let e2 = if com.platform = Php && not (is_php_safe e1) then explore e2 else replace e2 in
-							let el = handle_el el in
-							e2,el
-						| _ ->
-							let e2 = replace e2 in
-							let el = List.map replace el in
-							e2,el
-					in
-					if !found then e else match e.eexpr with
-						| TWhile _ | TTry _ ->
-							raise Exit
-						| TFunction _ ->
-							e
-						| TIf(e1,e2,eo) ->
-							let e1 = replace e1 in
-							if not !found && (has_state_write ir || has_any_field_write ir || has_any_var_write ir) then raise Exit;
-							let e2 = replace e2 in
-							let eo = Option.map replace eo in
-							{e with eexpr = TIf(e1,e2,eo)}
-						| TSwitch(e1,cases,edef) ->
-							let e1 = match com.platform with
-								| Lua | Python -> explore e1
-								| _ -> replace e1
-							in
-							if not !found then raise Exit;
-							{e with eexpr = TSwitch(e1,cases,edef)}
-						(* locals *)
-						| TLocal v2 when v1 == v2 && not !blocked ->
-							found := true;
-							if type_change_ok com v1.v_type e1.etype then e1 else mk (TCast(e1,None)) v1.v_type e.epos
-						| TLocal v ->
-							if has_var_write ir v || ((v.v_capture || is_ref_type v.v_type) && (has_state_write ir)) then raise Exit;
-							e
-						| TBinop(OpAssign,({eexpr = TLocal v} as e1),e2) ->
-							let e2 = replace e2 in
-							if not !found && has_var_read ir v then raise Exit;
-							{e with eexpr = TBinop(OpAssign,e1,e2)}
-						| TBinop(OpAssignOp _ as op,({eexpr = TLocal v} as e1),e2) ->
-							let e2 = replace e2 in
-							if not !found && (has_var_read ir v || has_var_write ir v) then raise Exit;
-							{e with eexpr = TBinop(op,e1,e2)}
-						| TUnop((Increment | Decrement),_,{eexpr = TLocal v}) when has_var_read ir v || has_var_write ir v ->
-							raise Exit
-						(* fields *)
-						| TField(e1,fa) ->
-							let e1 = replace e1 in
-							if not !found && not (is_read_only_field_access e1 fa) && (has_field_write ir (field_name fa) || has_state_write ir) then raise Exit;
-							{e with eexpr = TField(e1,fa)}
-						| TBinop(OpAssign,({eexpr = TField(e1,fa)} as ef),e2) ->
-							let e1 = replace e1 in
-							let e2 = replace e2 in
-							if not !found && (has_field_read ir (field_name fa) || has_state_read ir) then raise Exit;
-							{e with eexpr = TBinop(OpAssign,{ef with eexpr = TField(e1,fa)},e2)}
-						| TBinop(OpAssignOp _ as op,({eexpr = TField(e1,fa)} as ef),e2) ->
-							let e1 = replace e1 in
-							let s = field_name fa in
-							if not !found && (has_field_write ir s || has_state_write ir) then raise Exit;
-							let e2 = replace e2 in
-							if not !found && (has_field_read ir s || has_state_read ir) then raise Exit;
-							{e with eexpr = TBinop(op,{ef with eexpr = TField(e1,fa)},e2)}
-						| TUnop((Increment | Decrement),_,{eexpr = TField(e1,fa)}) when has_field_read ir (field_name fa) || has_state_read ir
-							|| has_field_write ir (field_name fa) || has_state_write ir ->
-							raise Exit
-						(* state *)
-						| TCall({eexpr = TLocal v},el) when not (is_unbound_call_that_might_have_side_effects v el) ->
-							e
-						| TNew(c,tl,el) when (match c.cl_constructor with Some cf when PurityState.is_pure c cf -> true | _ -> false) ->
-							let el = handle_el el in
-							if not !found && (has_state_write ir || has_any_field_write ir) then raise Exit;
-							{e with eexpr = TNew(c,tl,el)}
-						| TNew(c,tl,el) ->
-							let el = handle_el el in
-							if not !found && (has_state_write ir || has_state_read ir || has_any_field_read ir || has_any_field_write ir) then raise Exit;
-							{e with eexpr = TNew(c,tl,el)}
-						| TCall({eexpr = TField(_,FEnum _)} as ef,el) ->
-							let el = List.map replace el in
-							{e with eexpr = TCall(ef,el)}
-						| TCall({eexpr = TField(_,fa)} as ef,el) when PurityState.is_pure_field_access fa ->
-							let ef,el = handle_call ef el in
-							if not !found && (has_state_write ir || has_any_field_write ir) then raise Exit;
-							{e with eexpr = TCall(ef,el)}
-						| TCall(e1,el) ->
-							let e1,el = match e1.eexpr with
-								| TLocal v when is_really_unbound v -> e1,el
-								| _ -> handle_call e1 el
-							in
-							if not !found && (((has_state_read ir || has_any_field_read ir)) || has_state_write ir || has_any_field_write ir) then raise Exit;
-							{e with eexpr = TCall(e1,el)}
-						| TObjectDecl fl ->
-							let el = handle_el (List.map snd fl) in
-							if not !found && (has_state_write ir || has_any_field_write ir) then raise Exit;
-							{e with eexpr = TObjectDecl (List.map2 (fun (s,_) e -> s,e) fl el)}
-						| TArrayDecl el ->
-							let el = handle_el el in
-							(*if not !found && (has_state_write ir || has_any_field_write ir) then raise Exit;*)
-							{e with eexpr = TArrayDecl el}
-						| TBinop(OpAssign,({eexpr = TArray(e1,e2)} as ea),e3) ->
-							let e1 = replace e1 in
-							let e2 = replace e2 in
-							let e3 = replace e3 in
-							if not !found && has_state_read ir then raise Exit;
-							{e with eexpr = TBinop(OpAssign,{ea with eexpr = TArray(e1,e2)},e3)}
-						| TBinop(op,e1,e2) when (match com.platform with Cpp | Php -> true | _ -> false) ->
-							let e1 = replace e1 in
-							let temp_found = !found in
-							found := false;
-							let e2 = replace e2 in
-							found := !found || temp_found;
-							{e with eexpr = TBinop(op,e1,e2)}
-						| TArray(e1,e2) ->
-							let e1 = replace e1 in
-							let e2 = replace e2 in
-							if not !found && has_state_write ir then raise Exit;
-							{e with eexpr = TArray(e1,e2)}
+						if !found then (List.rev (e :: acc)) @ el
+						else loop (e :: acc) el
+					| [] ->
+						List.rev acc
+				in
+				let el = loop [] el in
+				if not !found then raise Exit;
+				state#changed;
+				state#dec_reads v1;
+				if config.fusion_debug then print_endline (Printf.sprintf "YES: %s" (s_expr_pretty (mk (TBlock el) t_dynamic null_pos)));
+				acc,el
+			with Exit ->
+				if config.fusion_debug then print_endline (Printf.sprintf "NO: %s" (Printexc.get_backtrace()));
+				(ev :: acc),el
+			end
+		in
+		let rec fuse acc el = match el with
+			| ({eexpr = TVar(v1,eo)} as ev) :: el ->
+				begin match eo,el with
+				(* `var x; x = e;` -> `var x = e;` *)
+				| None,{eexpr = TBinop(OpAssign,{eexpr = TLocal v2},e2)} :: el when v1 == v2 ->
+					state#changed;
+					let ev = {ev with eexpr = TVar(v1,Some e2)} in
+					state#dec_writes v1;
+					fuse (ev :: acc) el
+				(* `var x; if(ec) x = e1 else x = e2;` -> `var x = ec ? e1 : e2` *)
+				| None,({eexpr = TIf(eif,_,Some _)} as e2) :: el when can_be_used_as_value com e2 && not (ExtType.is_void e2.etype) && (match com.platform with Php -> false | Cpp when not (Common.defined com Define.Cppia) -> false | _ -> true) ->
+					begin try
+						let i = ref 0 in
+						let check_assign e = match e.eexpr with
+							| TBinop(OpAssign,{eexpr = TLocal v2},e2) when v1 == v2 -> incr i; e2
+							| _ -> raise Exit
+						in
+						let e,_ = map_values ~allow_control_flow:false check_assign e2 in
+						let ev = {ev with eexpr = TVar(v1,Some e)} in
+						state#changed;
+						state#change_writes v1 (- !i);
+						fuse (ev :: acc) el
+					with Exit ->
+						fuse (ev :: acc) (e2 :: el)
+					end
+				(* `var x = e;` -> `e;` *)
+				| Some e1,el when config.optimize && config.local_dce && state#get_reads v1 = 0 && state#get_writes v1 = 0 ->
+					fuse acc (e1 :: el)
+				(* unconditionally fuse `this` *)
+				| Some e1,el when not v1.v_capture && is_this e1 && state#get_writes v1 = 0 ->
+					let rec replace e = match e.eexpr with
+						| TLocal v2 when v1 == v2 ->
+							state#changed;
+							if type_change_ok com v1.v_type e1.etype then e1 else mk (TCast(e1,None)) v1.v_type e.epos;
 						| _ ->
 							Type.map_expr replace e
-				in
-				begin try
-					let rec loop acc el = match el with
-						| e :: el ->
-							let e = replace e in
-							if !found then (List.rev (e :: acc)) @ el
-							else loop (e :: acc) el
-						| [] ->
-							List.rev acc
 					in
-					let el = loop [] el in
-					if not !found then raise Exit;
-					state#changed;
-					state#dec_reads v1;
-					if config.fusion_debug then print_endline (Printf.sprintf "YES: %s" (s_expr_pretty (mk (TBlock el) t_dynamic null_pos)));
+					let el = List.map replace el in
 					fuse acc el
-				with Exit ->
-					if config.fusion_debug then print_endline (Printf.sprintf "NO: %s" (Printexc.get_backtrace()));
+				(* `var x = i; ++i;` -> `var x = i++;` *)
+				| Some e1,({eexpr = TUnop((Increment | Decrement) as op,Prefix,e2)} as eop) :: el when Texpr.equal e1 e2 ->
+					let eop = {eop with eexpr = TUnop(op,Postfix,e2)} in
+					state#changed;
+					let rec loop e = match e.eexpr with
+						| TLocal v -> state#dec_reads v;
+						| _ -> Type.iter loop e
+					in
+					loop e1;
+					fuse acc ({ev with eexpr = TVar(v1,Some eop)} :: el)
+				(* var x = e; e = x + 1;` -> `var x = e++;` *)
+				| Some e1,({eexpr = TBinop(OpAssign,e2,({eexpr = TBinop((OpAdd | OpSub) as op,{eexpr = TLocal v2},{eexpr = TConst (TInt i32)})} as eop))}) :: el
+					when config.reconstruct_unops && Texpr.equal e1 e2 && v1 == v2 && Int32.to_int i32 = 1 ->
+					let eop = {eop with eexpr = TUnop((if op = OpAdd then Increment else Decrement),Postfix,e2)} in
+					state#dec_reads v1;
+					fuse acc ({ev with eexpr = TVar(v1,Some eop)} :: el)
+				(* generic fusion *)
+				| Some e1,el when can_be_fused v1 e1 ->
+					let acc,el = generic_fusion v1 ev e1 el acc in
+					fuse acc el
+				| _ ->
 					fuse (ev :: acc) el
 				end
-			(*| {eexpr = TUnop((Increment | Decrement as op,Prefix,({eexpr = TLocal v} as ev)))} as e1 :: e2 :: el ->
-				begin try
-					let e2,f = match e2.eexpr with
-						| TReturn (Some e2) -> e2,(fun e -> {e2 with eexpr = TReturn (Some e)})
-						| TBinop(OpAssign,e21,e22) -> e22,(fun e -> {e2 with eexpr = TBinop(OpAssign,e21,e)})
-						| TVar(v,Some e2) -> e2,(fun e -> {e2 with eexpr = TVar(v,Some e)})
-						| _ -> raise Exit
-					in
-					let ops_match op1 op2 = match op1,op2 with
-						| Increment,OpSub
-						| Decrement,OpAdd ->
-							true
-						| _ ->
-							false
-					in
-					begin match e2.eexpr with
-						| TBinop(op2,{eexpr = TLocal v2},{eexpr = TConst (TInt i32)}) when v == v2 && Int32.to_int i32 = 1 && ops_match op op2 ->
-							state#changed;
-							state#dec_reads v2;
-							let e = (f {e1 with eexpr = TUnop(op,Postfix,ev)}) in
-							fuse (e :: acc) el
-						| TLocal v2 when v == v2 ->
-							state#changed;
-							state#dec_reads v2;
-							let e = (f {e1 with eexpr = TUnop(op,Prefix,ev)}) in
-							fuse (e :: acc) el
-						| _ ->
-							raise Exit
-					end
-				with Exit ->
-					fuse (e1 :: acc) (e2 :: el)
-				end
-			| {eexpr = TBinop(OpAssign,e1,{eexpr = TBinop(op,e2,e3)})} as e :: el when use_assign_op com op e1 e2 ->
+			(* `x = x + y` -> `x += y` or `++x` *)
+			| {eexpr = TBinop(OpAssign,e1,{eexpr = TBinop(op,e2,e3)})} as e :: el when use_assign_op com config op e1 e2 ->
 				let rec loop e = match e.eexpr with
 					| TLocal v -> state#dec_reads v;
 					| _ -> Type.iter loop e
 				in
 				loop e1;
 				state#changed;
-				fuse acc ({e with eexpr = TBinop(OpAssignOp op,e1,e3)} :: el)
+				let e = match e3.eexpr with
+					| TConst (TInt i32) when Int32.to_int i32 = 1 && config.reconstruct_unops ->
+						begin match op with
+							| OpAdd -> {e with eexpr = TUnop(Increment,Prefix,e2)}
+							| OpSub -> {e with eexpr = TUnop(Decrement,Prefix,e2)}
+							| _ -> {e with eexpr = TBinop(OpAssignOp op,e1,e3)}
+						end
+					| _ ->
+						{e with eexpr = TBinop(OpAssignOp op,e1,e3)}
+				in
+				fuse acc (e :: el)
 			| {eexpr = TBinop(OpAssignOp _,e1,_)} as eop :: ({eexpr = TVar(v,Some e2)} as evar) :: el when Texpr.equal e1 e2 ->
 				state#changed;
-				fuse ({evar with eexpr = TVar(v,Some eop)} :: acc) el*)
+				fuse ({evar with eexpr = TVar(v,Some eop)} :: acc) el
+			| {eexpr = TUnop(_,_,{eexpr = TLocal v})} as ev :: e2 :: el ->
+				let acc,el2 = generic_fusion v ev ev [e2] acc in
+				fuse acc (el2 @ el)
 			| e1 :: el ->
 				fuse (e1 :: acc) el
 			| [] ->

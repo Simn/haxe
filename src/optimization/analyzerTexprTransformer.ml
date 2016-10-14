@@ -230,7 +230,7 @@ let rec func ctx bb tf t p =
 		let fl,e = loop [] e in
 		let rec loop e = match e.eexpr with
 			| TLocal v -> v.v_name
-			| TArray(e1,_) | TField(e1,_) | TParenthesis e1 | TCast(e1,None) | TMeta(_,e1) -> loop e1
+			| TArray(e1,_) | TField(e1,_) | TParenthesis e1 | TCast(e1,None) | TMeta(_,e1) | TUnop(_,_,e1) -> loop e1
 			| _ -> match ctx.name_stack with
 				| s :: _ -> s
 				| [] -> ctx.temp_var_name
@@ -310,9 +310,11 @@ let rec func ctx bb tf t p =
 	and assign_op bb op e e1 e2 postfix =
 		let rhs e1 e2 = {e with eexpr = TBinop(op,e1,e2)} in
 		match e1.eexpr with
-		| TLocal _ ->
+		| TLocal v ->
+			let close = push_name v.v_name in
 			let bb,ev = if postfix then bind_to_temp bb false e1 else bb,e1 in
 			let bb,e2 = value bb e2 in
+			close();
 			let e_op = rhs e1 e2 in
 			add_texpr bb {e with eexpr = TBinop(OpAssign,e1,e_op)};
 			bb,ev
