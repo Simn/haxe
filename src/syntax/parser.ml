@@ -929,6 +929,7 @@ and parse_complex_type_inner = parser
 		| [< >] -> serror())
 	| [< '(Question,p1); t,p2 = parse_complex_type_inner >] ->
 		CTOptional (t,p2),punion p1 p2
+	| [< '(Const (Ident "_"),p) >] -> CTPath { tpackage = []; tname = "-In"; tparams = []; tsub = Some("-In"); }, p 
 	| [< t,p = parse_type_path >] ->
 		CTPath t,p
 

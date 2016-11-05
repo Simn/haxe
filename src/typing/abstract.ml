@@ -22,32 +22,36 @@ let underlying_type_stack = ref []
 
 let rec get_underlying_type a pl =
 	let maybe_recurse t =
-		underlying_type_stack := (TAbstract(a,pl)) :: !underlying_type_stack;
-		let rec loop t = match t with
-			| TMono r ->
-				(match !r with
-				| Some t -> loop t
-				| _ -> t)
-			| TLazy f ->
-				loop (!f())
-			| TType({t_path=([],"Null")} as tn,[t1]) ->
-				TType(tn,[loop t1])
-			| TType (t,tl) ->
-				loop (apply_params t.t_params tl t.t_type)
-			| TAbstract(a,tl) when not (Meta.has Meta.CoreType a.a_meta) ->
-				if List.exists (fast_eq t) !underlying_type_stack then begin
-					let pctx = print_context() in
-					let s = String.concat " -> " (List.map (fun t -> s_type pctx t) (List.rev (t :: !underlying_type_stack))) in
-					underlying_type_stack := [];
-					error ("Abstract chain detected: " ^ s) a.a_pos
-				end;
-				get_underlying_type a tl
-			| _ ->
-				t
-		in
-		let t = loop t in
-		underlying_type_stack := List.tl !underlying_type_stack;
-		t
+		if is_of_type t || is_of_type (follow t) then
+			t_dynamic
+		else begin
+			underlying_type_stack := (TAbstract(a,pl)) :: !underlying_type_stack;
+			let rec loop t = match t with
+				| TMono r ->
+					(match !r with
+					| Some t -> loop t
+					| _ -> t)
+				| TLazy f ->
+					loop (!f())
+				| TType({t_path=([],"Null")} as tn,[t1]) ->
+					TType(tn,[loop t1])
+				| TType (t,tl) ->
+					loop (apply_params t.t_params tl t.t_type)
+				| TAbstract(a,tl) when not (Meta.has Meta.CoreType a.a_meta) ->
+					if List.exists (fast_eq t) !underlying_type_stack then begin
+						let pctx = print_context() in
+						let s = String.concat " -> " (List.map (fun t -> s_type pctx t) (List.rev (t :: !underlying_type_stack))) in
+						underlying_type_stack := [];
+						error ("Abstract chain detected: " ^ s) a.a_pos
+					end;
+					get_underlying_type a tl
+				| _ ->
+					t
+			in
+			let t = loop t in
+			underlying_type_stack := List.tl !underlying_type_stack;
+			t
+		end
 	in
 	try
 		if not (Meta.has Meta.MultiType a.a_meta) then raise Not_found;
@@ -57,8 +61,18 @@ let rec get_underlying_type a pl =
 	with Not_found ->
 		if Meta.has Meta.CoreType a.a_meta then
 			t_dynamic
-		else
-			maybe_recurse (apply_params a.a_params pl a.a_this)
+		else match a.a_path,pl with
+				| ([],"-Of"),[tm;ta] ->
+					let x, applied = unapply_in tm (reduce_of ta) in
+					if applied then
+						follow x
+					else
+						(* not reducible Of type like Of<M, Int> or Of<Of<M, A>, B>, fall
+						   back to dynamic *)
+						t_dynamic
+				| _ ->
+					maybe_recurse (apply_params a.a_params pl a.a_this)
+			
 
 let rec follow_with_abstracts t = match follow t with
 	| TAbstract(a,tl) when not (Meta.has Meta.CoreType a.a_meta) ->

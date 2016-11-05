@@ -435,94 +435,130 @@ let rec load_instance ?(allow_display=false) ctx (t,pn) allow_no_params p =
 	let t = try
 		if t.tpackage <> [] || t.tsub <> None then raise Not_found;
 		let pt = List.assoc t.tname ctx.type_params in
-		if t.tparams <> [] then error ("Class type parameter " ^ t.tname ^ " can't have parameters") p;
-		pt
+		begin match t.tparams with
+			| [] -> pt
+			(* CTPath({tpackage=[];tname="Void"}),_)*)
+			| [ TPType (CTPath ({tpackage=[]; tname="-In"; tsub=None}),ctpos) ] ->
+
+				let p1 = TPType (CTPath {tpackage=[]; tname="-In"; tparams=[]; tsub=Some("-In")}, ctpos)  in
+				let t = { t with tparams = [p1] } in
+				load_instance ctx (t,p) allow_no_params ctpos
+			| tps ->
+				let mk_of tm ta = 
+					let path = CTPath tm in
+					let tp = TPType (path,p) in
+					let params = [tp; ta] in
+					{ tpackage=[]; tname="-Of"; tsub=Some("-Of"); tparams = params} 
+				in
+				let rec loop tps =
+					match tps with
+					| [tp] -> mk_of { t with tparams = []} tp
+					| tp :: tps -> mk_of (loop tps) tp
+					| [] -> assert false
+				in
+				let t = loop (List.rev tps) in
+				load_instance ctx (t, p) allow_no_params p
+		end
 	with Not_found ->
-		let mt = load_type_def ctx p t in
-		let is_generic,is_generic_build = match mt with
-			| TClassDecl {cl_kind = KGeneric} -> true,false
-			| TClassDecl {cl_kind = KGenericBuild _} -> false,true
-			| _ -> false,false
-		in
-		let types , path , f = ctx.g.do_build_instance ctx mt p in
-		let is_rest = is_generic_build && (match types with ["Rest",_] -> true | _ -> false) in
-		if allow_no_params && t.tparams = [] && not is_rest then begin
-			let pl = ref [] in
-			pl := List.map (fun (name,t) ->
-				match follow t with
-				| TInst (c,_) ->
-					let t = mk_mono() in
-					if c.cl_kind <> KTypeParameter [] || is_generic then delay ctx PCheckConstraint (fun() -> check_param_constraints ctx types t (!pl) c p);
-					t;
-				| _ -> assert false
-			) types;
-			f (!pl)
-		end else if path = ([],"Dynamic") then
-			match t.tparams with
-			| [] -> t_dynamic
-			| [TPType t] -> TDynamic (load_complex_type ctx true p t)
-			| _ -> error "Too many parameters for Dynamic" p
+		if t.tname = "-In" then
+			!t_in
 		else begin
-			if not is_rest && ctx.com.display.dms_error_policy <> EPIgnore && List.length types <> List.length t.tparams then error ("Invalid number of type parameters for " ^ s_type_path path) p;
-			let tparams = List.map (fun t ->
-				match t with
-				| TPExpr e ->
-					let name = (match fst e with
-						| EConst (String s) -> "S" ^ s
-						| EConst (Int i) -> "I" ^ i
-						| EConst (Float f) -> "F" ^ f
-						| _ -> "Expr"
-					) in
-					let c = mk_class null_module ([],name) p (pos e) in
-					c.cl_kind <- KExpr e;
-					TInst (c,[])
-				| TPType t -> load_complex_type ctx true p t
-			) t.tparams in
-			let rec loop tl1 tl2 is_rest = match tl1,tl2 with
-				| t :: tl1,(name,t2) :: tl2 ->
-					let check_const c =
-						let is_expression = (match t with TInst ({ cl_kind = KExpr _ },_) -> true | _ -> false) in
-						let expects_expression = name = "Const" || Meta.has Meta.Const c.cl_meta in
-						let accepts_expression = name = "Rest" in
-						if is_expression then begin
-							if not expects_expression && not accepts_expression then
-								error "Constant value unexpected here" p
-						end else if expects_expression then
-							error "Type parameter is expected to be a constant value" p
+			let types, path, f, is_generic, is_generic_build = match t with
+				| {tname = "-Of"; tsub = Some("-Of"); tpackage = []} ->
+					let a = of_type in
+					let build_of params =
+						TAbstract (a, params)
 					in
-					let is_rest = is_rest || name = "Rest" && is_generic_build in
-					let t = match follow t2 with
-						| TInst ({ cl_kind = KTypeParameter [] } as c, []) when not is_generic ->
-							check_const c;
-							t
-						| TInst (c,[]) ->
-							check_const c;
-							let r = exc_protect ctx (fun r ->
-								r := (fun() -> t);
-								delay ctx PCheckConstraint (fun() -> check_param_constraints ctx types t tparams c p);
-								t
-							) "constraint" in
-							delay ctx PForce (fun () -> ignore(!r()));
-							TLazy r
-						| _ -> assert false
+					a.a_params, a.a_path, build_of, false, false
+				| _ ->
+					let mt = load_type_def ctx p t in
+					let is_generic,is_generic_build = match mt with
+						| TClassDecl {cl_kind = KGeneric} -> true,false
+						| TClassDecl {cl_kind = KGenericBuild _} -> false,true
+						| _ -> false,false
 					in
-					t :: loop tl1 tl2 is_rest
-				| [],[] ->
-					[]
-				| [],["Rest",_] when is_generic_build ->
-					[]
-				| [],(_,t) :: tl when ctx.com.display.dms_error_policy = EPIgnore ->
-					t :: loop [] tl is_rest
-				| [],_ ->
-					error ("Not enough type parameters for " ^ s_type_path path) p
-				| t :: tl,[] ->
-					if is_rest then
-						t :: loop tl [] true
-					else
-						error ("Too many parameters for " ^ s_type_path path) p
+					let t,p,f = ctx.g.do_build_instance ctx mt p in
+					t, p, f, is_generic, is_generic_build
 			in
-			let params = loop tparams types false in
-			f params
+			let is_rest = is_generic_build && (match types with ["Rest",_] -> true | _ -> false) in
+			if allow_no_params && t.tparams = [] && not is_rest then begin
+				let pl = ref [] in
+				pl := List.map (fun (name,t) ->
+					match follow t with
+					| TInst (c,_) ->
+						let t = mk_mono() in
+						if c.cl_kind <> KTypeParameter [] || is_generic then delay ctx PCheckConstraint (fun() -> check_param_constraints ctx types t (!pl) c p);
+						t;
+					| _ -> assert false
+				) types;
+				f (!pl)
+			end else if path = ([],"Dynamic") then
+				match t.tparams with
+				| [] -> t_dynamic
+				| [TPType t] -> TDynamic (load_complex_type ctx true p t)
+				| _ -> error "Too many parameters for Dynamic" p
+			else begin
+				if not is_rest && ctx.com.display.dms_error_policy <> EPIgnore && List.length types <> List.length t.tparams then error ("Invalid number of type parameters for " ^ s_type_path path) p;
+				let tparams = List.map (fun t ->
+					match t with
+					| TPExpr e ->
+						let name = (match fst e with
+							| EConst (String s) -> "S" ^ s
+							| EConst (Int i) -> "I" ^ i
+							| EConst (Float f) -> "F" ^ f
+							| _ -> "Expr"
+						) in
+						let c = mk_class null_module ([],name) p (pos e) in
+						c.cl_kind <- KExpr e;
+						TInst (c,[])
+					| TPType t -> load_complex_type ctx true p t
+				) t.tparams in
+				let rec loop tl1 tl2 is_rest = match tl1,tl2 with
+					| t :: tl1,(name,t2) :: tl2 ->
+						let check_const c =
+							let is_expression = (match t with TInst ({ cl_kind = KExpr _ },_) -> true | _ -> false) in
+							let expects_expression = name = "Const" || Meta.has Meta.Const c.cl_meta in
+							let accepts_expression = name = "Rest" in
+							if is_expression then begin
+								if not expects_expression && not accepts_expression then
+									error "Constant value unexpected here" p
+							end else if expects_expression then
+								error "Type parameter is expected to be a constant value" p
+						in
+						let is_rest = is_rest || name = "Rest" && is_generic_build in
+						let t = match follow t2 with
+							| TInst ({ cl_kind = KTypeParameter [] } as c, []) when not is_generic ->
+								check_const c;
+								t
+							| TInst (c,[]) ->
+								check_const c;
+								let r = exc_protect ctx (fun r ->
+									r := (fun() -> t);
+									delay ctx PCheckConstraint (fun() -> check_param_constraints ctx types t tparams c p);
+									t
+								) "constraint" in
+								delay ctx PForce (fun () -> ignore(!r()));
+								TLazy r
+							| _ -> assert false
+						in
+						t :: loop tl1 tl2 is_rest
+					| [],[] ->
+						[]
+					| [],["Rest",_] when is_generic_build ->
+						[]
+					| [],(_,t) :: tl when ctx.com.display.dms_error_policy = EPIgnore ->
+						t :: loop [] tl is_rest
+					| [],_ ->
+						error ("Not enough type parameters for " ^ s_type_path path) p
+					| t :: tl,[] ->
+						if is_rest then
+							t :: loop tl [] true
+						else
+							error ("Too many parameters for " ^ s_type_path path) p
+				in
+				let params = loop tparams types false in
+				f params
+			end
 		end
 	in
 	if allow_display then Display.DisplayEmitter.check_display_type ctx t pn;
@@ -1389,7 +1425,7 @@ module Inheritance = struct
 
 	let set_heritance ctx c herits p =
 		let is_lib = Meta.has Meta.LibType c.cl_meta in
-		let ctx = { ctx with curclass = c; type_params = c.cl_params; } in
+		let ctx = { ctx with curclass = c; type_params = ("-In", !t_in) :: c.cl_params; } in
 		let old_meta = c.cl_meta in
 		let process_meta csup =
 			List.iter (fun m ->

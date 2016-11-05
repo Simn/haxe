@@ -44,6 +44,7 @@ class TestMain {
 		var classes = [
 			new TestOps(),
 			new TestBasetypes(),
+			new TestTypeConstructor(),
 			new TestBytes(),
 			new TestIO(),
 			new TestLocals(),

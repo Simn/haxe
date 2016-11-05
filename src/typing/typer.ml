@@ -1586,6 +1586,12 @@ and type_field ?(resume=false) ctx e i p mode =
 			| MSet, _ ->
 				error "This operation is unsupported" p)
 		with Not_found -> try
+			match a,pl with
+			| {a_path=[], "-Of"},[tm;ta] ->
+				let t = unapply_in_constraints tm ta in
+				if is_of_type t then raise Not_found else type_field ~resume:true ctx {e with etype = t} i p mode
+			| _ -> raise Not_found
+		with Not_found -> try
 			if does_forward a false then
 				type_field ~resume:true ctx {e with etype = apply_params a.a_params pl a.a_this} i p mode
 			else
@@ -3939,6 +3945,9 @@ and display_expr ctx e_ast e with_type p =
 					PMap.map (fun f -> { f with cf_type = apply_params c.cl_params params (opt_type f.cf_type); cf_public = true; }) m
 				in
 				loop c params
+			| TAbstract({a_path=[], "-Of"},[tm;ta]) ->
+				let t = unapply_in_constraints tm ta in
+				if is_of_type t then PMap.empty else get_fields t
 			| TAbstract({a_impl = Some c} as a,pl) ->
 				if Meta.has Meta.CoreApi c.cl_meta then merge_core_doc ctx c;
 				let fields = try
@@ -5293,6 +5302,7 @@ let rec create com =
 			| "Float" -> ctx.t.tfloat <- TAbstract (a,[]);
 			| "Int" -> ctx.t.tint <- TAbstract (a,[])
 			| "Bool" -> ctx.t.tbool <- TAbstract (a,[])
+			| "-In" when !t_in == t_dynamic -> t_in := TAbstract(a,[])
 			| "Dynamic" -> t_dynamic_def := TAbstract(a,List.map snd a.a_params);
 			| _ -> ());
 		| TEnumDecl e ->
