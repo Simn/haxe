@@ -8,6 +8,8 @@ using unit.MyTypeConstructor;
 class TestTypeConstructor extends Test {
 
 	
+
+	
 	public function testMonadTransformers()
 	{
 		
@@ -16,12 +18,8 @@ class TestTypeConstructor extends Test {
 		
 		var r = e.arrayT().arrayT().fmap(function (x) return x+1, func).runT().runT();
 
-
 		var rx : Either<String, Array<Array<Int>>> = r;
 		
-
-		// The matching is not working at the moment File "src/typing/matcher.ml", line 819, characters 104-110: Assertion failed
-		#if false		
 		t(r.match(Right([[2]])));
 
 		var r = e.fmap(function (x) return 1, new EitherMonad());
@@ -52,7 +50,6 @@ class TestTypeConstructor extends Test {
 
 		t(r.match(Right([[Right(2)]])));
 
-		#end
 	}
 	
 

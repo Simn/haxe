@@ -1386,6 +1386,7 @@ module Match = struct
 				loop e1
 			| _ ->
 				let e = type_expr ctx e Value in
+				let e = { e with etype = reduce_of_rec e.etype } in
 				e.etype,[e]
 		in
 		let t,subjects = loop e in
