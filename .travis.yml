@@ -25,13 +25,18 @@ addons: &addons
     - api.haxe.org
 
 install_linux: &install_linux
+  # Install opam + ocaml
+  - sudo add-apt-repository ppa:ocaml42+opam12 -y
+  - sudo apt-get update -qq
+  - sudo apt-get install -qq ocaml ocaml-native-compilers camlp4-extra opam
+  - export OPAMYES=1
+  - opam init
+  - opam install ocamlfind oasis
+  - eval `opam config env`
   # Install neko and haxe dependencies
   - sudo add-apt-repository ppa:haxe/ocaml -y
   - sudo apt-get update
   - sudo apt-get install -y
-      ocaml
-      ocaml-native-compilers
-      camlp4
       pkg-config
       libgc-dev
       libssl-dev
@@ -57,9 +62,8 @@ install_linux: &install_linux
   - jdk_switcher use oraclejdk7
   - java -version
   # Build haxe
-  - make package_src -s
+  - oasis setup
   - make -s
-  - make package_bin -s
   - ls -l out
   - export PATH="$PATH:$TRAVIS_BUILD_DIR"
   - export HAXE_STD_PATH="$TRAVIS_BUILD_DIR/std"
@@ -118,39 +122,6 @@ matrix:
         - "sh -e /etc/init.d/xvfb start"
         - "export AUDIODEV=null"
       install: *install_linux
-
-    - os: linux
-      env:
-        - TEST=cpp
-      before_install:
-        - sudo apt-get update -y || true
-        - travis_retry sudo apt-get install -y
-            gcc-multilib
-            g++-multilib
-      install: *install_linux
-
-    - os: linux
-      env:
-        - TEST=php7
-      before_install:
-        - phpenv global "7.0"
-        # - sudo apt-get install php7-cli php7-mysql php7-sqlite -y || (sudo add-apt-repository ppa:ondrej/php -y && sudo apt-get update -y && sudo apt-get install  php7.0-cli php7.0-mysql php7.0-sqlite -y)
-        - php -v || true
-      install: *install_linux
-
-    #######
-    # osx #
-    #######
-    - os: osx
-      env:
-        - TEST=macro,neko,js,php,flash9,as3,java,cs,python,hl,lua
-        - DEPLOY=1
-      install: *install_osx
-
-    - os: osx
-      env:
-        - TEST=cpp
-      install: *install_osx
 
 script:
   - eval `ssh-agent -s` # for deployment to haxe.org
