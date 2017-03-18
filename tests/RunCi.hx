@@ -934,6 +934,7 @@ class RunCi {
 
 						var env = Sys.environment();
 						if (
+							false &&
 							env.exists("SAUCE") &&
 							env.exists("SAUCE_USERNAME") &&
 							env.exists("SAUCE_ACCESS_KEY")
