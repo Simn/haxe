@@ -113,6 +113,7 @@ Library "objsize"
   Path: libs/objsize
   Modules: Objsize
   CSources: c_objsize.c
+  CCOpt: -I../libs/objsize
   Install: false
 
 Library "pcre"
