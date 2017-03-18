@@ -1,0 +1,142 @@
+Name: Haxe
+Version: 3.3.0-rc1
+Synopsis: The Haxe compiler
+Authors: Simon Krajewski <simon@haxe.org>
+License: MIT
+
+Description: The Haxe cross-platform compiler
+Homepage: http://haxe.org
+
+OASISFormat: 0.4
+BuildTools: ocamlbuild
+Plugins: META (0.4), DevFiles (0.4)
+
+AlphaFeatures:
+  ocamlbuild_more_args
+
+XOCamlbuildExtraArgs:
+  -Is src,src/context,src/display,src/generators,src/macro,src/optimization,src/syntax,src/typing
+  -Is libs/extc,libs/extlib,libs/ilib,libs/javalib,libs/neko,libs/objsize,libs/pcre,libs/swflib,libs/ttflib,libs/xml-light,libs/ziplib
+  -Xs extra,lib,std,tests
+  -cflags -cclib,-lz
+
+Executable "haxe"
+  Path: src
+  MainIs: main.ml
+  BuildDepends: extc,extlib,swflib,ttflib,camlp4,unix,str
+  CompiledObject: native
+
+# HAXE
+
+# Library "haxe"
+#   Path: src
+#   Modules: Globals
+#   BuildDepends: haxe-display,haxe-macro,haxe-syntax,haxe-typing
+#   Install: false
+#
+# Library "haxe-context"
+#   Path: src/context
+#   Modules: Common,Meta
+#   BuildDepends: extc,haxe,haxe-display,haxe-syntax,haxe-typing,ilib,javalib,objsize,swflib
+#   Install: false
+#
+# Library "haxe-display"
+#   Path: src/display
+#   Modules: Display,DisplayOutput,DisplayTypes
+#   BuildDepends: haxe,haxe-context,haxe-syntax,haxe-typing
+#   Install: false
+#
+# Library "haxe-generators"
+#   Path: src/generators
+#   Modules: Codegen,Genas3,Gencommon,Gencpp,Gencs,Genhl,Genjava,Genjs,Genlua,Genneko,Genphp,Genphp7,Genpy,Genswf,Genswf9,Genxml,Hl2c,Hlcode,Hlinterp,Hlopt
+#   BuildDepends: extlib,haxe,haxe-context,haxe-macro,haxe-syntax,haxe-typing,ilib,neko,swflib,ttflib,xml-light,ziplib
+#   Install: false
+#
+# Library "haxe-macro"
+#   Path: src/macro
+#   Modules: Hlmacro,Interp,MacroApi,MacroContext
+#   BuildDepends: extc,haxe,haxe-context,haxe-generators,haxe-optimization,haxe-syntax,haxe-typing,pcre
+#   Install: false
+#
+# Library "haxe-optimization"
+#   Path: src/optimization
+#   Modules: Analyzer,AnalyzerConfig,AnalyzerTexpr,AnalyzerTexprTransformer,AnalyzerTypes,Dce,Filters,Optimizer,OptimizerTexpr
+#   BuildDepends: haxe,haxe-context,haxe-display,haxe-generators,haxe-syntax,haxe-typing
+#   Install: false
+#
+# Library "haxe-syntax"
+#   Path: src/syntax
+#   Modules: Ast,Parser
+#   BuildDepends: haxe,haxe-context,extlib
+#   Install: false
+#
+# Library "haxe-typing"
+#   Path: src/typing
+#   Modules: Abstract,Error,Matcher,Overloads,Type,Typecore,Typeload,Typer
+#   BuildDepends: haxe,haxe-context,haxe-display,haxe-macro,haxe-optimization,haxe-syntax
+#   Install: false
+
+# LIBS
+
+Library "extlib"
+  Path: libs/extlib
+  Modules: ExtString,IO,MultiArray
+  Install: false
+
+Library "extc"
+  Path: libs/extc
+  Modules: Extc
+  BuildDepends: extlib
+  Install: false
+
+Library "ilib"
+  Path: libs/ilib
+  Modules: IlData,IlMeta,IlMetaDebug
+  InternalModules: Dump,IlMetaReader,IlMetaTools,PeData,PeDataDebug,PeReader,PeWriter
+  BuildDepends: extlib
+  Install: false
+
+Library "javalib"
+  Path: libs/javalib
+  Modules: JData,JReader,JWriter
+  BuildDepends: extlib
+  Install: false
+
+Library "neko"
+  Path: libs/neko
+  Modules: Nast
+  BuildDepends: extlib
+  Install: false
+
+Library "objsize"
+  Path: libs/objsize
+  Modules: Objsize
+  Install: false
+
+Library "pcre"
+  Path: libs/pcre
+  Modules: Pcre
+  Install: false
+
+Library "swflib"
+  Path: libs/swflib
+  Modules: Swf
+  BuildDepends: extlib
+  Install: false
+
+Library "ttflib"
+  Path: libs/ttflib
+  Modules: TTFData,TTFParser
+  BuildDepends: extlib,swflib
+  Install: false
+
+Library "ziplib"
+  Path: libs/ziplib
+  Modules: Zip
+  BuildDepends: extc
+  Install: false
+
+Library "xml-light"
+  Path: libs/xml-light
+  modules: Xml
+  Install: false

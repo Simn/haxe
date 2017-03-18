@@ -31,7 +31,7 @@ let macro_platform = ref Neko
 let is_windows = Sys.os_type = "Win32" || Sys.os_type = "Cygwin"
 
 let s_version =
-	Printf.sprintf "%d.%d.%d%s" version_major version_minor version_revision (match Version.version_extra with None -> "" | Some v -> " " ^ v)
+	Printf.sprintf "%d.%d.%d%s" version_major version_minor version_revision ("")
 
 let platforms = [
 	Js;

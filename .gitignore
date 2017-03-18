@@ -94,3 +94,13 @@ tests/misc/projects/Issue4070/cpp/
 
 /tests/sys/temp
 *.dll
+*.mldylib
+*.mllib
+META
+Makefile
+configure
+myocamlbuild.ml
+setup.ml
+_build/
+setup.data
+_tags
