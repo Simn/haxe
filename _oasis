@@ -18,12 +18,11 @@ XOCamlbuildExtraArgs:
   -Is src,src/context,src/display,src/generators,src/macro,src/optimization,src/syntax,src/typing
   -Is libs/extc,libs/extlib,libs/ilib,libs/javalib,libs/neko,libs/objsize,libs/pcre,libs/swflib,libs/ttflib,libs/xml-light,libs/ziplib
   -Xs extra,lib,std,tests
-  -cflags -cclib,-lz
 
 Executable "haxe"
   Path: src
   MainIs: main.ml
-  BuildDepends: extc,extlib,swflib,ttflib,camlp4,unix,str
+  BuildDepends: extc,extlib,swflib,ttflib,camlp4,unix,str,pcre,objsize
   CompiledObject: native
 
 # HAXE
@@ -87,6 +86,8 @@ Library "extc"
   Path: libs/extc
   Modules: Extc
   BuildDepends: extlib
+  CSources: extc_stubs.c, process_stubs.c
+  CCLib: -lz
   Install: false
 
 Library "ilib"
@@ -111,11 +112,14 @@ Library "neko"
 Library "objsize"
   Path: libs/objsize
   Modules: Objsize
+  CSources: c_objsize.c
   Install: false
 
 Library "pcre"
   Path: libs/pcre
   Modules: Pcre
+  CSources: pcre_stubs.c
+  CCLib: -lpcre
   Install: false
 
 Library "swflib"
