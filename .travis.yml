@@ -64,7 +64,7 @@ install_linux: &install_linux
   # Build haxe
   - oasis setup
   - make -s
-  - ls -l out
+  - ls -l _build/src
   - export PATH="$PATH:$TRAVIS_BUILD_DIR"
   - export HAXE_STD_PATH="$TRAVIS_BUILD_DIR/std"
 
