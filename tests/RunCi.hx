@@ -933,37 +933,6 @@ class RunCi {
 						];
 
 						var env = Sys.environment();
-						if (
-							false &&
-							env.exists("SAUCE") &&
-							env.exists("SAUCE_USERNAME") &&
-							env.exists("SAUCE_ACCESS_KEY")
-						) {
-							// sauce-connect should have been started
-
-							// var scVersion = "sc-4.3-linux";
-							// runCommand("wget", ['https://saucelabs.com/downloads/${scVersion}.tar.gz'], true);
-							// runCommand("tar", ["-xf", '${scVersion}.tar.gz']);
-
-							// //start sauce-connect
-							// var scReadyFile = "sauce-connect-ready-" + Std.random(100);
-							// var sc = new Process('${scVersion}/bin/sc', [
-							// 	"-i", Sys.getEnv("TRAVIS_JOB_NUMBER"),
-							// 	"-f", scReadyFile
-							// ]);
-							// while(!FileSystem.exists(scReadyFile)) {
-							// 	Sys.sleep(0.5);
-							// }
-
-							runCommand("npm", ["install", "wd", "q"], true);
-							haxelibInstall("hxnodejs");
-							runCommand("haxe", ["compile-saucelabs-runner.hxml"]);
-							var server = new Process("nekotools", ["server"]);
-							runCommand("node", ["bin/RunSauceLabs.js"].concat([for (js in jsOutputs) "unit-js.html?js=" + js.urlEncode()]));
-
-							server.close();
-							// sc.close();
-						}
 
 						infoMsg("Test optimization:");
 						changeDirectory(optDir);
