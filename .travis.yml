@@ -62,7 +62,6 @@ install_linux: &install_linux
   - jdk_switcher use oraclejdk7
   - java -version
   # Build haxe
-  - oasis setup
   - make -s
   - ls -l _build/src
   - export PATH="$PATH:$TRAVIS_BUILD_DIR"

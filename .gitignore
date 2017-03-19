@@ -97,10 +97,7 @@ tests/misc/projects/Issue4070/cpp/
 *.mldylib
 *.mllib
 META
-Makefile
-configure
 myocamlbuild.ml
-setup.ml
 _build/
 setup.data
 _tags
