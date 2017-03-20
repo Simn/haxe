@@ -59,7 +59,9 @@ install_linux: &install_linux
   - jdk_switcher use oraclejdk7
   - java -version
   # Build haxe
-  - make -s
+  - make package_src -s
+  - make haxe haxelib -s
+  - make package_bin -s
   - ls -l _build/src
   - export PATH="$PATH:$TRAVIS_BUILD_DIR"
   - export HAXE_STD_PATH="$TRAVIS_BUILD_DIR/std"

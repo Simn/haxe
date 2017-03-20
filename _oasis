@@ -19,9 +19,6 @@ XOCamlbuildExtraArgs:
   -Is libs/extc,libs/extlib,libs/ilib,libs/javalib,libs/neko,libs/objsize,libs/pcre,libs/swflib,libs/ttflib,libs/xml-light,libs/ziplib
   -Xs extra,lib,std,tests
 
-PostBuildCommand:
-    cp _build/src/main.native haxe
-
 Executable "haxe"
   Path: src
   MainIs: main.ml

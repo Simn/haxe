@@ -49,6 +49,7 @@ open Common.DisplayMode
 open Type
 open Server
 open Globals
+open Matcher
 
 exception Abort
 
