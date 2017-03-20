@@ -598,7 +598,7 @@ let rename_local_vars ctx e =
 		reserve !name;
 		Hashtbl.replace count_table v.v_name !count;
 		if not (Meta.has Meta.RealPath v.v_meta) then
-			v.v_meta <- (Meta.RealPath,[EConst (String v.v_name),e.epos],e.epos) :: v.v_meta;
+			v.v_meta <- (Meta.RealPath,[EConst (String(v.v_name,false)),e.epos],e.epos) :: v.v_meta;
 		v.v_name <- !name;
 	in
 	List.iter maybe_rename (List.rev !vars);
@@ -778,7 +778,7 @@ let apply_native_paths ctx t =
 		in
 		let (_,e,mp) = get_native meta in
 		match e with
-		| [Ast.EConst (Ast.String name),p] ->
+		| [Ast.EConst (Ast.String(name,_)),p] ->
 			name,p
 		| [] ->
 			raise Not_found
@@ -787,11 +787,11 @@ let apply_native_paths ctx t =
 	in
 	let get_real_name meta name =
 		let name',p = get_native_name meta in
-		(Meta.RealPath,[Ast.EConst (Ast.String (name)), p], p), name'
+		(Meta.RealPath,[Ast.EConst (Ast.String (name,false)), p], p), name'
 	in
 	let get_real_path meta path =
 		let name,p = get_native_name meta in
-		(Meta.RealPath,[Ast.EConst (Ast.String (s_type_path path)), p], p), parse_path name
+		(Meta.RealPath,[Ast.EConst (Ast.String (s_type_path path,false)), p], p), parse_path name
 	in
 	try
 		(match t with

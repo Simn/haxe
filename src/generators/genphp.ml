@@ -794,7 +794,7 @@ and is_static t =
 and get_constant_prefix meta =
 	let (_, args, pos) = Meta.get Meta.PhpConstants meta in
 	(match args with
-		| [EConst(String prefix), _] -> prefix
+		| [EConst(String(prefix,_)), _] -> prefix
 		| [] -> ""
 		| _ -> abort "Invalid @:phpConstant parameters" pos)
 

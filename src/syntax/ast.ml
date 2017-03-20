@@ -98,7 +98,7 @@ type unop =
 type constant =
 	| Int of string
 	| Float of string
-	| String of string
+	| String of string * bool
 	| Ident of string
 	| Regexp of string * string
 
@@ -333,14 +333,15 @@ let parse_path s =
 	| [] -> failwith "Invalid empty path"
 	| x :: l -> List.rev l, x
 
-let s_escape ?(hex=true) s =
+let s_escape ?(hex=true) ?(single=false) s =
 	let b = Buffer.create (String.length s) in
 	for i = 0 to (String.length s) - 1 do
 		match s.[i] with
 		| '\n' -> Buffer.add_string b "\\n"
 		| '\t' -> Buffer.add_string b "\\t"
 		| '\r' -> Buffer.add_string b "\\r"
-		| '"' -> Buffer.add_string b "\\\""
+		| '"' when not single -> Buffer.add_string b "\\\""
+		| '\'' when single -> Buffer.add_string b "\\'"
 		| '\\' -> Buffer.add_string b "\\\\"
 		| c when int_of_char c < 32 && hex -> Buffer.add_string b (Printf.sprintf "\\x%.2X" (int_of_char c))
 		| c -> Buffer.add_char b c
@@ -350,7 +351,7 @@ let s_escape ?(hex=true) s =
 let s_constant = function
 	| Int s -> s
 	| Float s -> s
-	| String s -> "\"" ^ s_escape s ^ "\""
+	| String(s,b) -> "\"" ^ s_escape ~single:b s ^ "\""
 	| Ident s -> s
 	| Regexp (r,o) -> "~/" ^ r ^ "/"
 

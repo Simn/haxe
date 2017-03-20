@@ -714,7 +714,7 @@ let rec handle_throws gen cf =
 	match cf.cf_expr with
 	| Some ({ eexpr = TFunction(tf) } as e)  ->
 		let rec collect_throws acc = function
-			| (Meta.Throws, [Ast.EConst (Ast.String path), _],_) :: meta -> (try
+			| (Meta.Throws, [Ast.EConst (Ast.String(path,_)), _],_) :: meta -> (try
 				collect_throws (get_cl ( get_type gen (parse_path path)) :: acc) meta
 			with | Not_found | TypeNotFound _ ->
 				collect_throws acc meta)
@@ -923,7 +923,7 @@ let configure gen =
 
 	let path_s path meta = try
 		match Meta.get Meta.JavaCanonical meta with
-			| (Meta.JavaCanonical, [EConst(String pack), _; EConst(String name), _], _) ->
+			| (Meta.JavaCanonical, [EConst(String(pack,_)), _; EConst(String(name,_)), _], _) ->
 				if pack = "" then
 					name
 				else
@@ -1300,7 +1300,7 @@ let configure gen =
 					write w " )"
 				| TField (e, FStatic(_, cf)) when Meta.has Meta.Native cf.cf_meta ->
 					let rec loop meta = match meta with
-						| (Meta.Native, [EConst (String s), _],_) :: _ ->
+						| (Meta.Native, [EConst (String(s,_)), _],_) :: _ ->
 							expr_s w e; write w "."; write_field w s
 						| _ :: tl -> loop tl
 						| [] -> expr_s w e; write w "."; write_field w (cf.cf_name)
@@ -1616,7 +1616,7 @@ let configure gen =
 		| EConst c, p -> (match c with
 			| Int s | Float s | Ident s ->
 				write w s
-			| String s ->
+			| String(s,_) ->
 				write w "\"";
 				write w (escape s);
 				write w "\""
@@ -1831,10 +1831,10 @@ let configure gen =
 								end else begin
 									expr_s w expr;
 								end)
-							| (Meta.Throws, [Ast.EConst (Ast.String t), _], _) :: tl ->
+							| (Meta.Throws, [Ast.EConst (Ast.String(t,_)), _], _) :: tl ->
 								print w " throws %s" t;
 								loop tl
-							| (Meta.FunctionCode, [Ast.EConst (Ast.String contents),_],_) :: tl ->
+							| (Meta.FunctionCode, [Ast.EConst (Ast.String(contents,_)),_],_) :: tl ->
 								begin_block w;
 								write w contents;
 								end_block w
@@ -1862,7 +1862,7 @@ let configure gen =
 
 		let rec loop_meta meta acc =
 			match meta with
-				| (Meta.SuppressWarnings, [Ast.EConst (Ast.String w),_],_) :: meta -> loop_meta meta (w :: acc)
+				| (Meta.SuppressWarnings, [Ast.EConst (Ast.String(w,_)),_],_) :: meta -> loop_meta meta (w :: acc)
 				| _ :: meta -> loop_meta meta acc
 				| _ -> acc
 		in
@@ -1935,7 +1935,7 @@ let configure gen =
 		let rec loop meta =
 			match meta with
 				| [] -> ()
-				| (Meta.ClassCode, [Ast.EConst (Ast.String contents),_],_) :: tl ->
+				| (Meta.ClassCode, [Ast.EConst (Ast.String(contents,_)),_],_) :: tl ->
 					write w contents
 				| _ :: tl -> loop tl
 		in
@@ -2668,7 +2668,7 @@ and convert_signature ctx p jsig =
 
 let convert_constant ctx p const =
 	Option.map_default (function
-		| ConstString s -> Some (EConst (String s), p)
+		| ConstString s -> Some (EConst (String(s,false)), p)
 		| ConstInt i -> Some (EConst (Int (Printf.sprintf "%ld" i)), p)
 		| ConstFloat f | ConstDouble f -> Some (EConst (Float (Printf.sprintf "%E" f)), p)
 		| _ -> None) None const
@@ -2709,10 +2709,10 @@ let del_override field =
 	{ field with jf_attributes = List.filter (fun a -> not (is_override_attrib a)) field.jf_attributes }
 
 let get_canonical ctx p pack name =
-	(Meta.JavaCanonical, [EConst (String (String.concat "." pack)), p; EConst (String name), p], p)
+	(Meta.JavaCanonical, [EConst (String (String.concat "." pack,false)), p; EConst (String(name,false)), p], p)
 
 let convert_java_enum ctx p pe =
-	let meta = ref (get_canonical ctx p (fst pe.cpath) (snd pe.cpath) :: [Meta.Native, [EConst (String (real_java_path ctx pe.cpath) ), p], p ]) in
+	let meta = ref (get_canonical ctx p (fst pe.cpath) (snd pe.cpath) :: [Meta.Native, [EConst (String (real_java_path ctx pe.cpath,false) ), p], p ]) in
 	let data = ref [] in
 	List.iter (fun f ->
 		(* if List.mem JEnum f.jf_flags then *)
@@ -2785,7 +2785,7 @@ let convert_java_enum ctx p pe =
 		List.iter (fun jsig ->
 			match convert_signature ctx p jsig with
 				| CTPath path ->
-					cff_meta := (Meta.Throws, [Ast.EConst (Ast.String (s_type_path (path.tpackage,path.tname))), p],p) :: !cff_meta
+					cff_meta := (Meta.Throws, [Ast.EConst (Ast.String (s_type_path (path.tpackage,path.tname),false)), p],p) :: !cff_meta
 				| _ -> ()
 		) field.jf_throws;
 
@@ -2841,17 +2841,17 @@ let convert_java_enum ctx p pe =
 					let name = (String.sub cff_name 1 (String.length cff_name - 1)) in
 					if not (is_haxe_keyword name) then
 						cff_meta := (Meta.Deprecated, [EConst(String(
-							"This static field `_" ^ name ^ "` is deprecated and will be removed in later versions. Please use `" ^ name ^ "` instead")
+							"This static field `_" ^ name ^ "` is deprecated and will be removed in later versions. Please use `" ^ name ^ "` instead",false)
 						),p], p) :: !cff_meta;
 					"_" ^ name,
-					(Meta.Native, [EConst (String (name) ), cff_pos], cff_pos) :: !cff_meta
+					(Meta.Native, [EConst (String (name,false) ), cff_pos], cff_pos) :: !cff_meta
 				| _ ->
 					match String.nsplit cff_name "$" with
 						| [ no_dollar ] ->
 							cff_name, !cff_meta
 						| parts ->
 							String.concat "_" parts,
-							(Meta.Native, [EConst (String (cff_name) ), cff_pos], cff_pos) :: !cff_meta
+							(Meta.Native, [EConst (String (cff_name,false) ), cff_pos], cff_pos) :: !cff_meta
 		in
 		if PMap.mem "java_loader_debug" ctx.jcom.defines then
 			Printf.printf "\t%s%sfield %s : %s\n" (if List.mem AStatic !cff_access then "static " else "") (if List.mem AOverride !cff_access then "override " else "") cff_name (s_sig field.jf_signature);
@@ -2900,7 +2900,7 @@ let convert_java_enum ctx p pe =
 				print_endline ("converting " ^ (if List.mem JAbstract jc.cflags then "abstract " else "") ^ JData.path_s jc.cpath ^ " : " ^ (String.concat ", " (List.map s_sig sup)));
 			end;
 			(* todo: instead of JavaNative, use more specific definitions *)
-			let meta = ref [Meta.JavaNative, [], p; Meta.Native, [EConst (String (real_java_path ctx jc.cpath) ), p], p; get_canonical ctx p (fst jc.cpath) (snd jc.cpath)] in
+			let meta = ref [Meta.JavaNative, [], p; Meta.Native, [EConst (String (real_java_path ctx jc.cpath,false) ), p], p; get_canonical ctx p (fst jc.cpath) (snd jc.cpath)] in
 			let force_check = Common.defined ctx.jcom Define.ForceLibCheck in
 			if not force_check then
 				meta := (Meta.LibType,[],p) :: !meta;
@@ -3478,11 +3478,11 @@ let add_java_lib com file std =
 			None
 	in
 	let replace_canonical_name p pack name_original name_replace decl =
-		let mk_meta name = (Meta.JavaCanonical, [EConst (String (String.concat "." pack)), p; EConst(String name), p], p) in
+		let mk_meta name = (Meta.JavaCanonical, [EConst (String (String.concat "." pack,false)), p; EConst(String(name,false)), p], p) in
 		let add_meta name metas =
 			if Meta.has Meta.JavaCanonical metas then
 				List.map (function
-					| (Meta.JavaCanonical,[EConst (String cpack), _; EConst(String cname), _],_) ->
+					| (Meta.JavaCanonical,[EConst (String(cpack,_)), _; EConst(String(cname,_)), _],_) ->
 						let did_replace,name = String.replace cname name_original name_replace in
 						if not did_replace then print_endline (cname ^ " -> " ^ name_original ^ " -> " ^ name_replace);
 						mk_meta name

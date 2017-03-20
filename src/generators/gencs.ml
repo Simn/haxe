@@ -1275,7 +1275,7 @@ let configure gen =
 						do_call w e [v]
 				| TField (e, (FStatic(_, cf) | FInstance(_, _, cf))) when Meta.has Meta.Native cf.cf_meta ->
 					let rec loop meta = match meta with
-						| (Meta.Native, [EConst (String s), _],_) :: _ ->
+						| (Meta.Native, [EConst (String(s,_)), _],_) :: _ ->
 							expr_s w e; write w "."; write_field w s
 						| _ :: tl -> loop tl
 						| [] -> expr_s w e; write w "."; write_field w (cf.cf_name)
@@ -1756,7 +1756,7 @@ let configure gen =
 		| EConst c, p -> (match c with
 			| Int s | Float s | Ident s ->
 				write w s
-			| String s ->
+			| String(s,_) ->
 				write w "\"";
 				write w (escape s);
 				write w "\""
@@ -1792,7 +1792,7 @@ let configure gen =
 
 	let gen_attributes w metadata =
 		List.iter (function
-			| Meta.Meta, [EConst(String s), _], _ ->
+			| Meta.Meta, [EConst(String(s,_)), _], _ ->
 				write w "[";
 				write w s;
 				write w "]";
@@ -2170,7 +2170,7 @@ let configure gen =
 								end else
 									write_method_expr expr
 								)
-							| (Meta.FunctionCode, [Ast.EConst (Ast.String contents),_],_) :: tl ->
+							| (Meta.FunctionCode, [Ast.EConst (Ast.String(contents,_)),_],_) :: tl ->
 								begin_block w;
 								write w contents;
 								end_block w
@@ -2378,7 +2378,7 @@ let configure gen =
 			in
 			let tparams = loop (match m with [(EConst(Int s),_)] -> int_of_string s | _ -> assert false) [] in
 			cl.cl_meta <- (Meta.Meta, [
-				EConst(String("global::haxe.lang.GenericInterface(typeof(global::" ^ module_s (TClassDecl cl) ^ "<" ^ String.concat ", " tparams ^ ">))") ), cl.cl_pos
+				EConst(String("global::haxe.lang.GenericInterface(typeof(global::" ^ module_s (TClassDecl cl) ^ "<" ^ String.concat ", " tparams ^ ">))",false) ), cl.cl_pos
 			], cl.cl_pos) :: cl.cl_meta
 		with Not_found ->
 			());
@@ -2432,7 +2432,7 @@ let configure gen =
 		let rec loop meta =
 			match meta with
 				| [] -> ()
-				| (Meta.ClassCode, [Ast.EConst (Ast.String contents),_],_) :: tl ->
+				| (Meta.ClassCode, [Ast.EConst (Ast.String(contents,_)),_],_) :: tl ->
 					write w contents
 				| _ :: tl -> loop tl
 		in
@@ -3497,7 +3497,7 @@ let enum_is_flag ilcls =
 
 let convert_ilenum ctx p ?(is_flag=false) ilcls =
 	let meta = ref [
-		Meta.Native, [EConst (String (ilpath_s ilcls.cpath) ), p], p;
+		Meta.Native, [EConst (String (ilpath_s ilcls.cpath,false) ), p], p;
 		Meta.CsNative, [], p;
 	] in
 
@@ -3581,7 +3581,7 @@ let convert_ilfield ctx p field =
 		if String.get cff_name 0 = '%' then
 			let name = (String.sub cff_name 1 (String.length cff_name - 1)) in
 			"_" ^ name,
-			(Meta.Native, [EConst (String (name) ), cff_pos], cff_pos) :: !cff_meta
+			(Meta.Native, [EConst (String (name,false) ), cff_pos], cff_pos) :: !cff_meta
 		else
 			cff_name, !cff_meta
 	in
@@ -3732,7 +3732,7 @@ let convert_ilmethod ctx p m is_explicit_impl =
 		if String.get cff_name 0 = '%' then
 			let name = (String.sub cff_name 1 (String.length cff_name - 1)) in
 			"_" ^ name,
-			(Meta.Native, [EConst (String (name) ), cff_pos], cff_pos) :: meta
+			(Meta.Native, [EConst (String (name,false) ), cff_pos], cff_pos) :: meta
 		else
 			cff_name, meta
 	in
@@ -3966,7 +3966,7 @@ let convert_ilclass ctx p ?(delegate=false) ilcls = match ilcls.csuper with
 			let sup = sup @ List.map (fun i -> IlMetaDebug.ilsig_s i.ssig) ilcls.cimplements in
 			print_endline ("converting " ^ ilpath_s ilcls.cpath ^ " : " ^ (String.concat ", " sup))
 		end;
-		let meta = ref [Meta.CsNative, [], p; Meta.Native, [EConst (String (ilpath_s ilcls.cpath) ), p], p] in
+		let meta = ref [Meta.CsNative, [], p; Meta.Native, [EConst (String (ilpath_s ilcls.cpath,false) ), p], p] in
 		let force_check = Common.defined ctx.ncom Define.ForceLibCheck in
 		if not force_check then
 			meta := (Meta.LibType,[],p) :: !meta;

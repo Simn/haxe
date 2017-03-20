@@ -2972,9 +2972,9 @@ let value_to_expr v p =
 		| VFloat f -> haxe_float f p
 		| VAbstract (APos p) ->
 			(Ast.EObjectDecl (
-				(("fileName",Globals.null_pos) , (Ast.EConst (Ast.String p.Globals.pfile) , p)) ::
+				(("fileName",Globals.null_pos) , (Ast.EConst (Ast.String(p.Globals.pfile,false)) , p)) ::
 				(("lineNumber",Globals.null_pos) , (Ast.EConst (Ast.Int (string_of_int (Lexer.get_error_line p))),p)) ::
-				(("className",Globals.null_pos) , (Ast.EConst (Ast.String ("")),p)) ::
+				(("className",Globals.null_pos) , (Ast.EConst (Ast.String ("",false)),p)) ::
 				[]
 			), p)
 		| VString _ | VArray _ | VAbstract _ | VFunction _ | VClosure _ as v -> error v
@@ -2992,7 +2992,7 @@ let value_to_expr v p =
 				| _, Some (VArray a), _, Some (VInt len) ->
 					(Ast.EArrayDecl (List.map loop (Array.to_list (Array.sub a 0 len))),p)
 				| _, _, Some (VString s), _ ->
-					(Ast.EConst (Ast.String s),p)
+					(Ast.EConst (Ast.String(s,false)),p)
 				| Some (VObject en), _, _, _ ->
 					(match get_field en h_et, get_field o h_tag with
 					| VAbstract (ATDecl t), VString tag ->

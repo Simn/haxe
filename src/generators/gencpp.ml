@@ -419,7 +419,7 @@ let join_class_path_remap path separator =
 let get_meta_string meta key =
    let rec loop = function
       | [] -> ""
-      | (k,[Ast.EConst (Ast.String name),_],_) :: _  when k=key-> name
+      | (k,[Ast.EConst (Ast.String(name,_)),_],_) :: _  when k=key-> name
       | _ :: l -> loop l
       in
    loop meta
@@ -430,7 +430,7 @@ let get_meta_string meta key =
 let get_meta_string_path meta key =
    let rec loop = function
       | [] -> ""
-      | (k,[Ast.EConst (Ast.String name),_], pos) :: _  when k=key->
+      | (k,[Ast.EConst (Ast.String(name,_)),_], pos) :: _  when k=key->
            (try
            if (String.sub name 0 2) = "./" then begin
               let base = if (Filename.is_relative pos.pfile) then
@@ -2185,7 +2185,7 @@ let cpp_var_name_of var =
 
 let cpp_var_debug_name_of v =
    let rec loop meta = match meta with
-      | (Meta.RealPath,[EConst (String s),_],_) :: _ -> s
+      | (Meta.RealPath,[EConst (String(s,_)),_],_) :: _ -> s
       | _ :: meta -> loop meta
       | [] -> v.v_name
    in
@@ -2308,7 +2308,7 @@ let is_gc_element ctx member_type =
    | TCppWrapped _
    | TCppScalarArray _
    | TCppInst _
-   | TCppInterface _ 
+   | TCppInterface _
    | TCppClass
        -> true
    | _ -> false
@@ -3077,7 +3077,7 @@ let retype_expression ctx request_type function_args function_type expression_tr
             Using the 'typedef hack', where we use typedef X<T> = T, allows the
             haxe compiler to use these types interchangeably. We then work
             out the correct way to convert between them when one is expected, but another provided.
- 
+
             TCppFunction: these do not really interact with the haxe function type, T
             Since they are implemented with cpp::Function, conversion to/from Dynamic should happen automatically
                CallableData<T> = T;
@@ -6134,7 +6134,7 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
          List.iter dump_script_static class_def.cl_ordered_statics;
 
          output_cpp "static hx::ScriptNamedFunction __scriptableFunctions[] = {\n";
-         let dump_func f isStaticFlag = 
+         let dump_func f isStaticFlag =
             let s = try Hashtbl.find sigs f.cf_name with Not_found -> "v" in
             output_cpp ("  hx::ScriptNamedFunction(\"" ^ f.cf_name ^ "\",__s_" ^ f.cf_name ^ ",\"" ^ s ^ "\", " ^ isStaticFlag ^ " ),\n" )
          in
@@ -7588,13 +7588,13 @@ let generate_source ctx =
                let id = gen_hash32 seed class_name in
                (* reserve first 100 ids for runtime *)
                if id < Int32.of_int 100 || Hashtbl.mem existingIds id then
-                  makeId class_name (seed+100) 
+                  makeId class_name (seed+100)
                else begin
                   Hashtbl.add existingIds id true;
                   Hashtbl.add ctx.ctx_type_ids class_name id;
                end in
             makeId name 0;
- 
+
             build_xml := !build_xml ^ (get_class_code class_def Meta.BuildXml);
             if (has_init_field class_def) then
                init_classes := class_def.cl_path ::  !init_classes;

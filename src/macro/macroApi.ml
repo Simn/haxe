@@ -296,7 +296,7 @@ let encode_const c =
 	let tag, pl = match c with
 	| Int s -> 0, [enc_string s]
 	| Float s -> 1, [enc_string s]
-	| String s -> 2, [enc_string s]
+	| String(s,_) -> 2, [enc_string s] (* TODO FMTSTRING *)
 	| Ident s -> 3, [enc_string s]
 	| Regexp (s,opt) -> 4, [enc_string s;enc_string opt]
 	in
@@ -570,7 +570,7 @@ let decode_const c =
 	match decode_enum c with
 	| 0, [s] -> Int (dec_string s)
 	| 1, [s] -> Float (dec_string s)
-	| 2, [s] -> String (dec_string s)
+	| 2, [s] -> String (dec_string s,false) (* TODO FMTSTRING *)
 	| 3, [s] -> Ident (dec_string s)
 	| 4, [s;opt] -> Regexp (dec_string s, dec_string opt)
 	| 5, [s] -> Ident (dec_string s) (** deprecated CType, keep until 3.0 release **)
@@ -1570,9 +1570,9 @@ let macro_api ccom get_api =
 			let f = if dec_opt_bool b then Type.s_expr_pretty false "" false else Type.s_expr_ast true "" in
 			enc_string (f (Type.s_type (print_context())) (decode_texpr v))
 		);
-		"is_fmt_string", vfun1 (fun p ->
+		(*"is_fmt_string", vfun1 (fun p ->
 			vbool (Lexer.is_fmt_string (decode_pos p))
-		);
+		);*) (* TODO FMTSTRING *)
 		"format_string", vfun2 (fun s p ->
 			encode_expr ((get_api()).format_string (dec_string s) (decode_pos p))
 		);
