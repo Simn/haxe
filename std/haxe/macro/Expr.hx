@@ -64,7 +64,7 @@ enum Constant {
 	/**
 		Represents a string literal.
 	**/
-	CString( s : String );
+	CString( s : String, ?singleQuotes:Bool );
 
 	/**
 		Represents an identifier.

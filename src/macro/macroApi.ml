@@ -136,6 +136,7 @@ module type InterpApi = sig
 
 	val enc_array : value list -> value
 	val enc_string  : string -> value
+	val enc_bool : bool -> value
 	val enc_obj : obj_type -> (string * value) list -> value
 
 	val vfun0 : (unit -> value) -> value
@@ -296,7 +297,7 @@ let encode_const c =
 	let tag, pl = match c with
 	| Int s -> 0, [enc_string s]
 	| Float s -> 1, [enc_string s]
-	| String(s,_) -> 2, [enc_string s] (* TODO FMTSTRING *)
+	| String(s,b) -> 2, [enc_string s;enc_bool b]
 	| Ident s -> 3, [enc_string s]
 	| Regexp (s,opt) -> 4, [enc_string s;enc_string opt]
 	in
@@ -570,7 +571,7 @@ let decode_const c =
 	match decode_enum c with
 	| 0, [s] -> Int (dec_string s)
 	| 1, [s] -> Float (dec_string s)
-	| 2, [s] -> String (dec_string s,false) (* TODO FMTSTRING *)
+	| 2, [s1;s2] -> String (dec_string s1,dec_opt_bool s2)
 	| 3, [s] -> Ident (dec_string s)
 	| 4, [s;opt] -> Regexp (dec_string s, dec_string opt)
 	| 5, [s] -> Ident (dec_string s) (** deprecated CType, keep until 3.0 release **)

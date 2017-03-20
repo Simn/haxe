@@ -2876,6 +2876,8 @@ let enc_string s =
 		"length", VInt (String.length s)
 	]
 
+let enc_bool b = VBool b
+
 let encode_bytes s =
 	enc_inst ["haxe";"io";"Bytes"] [
 		"b", VString s;
