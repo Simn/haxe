@@ -23,12 +23,9 @@ addons: &addons
 
 install_linux: &install_linux
   # Install opam + ocaml
-  - sudo add-apt-repository ppa:avsm/ocaml42+opam12 -y
-  - sudo apt-get update -qq
-  - sudo apt-get install -qq ocaml ocaml-native-compilers camlp4-extra opam
+  - sudo wget https://raw.github.com/ocaml/opam/master/shell/opam_installer.sh -O - | sh -s /usr/local/bin 4.02.3
   - export OPAMYES=1
-  - opam init
-  - opam install ocamlfind oasis
+  - opam install camlp4 ocamlfind oasis
   - eval `opam config env`
   # Install neko and haxe dependencies
   - sudo add-apt-repository ppa:haxe/ocaml -y
