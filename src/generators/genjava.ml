@@ -2082,8 +2082,6 @@ let configure gen =
 	Normalize.configure gen ~metas:(Hashtbl.create 0);
 	AbstractImplementationFix.configure gen;
 
-	IteratorsInterface.configure gen;
-
 	let closure_t = ClosuresToClass.DoubleAndDynamicClosureImpl.get_ctx gen (get_cl (get_type gen (["haxe";"lang"],"Function"))) 6 in
 	ClosuresToClass.configure gen closure_t;
 
@@ -2539,7 +2537,7 @@ exception ConversionError of string * pos
 let error s p = raise (ConversionError (s, p))
 
 let is_haxe_keyword = function
-	| "callback" | "cast" | "extern" | "function" | "in" | "typedef" | "using" | "var" | "untyped" | "inline" -> true
+	| "cast" | "extern" | "function" | "in" | "typedef" | "using" | "var" | "untyped" | "inline" -> true
 	| _ -> false
 
 let jname_to_hx name =

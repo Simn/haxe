@@ -1,3 +1,22 @@
+????-??-??: 4.0.0
+
+	General improvements and optimizations:
+
+	js : improved generation of `break` inside `switch` inside loops (#4964)
+
+	Removals:
+
+	all : SPOD (sys.db.Object, sys.db.Manager and friends) was moved into a separate library `record-macros` (https://github.com/HaxeFoundation/record-macros)
+
+2017-03-20: 3.4.2
+
+	Bugfixes:
+
+	cpp : fixed issue with @:native names being prefixed with :: (#6086)
+	cpp : fixed issue with return type handling (#6103)
+	cpp : fixed inaccurate line numbers that threw off debugging
+	php7 : fixed generation of `[][0]` constructs (#6090)
+
 2017-03-17: 3.4.1
 
 	New features:
