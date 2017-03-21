@@ -1068,8 +1068,8 @@ let rec process_meta_argument ?(toplevel=true) ctx expr = match expr.eexpr with
 		(EConst(Int (Int32.to_string i)), expr.epos)
 	| TConst(TFloat f) ->
 		(EConst(Float f), expr.epos)
-	| TConst(TString s) ->
-		(EConst(String(s,false)), expr.epos)
+	| TConst(TString(s,b)) ->
+		(EConst(String(s,b)), expr.epos)
 	| TConst TNull ->
 		(EConst(Ident "null"), expr.epos)
 	| TConst(TBool b) ->

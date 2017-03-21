@@ -837,7 +837,7 @@ let add_rtti ctx t =
 	| TClassDecl c when has_rtti c && not (PMap.mem "__rtti" c.cl_statics) ->
 		let f = mk_field "__rtti" ctx.t.tstring c.cl_pos null_pos in
 		let str = Genxml.gen_type_string ctx.com t in
-		f.cf_expr <- Some (mk (TConst (TString str)) f.cf_type c.cl_pos);
+		f.cf_expr <- Some (mk (TConst (TString(str,false))) f.cf_type c.cl_pos);
 		c.cl_ordered_statics <- f :: c.cl_ordered_statics;
 		c.cl_statics <- PMap.add f.cf_name f c.cl_statics;
 	| _ ->

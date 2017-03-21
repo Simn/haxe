@@ -331,7 +331,7 @@ let rec extract_expr e = match e.eexpr with
 let gen_constant ctx p = function
 	| TInt i -> print ctx "%ld" i
 	| TFloat s -> spr ctx s
-	| TString s -> begin
+	| TString(s,_) -> begin
 	    add_feature ctx "use.string";
 	    print ctx "\"%s\"" (s_escape_lua s)
 	end
@@ -367,7 +367,7 @@ let rec gen_call ctx e el in_value =
 		spr ctx "(";
 		concat ctx "," (gen_value ctx) el;
 		spr ctx ")";
-	| TLocal { v_name = "__new__" }, { eexpr = TConst (TString cl) } :: params ->
+	| TLocal { v_name = "__new__" }, { eexpr = TConst (TString(cl,_)) } :: params ->
 		print ctx "%s.new(" cl;
 		concat ctx "," (gen_value ctx) params;
 		spr ctx ")";
@@ -376,12 +376,12 @@ let rec gen_call ctx e el in_value =
 		spr ctx ".new(";
 		concat ctx "," (gen_value ctx) params;
 		spr ctx ")";
-	| TLocal { v_name = "__callself__" }, { eexpr = TConst (TString head) } :: { eexpr = TConst (TString tail) } :: el ->
+	| TLocal { v_name = "__callself__" }, { eexpr = TConst (TString(head,_)) } :: { eexpr = TConst (TString(tail,_)) } :: el ->
 		print ctx "%s:%s" head tail;
 		spr ctx "(";
 		concat ctx ", " (gen_value ctx) el;
 		spr ctx ")";
-	| TLocal { v_name = "__call__" }, { eexpr = TConst (TString code) } :: el ->
+	| TLocal { v_name = "__call__" }, { eexpr = TConst (TString(code,_)) } :: el ->
 		spr ctx code;
 		spr ctx "(";
 		concat ctx ", " (gen_value ctx) el;
@@ -409,9 +409,9 @@ let rec gen_call ctx e el in_value =
 			    abort "__lua_table__ only accepts array or anonymous object arguments" e.epos;
 		)) el;
 		spr ctx "})";
-	| TLocal { v_name = "__lua__" }, [{ eexpr = TConst (TString code) }] ->
+	| TLocal { v_name = "__lua__" }, [{ eexpr = TConst (TString(code,_)) }] ->
 		spr ctx (String.concat "\n" (ExtString.String.nsplit code "\r\n"))
-	| TLocal { v_name = "__lua__" }, { eexpr = TConst (TString code); epos = p } :: tl ->
+	| TLocal { v_name = "__lua__" }, { eexpr = TConst (TString(code,_)); epos = p } :: tl ->
 		Codegen.interpolate_code ctx.com code tl (spr ctx) (gen_expr ctx) p
 	| TLocal { v_name = "__type__" },  [o] ->
 		spr ctx "type(";
@@ -419,7 +419,7 @@ let rec gen_call ctx e el in_value =
 		spr ctx ")";
 	| TLocal ({v_name = "__define_feature__"}), [_;e] ->
 		gen_expr ctx e
-	| TLocal { v_name = "__feature__" }, { eexpr = TConst (TString f) } :: eif :: eelse ->
+	| TLocal { v_name = "__feature__" }, { eexpr = TConst (TString(f,_)) } :: eif :: eelse ->
 		(if has_feature ctx f then
 			gen_value ctx eif
 		else match eelse with
@@ -433,9 +433,9 @@ let rec gen_call ctx e el in_value =
 			if (!count == 0) then spr ctx "[0]=";
 			spr ctx "{ ";
 			spr ctx "name = ";
-			gen_constant ctx e.epos (TString name);
+			gen_constant ctx e.epos (TString(name,false));
 			spr ctx ", data = ";
-			gen_constant ctx e.epos (TString (Codegen.bytes_serialize data));
+			gen_constant ctx e.epos (TString (Codegen.bytes_serialize data,false));
 			spr ctx "}";
 			incr count
 		) (Hashtbl.fold (fun name data acc -> (name,data) :: acc) ctx.com.resources []);
@@ -493,7 +493,7 @@ and gen_expr ?(local=true) ctx e = begin
 	| TLocal v when v.v_name = "this" ->
 		spr ctx "self";
 	| TLocal v -> spr ctx (ident v.v_name)
-	| TArray (e1,{ eexpr = TConst (TString s) }) when valid_lua_ident s && (match e1.eexpr with TConst (TInt _|TFloat _) -> false | _ -> true) ->
+	| TArray (e1,{ eexpr = TConst (TString(s,_)) }) when valid_lua_ident s && (match e1.eexpr with TConst (TInt _|TFloat _) -> false | _ -> true) ->
 		gen_value ctx e1;
 		spr ctx (field s)
 	| TArray (e1,e2) ->
@@ -1006,7 +1006,7 @@ and gen_block_element ctx e  =
 		let f () = gen_expr ctx e in
 		gen_iife_assign ctx f;
 		semicolon ctx;
-	| TCall ({ eexpr = TLocal { v_name = "__feature__" } }, { eexpr = TConst (TString f) } :: eif :: eelse) ->
+	| TCall ({ eexpr = TLocal { v_name = "__feature__" } }, { eexpr = TConst (TString(f,_)) } :: eif :: eelse) ->
 		if has_feature ctx f then
 			gen_block_element ctx eif
 		else (match eelse with

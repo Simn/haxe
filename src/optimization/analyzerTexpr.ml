@@ -121,7 +121,7 @@ let rec can_be_used_as_value com e =
 	let rec loop e = match e.eexpr with
 		| TBlock [e] -> loop e
 		| TBlock _ | TSwitch _ | TTry _ -> raise Exit
-		| TCall({eexpr = TConst (TString "phi")},_) -> raise Exit
+		| TCall({eexpr = TConst (TString("phi",_))},_) -> raise Exit
 		(* | TCall _ | TNew _ when (match com.platform with Cpp | Php -> true | _ -> false) -> raise Exit *)
 		| TReturn _ | TThrow _ | TBreak | TContinue -> raise Exit
 		| TUnop((Increment | Decrement),_,_) when not (target_handles_unops com) -> raise Exit
@@ -148,7 +148,7 @@ let is_really_unbound v = match v.v_name with
 
 let r = Str.regexp "^\\([A-Za-z0-9_]\\)+$"
 let is_unbound_call_that_might_have_side_effects v el = match v.v_name,el with
-	| "__js__",[{eexpr = TConst (TString s)}] when Str.string_match r s 0 -> false
+	| "__js__",[{eexpr = TConst (TString(s,_))}] when Str.string_match r s 0 -> false
 	| _ -> true
 
 let is_ref_type = function

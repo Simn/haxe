@@ -46,7 +46,7 @@ module ExprBuilder = struct
 		mk (TConst(TBool b)) com.basic.tbool p
 
 	let make_string com s p =
-		mk (TConst (TString s)) com.basic.tstring p
+		mk (TConst (TString(s,false))) com.basic.tstring p
 
 	let make_null t p =
 		mk (TConst TNull) t p
@@ -55,7 +55,7 @@ module ExprBuilder = struct
 		mk (TLocal v) v.v_type p
 
 	let make_const_texpr com ct p = match ct with
-		| TString s -> mk (TConst (TString s)) com.basic.tstring p
+		| TString(s,b) -> mk (TConst (TString(s,b))) com.basic.tstring p
 		| TInt i -> mk (TConst (TInt i)) com.basic.tint p
 		| TFloat f -> mk (TConst (TFloat f)) com.basic.tfloat p
 		| TBool b -> mk (TConst (TBool b)) com.basic.tbool p
@@ -94,7 +94,7 @@ let type_constant com c p =
 		(try mk (TConst (TInt (Int32.of_string s))) t.tint p
 		with _ -> mk (TConst (TFloat s)) t.tfloat p)
 	| Float f -> mk (TConst (TFloat f)) t.tfloat p
-	| String(s,_) -> mk (TConst (TString s)) t.tstring p (* TODO FMTSTRING *)
+	| String(s,b) -> mk (TConst (TString(s,b))) t.tstring p
 	| Ident "true" -> mk (TConst (TBool true)) t.tbool p
 	| Ident "false" -> mk (TConst (TBool false)) t.tbool p
 	| Ident "null" -> mk (TConst TNull) (t.tnull (mk_mono())) p
@@ -725,7 +725,7 @@ let default_cast ?(vtmp="$t") com e texpr t p =
 	let std = mk (TTypeExpr std) (mk_texpr std) p in
 	let is = mk (TField (std,fis)) (tfun [t_dynamic;t_dynamic] api.tbool) p in
 	let is = mk (TCall (is,[vexpr;texpr])) api.tbool p in
-	let exc = mk (TThrow (mk (TConst (TString "Class cast error")) api.tstring p)) t p in
+	let exc = mk (TThrow (mk (TConst (TString ("Class cast error",false))) api.tstring p)) t p in
 	let check = mk (TIf (mk_parent is,mk (TCast (vexpr,None)) t p,Some exc)) t p in
 	mk (TBlock [var;check;vexpr]) t p
 

@@ -327,7 +327,7 @@ let is_dynamic_iterator ctx e =
 let gen_constant ctx p = function
 	| TInt i -> print ctx "%ld" i
 	| TFloat s -> spr ctx s
-	| TString s -> print ctx "\"%s\"" (Ast.s_escape s)
+	| TString(s,_) -> print ctx "\"%s\"" (Ast.s_escape s)
 	| TBool b -> spr ctx (if b then "true" else "false")
 	| TNull -> spr ctx "null"
 	| TThis -> spr ctx (this ctx)
@@ -359,7 +359,7 @@ let rec gen_call ctx e el in_value =
 		spr ctx "(";
 		concat ctx "," (gen_value ctx) el;
 		spr ctx ")";
-	| TLocal { v_name = "__new__" }, { eexpr = TConst (TString cl) } :: params ->
+	| TLocal { v_name = "__new__" }, { eexpr = TConst (TString(cl,_)) } :: params ->
 		print ctx "new %s(" cl;
 		concat ctx "," (gen_value ctx) params;
 		spr ctx ")";
@@ -369,11 +369,11 @@ let rec gen_call ctx e el in_value =
 		spr ctx "(";
 		concat ctx "," (gen_value ctx) params;
 		spr ctx ")";
-	| TLocal { v_name = "__js__" }, [{ eexpr = TConst (TString "this") }] ->
+	| TLocal { v_name = "__js__" }, [{ eexpr = TConst (TString("this",_)) }] ->
 		spr ctx (this ctx)
-	| TLocal { v_name = "__js__" }, [{ eexpr = TConst (TString code) }] ->
+	| TLocal { v_name = "__js__" }, [{ eexpr = TConst (TString(code,_)) }] ->
 		spr ctx (String.concat "\n" (ExtString.String.nsplit code "\r\n"))
-	| TLocal { v_name = "__js__" }, { eexpr = TConst (TString code); epos = p } :: tl ->
+	| TLocal { v_name = "__js__" }, { eexpr = TConst (TString(code,_)); epos = p } :: tl ->
 		Codegen.interpolate_code ctx.com code tl (spr ctx) (gen_expr ctx) p
 	| TLocal { v_name = "__instanceof__" },  [o;t] ->
 		spr ctx "(";
@@ -401,7 +401,7 @@ let rec gen_call ctx e el in_value =
 		spr ctx ")";
 	| TLocal ({v_name = "__define_feature__"}), [_;e] ->
 		gen_expr ctx e
-	| TLocal { v_name = "__feature__" }, { eexpr = TConst (TString f) } :: eif :: eelse ->
+	| TLocal { v_name = "__feature__" }, { eexpr = TConst (TString(f,_)) } :: eif :: eelse ->
 		(if has_feature ctx f then
 			gen_value ctx eif
 		else match eelse with
@@ -414,9 +414,9 @@ let rec gen_call ctx e el in_value =
 		concat ctx "," (fun (name,data) ->
 			spr ctx "{ ";
 			spr ctx "name : ";
-			gen_constant ctx e.epos (TString name);
+			gen_constant ctx e.epos (TString(name,false));
 			spr ctx ", data : ";
-			gen_constant ctx e.epos (TString (Codegen.bytes_serialize data));
+			gen_constant ctx e.epos (TString (Codegen.bytes_serialize data,false));
 			spr ctx "}"
 		) (Hashtbl.fold (fun name data acc -> (name,data) :: acc) ctx.com.resources []);
 		spr ctx "]";
@@ -812,7 +812,7 @@ and gen_block_element ?(after=false) ctx e =
 	match e.eexpr with
 	| TBlock el ->
 		List.iter (gen_block_element ~after ctx) el
-	| TCall ({ eexpr = TLocal { v_name = "__feature__" } }, { eexpr = TConst (TString f) } :: eif :: eelse) ->
+	| TCall ({ eexpr = TLocal { v_name = "__feature__" } }, { eexpr = TConst (TString(f,_)) } :: eif :: eelse) ->
 		if has_feature ctx f then
 			gen_block_element ~after ctx eif
 		else (match eelse with

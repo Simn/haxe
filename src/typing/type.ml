@@ -72,7 +72,7 @@ and type_params = (string * t) list
 and tconstant =
 	| TInt of int32
 	| TFloat of string
-	| TString of string
+	| TString of string * bool
 	| TBool of bool
 	| TNull
 	| TThis
@@ -734,7 +734,7 @@ let rec module_type_of_type = function
 let tconst_to_const = function
 	| TInt i -> Int (Int32.to_string i)
 	| TFloat s -> Float s
-	| TString s -> String(s,false) (* TODO FMTSTRING *)
+	| TString(s,b) -> String(s,b)
 	| TBool b -> Ident (if b then "true" else "false")
 	| TNull -> Ident "null"
 	| TThis -> Ident "this"
@@ -1000,7 +1000,7 @@ let s_expr_kind e =
 let s_const = function
 	| TInt i -> Int32.to_string i
 	| TFloat s -> s
-	| TString s -> Printf.sprintf "\"%s\"" (Ast.s_escape s)
+	| TString(s,b) -> Printf.sprintf "\"%s\"" (Ast.s_escape ~single:b s)
 	| TBool b -> if b then "true" else "false"
 	| TNull -> "null"
 	| TThis -> "this"

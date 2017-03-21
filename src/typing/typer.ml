@@ -1105,7 +1105,7 @@ let field_access ctx mode f fmode t e p =
 			else
 				AKExpr (make_call ctx (mk (TField (e,quick_field_dynamic e.etype m)) (tfun [] t) p) [] t p)
 		| AccResolve ->
-			let fstring = mk (TConst (TString f.cf_name)) ctx.t.tstring p in
+			let fstring = mk (TConst (TString(f.cf_name,false))) ctx.t.tstring p in
 			let tresolve = tfun [ctx.t.tstring] t in
 			AKExpr (make_call ctx (mk (TField (e,FDynamic "resolve")) tresolve p) [fstring] t p)
 		| AccNever ->
@@ -3342,8 +3342,8 @@ and type_expr ctx (e,p) (with_type:with_type) =
 	| EArray _ ->
 		acc_get ctx (type_access ctx e p MGet) p
 	| EConst (Regexp (r,opt)) ->
-		let str = mk (TConst (TString r)) ctx.t.tstring p in
-		let opt = mk (TConst (TString opt)) ctx.t.tstring p in
+		let str = mk (TConst (TString(r,false))) ctx.t.tstring p in
+		let opt = mk (TConst (TString(opt,false))) ctx.t.tstring p in
 		let t = Typeload.load_core_type ctx "EReg" in
 		mk (TNew ((match t with TInst (c,[]) -> c | _ -> assert false),[],[str;opt])) t p
 	| EConst (String(s,true)) ->

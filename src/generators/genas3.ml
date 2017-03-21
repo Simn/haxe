@@ -371,7 +371,7 @@ let generate_resources infos =
 let gen_constant ctx p = function
 	| TInt i -> print ctx "%ld" i
 	| TFloat s -> spr ctx s
-	| TString s -> print ctx "\"%s\"" (Ast.s_escape s)
+	| TString(s,_) -> print ctx "\"%s\"" (Ast.s_escape s)
 	| TBool b -> spr ctx (if b then "true" else "false")
 	| TNull -> spr ctx "null"
 	| TThis -> spr ctx (this ctx)
@@ -595,7 +595,7 @@ and gen_expr ctx e =
 		gen_constant ctx e.epos c
 	| TLocal v ->
 		spr ctx (s_ident v.v_name)
-	| TArray ({ eexpr = TLocal { v_name = "__global__" } },{ eexpr = TConst (TString s) }) ->
+	| TArray ({ eexpr = TLocal { v_name = "__global__" } },{ eexpr = TConst (TString(s,_)) }) ->
 		let path = Ast.parse_path s in
 		spr ctx (s_path ctx false path e.epos)
 	| TArray (e1,e2) ->
@@ -986,8 +986,8 @@ let generate_field ctx static f =
 				print ctx "(";
 				concat ctx "," (fun a ->
 					match mk_arg a with
-					| None, s -> gen_constant ctx (snd a) (TString s)
-					| Some s, e -> print ctx "%s=" s; gen_constant ctx (snd a) (TString e)
+					| None, s -> gen_constant ctx (snd a) (TString(s,false))
+					| Some s, e -> print ctx "%s=" s; gen_constant ctx (snd a) (TString(e,false))
 				) args;
 				print ctx ")");
 			print ctx "]";

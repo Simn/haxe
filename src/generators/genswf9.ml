@@ -641,7 +641,7 @@ let gen_constant ctx c t p =
 	| TFloat f ->
 		let f = float_of_string f in
 		write ctx (HFloat f);
-	| TString s ->
+	| TString(s,_) ->
 		write ctx (HString (to_utf8 s));
 	| TBool b ->
 		write ctx (if b then HTrue else HFalse);
@@ -921,7 +921,7 @@ let rec gen_access ctx e (forset : 'a) : 'a access =
 			else
 				VCast (id,classify ctx e.etype)
 		)
-	| TArray ({ eexpr = TLocal { v_name = "__global__" } },{ eexpr = TConst (TString s) }) ->
+	| TArray ({ eexpr = TLocal { v_name = "__global__" } },{ eexpr = TConst (TString(s,_)) }) ->
 		let path = parse_path s in
 		let id = type_path ctx path in
 		if is_set forset then write ctx HGetGlobalScope;
@@ -1475,7 +1475,7 @@ and gen_call ctx retval e el r =
 		write ctx HGetGlobalScope;
 		gen_expr ctx true ep;
 		write ctx (HCallStack 1)
-	| TArray ({ eexpr = TLocal { v_name = "__global__" } },{ eexpr = TConst (TString s) }), _ ->
+	| TArray ({ eexpr = TLocal { v_name = "__global__" } },{ eexpr = TConst (TString(s,_)) }), _ ->
 		(match gen_access ctx e Read with
 		| VGlobal id ->
 			write ctx (HFindPropStrict id);

@@ -435,7 +435,7 @@ struct
 		let has_case = ref false in
 		(* first we need to reorder all cases so all collisions are close to each other *)
 
-		let get_str e = match e.eexpr with | TConst(TString s) -> s | _ -> assert false in
+		let get_str e = match e.eexpr with | TConst(TString(s,_)) -> s | _ -> assert false in
 		let has_conflict = ref false in
 
 		let rec reorder_cases unordered ordered =
@@ -482,7 +482,7 @@ struct
 			let conds, el = List.fold_left (fun (conds,el) e ->
 				has_case := true;
 				match e.eexpr with
-					| TConst(TString s) ->
+					| TConst(TString(s,_)) ->
 						let hashed = java_hash s in
 						let equals_test = {
 							eexpr = TCall({ e with eexpr = TField(local, FDynamic "equals"); etype = TFun(["obj",false,t_dynamic],basic.tbool) }, [ e ]);
@@ -1262,7 +1262,7 @@ let configure gen =
 							write w s;
 							(* fix for Int notation, which only fit in a Float *)
 							(if not (String.contains s '.' || String.contains s 'e' || String.contains s 'E') then write w ".0");
-						| TString s -> print w "\"%s\"" (escape s)
+						| TString(s,_) -> print w "\"%s\"" (escape s)
 						| TBool b -> write w (if b then "true" else "false")
 						| TNull ->
 							(match real_type e.etype with
@@ -1359,9 +1359,9 @@ let configure gen =
 					write w " instanceof ";
 					write w (md_s e.epos md);
 					write w " )"
-				| TCall ({ eexpr = TLocal( { v_name = "__java__" } ) }, [ { eexpr = TConst(TString(s)) } ] ) ->
+				| TCall ({ eexpr = TLocal( { v_name = "__java__" } ) }, [ { eexpr = TConst(TString(s,_)) } ] ) ->
 					write w s
-				| TCall ({ eexpr = TLocal( { v_name = "__java__" } ) }, { eexpr = TConst(TString(s)) } :: tl ) ->
+				| TCall ({ eexpr = TLocal( { v_name = "__java__" } ) }, { eexpr = TConst(TString(s,_)) } :: tl ) ->
 					Codegen.interpolate_code gen.gcon s tl (write w) (expr_s w) e.epos
 				| TCall ({ eexpr = TLocal( { v_name = "__lock__" } ) }, [ eobj; eblock ] ) ->
 					write w "synchronized(";
@@ -2125,7 +2125,7 @@ let configure gen =
 		let should_cast = match main_expr.etype with | TAbstract({ a_path = ([], "Float") }, []) -> false | _ -> true in
 		let infer = mk_static_field_access_infer runtime_cl fn_name field_expr.epos [] in
 		let first_args =
-			[ field_expr; { eexpr = TConst(TString field); etype = basic.tstring; epos = pos } ]
+			[ field_expr; { eexpr = TConst(TString(field,false)); etype = basic.tstring; epos = pos } ]
 			@ if is_some may_hash then [ { eexpr = TConst(TInt (get may_hash)); etype = basic.tint; epos = pos } ] else []
 		in
 		let args = first_args @ match is_float, may_set with
@@ -2158,7 +2158,7 @@ let configure gen =
 
 
 		let call_args =
-			[field_expr; { field_expr with eexpr = TConst(TString field); etype = basic.tstring } ]
+			[field_expr; { field_expr with eexpr = TConst(TString(field,false)); etype = basic.tstring } ]
 				@ hash_arg
 				@ [ arr_call ]
 		in
@@ -2424,7 +2424,7 @@ let configure gen =
 	(* add resources array *)
 	let res = ref [] in
 	Hashtbl.iter (fun name v ->
-		res := { eexpr = TConst(TString name); etype = gen.gcon.basic.tstring; epos = null_pos } :: !res;
+		res := { eexpr = TConst(TString(name,false)); etype = gen.gcon.basic.tstring; epos = null_pos } :: !res;
 		let name = Codegen.escape_res_name name true in
 		let full_path = gen.gcon.file ^ "/src/" ^ name in
 		mkdir_from_path full_path;

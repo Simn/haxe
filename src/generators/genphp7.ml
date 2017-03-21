@@ -1635,7 +1635,7 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 		method write_expr_const const =
 			match const with
 				| TFloat str -> self#write str
-				| TString str -> self#write_const_string str
+				| TString(str,_) -> self#write_const_string str
 				| TBool value -> self#write (if value then "true" else "false")
 				| TNull -> self#write "null"
 				| TThis -> self#write "$this"
@@ -1980,11 +1980,11 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 			let error = error_message self#pos ("Invalid arguments for " ^ name ^ " magic call") in
 			match args with
 				| [] -> failwith error
-				| { eexpr = TConst (TString code) } as expr :: args ->
+				| { eexpr = TConst (TString(code,_)) } as expr :: args ->
 					(match name with
 						| "__php__" ->
 							(match expr.eexpr with
-								| TConst (TString php) ->
+								| TConst (TString(php,_)) ->
 									Codegen.interpolate_code ctx php args self#write self#write_expr self#pos
 								| _ -> fail self#pos (try assert false with Assert_failure mlpos -> mlpos)
 							)
@@ -2524,7 +2524,7 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 			match args with
 				| val_expr1 :: operator_expr :: val_expr2 :: [] ->
 					let operator = match operator_expr.eexpr with
-						| TConst (TString operator) -> operator
+						| TConst (TString(operator,_)) -> operator
 						| _ -> error_and_exit self#pos "Second argument for php.Syntax.binop() must be a constant string"
 					in
 					self#write "(";

@@ -173,11 +173,14 @@ let reify in_macro =
 		| [] -> constr
 		| _ -> (ECall (constr,vl),p)
 	in
+	let to_bool o p =
+		(EConst (Ident (if o then "true" else "false")),p)
+	in
 	let to_const c p =
 		let cst n v = mk_enum "Constant" n [EConst (String(v,false)),p] p in
 		match c with
 		| Int i -> cst "CInt" i
-		| String(s,_) -> cst "CString" s (* TODO FMTSTRING *)
+		| String(s,b) -> mk_enum "Constant" "CString" [(EConst (String(s,false)),p);to_bool b p] p
 		| Float s -> cst "CFloat" s
 		| Ident s -> cst "CIdent" s
 		| Regexp (r,o) -> mk_enum "Constant" "CRegexp" [(EConst (String(r,false)),p);(EConst (String(o,false)),p)] p
@@ -229,9 +232,6 @@ let reify in_macro =
 		match v with
 		| None -> to_null p
 		| Some v -> f v p
-	in
-	let to_bool o p =
-		(EConst (Ident (if o then "true" else "false")),p)
 	in
 	let to_obj fields p =
 		(EObjectDecl (List.map (fun (s,e) -> (s,null_pos),e) fields),p)

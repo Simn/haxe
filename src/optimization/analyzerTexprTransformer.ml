@@ -161,7 +161,7 @@ let rec func ctx bb tf t p =
 			bb,{e with eexpr = TEnumParameter(e1,ef,ei)}
 		| TFunction tf ->
 			let bb_func,bb_func_end = func ctx bb tf e.etype e.epos in
-			let e_fun = mk (TConst (TString "fun")) t_dynamic p in
+			let e_fun = mk (TConst (TString("fun",false))) t_dynamic p in
 			let econst = mk (TConst (TInt (Int32.of_int bb_func.bb_id))) ctx.com.basic.tint e.epos in
 			let ec = mk (TCall(e_fun,[econst])) t_dynamic p in
 			let bb_next = create_node BKNormal bb.bb_type bb.bb_pos in
@@ -734,7 +734,7 @@ and func ctx i =
 				| _ ->
 					{e with eexpr = TBinop(OpAssign,e1,{e4 with eexpr = TBinop(op,e2,e3)})}
 			end
-		| TCall({eexpr = TConst (TString "fun")},[{eexpr = TConst (TInt i32)}]) ->
+		| TCall({eexpr = TConst (TString("fun",_))},[{eexpr = TConst (TInt i32)}]) ->
 			func ctx (Int32.to_int i32)
 		| TCall({eexpr = TLocal v},_) when is_really_unbound v ->
 			e

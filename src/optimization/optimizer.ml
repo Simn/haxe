@@ -55,16 +55,16 @@ let api_inline2 com c field params p =
 	| ([],"Std"),"int",[{ eexpr = TConst (TInt _) } as e] ->
 		Some { e with epos = p }
 	| ([],"String"),"fromCharCode",[{ eexpr = TConst (TInt i) }] when i > 0l && i < 128l ->
-		Some (mk (TConst (TString (String.make 1 (char_of_int (Int32.to_int i))))) com.basic.tstring p)
+		Some (mk (TConst (TString (String.make 1 (char_of_int (Int32.to_int i)),false))) com.basic.tstring p)
 	| ([],"Std"),"string",[{ eexpr = TCast ({ eexpr = TConst c } as e, None)}]
 	| ([],"Std"),"string",[{ eexpr = TConst c } as e] ->
 		(match c with
-		| TString s ->
+		| TString(s,_) ->
 			Some { e with epos = p }
 		| TInt i ->
-			Some { eexpr = TConst (TString (Int32.to_string i)); epos = p; etype = com.basic.tstring }
+			Some { eexpr = TConst (TString (Int32.to_string i,false)); epos = p; etype = com.basic.tstring }
 		| TBool b ->
-			Some { eexpr = TConst (TString (if b then "true" else "false")); epos = p; etype = com.basic.tstring }
+			Some { eexpr = TConst (TString ((if b then "true" else "false"),false)); epos = p; etype = com.basic.tstring }
 		| _ ->
 			None)
 	| ([],"Std"),"string",[{ eexpr = TIf (_,{ eexpr = TConst (TString _)},Some { eexpr = TConst (TString _) }) } as e] ->
@@ -72,10 +72,10 @@ let api_inline2 com c field params p =
 	| ([],"Std"),"string",[{ eexpr = TLocal v | TField({ eexpr = TLocal v },_) } as ev] when (com.platform = Js || com.platform = Flash) && not (Meta.has Meta.CompilerGenerated v.v_meta) ->
 		let pos = ev.epos in
 		let stringv() =
-			let to_str = mk (TBinop (Ast.OpAdd, mk (TConst (TString "")) com.basic.tstring pos, ev)) com.basic.tstring pos in
+			let to_str = mk (TBinop (Ast.OpAdd, mk (TConst (TString("",false))) com.basic.tstring pos, ev)) com.basic.tstring pos in
 			if com.platform = Js || is_nullable ev.etype then
 				let chk_null = mk (TBinop (Ast.OpEq, ev, mk (TConst TNull) t_dynamic pos)) com.basic.tbool pos in
-				mk (TIf (chk_null, mk (TConst (TString "null")) com.basic.tstring pos, Some to_str)) com.basic.tstring pos
+				mk (TIf (chk_null, mk (TConst (TString("null",false))) com.basic.tstring pos, Some to_str)) com.basic.tstring pos
 			else
 				to_str
 		in
@@ -152,7 +152,7 @@ let api_inline ctx c field params p = match c.cl_path, field, params with
 		let typeof t =
 			let tof = mk_local ctx "__typeof__" (tfun [o.etype] tstring) p in
 			let tof = mk (TCall (tof, [o])) tstring p in
-			mk (TBinop (Ast.OpEq, tof, (mk (TConst (TString t)) tstring p))) tbool p
+			mk (TBinop (Ast.OpEq, tof, (mk (TConst (TString(t,false))) tstring p))) tbool p
 		in
 
 		(match t.eexpr with
@@ -653,10 +653,10 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 
 (* Same as type_inline, but modifies the function body to add field inits *)
 and type_inline_ctor ctx c cf tf ethis el po =
-	let field_inits = 
+	let field_inits =
 		let cparams = List.map snd c.cl_params in
 		let ethis = mk (TConst TThis) (TInst (c,cparams)) c.cl_pos in
-		let el = List.fold_left (fun acc cf -> 
+		let el = List.fold_left (fun acc cf ->
 			match cf.cf_kind,cf.cf_expr with
 			| Var _,Some e ->
 				let lhs = mk (TField(ethis,FInstance (c,cparams,cf))) cf.cf_type e.epos in
@@ -1126,8 +1126,8 @@ let rec make_constant_expression ctx ?(concat_strings=false) e =
 	match e.eexpr with
 	| TConst _ -> Some e
 	| TBinop ((OpAdd|OpSub|OpMult|OpDiv|OpMod|OpShl|OpShr|OpUShr|OpOr|OpAnd|OpXor) as op,e1,e2) -> (match make_constant_expression ctx e1,make_constant_expression ctx e2 with
-		| Some ({eexpr = TConst (TString s1)}), Some ({eexpr = TConst (TString s2)}) when concat_strings ->
-			Some (mk (TConst (TString (s1 ^ s2))) ctx.com.basic.tstring (punion e1.epos e2.epos))
+		| Some ({eexpr = TConst (TString(s1,single1))}), Some ({eexpr = TConst (TString(s2,single2))}) when concat_strings ->
+			Some (mk (TConst (TString (s1 ^ s2,single1 || single2))) ctx.com.basic.tstring (punion e1.epos e2.epos))
 		| Some e1, Some e2 -> Some (mk (TBinop(op, e1, e2)) e.etype e.epos)
 		| _ -> None)
 	| TUnop((Neg | NegBits) as op,Prefix,e1) -> (match make_constant_expression ctx e1 with

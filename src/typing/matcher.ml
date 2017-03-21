@@ -109,7 +109,7 @@ module Constructor = struct
 			if Meta.has Meta.FakeEnum en.e_meta then begin
 				let e_mt = !type_module_type_ref ctx (TEnumDecl en) None p in
  				mk (TField(e_mt,FEnum(en,ef))) ef.ef_type p
- 			end else if match_debug then mk (TConst (TString ef.ef_name)) ctx.t.tstring p
+ 			end else if match_debug then mk (TConst (TString(ef.ef_name,false))) ctx.t.tstring p
 			else mk (TConst (TInt (Int32.of_int ef.ef_index))) ctx.t.tint p
 		| ConConst ct -> Codegen.ExprBuilder.make_const_texpr ctx.com ct p
 		| ConArray i -> Codegen.ExprBuilder.make_int ctx.com i p
@@ -1260,7 +1260,7 @@ module TexprConverter = struct
 		in
 		let mk_name_call e =
 			if not ctx.in_macro && not ctx.com.display.DisplayMode.dms_full_typing then
-				mk (TConst (TString "")) ctx.t.tstring e.epos
+				mk (TConst (TString("",false))) ctx.t.tstring e.epos
 			else
 				let cf = PMap.find "enumConstructor" c_type.cl_statics in
 				make_static_call ctx c_type cf (fun t -> t) [e] com.basic.tstring e.epos

@@ -1297,7 +1297,7 @@ let configure gen =
 								| TType( { t_path = ([], "Single") }, [] ) -> write w "f"
 								| _ -> ()
 							*)
-						| TString s ->
+						| TString(s,_) ->
 							write w "\"";
 							write w (escape s);
 							write w "\""
@@ -1402,9 +1402,9 @@ let configure gen =
 					write w " as ";
 					write w (t_s e.etype);
 					write w " )";
-				| TCall ({ eexpr = TLocal( { v_name = "__cs__" } ) }, [ { eexpr = TConst(TString(s)) } ] ) ->
+				| TCall ({ eexpr = TLocal( { v_name = "__cs__" } ) }, [ { eexpr = TConst(TString(s,_)) } ] ) ->
 					write w s
-				| TCall ({ eexpr = TLocal( { v_name = "__cs__" } ) }, { eexpr = TConst(TString(s)) } :: tl ) ->
+				| TCall ({ eexpr = TLocal( { v_name = "__cs__" } ) }, { eexpr = TConst(TString(s,_)) } :: tl ) ->
 					Codegen.interpolate_code gen.gcon s tl (write w) (expr_s w) e.epos
 				| TCall ({ eexpr = TLocal( { v_name = "__stackalloc__" } ) }, [ e ] ) ->
 					write w "stackalloc byte[";
@@ -2796,7 +2796,7 @@ let configure gen =
 		let should_cast = match main_expr.etype with | TAbstract({ a_path = ([], "Float") }, []) -> false | _ -> true in
 		let infer = mk_static_field_access_infer runtime_cl fn_name field_expr.epos [] in
 		let first_args =
-			[ field_expr; { eexpr = TConst(TString field); etype = basic.tstring; epos = pos } ]
+			[ field_expr; { eexpr = TConst(TString(field,false)); etype = basic.tstring; epos = pos } ]
 			@ if is_some may_hash then [ { eexpr = TConst(TInt (get may_hash)); etype = basic.tint; epos = pos } ] else []
 		in
 		let args = first_args @ match is_float, may_set with
@@ -2828,7 +2828,7 @@ let configure gen =
 		in
 
 		let call_args =
-			[field_expr; { field_expr with eexpr = TConst(TString field); etype = basic.tstring } ]
+			[field_expr; { field_expr with eexpr = TConst(TString(field,false)); etype = basic.tstring } ]
 				@ hash_arg
 				@ [ arr_call ]
 		in
@@ -3173,7 +3173,7 @@ let configure gen =
 		let cf = PMap.find "content" res.cl_statics in
 		let res = ref [] in
 		Hashtbl.iter (fun name v ->
-			res := { eexpr = TConst(TString name); etype = gen.gcon.basic.tstring; epos = null_pos } :: !res;
+			res := { eexpr = TConst(TString(name,false)); etype = gen.gcon.basic.tstring; epos = null_pos } :: !res;
 		) gen.gcon.resources;
 		cf.cf_expr <- Some ({ eexpr = TArrayDecl(!res); etype = gen.gcon.basic.tarray gen.gcon.basic.tstring; epos = null_pos })
 	with | Not_found -> ());
@@ -3216,7 +3216,7 @@ let configure gen =
 					let add = mk_static_field_access_infer flookup_cl "addFields" c.cl_pos [] in
 					let expr = { eexpr = TCall(add, [
 						mk_nativearray_decl gen basic.tint (List.map (fun (i,s) -> { eexpr = TConst(TInt (i)); etype = basic.tint; epos = c.cl_pos }) all) c.cl_pos;
-						mk_nativearray_decl gen basic.tstring (List.map (fun (i,s) -> { eexpr = TConst(TString (s)); etype = basic.tstring; epos = c.cl_pos }) all) c.cl_pos;
+						mk_nativearray_decl gen basic.tstring (List.map (fun (i,s) -> { eexpr = TConst(TString(s,false)); etype = basic.tstring; epos = c.cl_pos }) all) c.cl_pos;
 					]); etype = basic.tvoid; epos = c.cl_pos } in
 					match c.cl_init with
 						| None -> c.cl_init <- Some expr
@@ -3233,7 +3233,7 @@ let configure gen =
 		let fields = PMap.find "fields" cl.cl_statics in
 
 		field_ids.cf_expr <- Some (mk_nativearray_decl gen basic.tint (List.map (fun (i,s) -> { eexpr = TConst(TInt (i)); etype = basic.tint; epos = field_ids.cf_pos }) hashes) field_ids.cf_pos);
-		fields.cf_expr <- Some (mk_nativearray_decl gen basic.tstring (List.map (fun (i,s) -> { eexpr = TConst(TString s); etype = basic.tstring; epos = fields.cf_pos }) hashes) fields.cf_pos);
+		fields.cf_expr <- Some (mk_nativearray_decl gen basic.tstring (List.map (fun (i,s) -> { eexpr = TConst(TString(s,false)); etype = basic.tstring; epos = fields.cf_pos }) hashes) fields.cf_pos);
 
 	with | Not_found ->
 		gen.gcon.error "Fields 'fieldIds' and 'fields' were not found in class haxe.lang.FieldLookup" flookup_cl.cl_pos

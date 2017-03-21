@@ -473,7 +473,7 @@ and expr dce e =
 		check_and_add_feature dce "has_anon_trace";
 		List.iter (fun (_,e) -> expr dce e) v;
 		expr dce p;
-	| TCall ({eexpr = TLocal ({v_name = "__define_feature__"})},[{eexpr = TConst (TString ft)};e]) ->
+	| TCall ({eexpr = TLocal ({v_name = "__define_feature__"})},[{eexpr = TConst (TString(ft,_))};e]) ->
 		Hashtbl.replace dce.curclass.cl_module.m_extra.m_features ft true;
 		check_feature dce ft;
 		expr dce e;

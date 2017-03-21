@@ -2311,7 +2311,7 @@ struct
 				change_expr e (run fexpr) (field_name f) None true
 			| TCall(
 				{ eexpr = TField(_, FStatic({ cl_path = ([], "Reflect") }, { cf_name = "field" })) } ,
-					[obj; { eexpr = TConst(TString(field)) }]
+					[obj; { eexpr = TConst(TString(field,false)) }]
 				) ->
 				let t = match gen.greal_type obj.etype with
 					| TDynamic _ | TAnon _ | TMono _ -> t_dynamic
@@ -2320,7 +2320,7 @@ struct
 				change_expr (mk_field_access gen { obj with etype = t } field obj.epos) (run obj) field None false
 			| TCall(
 				{ eexpr = TField(_, FStatic({ cl_path = ([], "Reflect") }, { cf_name = "setField" } )) },
-					[obj; { eexpr = TConst(TString(field)) }; evalue]
+					[obj; { eexpr = TConst(TString(field,false)) }; evalue]
 				) ->
 				change_expr (mk_field_access gen obj field obj.epos) (run obj) field (Some (run evalue)) false
 			| TBinop(OpAssign, ({eexpr = TField(fexpr, f)}), evalue) when is_dynamic e fexpr (f) ->
@@ -7200,7 +7200,7 @@ struct
 			let sort_fn (e1,_) (e2,_) =
 				match e1.eexpr, e2.eexpr with
 					| TConst(TInt i1), TConst(TInt i2) -> compare i1 i2
-					| TConst(TString s1), TConst(TString s2) -> compare s1 s2
+					| TConst(TString(s1,_)), TConst(TString(s2,_)) -> compare s1 s2
 					| _ -> assert false
 			in
 
@@ -8343,7 +8343,7 @@ struct
 			) en.e_names in
 			let constructs_cf = mk_class_field "__hx_constructs" (gen.gclasses.nativearray basic.tstring) true pos (Var { v_read = AccNormal; v_write = AccNever }) [] in
 			constructs_cf.cf_meta <- [Meta.ReadOnly,[],pos];
-			constructs_cf.cf_expr <- Some (mk_nativearray_decl gen basic.tstring (List.map (fun s -> { eexpr = TConst(TString s); etype = basic.tstring; epos = pos }) en.e_names) pos);
+			constructs_cf.cf_expr <- Some (mk_nativearray_decl gen basic.tstring (List.map (fun s -> { eexpr = TConst(TString(s,false)); etype = basic.tstring; epos = pos }) en.e_names) pos);
 
 			cl.cl_ordered_statics <- constructs_cf :: cfs @ cl.cl_ordered_statics ;
 			cl.cl_statics <- PMap.add "__hx_constructs" constructs_cf cl.cl_statics;
@@ -9273,8 +9273,8 @@ struct
 		match opt with
 		| None | Some TNull ->
 			(var,opt)
-		| Some (TString str) ->
-			block := Codegen.set_default gen.gcon var (TString str) pos :: !block;
+		| Some (TString(str,b)) ->
+			block := Codegen.set_default gen.gcon var (TString(str,b)) pos :: !block;
 			(var, opt)
 		| Some const ->
 			let basic = gen.gcon.basic in

@@ -198,11 +198,11 @@ module Transformer = struct
 			e
 
 	let dynamic_field_read e s t =
-		let e = Utils.mk_static_call_2 ((!c_reflect)()) "field" [e;mk (TConst (TString s)) !t_string e.epos] e.epos in
+		let e = Utils.mk_static_call_2 ((!c_reflect)()) "field" [e;mk (TConst (TString(s,false))) !t_string e.epos] e.epos in
 		{ e with etype = t }
 
 	let dynamic_field_write e1 s e2 =
-		Utils.mk_static_call_2 ((!c_reflect)()) "setField" [e1;mk (TConst (TString s)) !t_string e1.epos;e2] e1.epos
+		Utils.mk_static_call_2 ((!c_reflect)()) "setField" [e1;mk (TConst (TString(s,false))) !t_string e1.epos;e2] e1.epos
 
 	let dynamic_field_read_write next_id e1 s op e2 t =
 		let id = next_id() in
@@ -409,7 +409,7 @@ module Transformer = struct
 		List.iter (fun (el,e) ->
 			List.iter (fun es ->
 				match es.eexpr with
-				| TConst (TString s) ->
+				| TConst (TString(s,_)) ->
 					let l = UTF8.length s in
 					let sl = try
 						Hashtbl.find length_map l
@@ -1066,7 +1066,7 @@ module Printer = struct
 		| TNull -> "None"
 		| TBool(true) -> "True"
 		| TBool(false) -> "False"
-		| TString(s) -> print_string s
+		| TString(s,_) -> print_string s
 		| TInt(i) -> Int32.to_string i
 		| TFloat s -> s
 		| TSuper -> "super"
@@ -1181,7 +1181,7 @@ module Printer = struct
 			(match id with
 			| "Std.string" -> true
 			| _ -> false)
-		| TConst (TString s) -> true
+		| TConst (TString(s,_)) -> true
 		| _ -> false
 
 	and print_expr pctx e =
@@ -1216,7 +1216,7 @@ module Printer = struct
 				print_expr pctx { e with eexpr = TBinop(op, e1, { e2 with eexpr = TParenthesis(e2) })}
 			| TBinop(OpEq,{eexpr = TCall({eexpr = TLocal {v_name = "__typeof__"}},[e1])},e2) ->
 				begin match e2.eexpr with
-					| TConst(TString s) ->
+					| TConst(TString(s,_)) ->
 						begin match s with
 							| "string" -> Printf.sprintf "Std._hx_is(%s, str)" (print_expr pctx e1)
 							| "boolean" -> Printf.sprintf "Std._hx_is(%s, bool)" (print_expr pctx e1)
@@ -1518,7 +1518,7 @@ module Printer = struct
 			| "super",_ ->
 				let s_el = (print_call_args pctx e1 el) in
 				Printf.sprintf "super().__init__(%s)" s_el
-			| ("python_Syntax._pythonCode"),[({ eexpr = TConst (TString code) } as ecode); {eexpr = TArrayDecl tl}] ->
+			| ("python_Syntax._pythonCode"),[({ eexpr = TConst (TString(code,_)) } as ecode); {eexpr = TArrayDecl tl}] ->
 				let exprs = Array.of_list tl in
 				let i = ref 0 in
 				let err msg =
@@ -1569,7 +1569,7 @@ module Printer = struct
 				"*" ^ (print_expr pctx e1)
 			| "python_Syntax.call" ,e1 :: [{eexpr = TArrayDecl el}]->
 				Printf.sprintf "%s(%s)" (print_expr pctx e1) (print_exprs pctx ", " el)
-			| "python_Syntax.field",[e1;{eexpr = TConst(TString id)}] ->
+			| "python_Syntax.field",[e1;{eexpr = TConst(TString(id,_))}] ->
 				Printf.sprintf "%s.%s" (print_expr pctx e1) id
 			| "python_Syntax._tuple", [{eexpr = TArrayDecl el}] ->
 				(match el with
@@ -1587,7 +1587,7 @@ module Printer = struct
 				Printf.sprintf "(%s in %s)" (print_expr pctx e1) (print_expr pctx e2)
 			| "python_Syntax.delete",[e1] ->
 				Printf.sprintf "del %s" (print_expr pctx e1)
-			| "python_Syntax.binop",[e0;{eexpr = TConst(TString id)};e2] ->
+			| "python_Syntax.binop",[e0;{eexpr = TConst(TString(id,_))};e2] ->
 				Printf.sprintf "(%s %s %s)" (print_expr pctx e0) id (print_expr pctx e2)
 			| "python_Syntax.assign",[e0;e1] ->
 				Printf.sprintf "%s = %s" (print_expr pctx e0) (print_expr pctx e1)

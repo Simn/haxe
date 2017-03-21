@@ -228,8 +228,8 @@ let optimize_binop e op e1 e2 =
 		| OpLt -> ebool (<)
 		| OpLte -> ebool (<=)
 		| _ -> e)
-	| TConst (TString ""),TConst (TString s) | TConst (TString s),TConst (TString "") when op = OpAdd ->
-		{e with eexpr = TConst (TString s)}
+	| TConst (TString("",_)),TConst (TString(s,single)) | TConst (TString(s,single)),TConst (TString("",_)) when op = OpAdd ->
+		{e with eexpr = TConst (TString(s,single))}
 	| TConst (TBool a), TConst (TBool b) ->
 		let ebool f =
 			{ e with eexpr = TConst (TBool (f a b)) }

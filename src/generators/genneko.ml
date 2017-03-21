@@ -173,7 +173,7 @@ let gen_constant ctx pe c =
 			if ctx.version < 2 then abort "This integer is too big to be compiled to a Neko 31-bit integer. Please use a Float instead" pe;
 			(EConst (Int32 i),p))
 	| TFloat f -> (EConst (Float f),p)
-	| TString s -> call p (field p (ident p "String") "new") [gen_big_string ctx p s]
+	| TString(s,_) -> call p (field p (ident p "String") "new") [gen_big_string ctx p s]
 	| TBool b -> (EConst (if b then True else False),p)
 	| TNull -> null p
 	| TThis -> this p
@@ -201,7 +201,7 @@ and gen_call ctx p e el =
 		]
 	| TLocal { v_name = "__resources__" }, [] ->
 		call p (builtin p "array") (Hashtbl.fold (fun name data acc ->
-			(EObject [("name",gen_constant ctx e.epos (TString name));("data",gen_big_string ctx p data)],p) :: acc
+			(EObject [("name",gen_constant ctx e.epos (TString(name,false)));("data",gen_big_string ctx p data)],p) :: acc
 		) ctx.com.resources [])
 	| TField ({ eexpr = TConst TSuper; etype = t },f) , _ ->
 		let c = (match follow t with TInst (c,_) -> c | _ -> assert false) in
@@ -405,7 +405,7 @@ let gen_method ctx p c acc =
 		((c.cf_name, null p) :: acc)
 	| Some e ->
 		match e.eexpr with
-		| TCall ({ eexpr = TField (_,FStatic ({cl_path=["neko"],"Lib"},{cf_name="load" | "loadLazy" as load})) },[{ eexpr = TConst (TString m) };{ eexpr = TConst (TString f) };{ eexpr = TConst (TInt n) }]) ->
+		| TCall ({ eexpr = TField (_,FStatic ({cl_path=["neko"],"Lib"},{cf_name="load" | "loadLazy" as load})) },[{ eexpr = TConst (TString(m,_)) };{ eexpr = TConst (TString(f,_)) };{ eexpr = TConst (TInt n) }]) ->
 			let p = pos ctx e.epos in
 			let e = call p (EField (builtin p "loader","loadprim"),p) [(EBinop ("+",(EBinop ("+",str p m,str p "@"),p),str p f),p); (EConst (Int (Int32.to_int n)),p)] in
 			let e = (if load = "load" then e else (ETry (e,"@e",call p (ident p "@lazy_error") [ident p "@e"]),p)) in
@@ -621,10 +621,10 @@ let gen_name ctx acc t =
 	| TEnumDecl e ->
 		let p = pos ctx e.e_pos in
 		let name = fst e.e_path @ [snd e.e_path] in
-		let arr = call p (field p (ident p "Array") "new1") [array p (List.map (fun n -> gen_constant ctx e.e_pos (TString n)) name); int p (List.length name)] in
+		let arr = call p (field p (ident p "Array") "new1") [array p (List.map (fun n -> gen_constant ctx e.e_pos (TString(n,false))) name); int p (List.length name)] in
 		let path = gen_type_path p e.e_path in
 		let setname = (EBinop ("=",field p path "__ename__",arr),p) in
-		let arr = call p (field p (ident p "Array") "new1") [array p (List.map (fun n -> gen_constant ctx e.e_pos (TString n)) e.e_names); int p (List.length e.e_names)] in
+		let arr = call p (field p (ident p "Array") "new1") [array p (List.map (fun n -> gen_constant ctx e.e_pos (TString(n,false))) e.e_names); int p (List.length e.e_names)] in
 		let setconstrs = (EBinop ("=", field p path "__constructs__", arr),p) in
 		let meta = (match Codegen.build_metadata ctx.com (TEnumDecl e) with
 			| None -> []
@@ -642,7 +642,7 @@ let gen_name ctx acc t =
 		else
 			let p = pos ctx c.cl_pos in
 			let name = fst c.cl_path @ [snd c.cl_path] in
-			let arr = call p (field p (ident p "Array") "new1") [array p (List.map (fun n -> gen_constant ctx c.cl_pos (TString n)) name); int p (List.length name)] in
+			let arr = call p (field p (ident p "Array") "new1") [array p (List.map (fun n -> gen_constant ctx c.cl_pos (TString(n,false))) name); int p (List.length name)] in
 			(EBinop ("=",field p (gen_type_path p c.cl_path) "__name__",arr),p) ::
 			(match c.cl_implements with
 			| [] -> acc

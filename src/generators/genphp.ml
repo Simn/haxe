@@ -245,10 +245,10 @@ let to_string_null ctx e =
 
 let as_string_expr ctx e =	match e.eexpr with
 	| TConst (TNull) ->  to_string ctx e
-	| TConst (TString s) -> e
+	| TConst (TString(s,_)) -> e
 	| TBinop (op,_,_) when (is_string_expr e)-> e
 	| TCall ({eexpr = TField({eexpr = TTypeExpr(TClassDecl {cl_path = ([],"Std")})},FStatic(c,f) )}, [_]) when (f.cf_name="string") -> e
-	| TCall ({eexpr = TLocal _}, [{eexpr = TConst (TString ("_hx_string_rec" | "_hx_str_or_null"))}]) -> e
+	| TCall ({eexpr = TLocal _}, [{eexpr = TConst (TString (("_hx_string_rec" | "_hx_str_or_null"),_))}]) -> e
 	| _ when not (is_string_expr e) -> to_string ctx e
 	| _ -> to_string_null ctx e
 
@@ -484,7 +484,7 @@ let this ctx =
 let gen_constant ctx p = function
 	| TInt i -> print ctx "%ld" i
 	| TFloat s -> spr ctx s
-	| TString s ->
+	| TString(s,_) ->
 		print ctx "\"%s\"" (escape_bin s)
 	| TBool b -> spr ctx (if b then "true" else "false")
 	| TNull -> spr ctx "null"
@@ -568,7 +568,7 @@ and gen_call ctx e el =
 			concat ctx "," (gen_value ctx) params;
 			spr ctx ")";
 		);
-	| TLocal { v_name = "__set__" }, { eexpr = TConst (TString code) } :: el ->
+	| TLocal { v_name = "__set__" }, { eexpr = TConst (TString(code,_)) } :: el ->
 		print ctx "$%s" code;
 		genargs el;
 	| TLocal { v_name = "__set__" }, e :: el ->
@@ -580,7 +580,7 @@ and gen_call ctx e el =
 		gen_value ctx f;
 		spr ctx "}";
 		genargs el;
-	| TLocal { v_name = "__field__" }, e :: ({ eexpr = TConst (TString code) } :: el) ->
+	| TLocal { v_name = "__field__" }, e :: ({ eexpr = TConst (TString(code,_)) } :: el) ->
 		gen_value ctx e;
 		spr ctx "->";
 		spr ctx code;
@@ -596,23 +596,23 @@ and gen_call ctx e el =
 			print ctx "\"%s\"" prefix
 		| None ->
 			spr ctx "null")
-	| TLocal { v_name = "__var__" }, { eexpr = TConst (TString code) } :: el ->
+	| TLocal { v_name = "__var__" }, { eexpr = TConst (TString(code,_)) } :: el ->
 		print ctx "$%s" code;
 		gen_array_args ctx el;
 	| TLocal { v_name = "__var__" }, e :: el ->
 		gen_value ctx e;
 		gen_array_args ctx el;
-	| TLocal { v_name = "__call__" }, { eexpr = TConst (TString code) } :: el ->
+	| TLocal { v_name = "__call__" }, { eexpr = TConst (TString(code,_)) } :: el ->
 		spr ctx code;
 		spr ctx "(";
 		concat ctx ", " (gen_value ctx) el;
 		spr ctx ")";
-	| TLocal { v_name = "__php__" }, [{ eexpr = TConst (TString code) }] ->
+	| TLocal { v_name = "__php__" }, [{ eexpr = TConst (TString(code,_)) }] ->
 		(*--php-prefix*)
 		spr ctx (prefix_init_replace ctx.com code)
-	| TLocal { v_name = "__php__" }, { eexpr = TConst (TString code); epos = p } :: tl ->
+	| TLocal { v_name = "__php__" }, { eexpr = TConst (TString(code,_)); epos = p } :: tl ->
 		Codegen.interpolate_code ctx.com code tl (spr ctx) (gen_expr ctx) p
-	| TLocal { v_name = "__instanceof__" },  [e1;{ eexpr = TConst (TString t) }] ->
+	| TLocal { v_name = "__instanceof__" },  [e1;{ eexpr = TConst (TString(t,_)) }] ->
 		gen_value ctx e1;
 		print ctx " instanceof %s" t;
 	| TLocal { v_name = "__physeq__" },  [e1;e2] ->

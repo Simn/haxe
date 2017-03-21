@@ -50,7 +50,7 @@ module Ssa = struct
 		let p = bb.bb_pos in
 		let ev = mk (TLocal v) v.v_type p in
 		let el = List.map (fun _ -> ev) bb.bb_incoming in
-		let e_phi = mk (TConst (TString "phi")) t_dynamic p in
+		let e_phi = mk (TConst (TString("phi",false))) t_dynamic p in
 		let ec = mk (TCall(e_phi,el)) t_dynamic p in
 		let e = mk (TBinop(OpAssign,ev,ec)) t_dynamic p in
 		DynArray.add bb.bb_phi e
@@ -117,7 +117,7 @@ module Ssa = struct
 		let bb = edge.cfg_to in
 		let rec loop i e =
 			match e.eexpr with
-			| TBinop(OpAssign,({eexpr = TLocal v0} as e1), ({eexpr = TCall({eexpr = TConst (TString "phi")} as ephi,el)} as ecall)) ->
+			| TBinop(OpAssign,({eexpr = TLocal v0} as e1), ({eexpr = TCall({eexpr = TConst (TString("phi",_))} as ephi,el)} as ecall)) ->
 				let el = List.map2 (fun e inc ->
 					let bb_pred = inc.cfg_from in
 					if bb_pred != edge.cfg_from then
@@ -165,7 +165,7 @@ module Ssa = struct
 				let e2 = (loop is_phi i) e2 in
 				let v' = write_var v is_phi i in
 				{e with eexpr = TBinop(OpAssign,{e1 with eexpr = TLocal v'},e2)};
-			| TCall({eexpr = TConst (TString "phi")},_) ->
+			| TCall({eexpr = TConst (TString("phi",_))},_) ->
 				e
 			| _ ->
 				Type.map_expr (loop is_phi i) e
@@ -246,7 +246,7 @@ module DataFlow (M : DataFlowApi) = struct
 		in
 		let visit_assignment bb v e =
 			match e.eexpr with
-			| TCall({eexpr = TConst (TString "phi")},el) ->
+			| TCall({eexpr = TConst (TString("phi",_))},el) ->
 				set_lattice_cell v (visit_phi bb v el)
 			| _ ->
 				if List.exists (fun edge -> has_flag edge M.flag) bb.bb_incoming then
@@ -299,7 +299,7 @@ module DataFlow (M : DataFlowApi) = struct
 		let visit_phis bb =
 			DynArray.iter (fun e ->
 				match e.eexpr with
-					| TBinop(OpAssign,{eexpr = TLocal v},{eexpr = TCall({eexpr = TConst (TString "phi")},el)}) ->
+					| TBinop(OpAssign,{eexpr = TLocal v},{eexpr = TCall({eexpr = TConst (TString("phi",_))},el)}) ->
 						set_lattice_cell v (visit_phi bb v el)
 					| _ -> assert false
 			) bb.bb_phi
@@ -592,7 +592,7 @@ module LocalDce = struct
 			| TConst _ | TLocal _ | TTypeExpr _ | TFunction _ -> ()
 			| TCall ({ eexpr = TField(_,FStatic({ cl_path = ([],"Std") },{ cf_name = "string" })) },args) -> Type.iter loop e
 			| TCall ({eexpr = TField(_,FEnum _)},_) -> Type.iter loop e
-			| TCall ({eexpr = TConst (TString ("phi" | "fun"))},_) -> ()
+			| TCall ({eexpr = TConst (TString (("phi" | "fun"),_))},_) -> ()
 			| TCall({eexpr = TField(e1,fa)},el) when PurityState.is_pure_field_access fa -> loop e1; List.iter loop el
 			| TNew _ | TCall _ | TBinop ((OpAssignOp _ | OpAssign),_,_) | TUnop ((Increment|Decrement),_,_) -> raise Exit
 			| TReturn _ | TBreak | TContinue | TThrow _ | TCast (_,Some _) -> raise Exit

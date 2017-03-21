@@ -1093,7 +1093,7 @@ and encode_tconst c =
 	let tag, pl = match c with
 		| TInt i -> 0,[vint32 i]
 		| TFloat f -> 1,[enc_string f]
-		| TString s -> 2,[enc_string s]
+		| TString(s,b) -> 2,[enc_string s;enc_bool b]
 		| TBool b -> 3,[vbool b]
 		| TNull -> 4,[]
 		| TThis -> 5,[]
@@ -1220,7 +1220,7 @@ let decode_tconst c =
 	match decode_enum c with
 	| 0, [s] -> TInt (dec_i32 s)
 	| 1, [s] -> TFloat (dec_string s)
-	| 2, [s] -> TString (dec_string s)
+	| 2, [s;b] -> TString (dec_string s,dec_opt_bool b)
 	| 3, [s] -> TBool (dec_bool s)
 	| 4, [] -> TNull
 	| 5, [] -> TThis
@@ -1439,7 +1439,7 @@ let rec make_const e =
 		(match c with
 		| TInt i -> vint32 i
 		| TFloat s -> vfloat (float_of_string s)
-		| TString s -> enc_string s
+		| TString(s,b) -> enc_string s (* TODO FMTSTRING *)
 		| TBool b -> vbool b
 		| TNull -> vnull
 		| TThis | TSuper -> raise Exit)

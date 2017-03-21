@@ -1284,7 +1284,7 @@ let is_matching_interface_type t0 t1 =
 let default_value_string = function
    | TInt i -> Printf.sprintf "%ld" i
    | TFloat float_as_string -> "((Float)" ^ float_as_string ^ ")"
-   | TString s -> str s
+   | TString(s,_) -> str s
    | TBool b -> (if b then "true" else "false")
    | TNull -> "null()"
    | _ -> "/* Hmmm */"
@@ -1698,7 +1698,7 @@ let cpp_const_type cval = match cval with
    | TInt i -> CppInt(i) , TCppScalar("int")
    | TBool b -> CppBool(b) , TCppScalar("bool")
    | TFloat f -> CppFloat(f) , TCppScalar("Float")
-   | TString s -> CppString(s) , TCppString
+   | TString(s,_) -> CppString(s) , TCppString
    | _ -> (* TNull, TThis & TSuper should already be handled *)
       CppNull, TCppNull
 ;;
@@ -1741,7 +1741,7 @@ let rec const_float_of expr =
 
 let rec const_string_of expr =
    match expr.eexpr with
-   | TConst TString x -> x
+   | TConst TString(x,_) -> x
    | TParenthesis e -> const_string_of e
    | _ -> raise Not_found
 ;;
@@ -2602,8 +2602,8 @@ let retype_expression ctx request_type function_args function_type expression_tr
 
          | TCall( {eexpr = TLocal { v_name = "__cpp__" }}, arg_list ) ->
             let  cppExpr = match arg_list with
-            | [{ eexpr = TConst (TString code) }] -> CppCode(code, [])
-            | ({ eexpr = TConst (TString code) }) :: remaining ->
+            | [{ eexpr = TConst (TString(code,_)) }] -> CppCode(code, [])
+            | ({ eexpr = TConst (TString(code,_)) }) :: remaining ->
                   let retypedArgs = List.map (fun arg -> retype (TCppCode(cpp_type_of arg.etype)) arg) remaining in
                   CppCode(code, retypedArgs)
             | _ -> abort "__cpp__'s first argument must be a string" expr.epos;
@@ -2909,10 +2909,10 @@ let retype_expression ctx request_type function_args function_type expression_tr
             CppBlock(cppExprs, List.rev !local_closures, !gc_stack ), TCppVoid
 
          | TObjectDecl (
-            ("fileName" , { eexpr = (TConst (TString file)) }) ::
+            ("fileName" , { eexpr = (TConst (TString(file,_))) }) ::
                ("lineNumber" , { eexpr = (TConst (TInt line)) }) ::
-                  ("className" , { eexpr = (TConst (TString class_name)) }) ::
-                     ("methodName", { eexpr = (TConst (TString meth)) }) :: [] ) ->
+                  ("className" , { eexpr = (TConst (TString(class_name,_))) }) ::
+                     ("methodName", { eexpr = (TConst (TString(meth,_))) }) :: [] ) ->
               CppPosition(file,line,class_name,meth), TCppDynamic
 
          | TObjectDecl el ->
@@ -7013,7 +7013,7 @@ class script_writer ctx filename asciiOut =
    method constText c = match c with
    | TInt i -> (this#op IaConstInt) ^ (Printf.sprintf "%ld " i)
    | TFloat f -> (this#op IaConstFloat) ^ (this#stringText f)
-   | TString s -> (this#op IaConstString) ^ (this#stringText s)
+   | TString(s,_) -> (this#op IaConstString) ^ (this#stringText s)
    | TBool true -> (this#op IaConstTrue)
    | TBool false -> (this#op IaConstFalse)
    | TNull -> (this#op IaConstNull)
@@ -7341,10 +7341,10 @@ class script_writer ctx filename asciiOut =
               this#checkCast return_type value false false;
          )
    | TObjectDecl (
-      ("fileName" , { eexpr = (TConst (TString file)) }) ::
+      ("fileName" , { eexpr = (TConst (TString(file,_))) }) ::
          ("lineNumber" , { eexpr = (TConst (TInt line)) }) ::
-            ("className" , { eexpr = (TConst (TString class_name)) }) ::
-               ("methodName", { eexpr = (TConst (TString meth)) }) :: [] ) ->
+            ("className" , { eexpr = (TConst (TString(class_name,_))) }) ::
+               ("methodName", { eexpr = (TConst (TString(meth,_))) }) :: [] ) ->
             this#write ( (this#op IaPosInfo) ^ (this#stringText file) ^ (Printf.sprintf "%ld" line) ^ " " ^
                         (this#stringText class_name) ^ " " ^  (this#stringText meth))
 
