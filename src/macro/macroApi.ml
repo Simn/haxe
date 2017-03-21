@@ -1571,9 +1571,6 @@ let macro_api ccom get_api =
 			let f = if dec_opt_bool b then Type.s_expr_pretty false "" false else Type.s_expr_ast true "" in
 			enc_string (f (Type.s_type (print_context())) (decode_texpr v))
 		);
-		(*"is_fmt_string", vfun1 (fun p ->
-			vbool (Lexer.is_fmt_string (decode_pos p))
-		);*) (* TODO FMTSTRING *)
 		"format_string", vfun2 (fun s p ->
 			encode_expr ((get_api()).format_string (dec_string s) (decode_pos p))
 		);
