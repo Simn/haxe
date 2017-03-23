@@ -51,6 +51,29 @@ open Globals
 
 exception Abort
 
+let create_api () =
+	let open Typecore in
+	let api = {
+		(* Macro context *)
+		do_macro = MacroContext.type_macro;
+		(* Typeload *)
+		do_load_module = Typeload.load_module;
+		do_load_instance = Typeload.load_instance;
+		do_build_instance = Typeload.build_instance;
+		do_inherit = Typeload.on_inherit;
+		(* Optimizer *)
+		do_optimize = Optimizer.reduce_expression;
+		do_optimize_completion_expr = Optimizer.optimize_completion_expr;
+		do_make_constant_expression = Optimizer.make_constant_expression;
+		(* Typer *)
+		do_format_string = Typer.format_string;
+		do_finalize = Typer.finalize;
+		do_generate = Typer.generate;
+		do_create = Obj.magic;
+	} in
+	api.do_create <- Typer.create api;
+	api
+
 let executable_path() =
 	Extc.executable_path()
 
@@ -814,10 +837,10 @@ try
 		Common.log com ("Defines : " ^ (String.concat ";" (PMap.foldi (fun k v acc -> (match v with "1" -> k | _ -> k ^ "=" ^ v) :: acc) com.defines [])));
 		let t = Common.timer ["typing"] in
 		Typecore.type_expr_ref := (fun ctx e with_type -> Typer.type_expr ctx e with_type);
-		let tctx = Typer.create com in
+		let tctx = Typer.create (create_api()) com in
 		List.iter (MacroContext.call_init_macro tctx) (List.rev !config_macros);
 		List.iter (Typer.eval tctx) !evals;
-		List.iter (fun cpath -> ignore(tctx.Typecore.g.Typecore.do_load_module tctx cpath null_pos)) (List.rev !classes);
+		List.iter (fun cpath -> ignore(tctx.Typecore.g.Typecore.api.Typecore.do_load_module tctx cpath null_pos)) (List.rev !classes);
 		Typer.finalize tctx;
 		t();
 		if not ctx.com.display.dms_display && ctx.has_error then raise Abort;
@@ -926,7 +949,7 @@ with
 				| None ->
 					DisplayOutput.TypePathHandler.complete_type_path com p
 				| Some (c,cur_package) ->
-					DisplayOutput.TypePathHandler.complete_type_path_inner com p c cur_package is_import
+					DisplayOutput.TypePathHandler.complete_type_path_inner com (create_api()) p c cur_package is_import
 			end with Common.Abort(msg,p) ->
 				error ctx msg p;
 				None

@@ -827,7 +827,7 @@ let make_call ctx e params t p =
 				None
 		in
 		ignore(follow f.cf_type); (* force evaluation *)
-		let params = List.map (ctx.g.do_optimize ctx) params in
+		let params = List.map (ctx.g.api.do_optimize ctx) params in
 		let force_inline = is_forced_inline cl f in
 		(match f.cf_expr_unoptimized,f.cf_expr with
 		| Some fd,_
@@ -4191,7 +4191,7 @@ and build_call ctx acc el (with_type:with_type) p =
 		let ethis_f = ref (fun () -> ()) in
 		let f = (match ethis.eexpr with
 		| TTypeExpr (TClassDecl c) ->
-			(match ctx.g.do_macro ctx MExpr c.cl_path cf.cf_name el p with
+			(match ctx.g.api.do_macro ctx MExpr c.cl_path cf.cf_name el p with
 			| None -> (fun() -> type_expr ctx (EConst (Ident "null"),p) Value)
 			| Some (EMeta((Meta.MergeBlock,_,_),(EBlock el,_)),_) -> (fun () -> let e = type_block ctx el with_type p in mk (TMeta((Meta.MergeBlock,[],p), e)) e.etype e.epos)
 			| Some e -> (fun() -> type_expr ctx e with_type))
@@ -4203,7 +4203,7 @@ and build_call ctx acc el (with_type:with_type) p =
 					if PMap.mem cf.cf_name c.cl_fields then
 						let eparam,f = push_this ctx ethis in
 						ethis_f := f;
-						let e = match ctx.g.do_macro ctx MExpr c.cl_path cf.cf_name (eparam :: el) p with
+						let e = match ctx.g.api.do_macro ctx MExpr c.cl_path cf.cf_name (eparam :: el) p with
 							| None -> (fun() -> type_expr ctx (EConst (Ident "null"),p) Value)
 							| Some e -> (fun() -> type_expr ctx e Value)
 						in
@@ -4438,7 +4438,7 @@ let generate ctx =
 (* ---------------------------------------------------------------------- *)
 (* TYPER INITIALIZATION *)
 
-let rec create com =
+let rec create api com =
 	let ctx = {
 		com = com;
 		t = com.basic;
@@ -4458,15 +4458,7 @@ let rec create com =
 			get_build_infos = (fun() -> None);
 			std = null_module;
 			global_using = [];
-			do_inherit = Typeload.on_inherit;
-			do_create = create;
-			do_macro = MacroContext.type_macro;
-			do_load_module = Typeload.load_module;
-			do_optimize = Optimizer.reduce_expression;
-			do_build_instance = Typeload.build_instance;
-			do_format_string = format_string;
-			do_finalize = finalize;
-			do_generate = generate;
+			api = api;
 		};
 		m = {
 			curmod = null_module;

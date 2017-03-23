@@ -27,7 +27,7 @@ STATICLINK?=0
 
 # Configuration
 
-HAXE_DIRECTORIES=compiler context generators generators/gencommon macro optimization syntax typing display
+HAXE_DIRECTORIES=compiler data generators generators/gencommon macro optimization syntax typing display
 EXTLIB_LIBS=extlib extc neko javalib ziplib swflib xml-light ttflib ilib objsize pcre
 FINDLIB_LIBS=unix str
 
@@ -100,7 +100,7 @@ libs:
 
 copy_output_files:
 	mkdir -p _build
-	$(foreach dir,$(HAXE_DIRECTORIES:%=src/%),mkdir -p _build/$(dir) && rsync -u $(dir)/*.ml _build/$(dir) &&) true
+	$(foreach dir,$(HAXE_DIRECTORIES:%=src/%),mkdir -p _build/$(dir) && rsync --ignore-missing-args -u $(dir)/*.ml _build/$(dir) &&) true
 	sh compile.sh $(ADD_REVISION)
 ifneq ($(ADD_REVISION),0)
 	$(MAKE) -f Makefile.version_extra -s --no-print-directory ADD_REVISION=$(ADD_REVISION) BRANCH=$(BRANCH) COMMIT_SHA=$(COMMIT_SHA) COMMIT_DATE=$(COMMIT_DATE) > _build/src/compiler/version.ml

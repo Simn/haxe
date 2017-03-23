@@ -718,7 +718,7 @@ module Statistics = struct
 					None
 			in
 			let check_module path p =
-				let m = ctx.g.do_load_module ctx path p in
+				let m = ctx.g.api.do_load_module ctx path p in
 				m
 			in
 			let check_field c s p =
@@ -769,7 +769,7 @@ let explore_class_paths ctx class_paths recusive f_pack f_module f_type =
 							try
 								let name = String.sub file 0 (l - 3) in
 								let path = (List.rev pack,name) in
-								let md = ctx.g.do_load_module ctx path null_pos in
+								let md = ctx.g.api.do_load_module ctx path null_pos in
 								f_module md;
 								List.iter (fun mt -> f_type mt) md.m_types
 							with _ ->

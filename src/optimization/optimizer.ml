@@ -189,7 +189,7 @@ let api_inline ctx c field params p = match c.cl_path, field, params with
 				([platf],"NativeArray")
 			in
 
-			let m = ctx.g.do_load_module ctx mpath null_pos in
+			let m = ctx.g.api.do_load_module ctx mpath null_pos in
 			let main = List.find (function | TClassDecl _ | TAbstractDecl _ -> true | _ -> false) m.m_types in
 			let t = match follow edecl.etype, main with
 				| TInst({ cl_path = [],"Array" }, [t]), TClassDecl(cl) ->
@@ -653,10 +653,10 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 
 (* Same as type_inline, but modifies the function body to add field inits *)
 and type_inline_ctor ctx c cf tf ethis el po =
-	let field_inits = 
+	let field_inits =
 		let cparams = List.map snd c.cl_params in
 		let ethis = mk (TConst TThis) (TInst (c,cparams)) c.cl_pos in
-		let el = List.fold_left (fun acc cf -> 
+		let el = List.fold_left (fun acc cf ->
 			match cf.cf_kind,cf.cf_expr with
 			| Var _,Some e ->
 				let lhs = mk (TField(ethis,FInstance (c,cparams,cf))) cf.cf_type e.epos in

@@ -304,7 +304,7 @@ let apply_macro ctx mode path el p =
 		| meth :: name :: pack -> (List.rev pack,name), meth
 		| _ -> error "Invalid macro path" p
 	) in
-	ctx.g.do_macro ctx mode cpath meth el p
+	ctx.g.api.do_macro ctx mode cpath meth el p
 
 (** since load_type_def and load_instance are used in PASS2, they should not access the structure of a type **)
 
@@ -331,12 +331,12 @@ let rec load_type_def ctx p t =
 		Not_found ->
 			let next() =
 				let t, m = (try
-					t, ctx.g.do_load_module ctx (t.tpackage,t.tname) p
+					t, ctx.g.api.do_load_module ctx (t.tpackage,t.tname) p
 				with Error (Module_not_found _,p2) as e when p == p2 ->
 					match t.tpackage with
 					| "std" :: l ->
 						let t = { t with tpackage = l } in
-						t, ctx.g.do_load_module ctx (t.tpackage,t.tname) p
+						t, ctx.g.api.do_load_module ctx (t.tpackage,t.tname) p
 					| _ -> raise e
 				) in
 				let tpath = (t.tpackage,tname) in
@@ -403,7 +403,7 @@ let check_param_constraints ctx types t pl c p =
 			let ti = (match follow ti with
 				| TInst ({ cl_kind = KGeneric } as c,pl) ->
 					(* if we solve a generic contraint, let's substitute with the actual generic instance before unifying *)
-					let _,_, f = ctx.g.do_build_instance ctx (TClassDecl c) p in
+					let _,_, f = ctx.g.api.do_build_instance ctx (TClassDecl c) p in
 					f pl
 				| _ -> ti
 			) in
@@ -444,7 +444,7 @@ let rec load_instance ?(allow_display=false) ctx (t,pn) allow_no_params p =
 			| TClassDecl {cl_kind = KGenericBuild _} -> false,true
 			| _ -> false,false
 		in
-		let types , path , f = ctx.g.do_build_instance ctx mt p in
+		let types , path , f = ctx.g.api.do_build_instance ctx mt p in
 		let is_rest = is_generic_build && (match types with ["Rest",_] -> true | _ -> false) in
 		if allow_no_params && t.tparams = [] && not is_rest then begin
 			let pl = ref [] in
@@ -1018,7 +1018,7 @@ let type_function_arg_value ctx t c do_display =
 		| Some e ->
 			let p = pos e in
 			let e = if do_display then Display.ExprPreprocessing.process_expr ctx.com e else e in
-			let e = ctx.g.do_optimize ctx (type_expr ctx e (WithType t)) in
+			let e = ctx.g.api.do_optimize ctx (type_expr ctx e (WithType t)) in
 			unify ctx e.etype t p;
 			let rec loop e = match e.eexpr with
 				| TConst c -> Some c
@@ -1439,7 +1439,7 @@ module Inheritance = struct
 			| HImplements t -> Some(false,resolve_imports t)
 			| t -> None
 		) herits in
-		let herits = List.filter (ctx.g.do_inherit ctx c p) herits in
+		let herits = List.filter (ctx.g.api.do_inherit ctx c p) herits in
 		(* Pass 1: Check and set relations *)
 		let check_herit t is_extends =
 			if is_extends then begin
@@ -1580,7 +1580,7 @@ let type_function ctx args ret fmode f do_display p =
 		let e = Display.ExprPreprocessing.process_expr ctx.com e in
 		try
 			if Common.defined ctx.com Define.NoCOpt then raise Exit;
-			type_expr ctx (Optimizer.optimize_completion_expr e) NoValue
+			type_expr ctx (ctx.g.api.do_optimize_completion_expr e) NoValue
 		with
 		| Parser.TypePath (_,None,_) | Exit ->
 			type_expr ctx e NoValue
@@ -1671,7 +1671,7 @@ let load_core_class ctx c =
 			Common.define com2 Define.Sys;
 			if ctx.in_macro then Common.define com2 Define.Macro;
 			com2.class_path <- ctx.com.std_path;
-			let ctx2 = ctx.g.do_create com2 in
+			let ctx2 = ctx.g.api.do_create com2 in
 			ctx.g.core_api <- Some ctx2;
 			ctx2
 		| Some c ->
@@ -2112,7 +2112,7 @@ module ClassInitializer = struct
 		in
 		let force_macro () =
 			(* force macro system loading of this class in order to get completion *)
-			delay ctx PTypeField (fun() -> try ignore(ctx.g.do_macro ctx MDisplay c.cl_path cf.cf_name [] p) with Exit | Error _ -> ())
+			delay ctx PTypeField (fun() -> try ignore(ctx.g.api.do_macro ctx MDisplay c.cl_path cf.cf_name [] p) with Exit | Error _ -> ())
 		in
 		let handle_display_field () =
 			if fctx.is_macro && not ctx.in_macro then
@@ -2203,7 +2203,7 @@ module ClassInitializer = struct
 					let require_constant_expression e msg =
 						if ctx.com.display.dms_display && ctx.com.display.dms_error_policy <> EPCollect then
 							e
-						else match Optimizer.make_constant_expression ctx (maybe_run_analyzer e) with
+						else match ctx.g.api.do_make_constant_expression ctx (maybe_run_analyzer e) with
 						| Some e -> e
 						| None -> display_error ctx msg p; e
 					in
@@ -2222,7 +2222,7 @@ module ClassInitializer = struct
 					| Var v when not fctx.is_static ->
 						let e = if ctx.com.display.dms_display && ctx.com.display.dms_error_policy <> EPCollect then
 							e
-						else match Optimizer.make_constant_expression ctx (maybe_run_analyzer e) with
+						else match ctx.g.api.do_make_constant_expression ctx (maybe_run_analyzer e) with
 							| Some e -> e
 							| None ->
 								let rec has_this e = match e.eexpr with
@@ -2900,7 +2900,7 @@ let handle_path_display ctx path p =
 		| (IDKModule(sl,s),_),DMPosition ->
 			(* We assume that we want to go to the module file, not a specific type
 			   which might not even exist anyway. *)
-			let mt = ctx.g.do_load_module ctx (sl,s) p in
+			let mt = ctx.g.api.do_load_module ctx (sl,s) p in
 			let p = { pfile = mt.m_extra.m_file; pmin = 0; pmax = 0} in
 			raise (Display.DisplayPosition [p])
 		| (IDKModule(sl,s),_),_ ->
@@ -2911,7 +2911,7 @@ let handle_path_display ctx path p =
 		| (IDKSubType(sl,sm,st),_),_ ->
 			raise (Parser.TypePath(sl @ [sm],Some(st,false),true))
 		| ((IDKSubTypeField(sl,sm,st,sf) | IDKModuleField(sl,(sm as st),sf)),p),_ ->
-			let m = ctx.g.do_load_module ctx (sl,sm) p in
+			let m = ctx.g.api.do_load_module ctx (sl,sm) p in
 			List.iter (fun t -> match t with
 				| TClassDecl c when snd c.cl_path = st ->
 					ignore(c.cl_build());
@@ -2962,7 +2962,7 @@ let init_module_type ctx context_init do_init (decl,p) =
 		| (tname,p2) :: rest ->
 			let p1 = (match pack with [] -> p2 | (_,p1) :: _ -> p1) in
 			let p_type = punion p1 p2 in
-			let md = ctx.g.do_load_module ctx (List.map fst pack,tname) p_type in
+			let md = ctx.g.api.do_load_module ctx (List.map fst pack,tname) p_type in
 			let types = md.m_types in
 			let no_private (t,_) = not (t_infos t).mt_private in
 			let chk_private t p = if (t_infos t).mt_private then error "You can't import a private type" p in
@@ -2975,7 +2975,7 @@ let init_module_type ctx context_init do_init (decl,p) =
 			let rebind t name =
 				if not (name.[0] >= 'A' && name.[0] <= 'Z') then
 					error "Type aliases must start with an uppercase letter" p;
-				let _, _, f = ctx.g.do_build_instance ctx t p_type in
+				let _, _, f = ctx.g.api.do_build_instance ctx t p_type in
 				(* create a temp private typedef, does not register it in module *)
 				TTypeDecl {
 					t_path = (fst md.m_path @ ["_" ^ snd md.m_path],name);
@@ -3071,7 +3071,7 @@ let init_module_type ctx context_init do_init (decl,p) =
 		(* do the import first *)
 		let types = (match t.tsub with
 			| None ->
-				let md = ctx.g.do_load_module ctx (t.tpackage,t.tname) p in
+				let md = ctx.g.api.do_load_module ctx (t.tpackage,t.tname) p in
 				let types = List.filter (fun t -> not (t_infos t).mt_private) md.m_types in
 				ctx.m.module_types <- (List.map (fun t -> t,p) types) @ ctx.m.module_types;
 				types
@@ -3783,7 +3783,7 @@ let rec generic_substitute_type gctx t =
 	match t with
 	| TInst ({ cl_kind = KGeneric } as c2,tl2) ->
 		(* maybe loop, or generate cascading generics *)
-		let _, _, f = gctx.ctx.g.do_build_instance gctx.ctx (TClassDecl c2) gctx.p in
+		let _, _, f = gctx.ctx.g.api.do_build_instance gctx.ctx (TClassDecl c2) gctx.p in
 		let t = f (List.map (generic_substitute_type gctx) tl2) in
 		(match follow t,gctx.mg with TInst(c,_), Some m -> add_dependency m c.cl_module | _ -> ());
 		t
@@ -3807,7 +3807,7 @@ let generic_substitute_expr gctx e =
 	let rec build_expr e =
 		match e.eexpr with
 		| TField(e1, FInstance({cl_kind = KGeneric} as c,tl,cf)) ->
-			let _, _, f = gctx.ctx.g.do_build_instance gctx.ctx (TClassDecl c) gctx.p in
+			let _, _, f = gctx.ctx.g.api.do_build_instance gctx.ctx (TClassDecl c) gctx.p in
 			let t = f (List.map (generic_substitute_type gctx) tl) in
 			let fa = try
 				quick_field t cf.cf_name
@@ -4123,7 +4123,7 @@ let build_macro_type ctx pl p =
 			error "MacroType requires a single expression call parameter" p
 	) in
 	let old = ctx.ret in
-	let t = (match ctx.g.do_macro ctx MMacroType path field args p with
+	let t = (match ctx.g.api.do_macro ctx MMacroType path field args p with
 		| None -> mk_mono()
 		| Some _ -> ctx.ret
 	) in
@@ -4137,7 +4137,7 @@ let build_macro_build ctx c pl cfl p =
 	in
 	let old = ctx.ret,ctx.g.get_build_infos in
 	ctx.g.get_build_infos <- (fun() -> Some (TClassDecl c, pl, cfl));
-	let t = (match ctx.g.do_macro ctx MMacroType path field args p with
+	let t = (match ctx.g.api.do_macro ctx MMacroType path field args p with
 		| None -> mk_mono()
 		| Some _ -> ctx.ret
 	) in

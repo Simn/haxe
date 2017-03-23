@@ -81,16 +81,26 @@ type typer_globals = {
 	mutable get_build_infos : unit -> (module_type * t list * class_field list) option;
 	delayed_macros : (unit -> unit) DynArray.t;
 	mutable global_using : (tclass * pos) list;
-	(* api *)
-	do_inherit : typer -> Type.tclass -> pos -> (bool * placed_type_path) -> bool;
-	do_create : Common.context -> typer;
+	api : typing_api;
+}
+
+and typing_api = {
+	(* Macro context *)
 	do_macro : typer -> macro_mode -> path -> string -> expr list -> pos -> expr option;
+	(* Typeload *)
 	do_load_module : typer -> path -> pos -> module_def;
-	do_optimize : typer -> texpr -> texpr;
+	do_load_instance : typer -> (type_path * pos) -> bool -> pos -> t;
 	do_build_instance : typer -> module_type -> pos -> ((string * t) list * path * (t list -> t));
+	do_inherit : typer -> Type.tclass -> pos -> (bool * placed_type_path) -> bool;
+	(* Optimizer *)
+	do_optimize : typer -> texpr -> texpr;
+	do_optimize_completion_expr : expr -> expr;
+	do_make_constant_expression : typer -> ?concat_strings:bool -> texpr -> texpr option;
+	(* Typer *)
 	do_format_string : typer -> string -> pos -> Ast.expr;
 	do_finalize : typer -> unit;
 	do_generate : typer -> (texpr option * module_type list * module_def list);
+	mutable do_create : Common.context -> typer;
 }
 
 and typer = {
@@ -327,7 +337,7 @@ module AbstractCast = struct
 				| [e] ->
 					let e,f = push_this ctx e in
 					ctx.with_type_stack <- (WithType t) :: ctx.with_type_stack;
-					let e = match ctx.g.do_macro ctx MExpr c.cl_path cf.cf_name [e] p with
+					let e = match ctx.g.api.do_macro ctx MExpr c.cl_path cf.cf_name [e] p with
 						| Some e -> type_expr ctx e Value
 						| None ->  type_expr ctx (EConst (Ident "null"),p) Value
 					in

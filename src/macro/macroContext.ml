@@ -324,7 +324,7 @@ let make_macro_api ctx p =
 			!macro_enable_cache
 		);
 		MacroApi.format_string = (fun s p ->
-			ctx.g.do_format_string ctx s p
+			ctx.g.api.do_format_string ctx s p
 		);
 		MacroApi.cast_or_unify = (fun t e p ->
 			AbstractCast.cast_or_unify_raise ctx t e p
@@ -372,8 +372,8 @@ let rec init_macro_interp ctx mctx mint =
 and flush_macro_context mint ctx =
 	let t = macro_timer ctx ["flush"] in
 	let mctx = (match ctx.g.macros with None -> assert false | Some (_,mctx) -> mctx) in
-	ctx.g.do_finalize mctx;
-	let _, types, modules = ctx.g.do_generate mctx in
+	ctx.g.api.do_finalize mctx;
+	let _, types, modules = ctx.g.api.do_generate mctx in
 	mctx.com.types <- types;
 	mctx.com.Common.modules <- modules;
 	let check_reuse() =
@@ -471,7 +471,7 @@ let get_macro_context ctx p =
 		com2.defines <- PMap.foldi (fun k v acc -> if List.mem k to_remove then acc else PMap.add k v acc) com2.defines PMap.empty;
 		Common.define com2 Define.Macro;
 		Common.init_platform com2 !Globals.macro_platform;
-		let mctx = ctx.g.do_create com2 in
+		let mctx = ctx.g.api.do_create com2 in
 		mctx.is_display_file <- ctx.is_display_file;
 		create_macro_interp ctx mctx;
 		api, mctx
@@ -503,7 +503,7 @@ let load_macro ctx display cpath f p =
 		let cl, meth = (match mt with
 			| TClassDecl c ->
 				let t = macro_timer ctx ["finalize"] in
-				mctx.g.do_finalize mctx;
+				mctx.g.api.do_finalize mctx;
 				t();
 				c, (try PMap.find f c.cl_statics with Not_found -> error ("Method " ^ f ^ " not found on class " ^ s_type_path cpath) p)
 			| _ -> error "Macro should be called on a class" p

@@ -329,16 +329,16 @@ module TypePathHandler = struct
 			Some (packs @ modules)
 
 	(** raise field completion listing module sub-types and static fields *)
-	let complete_type_path_inner com p c cur_package is_import =
+	let complete_type_path_inner com api p c cur_package is_import =
 		try
 			let sl_pack,s_module = match List.rev p with
 				| s :: sl when s.[0] >= 'A' && s.[0] <= 'Z' -> List.rev sl,s
 				| _ -> p,c
 			in
-			let ctx = Typer.create com in
+			let ctx = Typer.create api com in
 			let rec lookup p =
 				try
-					Typeload.load_module ctx (p,s_module) null_pos
+					ctx.g.api.do_load_module ctx (p,s_module) null_pos
 				with e ->
 					if cur_package then
 						match List.rev p with
