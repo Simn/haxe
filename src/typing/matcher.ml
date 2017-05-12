@@ -941,6 +941,11 @@ module Compile = struct
 		end in
 		subjects,cases
 
+	let requires_special_null_handling t = match follow t with
+		| TAbstract({a_path=([],("Int" | "Float" | "Bool"))},_) -> false
+		| TInst({cl_path=([],"String")},_) -> false
+		| _ -> true
+
 	let rec compile mctx subjects cases = match cases with
 		| [] ->
 			fail mctx (match subjects with e :: _ -> e.epos | _ -> mctx.match_pos);
@@ -993,7 +998,7 @@ module Compile = struct
 			let null = ref [] in
 			List.iter (fun (case,bindings,patterns) ->
 				let rec loop pat = match fst pat with
-					| PatConstructor(ConConst TNull,_) ->
+					| PatConstructor(ConConst TNull,_) when requires_special_null_handling subject.etype ->
 						null := (case,bindings,List.tl patterns) :: !null;
 					| PatConstructor(con,_) ->
 						if case.case_guard = None then ConTable.replace unguarded con true;
@@ -1024,7 +1029,7 @@ module Compile = struct
 		in
 		match null with
 			| [] ->
-				if is_explicit_null subject.etype then null_guard switch_default else dt
+				if is_explicit_null subject.etype && requires_special_null_handling subject.etype then null_guard switch_default else dt
 			| cases ->
 				let dt_null = compile mctx subjects (cases @ default) in
 				null_guard dt_null
@@ -1259,6 +1264,15 @@ module TexprConverter = struct
 		in
 		error (Printf.sprintf "Unmatched patterns: %s" (s_subject s e_subject)) e_subject.epos
 
+	let rec fold_if e =
+		let e = Type.map_expr fold_if e in
+		match e.eexpr with
+			| TIf(e1,{eexpr = TIf(e2,e3,Some ed1)},Some ed2) when Texpr.equal ed1 ed2 ->
+				let econd = mk (TBinop(OpBoolAnd,e1,e2)) e1.etype (punion e1.epos e2.epos) in
+				{e with eexpr = TIf(econd,e3,Some ed1)}
+			| _ ->
+				e
+
 	let to_texpr ctx t_switch match_debug with_type dt =
 		let com = ctx.com in
 		let p = dt.dt_pos in
@@ -1382,6 +1396,7 @@ module TexprConverter = struct
 		in
 		let params = List.map snd ctx.type_params in
 		let e = loop true params dt in
+		let e = fold_if e in
 		Texpr.duplicate_tvars e
 end
 
