@@ -111,7 +111,7 @@ let value_string value =
 		| VFloat f -> "Float",string_of_float f
 		| VEnumValue ev -> rev_hash_s ev.epath,Rope.to_string (s_enum_value 0 ev)
 		| VObject o -> "Anonymous",fields_string (depth + 1) (object_fields o)
-		| VInstance {ikind = IString(_,s)} -> "String","\"" ^ (Ast.s_escape (Lazy.force s)) ^ "\""
+		| VString(_,s) -> "String","\"" ^ (Ast.s_escape (Lazy.force s)) ^ "\""
 		| VInstance {ikind = IArray va} -> "Array",Rope.to_string (s_array (depth + 1) va)
 		| VInstance vi -> rev_hash_s vi.iproto.ppath,instance_fields (depth + 1) vi
 		| VPrototype proto -> "Anonymous",Rope.to_string (s_proto_kind proto)
@@ -369,7 +369,7 @@ module DebugOutputJson = struct
 					| vl -> name ^ "(...)"
 				end
 			| VObject o -> "{...}"
-			| VInstance {ikind = IString(_,s)} -> string_repr s
+			| VString(_,s) -> string_repr s
 			| VInstance {ikind = IArray va} -> "[...]"
 			| VInstance vi -> (rev_hash_s vi.iproto.ppath) ^ " {...}"
 			| VPrototype proto -> Rope.to_string (s_proto_kind proto)
@@ -402,7 +402,7 @@ module DebugOutputJson = struct
 				in
 				jv type_s value_s is_structured
 			| VObject o -> jv "Anonymous" (fields_string (object_fields o)) true (* TODO: false for empty structures *)
-			| VInstance {ikind = IString(_,s)} -> jv "String" (string_repr s) false
+			| VString(_,s) -> jv "String" (string_repr s) false
 			| VInstance {ikind = IArray va} -> jv "Array" (array_elems va) true (* TODO: false for empty arrays *)
 			| VInstance vi ->
 				let class_name = rev_hash_s vi.iproto.ppath in
@@ -557,7 +557,7 @@ module DebugOutputJson = struct
 					let a = access ^ "." ^ n in
 					n, v, a
 				) fields
-			| VInstance {ikind = IString(_,s)} -> []
+			| VString(_,s) -> []
 			| VInstance {ikind = IArray va} ->
 				let l = EvalArray.to_list va in
 				List.mapi (fun i v ->

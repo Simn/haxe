@@ -102,7 +102,7 @@ and s_value depth v =
 		concat2 rfun (Rope.of_string (s))
 	| VFieldClosure _ -> rclosure
 	| VEnumValue ve -> s_enum_value depth ve
-	| VInstance {ikind = IString(s,_)} -> s
+	| VString(s,_) -> s
 	| VInstance {ikind = IArray va} -> s_array (depth + 1) va
 	| VInstance {ikind=IDate d} -> s_date d
 	| VInstance {ikind=IPos p} -> of_string ("#pos(" ^ Lexer.get_error_pos (Printf.sprintf "%s:%d:") p ^ ")")

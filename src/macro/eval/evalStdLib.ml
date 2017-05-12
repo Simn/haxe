@@ -1459,6 +1459,7 @@ module StdReflect = struct
 			iproto = vi.iproto;
 			ikind = vi.ikind;
 		}
+		| VString _ -> o
 		| _ -> unexpected_value o "object"
 	)
 
@@ -1491,6 +1492,7 @@ module StdReflect = struct
 			| VInstance vi -> IntMap.fold (fun name _ acc -> name :: acc) vi.iproto.pinstance_names []
 			| VPrototype proto -> proto_fields proto
 			| VNull -> []
+			| VString _ -> [key_length]
 			| _ -> unexpected_value o "object"
 		in
 		encode_array (List.map (fun i -> encode_rope (rev_hash i)) fields)
@@ -1526,7 +1528,7 @@ module StdReflect = struct
 	)
 
 	let isObject = vfun1 (fun v -> match v with
-		| VObject _ | VInstance _ | VPrototype _ -> vtrue
+		| VObject _ | VString _ | VInstance _ | VPrototype _ -> vtrue
 		| _ -> vfalse
 	)
 
@@ -1777,15 +1779,15 @@ end
 
 module StdString = struct
 	let this vthis = match vthis with
-		| VInstance {ikind = IString(r,_)} -> r
+		| VString(r,_) -> r
 		| v -> unexpected_value v "string"
 
 	let this_pair vthis = match vthis with
-		| VInstance {ikind = IString(r,s)} -> r,Lazy.force s
+		| VString(r,s) -> r,Lazy.force s
 		| v -> unexpected_value v "string"
 
 	let this_string vthis = match vthis with
-		| VInstance {ikind = IString(_,s)} -> Lazy.force s
+		| VString(_,s) -> Lazy.force s
 		| v -> unexpected_value v "string"
 
 	let charAt = vifun1 (fun vthis index ->
@@ -1935,7 +1937,7 @@ module StdStringBuf = struct
 	let add = vifun1 (fun vthis x ->
 		let this = this vthis in
 		begin match x with
-			| VInstance {ikind = IString(s,_)} -> Buffer.add_rope this s
+			| VString(s,_) -> Buffer.add_rope this s
 			| _ -> Buffer.add_string this (value_string x)
 		end;
 		vnull;
@@ -2268,6 +2270,7 @@ module StdType = struct
 	let getClass = vfun1 (fun v ->
 		match v with
 		| VInstance ({iproto = {pkind = PInstance}} as vi) -> get_static_prototype_as_value (get_ctx()) vi.iproto.ppath null_pos
+		| VString _ -> get_static_prototype_as_value (get_ctx()) key_String null_pos
 		| _ -> vnull
 	)
 
@@ -2361,6 +2364,7 @@ module StdType = struct
 			| VFloat _ -> 2,[||]
 			| VTrue | VFalse -> 3,[||]
 			| VInstance vi -> 6,[|get_static_prototype_as_value ctx vi.iproto.ppath null_pos|]
+			| VString _ -> 6,[|get_static_prototype_as_value ctx key_String null_pos|]
 			| VObject _ | VPrototype _ ->
 				4,[||]
 			| VFunction _

@@ -35,6 +35,7 @@ let s_value_kind = function
 	| VFloat _ -> "VFloat"
 	| VEnumValue _ -> "VEnumValue"
 	| VObject _ -> "VObject"
+	| VString _ -> "VString"
 	| VInstance _ -> "VInstance"
 	| VPrototype _ -> "VPrototype"
 	| VFunction _ -> "VFunction"

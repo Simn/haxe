@@ -46,15 +46,15 @@ let decode_varray v = match v with
 	| _ -> unexpected_value v "array"
 
 let decode_string v = match v with
-	| VInstance {ikind = IString(r,s)} -> Lazy.force s
+	| VString(r,s) -> Lazy.force s
 	| _ -> unexpected_value v "string"
 
 let decode_rope v = match v with
-	| VInstance {ikind = IString(s,_)} -> s
+	| VString(s,_) -> s
 	| _ -> unexpected_value v "string"
 
 let decode_rope_string v = match v with
-	| VInstance {ikind = IString(r,s)} -> r,s
+	| VString(r,s) -> r,s
 	| _ -> unexpected_value v "string"
 
 let decode_bytes v = match v with

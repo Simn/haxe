@@ -115,12 +115,7 @@ let encode_array l =
 	encode_array_instance (EvalArray.create (Array.of_list l))
 
 let encode_string s =
-	let proto = (get_ctx()).string_prototype in
-	vinstance {
-		ifields = [|vint (String.length s)|];
-		iproto = proto;
-		ikind = IString(Rope.of_string s,lazy s)
-	}
+	VString(Rope.of_string s,lazy s)
 
 let encode_rope s =
 	vstring s
