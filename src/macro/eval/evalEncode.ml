@@ -109,7 +109,7 @@ let encode_instance ?(kind=INormal) path =
 	vinstance (create_instance ~kind path)
 
 let encode_array_instance a =
-	encode_instance ~kind:(IArray a) key_Array
+	VArray a
 
 let encode_array l =
 	encode_array_instance (EvalArray.create (Array.of_list l))

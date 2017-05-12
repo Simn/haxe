@@ -770,7 +770,7 @@ let emit_local_read i env = env.env_locals.(i)
 let emit_capture_read i env = !(env.env_captures.(i))
 
 let emit_array_length_read exec env = match exec env with
-	| VInstance {ikind = IArray va} -> vint (va.alength)
+	| VArray va -> vint (va.alength)
 	| v -> unexpected_value v "Array"
 
 let emit_bytes_length_read exec env = match exec env with

@@ -38,11 +38,11 @@ let decode_instance v = match v with
 	| _ -> unexpected_value v "instance"
 
 let decode_array v = match v with
-	| VInstance {ikind = IArray va} -> EvalArray.to_list va
+	| VArray va -> EvalArray.to_list va
 	| _ -> unexpected_value v "array"
 
 let decode_varray v = match v with
-	| VInstance {ikind = IArray va} -> va
+	| VArray va -> va
 	| _ -> unexpected_value v "array"
 
 let decode_string v = match v with
