@@ -194,11 +194,7 @@ let get_call_stack_envs ctx kind p =
 		| _ :: envs -> envs
 		| [] -> []
 	in
-	let rec loop delta envs = match envs with
-		| _ :: envs when delta < 0 -> loop (delta + 1) envs
-		| _ -> envs
-	in
-	loop ctx.debug.environment_offset_delta envs
+	envs
 
 let output_call_stack ctx kind p =
 	let envs = get_call_stack_envs ctx kind p in
@@ -317,10 +313,6 @@ type command_outcome =
 let make_connection socket =
 	(* Reads input and reacts accordingly. *)
 	let rec wait ctx run env =
-		let get_real_env ctx =
-			ctx.debug.environment_offset_delta <- 0;
-			DynArray.get (get_eval ctx).environments ((get_eval ctx).environment_offset - 1);
-		in
 		let rec loop () =
 			let handle_request id name params =
 				let error msg =
@@ -331,28 +323,16 @@ let make_connection socket =
 					let open JsonRpc in
 					raise (JsonRpc_error (Invalid_params id))
 				in
-				let rec move_frame offset =
-					if offset < 0 || offset >= (get_eval ctx).environment_offset then begin
-						error (Printf.sprintf "Frame out of bounds: %i (valid range is %i - %i)" offset 0 ((get_eval ctx).environment_offset - 1))
-					end else begin
-						ctx.debug.environment_offset_delta <- ((get_eval ctx).environment_offset - offset - 1);
-						Wait (JNull, (DynArray.get (get_eval ctx).environments offset))
-					end
-				in
 				match name with
 				| "continue" ->
-					let env = get_real_env ctx in
 					ctx.debug.debug_state <- (if ctx.debug.debug_state = DbgStart then DbgRunning else DbgContinue);
 					Run (JNull,env)
 				| "stepIn" ->
-					let env = get_real_env ctx in
 					Run (JNull,env)
 				| "next" ->
-					let env = get_real_env ctx in
 					ctx.debug.debug_state <- DbgNext (get_eval ctx).environment_offset;
 					Run (JNull,env)
 				| "stepOut" ->
-					let env = get_real_env ctx in
 					ctx.debug.debug_state <- DbgFinish (get_eval ctx).environment_offset;
 					Run (JNull,env)
 				| "stackTrace" ->
@@ -434,15 +414,6 @@ let make_connection socket =
 						error (Printf.sprintf "Unknown breakpoint: %d" id)
 					end;
 					Loop JNull
-				| "switchFrame" ->
-					let frame =
-						match params with
-						| Some (JObject fl) ->
-							let id = try List.find (fun (n,_) -> n = "id") fl with Not_found -> invalid_params () in
-							(match (snd id) with JInt s -> s | _ -> invalid_params ())
-						| _ -> invalid_params ()
-					in
-					move_frame ((get_eval ctx).environment_offset - frame - 1)
 				| "getScopes" ->
 					Loop (output_scopes env.env_info.capture_infos env.env_debug.scopes);
 				| "getScopeVariables" ->

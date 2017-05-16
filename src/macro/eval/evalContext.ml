@@ -110,7 +110,6 @@ type debug = {
 	mutable debug_state : debug_state;
 	mutable breakpoint : breakpoint;
 	caught_types : (int,bool) Hashtbl.t;
-	mutable environment_offset_delta : int;
 	mutable debug_socket : debug_socket option;
 }
 

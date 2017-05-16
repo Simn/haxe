@@ -16,11 +16,7 @@ let get_call_stack_envs ctx kind p =
 		| _ :: envs -> envs
 		| [] -> []
 	in
-	let rec loop delta envs = match envs with
-		| _ :: envs when delta < 0 -> loop (delta + 1) envs
-		| _ -> envs
-	in
-	loop ctx.debug.environment_offset_delta envs
+	envs
 
 (* Printing *)
 
@@ -165,19 +161,7 @@ let set_variable ctx scopes name value env =
 
 (* Reads input and reacts accordingly. *)
 let rec wait ctx run env =
-	let get_real_env ctx =
-		ctx.debug.environment_offset_delta <- 0;
-		DynArray.get (get_eval ctx).environments ((get_eval ctx).environment_offset - 1);
-	in
-	let rec move_frame offset : value =
-		if offset < 0 || offset >= (get_eval ctx).environment_offset then begin
-			output_error (Printf.sprintf "Frame out of bounds: %i (valid range is %i - %i)" offset 0 ((get_eval ctx).environment_offset - 1));
-			loop()
-		end else begin
-			ctx.debug.environment_offset_delta <- ((get_eval ctx).environment_offset - offset - 1);
-			wait ctx run (DynArray.get (get_eval ctx).environments offset);
-		end
-	and loop () =
+	let rec loop () =
 		print_string "1> ";
 		flush stdout;
 		let line = read_line () in
@@ -301,41 +285,19 @@ let rec wait ctx run env =
 			loop()
 		(* thread | unsafe | safe *)
 		| ["continue" | "c"] ->
-			let env = get_real_env ctx in
 			ctx.debug.debug_state <- (if ctx.debug.debug_state = DbgStart then DbgRunning else DbgContinue);
 			run env
 		| ["step" | "s" | ""] ->
-			let env = get_real_env ctx in
 			run env
 		| ["next" | "n"] ->
-			let env = get_real_env ctx in
 			ctx.debug.debug_state <- DbgNext (get_eval ctx).environment_offset;
 			run env
 		| ["finish" | "f"] ->
-			let env = get_real_env ctx in
 			ctx.debug.debug_state <- DbgFinish (get_eval ctx).environment_offset;
 			run env
 		| ["where" | "w"] ->
 			output_call_stack ctx env.env_info.kind env.env_debug.expr.epos;
 			loop()
-		| ["up"] ->
-			let offset = (get_eval ctx).environment_offset - ctx.debug.environment_offset_delta in
-			move_frame (offset - 2)
-		| ["down"] ->
-			let offset = (get_eval ctx).environment_offset - ctx.debug.environment_offset_delta in
-			move_frame offset
-		| ["frame";sframe] ->
-			let frame = try
-				Some (int_of_string sframe)
-			with _ ->
-				None
-			in
-			begin match frame with
-				| Some frame -> move_frame ((get_eval ctx).environment_offset - frame - 1)
-				| None ->
-					output_error ("Invalid frame format: " ^ sframe);
-					loop()
-			end
 		| ["variables" | "vars"] ->
 			print_variables ctx env.env_info.capture_infos env.env_debug.scopes env;
 			loop()

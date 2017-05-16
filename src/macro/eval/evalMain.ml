@@ -87,7 +87,6 @@ let create com api is_macro =
 				debug_state = DbgStart;
 				breakpoint = EvalDebugMisc.make_breakpoint 0 0 BPDisabled BPAny;
 				caught_types = Hashtbl.create 0;
-				environment_offset_delta = 0;
 				debug_socket = socket;
 			} in
 			debug := Some debug';
