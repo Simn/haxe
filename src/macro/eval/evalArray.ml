@@ -133,7 +133,7 @@ let reverse a =
 let set a i v =
 	if i >= a.alength then begin
 		if i >= Array.length a.avalues then begin
-			let values' = Array.make (i + 5) vnull in
+			let values' = Array.make (Array.length a.avalues * 2 + 5) vnull in
 			Array.blit a.avalues 0 values' 0 a.alength;
 			a.avalues <- values';
 		end;

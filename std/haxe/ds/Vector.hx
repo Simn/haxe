@@ -74,6 +74,8 @@ abstract Vector<T>(VectorData<T>) {
 			this = python.Syntax.pythonCode("[{0}]*{1}", null, length);
 		#elseif lua
 			this = untyped __lua_table__({length:length});
+		#elseif eval
+			this = eval.Lib.arrayAlloc(length);
 		#else
 			this = [];
 			untyped this.length = length;
@@ -126,6 +128,8 @@ abstract Vector<T>(VectorData<T>) {
 			return this.length;
 		#elseif python
 			return this.length;
+		#elseif eval
+			return this.length;
 		#else
 			return untyped this.length;
 		#end
@@ -148,6 +152,8 @@ abstract Vector<T>(VectorData<T>) {
 			cs.system.Array.Copy(cast src, srcPos,cast dest, destPos, len);
 		#elseif cpp
 			dest.toData().blit(destPos,src.toData(), srcPos,len);
+		#elseif eval
+			eval.Lib.arrayBlit(cast src, srcPos, cast dest, destPos, len);
 		#else
 			if (src == dest) {
 				if (srcPos < destPos) {
@@ -185,6 +191,8 @@ abstract Vector<T>(VectorData<T>) {
 			return this.copy();
 		#elseif js
 			return this.slice(0);
+		#elseif eval
+			return this.copy();
 		#else
 			var a = new Array();
 			var len = length;
@@ -241,6 +249,8 @@ abstract Vector<T>(VectorData<T>) {
 		return cast array.copy();
 		#elseif js
 		return fromData(array.slice(0));
+		#elseif eval
+		return fromData(array.copy());
 		#else
 		// TODO: Optimize this for others?
 		var vec = new Vector<T>(array.length);
@@ -277,7 +287,7 @@ abstract Vector<T>(VectorData<T>) {
 		If `sep` is null, the result is unspecified.
 	**/
 	#if cs @:extern #end public inline function join<T>(sep:String):String {
-		#if (flash10||cpp)
+		#if (flash10||cpp||eval)
 		return this.join(sep);
 		#else
 		var b = new StringBuf();
@@ -301,6 +311,9 @@ abstract Vector<T>(VectorData<T>) {
 		If `f` is null, the result is unspecified.
 	**/
 	#if cs @:extern #end public inline function map<S>(f:T->S):Vector<S> {
+		#if eval
+		return fromData(this.map(f));
+		#else
 		var length = length;
 		var r = new Vector<S>(length);
 		var i = 0;
@@ -310,6 +323,7 @@ abstract Vector<T>(VectorData<T>) {
 			r.set(i, v);
 		}
 		return r;
+		#end
 	}
 
 	/**

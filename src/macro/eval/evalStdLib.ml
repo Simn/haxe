@@ -47,6 +47,24 @@ let encode_i64_direct i64 =
 	let high = Int64.to_int32 (Int64.shift_right_logical i64 32) in
 	encode_i64 low high
 
+module StdLib = struct
+	let arrayAlloc = vfun1 (fun size ->
+		let i = decode_int size in
+		let avalues = Array.make i vnull in
+		let a = EvalArray.create avalues in
+		encode_array_instance a;
+	)
+	let arrayBlit = vfun5 (fun src srcPos dest destPos len ->
+		let src_pos = decode_int srcPos in
+		let dest_pos = decode_int destPos in
+		let len = decode_int len in
+		let src = decode_varray src in
+		let dest = decode_varray dest in
+		Array.blit (src.avalues) src_pos (dest.avalues) dest_pos len;
+		vnull;
+	)
+end
+
 module StdArray = struct
 	let this this = match this with
 		| VArray va -> va
@@ -2604,10 +2622,15 @@ let init_standard_library builtins =
 	init_constructors builtins;
 	init_empty_constructors builtins;
 	init_maps builtins;
+	init_fields builtins (["eval"],"Lib") [
+		"arrayAlloc",StdLib.arrayAlloc;
+		"arrayBlit", StdLib.arrayBlit;
+	] [];
 	init_fields builtins ([],"Array") [] [
 		"concat",StdArray.concat;
 		"copy",StdArray.copy;
 		"filter",StdArray.filter;
+
 		"indexOf",StdArray.indexOf;
 		"insert",StdArray.insert;
 		"iterator",StdArray.iterator;
