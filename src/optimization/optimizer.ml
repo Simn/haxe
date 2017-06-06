@@ -712,6 +712,10 @@ let rec optimize_for_loop ctx (i,pi) e1 e2 p =
 		in
 		let ivar = Some (mk (TConst (TInt 0l)) t_int p) in
 		let elength = f_length arr p in
+		let enull = mk (TConst TNull) arr.etype p in
+		let enull_check = mk (TBinop(OpNotEq,arr,enull)) ctx.t.tbool p in
+		let ezero = mk (TConst (TInt Int32.zero)) ctx.t.tint p in
+		let elength = mk (TIf(enull_check,elength,Some ezero)) ezero.etype p in
 		let el = [mk (TWhile (
 				mk (TBinop (OpLt, iexpr, elength)) ctx.t.tbool p,
 				block,
