@@ -28,6 +28,12 @@ open AnalyzerTypes.Graph
 open AnalyzerTexpr
 open OptimizerTexpr
 
+let is_catch_variable v =
+	Meta.has Meta.CatchVariable v.v_meta
+
+let make_catch_variable v p =
+	v.v_meta <- (Meta.CatchVariable,[],p) :: v.v_meta
+
 (*
 	Transforms an expression to a graph, and a graph back to an expression. This module relies on TexprFilter being
 	run first.
@@ -503,6 +509,8 @@ let rec func ctx bb tf t p =
 			if bb_exc.bb_incoming = [] then add_cfg_edge (if bb_try_next == g.g_unreachable then bb_try else bb_try_next) bb_exc CFGMaybeThrow;
 			let is_reachable = ref (not (bb_try_next == g.g_unreachable)) in
 			let catches = List.map (fun (v,e) ->
+				if not (is_catch_variable v) then
+					make_catch_variable v e.epos;
 				let bb_catch = create_node (BKCatch v) e.etype e.epos in
 				add_cfg_edge bb_exc bb_catch CFGGoto;
 				let bb_catch_next = block bb_catch e in
@@ -665,6 +673,22 @@ let from_tfunction ctx tf t p =
 	g.g_exit <- bb_exit;
 	set_syntax_edge bb_exit SEEnd
 
+let rethrow com e =
+	try
+		(* It would be nice if these guys could agree on something... *)
+		let s,el = match com.platform with
+			| Neko -> "__dollar__rethrow",[e]
+			| Hl -> "$rethrow",[e]
+			| Cs -> "__rethrow__",[e]
+			| Js -> add_feature com "js.Lib.rethrow"; "__rethrow__",[]
+			| _ -> raise Exit
+		in
+		let v = alloc_unbound_var s t_dynamic e.epos in
+		let ev = Codegen.ExprBuilder.make_local v e.epos in
+		mk (TCall(ev,el)) com.basic.tvoid e.epos
+	with Exit ->
+		mk (TThrow e) com.basic.tvoid e.epos
+
 let rec block_to_texpr_el ctx bb =
 	if bb.bb_dominator == ctx.graph.g_unreachable then
 		[]
@@ -677,6 +701,15 @@ let rec block_to_texpr_el ctx bb =
 				Some bb_next,(block bb_sub) :: el
 			| el,SEMerge bb_next ->
 				Some bb_next,el
+			| {eexpr = TThrow ({eexpr = TLocal v} as e1)} as e :: el,SENone when is_catch_variable v ->
+				let v' = get_var_origin ctx.graph v in
+				let rec find_catch_var bb = match bb.bb_kind with
+					| BKCatch v -> v
+					| _ -> find_catch_var bb.bb_dominator
+				in
+				let v'' = find_catch_var bb in
+				let e = if v == v' && v == v'' then rethrow ctx.com e1 else e in
+				None,e :: el
 			| el,(SEEnd | SENone) ->
 				None,el
 			| {eexpr = TWhile(e1,_,flag)} as e :: el,(SEWhile(_,bb_body,bb_next)) ->
