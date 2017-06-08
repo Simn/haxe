@@ -243,7 +243,16 @@ let parse_file_from_lexbuf com file p lexbuf =
 	let t = Common.timer ["parsing"] in
 	Lexer.init file true;
 	incr stats.s_files_parsed;
-	let data = (try Parser.parse com lexbuf with e -> t(); raise e) in
+	let data = try
+		Parser.parse com lexbuf
+	with
+		| Sedlexing.MalFormed ->
+			t();
+			error "Malformed file. Source files must be encoded with UTF-8." {pfile = file; pmin = 0; pmax = 0}
+		| e ->
+			t();
+			raise e
+	in
 	begin match !display_default with
 		| DMModuleSymbols filter when filter <> None || Display.is_display_file file ->
 			let ds = Display.DocumentSymbols.collect_module_symbols data in
@@ -300,12 +309,114 @@ let type_var_field ctx t e stat do_display p =
 	| TType ({ t_path = ([],"UInt") },[]) | TAbstract ({ a_path = ([],"UInt") },[]) when stat -> { e with etype = t }
 	| _ -> e
 
-let apply_macro ctx mode path el p =
-	let cpath, meth = (match List.rev (ExtString.String.nsplit path ".") with
-		| meth :: name :: pack -> (List.rev pack,name), meth
-		| _ -> error "Invalid macro path" p
-	) in
-	ctx.g.do_macro ctx mode cpath meth el p
+let apply_macro ctx mode rev_path el p =
+	let starts_with_uppercase s =
+		if String.length s > 0 then
+			let first_char = String.get s 0 in
+			(Char.lowercase first_char) != first_char
+		else
+			false
+	in
+	let check_candidates candidates try_absolute_path  =
+		let sort_candidates c =
+			List.sort (fun (p1,_,_) (p2,_,_) ->
+				compare p2 p1
+			) c
+		in
+		let run (cpath, meth) recover_allowed =
+			try
+				ctx.g.do_macro ctx mode cpath meth el p
+			with e when recover_allowed -> match e with
+				| Error (Module_not_found _, p) -> None
+				| Error (Method_not_found _, p) -> None
+				| _ -> raise e
+		in
+		let candidates = sort_candidates candidates in
+		(* iterate all candidates *)
+		let res = List.fold_left (fun acc (_, c, recover_allowed) -> begin
+			match acc with
+			| _, false | Some _, _ -> acc (* we already have a result *)
+			| None, _ -> (run c recover_allowed, recover_allowed)
+		end) (None, true) candidates in
+
+		match (fst res), try_absolute_path with
+			| None, true ->
+				(* just try as an absolute path *)
+				let cpath, meth = match rev_path with
+				| meth :: name :: pack ->
+					(List.rev pack,name), meth
+				| _ ->
+					error "Invalid macro path" p
+				in
+				ctx.g.do_macro ctx mode cpath meth el p
+			| None, false ->
+				error "Invalid macro path" p
+			| res, _ -> res
+	in
+	(match rev_path with
+		| meth :: name :: [] when (starts_with_uppercase name) -> begin
+			(* maybe it's an imported class (also consider wildcard packages) *)
+			let get_path pack name meth =
+				let pack = List.map fst pack in
+				((List.rev pack,name), meth)
+			in
+			let candidates = List.fold_left (fun a (l, mode) ->
+				match (List.rev l), mode with
+				| (name1,pos) :: pack, (IAsName s) when s = name ->
+					(pos, (get_path pack name1 meth), false) :: a
+				| (name1,pos) :: pack, (INormal) when name1 = name ->
+					(pos, (get_path pack name1 meth), false) :: a
+				| _ -> a
+			) [] ctx.m.module_imports in
+			(* allow error recovering for  wildcard candidates *)
+			let mk_wildcard_candidates name meth =
+				List.fold_left (fun a (pack, pos) ->
+					(pos, ((pack, name),meth), true) :: a
+				) [] ctx.m.wildcard_packages
+			in
+			let candidates = candidates @ (mk_wildcard_candidates name meth) in
+			check_candidates candidates true
+		end
+		| meth :: [] -> begin
+			(* maybe it's just a function *)
+			let get_path pack name meth =
+				let pack = List.map fst pack in
+				((List.rev pack,name), meth)
+			in
+			let candidates = List.fold_left (fun a (l, mode) ->
+				match (List.rev l), mode with
+				| (meth1,pos) :: (name,_) :: pack, (IAsName s) when s = meth ->
+					(pos, (get_path pack name meth1), false) :: a
+				| (meth1,pos) :: (name,_) :: pack, INormal when meth1 = meth ->
+					(pos, (get_path pack name meth1), false) :: a
+				| (name,pos) :: pack, IAll when (starts_with_uppercase name) ->
+					let pack = List.map fst pack in
+					let c = ((List.rev pack,name), meth) in
+					(pos, c, true) :: a (* allow error recovering for IAll candiates *)
+				| _ -> a
+			) [] ctx.m.module_imports in
+			check_candidates candidates false
+		end
+		| meth :: sub :: name :: [] when (starts_with_uppercase sub) && (starts_with_uppercase name) -> begin
+			(* maybe it's a subtype of an imported module *)
+			let get_path pack name sub meth =
+				let pack = name :: (List.map fst pack) in
+				((List.rev pack,sub), meth)
+			in
+			let candidates = List.fold_left (fun a (l, mode) ->
+				match (List.rev l), mode with
+				| (name1,pos) :: pack, (IAsName s) when s = name ->
+					(pos, (get_path pack name1 sub meth), false) :: a
+				| (name1,pos) :: pack, (INormal | IAll) when name1 = name ->
+					(pos, (get_path pack name1 sub meth), false) :: a
+				| _ -> a
+			) [] ctx.m.module_imports in
+			check_candidates candidates false
+		end
+		| _ ->
+			(* we don't have import candidates, just try as an absolute path *)
+			check_candidates [] true
+	)
 
 (** since load_type_def and load_instance are used in PASS2, they should not access the structure of a type **)
 
@@ -1319,7 +1430,9 @@ module Inheritance = struct
 		| TInst (csup,params) ->
 			if is_parent c csup then error "Recursive class" p;
 			begin match csup.cl_kind with
-				| KTypeParameter _ when not (is_generic_parameter ctx csup) -> error "Cannot extend non-generic type parameters" p
+				| KTypeParameter _ ->
+					if is_generic_parameter ctx csup then error "Extending generic type parameters is no longer allowed in Haxe 4" p;
+					error "Cannot extend type parameters" p
 				| _ -> csup,params
 			end
 		| _ -> error "Should extend by using a class" p
@@ -1852,12 +1965,12 @@ let build_module_def ctx mt meta fvars context_init fbuild =
 					| [ECall (epath,el),p] -> epath, el
 					| _ -> error "Invalid build parameters" p
 				) in
-				let s = try String.concat "." (List.rev (string_list_of_expr_path epath)) with Error (_,p) -> error "Build call parameter must be a class path" p in
+				let rev_path = try string_list_of_expr_path epath with Error (_,p) -> error "Build call parameter must be a class path" p in
 				if ctx.in_macro then error "You cannot use @:build inside a macro : make sure that your type is not used in macro" p;
 				let old = ctx.g.get_build_infos in
 				ctx.g.get_build_infos <- (fun() -> Some (mt, List.map snd (t_infos mt).mt_params, fvars()));
 				context_init();
-				let r = try apply_macro ctx MBuild s el p with e -> ctx.g.get_build_infos <- old; raise e in
+				let r = try apply_macro ctx MBuild rev_path el p with e -> ctx.g.get_build_infos <- old; raise e in
 				ctx.g.get_build_infos <- old;
 				(match r with
 				| None -> error "Build failure" p
@@ -2223,20 +2336,25 @@ module ClassInitializer = struct
 					| Var v when not fctx.is_static ->
 						let e = if ctx.com.display.dms_display && ctx.com.display.dms_error_policy <> EPCollect then
 							e
-						else match Optimizer.make_constant_expression ctx (maybe_run_analyzer e) with
-							| Some e -> e
-							| None ->
-								let rec has_this e = match e.eexpr with
-									| TConst TThis ->
-										display_error ctx "Cannot access this or other member field in variable initialization" e.epos;
-									| TLocal v when (match ctx.vthis with Some v2 -> v == v2 | None -> false) ->
-										display_error ctx "Cannot access this or other member field in variable initialization" e.epos;
-									| _ ->
-									Type.iter has_this e
-								in
-								has_this e;
+						else begin
+							let rec check_this e = match e.eexpr with
+								| TConst TThis ->
+									display_error ctx "Cannot access this or other member field in variable initialization" e.epos;
+									raise Exit
+								| TLocal v when (match ctx.vthis with Some v2 -> v == v2 | None -> false) ->
+									display_error ctx "Cannot access this or other member field in variable initialization" e.epos;
+									raise Exit
+								| _ ->
+								Type.iter check_this e
+							in
+							try
+								check_this e;
+								match Optimizer.make_constant_expression ctx (maybe_run_analyzer e) with
+								| Some e -> e
+								| None -> e
+							with Exit ->
 								e
-						in
+						end in
 						e
 					| Var v when v.v_read = AccInline ->
 						let e = require_constant_expression e "Inline variable initialization must be a constant value" in
@@ -2791,22 +2909,22 @@ module ClassInitializer = struct
 		let cl_req = check_require c.cl_meta in
 		let rec handle_field f =
 			try
-				let epath,el = match Meta.get Meta.Build f.cff_meta with
-					| _, [ECall (epath,el),p],_ -> epath,el
+				let epath,el,args,m = match Meta.get Meta.Build f.cff_meta with
+					| (_, ([ECall (epath,el),p] as args),_) as m -> epath,el,args,m
 					| _ -> error "Invalid build parameters" p
 				in
 				let mt = TClassDecl c in
 				let get_fields () = [f] in
-				let s = try String.concat "." (List.rev (string_list_of_expr_path epath)) with Error (_,p) -> error "Build call parameter must be a class path" p in
+				let rev_path = try string_list_of_expr_path epath with Error (_,p) -> error "Build call parameter must be a class path" p in
 				let old = ctx.g.get_build_infos in
 				ctx.g.get_build_infos <- (fun() -> Some (mt, List.map snd (t_infos mt).mt_params, get_fields()));
-				let r = try apply_macro ctx MBuild s el p with e -> ctx.g.get_build_infos <- old; raise e in
+				let r = try apply_macro ctx MBuild rev_path el p with e -> ctx.g.get_build_infos <- old; raise e in
 				ctx.g.get_build_infos <- old;
 				begin match r with
 					| None -> error "Build failure" p
 					| Some (EVars [_,Some (CTAnonymous fl,p),None],_) ->
 						List.iter (fun f' ->
-							if f'.cff_name = f.cff_name then f'.cff_meta <- List.filter (fun (m,_,_) -> m <> Meta.Build) f'.cff_meta;
+							if f'.cff_name = f.cff_name then f'.cff_meta <- List.filter (fun m1 -> m1 <> m) f'.cff_meta;
 							handle_field f'
 						) fl
 					| _ -> error "Build failure" p
@@ -4019,31 +4137,7 @@ let rec build_generic ctx c p tl =
 		cg.cl_super <- (match c.cl_super with
 			| None -> None
 			| Some (cs,pl) ->
-				let find_class subst =
-					let rec loop subst = match subst with
-						| (TInst(c,[]),t) :: subst when c == cs -> t
-						| _ :: subst -> loop subst
-						| [] -> raise Not_found
-					in
-					try
-						if pl <> [] then raise Not_found;
-						let t = loop subst in
-						(* extended type parameter: concrete type must have a constructor, but generic base class must not have one *)
-						begin match follow t,c.cl_constructor with
-							| TInst(cs,_),None ->
-								ignore(cs.cl_build());
-								begin match cs.cl_constructor with
-									| None -> error ("Cannot use " ^ (s_type_path cs.cl_path) ^ " as type parameter because it is extended and has no constructor") p
-									| _ -> ()
-								end;
-							| _,Some cf -> error "Generics extending type parameters cannot have constructors" cf.cf_pos
-							| _ -> ()
-						end;
-						t
-					with Not_found ->
-						apply_params c.cl_params tl (TInst(cs,pl))
-				in
-				let ts = follow (find_class gctx.subst) in
+				let ts = follow (apply_params c.cl_params tl (TInst(cs,pl))) in
 				let cs,pl = Inheritance.check_extends ctx c ts p in
 				match cs.cl_kind with
 				| KGeneric ->
