@@ -325,7 +325,38 @@ let gen_constant ctx p = function
 	| TThis -> spr ctx (this ctx)
 	| TSuper -> assert false
 
-let rec gen_call ctx e el in_value =
+let print_deprecation_message com msg p =
+	com.warning msg p
+
+let rec gen_instanceof ctx o t =
+	spr ctx "(";
+	gen_value ctx o;
+	print ctx " instanceof ";
+	gen_value ctx t;
+	spr ctx ")"
+
+and gen_typeof ctx o =
+	spr ctx "typeof(";
+	gen_value ctx o;
+	spr ctx ")"
+
+and gen_stricteq ctx x y =
+	(* add extra parenthesis here because of operator precedence *)
+	spr ctx "((";
+	gen_value ctx x;
+	spr ctx ") === ";
+	gen_value ctx y;
+	spr ctx ")"
+
+and gen_strictneq ctx x y =
+	(* add extra parenthesis here because of operator precedence *)
+	spr ctx "((";
+	gen_value ctx x;
+	spr ctx ") !== ";
+	gen_value ctx y;
+	spr ctx ")"
+
+and gen_call ctx e el in_value =
 	match e.eexpr , el with
 	| TConst TSuper , params ->
 		(match ctx.current.cl_super with
@@ -362,35 +393,40 @@ let rec gen_call ctx e el in_value =
 		concat ctx "," (gen_value ctx) params;
 		spr ctx ")";
 	| TLocal { v_name = "__js__" }, [{ eexpr = TConst (TString "this") }] ->
+		print_deprecation_message ctx.com "__js__ is deprecated, use js.Syntax.code instead" e.epos;
+		spr ctx (this ctx)
+	| TField(_,FStatic({cl_path=["js"],"Syntax"},{cf_name="code"})), [{ eexpr = TConst (TString "this") }] ->
 		spr ctx (this ctx)
 	| TLocal { v_name = "__js__" }, [{ eexpr = TConst (TString code) }] ->
+		print_deprecation_message ctx.com "__js__ is deprecated, use js.Syntax.code instead" e.epos;
+		spr ctx (String.concat "\n" (ExtString.String.nsplit code "\r\n"))
+	| TField(_,FStatic({cl_path=["js"],"Syntax"},{cf_name="code"})), [{ eexpr = TConst (TString code) }] ->
 		spr ctx (String.concat "\n" (ExtString.String.nsplit code "\r\n"))
 	| TLocal { v_name = "__js__" }, { eexpr = TConst (TString code); epos = p } :: tl ->
+		print_deprecation_message ctx.com "__js__ is deprecated, use js.Syntax.code instead" e.epos;
+		Codegen.interpolate_code ctx.com code tl (spr ctx) (gen_expr ctx) p
+	| TField(_,FStatic({cl_path=["js"],"Syntax"},{cf_name="code"})), { eexpr = TConst (TString code); epos = p } :: tl ->
 		Codegen.interpolate_code ctx.com code tl (spr ctx) (gen_expr ctx) p
 	| TLocal { v_name = "__instanceof__" },  [o;t] ->
-		spr ctx "(";
-		gen_value ctx o;
-		print ctx " instanceof ";
-		gen_value ctx t;
-		spr ctx ")";
+		print_deprecation_message ctx.com "__instanceof__ is deprecated, use js.Syntax.instanceof instead" e.epos;
+		gen_instanceof ctx o t
+	| TField(_,FStatic({cl_path=["js"],"Syntax"},{cf_name="instanceof"})),  [o;t] ->
+		gen_instanceof ctx o t
 	| TLocal { v_name = "__typeof__" },  [o] ->
-		spr ctx "typeof(";
-		gen_value ctx o;
-		spr ctx ")";
+		print_deprecation_message ctx.com "__typeof__ is deprecated, use js.Syntax.typeof instead" e.epos;
+		gen_typeof ctx o
+	| TField(_,FStatic({cl_path=["js"],"Syntax"},{cf_name="typeof"})),  [o] ->
+		gen_typeof ctx o
 	| TLocal { v_name = "__strict_eq__" } , [x;y] ->
-		(* add extra parenthesis here because of operator precedence *)
-		spr ctx "((";
-		gen_value ctx x;
-		spr ctx ") === ";
-		gen_value ctx y;
-		spr ctx ")";
+		print_deprecation_message ctx.com "__strict_eq__ is deprecated, use js.Syntax.strictEq instead" e.epos;
+		gen_stricteq ctx x y
+	| TField(_,FStatic({cl_path=["js"],"Syntax"},{cf_name="strictEq"})), [x;y] ->
+		gen_stricteq ctx x y
 	| TLocal { v_name = "__strict_neq__" } , [x;y] ->
-		(* add extra parenthesis here because of operator precedence *)
-		spr ctx "((";
-		gen_value ctx x;
-		spr ctx ") !== ";
-		gen_value ctx y;
-		spr ctx ")";
+		print_deprecation_message ctx.com "__strict_neq__ is deprecated, use js.Syntax.strictNeq instead" e.epos;
+		gen_strictneq ctx x y
+	| TField(_,FStatic({cl_path=["js"],"Syntax"},{cf_name="strictNeq"})), [x;y] ->
+		gen_strictneq ctx x y
 	| TLocal ({v_name = "__define_feature__"}), [_;e] ->
 		gen_expr ctx e
 	| TLocal { v_name = "__feature__" }, { eexpr = TConst (TString f) } :: eif :: eelse ->
@@ -400,6 +436,8 @@ let rec gen_call ctx e el in_value =
 			| [] -> ()
 			| e :: _ -> gen_value ctx e)
 	| TLocal { v_name = "__rethrow__" }, [] ->
+		spr ctx "throw $hx_rethrow";
+	| TField(_,FStatic({cl_path=["js"],"Syntax"},{cf_name="rethrow"})), [] ->
 		spr ctx "throw $hx_rethrow";
 	| TLocal { v_name = "__resources__" }, [] ->
 		spr ctx "[";
