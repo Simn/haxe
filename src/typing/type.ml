@@ -1521,8 +1521,6 @@ let rec link e a b =
 	(* tell is already a ~= b *)
 	if loop b then
 		(follow b) == a
-	else if b == t_dynamic then
-		true
 	else begin
 		e := Some b;
 		true
