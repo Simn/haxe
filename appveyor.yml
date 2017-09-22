@@ -21,7 +21,7 @@ install:
     - 'git submodule update --init --recursive'
     - '%CYG_ROOT%/bin/bash -lc "echo initialize"'
     - choco install curl
-    - curl -fsSl https://github.com/HaxeFoundation/ocamhaxe/releases/download/1.1/ocamhaxe.zip
+    - curl -fsSL https://github.com/HaxeFoundation/ocamhaxe/releases/download/1.1/ocamhaxe.zip -o ocamhaxe.zip
     - 7z x -y ocamhaxe.zip
     - cd ocamhaxe
     - config.bat
