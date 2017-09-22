@@ -21,6 +21,8 @@ install:
     - 'git submodule update --init --recursive'
     - '%CYG_ROOT%/bin/bash -lc "echo initialize"'
     - choco install curl
+    - curl -fsSL -o cygwin-setup.exe --retry 3 https://cygwin.com/setup-x86_64.exe
+    - 'cygwin-setup.exe -g -q -R "%CYG_ROOT%" -P unzip -P patch -P mingw64=i686-gcc'
     - curl -fsSL https://github.com/HaxeFoundation/ocamhaxe/releases/download/1.1/ocamhaxe.zip -o ocamhaxe.zip
     - 7z x -y ocamhaxe.zip
     - cd ocamhaxe
