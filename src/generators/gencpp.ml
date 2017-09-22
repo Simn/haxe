@@ -591,17 +591,9 @@ let is_numeric = function
    | _ -> false
 
 
-let rec remove_parens expression =
-      match expression.eexpr with
-      | TParenthesis e -> remove_parens e
-      | TMeta(_,e) -> remove_parens e
-      | _ -> expression
-;;
-
 
 let rec remove_parens_cast expression =
    match expression.eexpr with
-   | TParenthesis e -> remove_parens_cast e
    | TMeta(_,e) -> remove_parens_cast e
    | TCast ( e,None) -> remove_parens_cast e
    | _ -> expression
@@ -640,7 +632,7 @@ let rec is_objc_type t =
 
 
 let is_lvalue var =
-   match (remove_parens var).eexpr with
+   match var.eexpr with
    | TLocal _ -> true
    | TField (_,FStatic(_,field) ) | TField (_,FInstance(_,_,field) ) -> is_var_field field
    | _ -> false
@@ -904,13 +896,13 @@ let is_array_implementer haxe_type =
 
 
 let is_static_access obj =
-   match (remove_parens obj).eexpr with
+   match obj.eexpr with
    | TTypeExpr _ -> true
    | _ -> false
 ;;
 
 let is_native_with_space func =
-   match (remove_parens func).eexpr with
+   match func.eexpr with
    | TField(obj,field) when is_static_access obj ->
       String.contains (get_field_access_meta field Meta.Native) ' '
    | _ -> false
@@ -925,7 +917,7 @@ let is_native_pointer expr =
 
 
 let rec is_cpp_function_member func =
-   match (remove_parens func).eexpr with
+   match func.eexpr with
    | TField(obj,field) when is_cpp_function_instance obj.etype -> true
    | TCall(obj,_) -> is_cpp_function_member obj
    | _ -> false
@@ -1144,7 +1136,7 @@ let dynamic_internal = function | "__Is" -> true | _ -> false
 let rec is_null expr =
    match expr.eexpr with
    | TConst TNull -> true
-   | TParenthesis expr | TMeta (_,expr) -> is_null expr
+   | TMeta (_,expr) -> is_null expr
    | TCast (e,None) -> is_null e
    | _ -> false
 ;;
@@ -1160,13 +1152,13 @@ let is_real_function field =
 
 
 let is_this expression =
-   match (remove_parens expression).eexpr with
+   match expression.eexpr with
    | TConst TThis -> true
    | _ -> false
 ;;
 
 let is_super expression =
-   match (remove_parens expression).eexpr with
+   match expression.eexpr with
    | TConst TSuper -> true
    | _ -> false
 ;;
@@ -1206,7 +1198,7 @@ let rec is_dynamic_in_cpp ctx expr =
             | TFun (args,ret) -> is_dynamic_in_cpp ctx func
             | _ -> true
          );
-      | TParenthesis(expr) | TMeta(_,expr) -> is_dynamic_in_cpp ctx expr
+      | TMeta(_,expr) -> is_dynamic_in_cpp ctx expr
       | TCast (e,None) -> (type_string expr.etype) = "Dynamic"
       | TIdent "__global__" -> false
       | TConst TNull -> true
@@ -1722,7 +1714,6 @@ let rec const_int_of expr =
    match expr.eexpr with
    | TConst TInt x -> x
    | TConst TBool x -> Int32.of_int (if x then 1 else 0)
-   | TParenthesis e -> const_int_of e
    | _ -> raise Not_found
 ;;
 
@@ -1731,7 +1722,6 @@ let rec const_float_of expr =
    | TConst TInt x -> Printf.sprintf "%ld" x
    | TConst TFloat x -> x
    | TConst TBool x -> if x then "1" else "0"
-   | TParenthesis e -> const_float_of e
    | _ -> raise Not_found
 ;;
 
@@ -1739,7 +1729,6 @@ let rec const_float_of expr =
 let rec const_string_of expr =
    match expr.eexpr with
    | TConst TString x -> x
-   | TParenthesis e -> const_string_of e
    | _ -> raise Not_found
 ;;
 
@@ -2490,8 +2479,7 @@ let retype_expression ctx request_type function_args function_type expression_tr
             | _ -> cppType.cppexpr, cppType.cpptype
             )
 
-         | TMeta(_,e)
-         | TParenthesis e ->
+         | TMeta(_,e) ->
             let cppType = retype return_type e in
             cppType.cppexpr, cppType.cpptype
 
@@ -7342,7 +7330,7 @@ class script_writer ctx filename asciiOut =
 
 
    method gen_expression expr = (* { *)
-   let expression = remove_parens expr in
+   let expression = expr in
    this#begin_expr;
    (*this#write ( (this#fileText expression.epos.pfile) ^ "\t" ^ (string_of_int (Lexer.get_error_line expression.epos) ) ^ indent);*)
    this#writePos expression;
@@ -7504,7 +7492,6 @@ class script_writer ctx filename asciiOut =
             | None -> this#writeOp IaVarDecl;
                      this#writeVar tvar;
             | Some init ->this#writeOp IaVarDeclI;
-                     let init = remove_parens init in
                      this#writeVar tvar;
                      this#write (" " ^ (this#typeText init.etype));
                      this#write "\n";
@@ -7589,7 +7576,6 @@ class script_writer ctx filename asciiOut =
          this#write ((this#op IaTCast) ^ (this#typeText (TInst(t,[])) ) ^ "\n");
          this#gen_expression cast;
    | TCast (cast,_) -> this#checkCast expression.etype cast true true;
-   | TParenthesis _ -> abort "Unexpected parens" expression.epos
    | TMeta(_,_) -> abort "Unexpected meta" expression.epos
    | TIdent _ -> abort "Unexpected ident" expression.epos
    );

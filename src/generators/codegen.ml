@@ -83,9 +83,6 @@ let fcall e name el ret p =
 	let ft = tfun (List.map (fun e -> e.etype) el) ret in
 	mk (TCall (field e name ft p,el)) ret p
 
-let mk_parent e =
-	mk (TParenthesis e) e.etype e.epos
-
 let mk_return e =
 	mk (TReturn (Some e)) t_dynamic e.epos
 
@@ -315,7 +312,7 @@ let stack_context_init com stack_var exc_var pos_var tmp_var use_add p =
 		stack_restore = [
 			binop OpAssign exc_e (mk (TArrayDecl []) st p) st p;
 			mk (TWhile (
-				mk_parent (binop OpGte (field stack_e "length" t.tint p) (mk (TLocal pos_var) t.tint p) t.tbool p),
+				binop OpGte (field stack_e "length" t.tint p) (mk (TLocal pos_var) t.tint p) t.tbool p,
 				fcall exc_e "unshift" [fcall stack_e "pop" [] t.tstring p] t.tvoid p,
 				NormalWhile
 			)) t.tvoid p;
@@ -510,7 +507,7 @@ let set_default ctx a c p =
 	let t = a.v_type in
 	let ve = mk (TLocal a) t p in
 	let cond =  TBinop (OpEq,ve,mk (TConst TNull) t p) in
-	mk (TIf (mk_parent (mk cond ctx.basic.tbool p), mk (TBinop (OpAssign,ve,mk (TConst c) t p)) t p,None)) ctx.basic.tvoid p
+	mk (TIf ((mk cond ctx.basic.tbool p), mk (TBinop (OpAssign,ve,mk (TConst c) t p)) t p,None)) ctx.basic.tvoid p
 
 let bytes_serialize data =
 	let b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" in
@@ -530,7 +527,7 @@ let rec constructor_side_effects e =
 		true
 	| TBinop _ | TTry _ | TIf _ | TBlock _ | TVar _
 	| TFunction _ | TArrayDecl _ | TObjectDecl _
-	| TParenthesis _ | TTypeExpr _ | TLocal _ | TMeta _
+	| TTypeExpr _ | TLocal _ | TMeta _
 	| TConst _ | TContinue | TBreak | TCast _ | TIdent _ ->
 		try
 			Type.iter (fun e -> if constructor_side_effects e then raise Exit) e;
@@ -742,7 +739,7 @@ let default_cast ?(vtmp="$t") com e texpr t p =
 	let is = mk (TField (std,fis)) (tfun [t_dynamic;t_dynamic] api.tbool) p in
 	let is = mk (TCall (is,[vexpr;texpr])) api.tbool p in
 	let exc = mk (TThrow (mk (TConst (TString "Class cast error")) api.tstring p)) t p in
-	let check = mk (TIf (mk_parent is,mk (TCast (vexpr,None)) t p,Some exc)) t p in
+	let check = mk (TIf (is,mk (TCast (vexpr,None)) t p,Some exc)) t p in
 	mk (TBlock [var;check;vexpr]) t p
 
 module UnificationCallback = struct
@@ -901,5 +898,5 @@ let for_remap com v e1 e2 p =
 	let ebody = Type.concat eassign e2 in
 	mk (TBlock [
 		mk (TVar (v',Some e1)) com.basic.tvoid e1.epos;
-		mk (TWhile((mk (TParenthesis ehasnext) ehasnext.etype ehasnext.epos),ebody,NormalWhile)) com.basic.tvoid e1.epos;
+		mk (TWhile(ehasnext,ebody,NormalWhile)) com.basic.tvoid e1.epos;
 	]) com.basic.tvoid p

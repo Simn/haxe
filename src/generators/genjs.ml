@@ -458,7 +458,7 @@ let rec gen_call ctx e el in_value =
 and add_objectdecl_parens e =
 	let rec loop e = match e.eexpr with
 		| TCast(e1,None) | TMeta(_,e1) -> loop e1 (* TODO: do we really want to lose these? *)
-		| TObjectDecl _ -> {e with eexpr = TParenthesis e}
+		| TObjectDecl _ -> e (* TODO PARENS *)
 		| _ -> e
 	in
 	loop e
@@ -530,7 +530,7 @@ and gen_expr ctx e =
 	| TField (x,f) ->
 		let rec skip e = match e.eexpr with
 			| TCast(e1,None) | TMeta(_,e1) -> skip e1
-			| TConst(TInt _ | TFloat _) | TObjectDecl _ -> {e with eexpr = TParenthesis e}
+			| TConst(TInt _ | TFloat _) | TObjectDecl _ -> e (* TODO PARENS *)
 			| _ -> e
 		in
 		let x = skip x in
@@ -539,10 +539,6 @@ and gen_expr ctx e =
 		spr ctx (match f with FStatic(c,_) -> static_field c name | FEnum _ | FInstance _ | FAnon _ | FDynamic _ | FClosure _ -> field name)
 	| TTypeExpr t ->
 		spr ctx (ctx.type_accessor t)
-	| TParenthesis e ->
-		spr ctx "(";
-		gen_value ctx e;
-		spr ctx ")";
 	| TMeta ((Meta.LoopLabel,[(EConst(Int n),_)],_), e) ->
 		(match e.eexpr with
 		| TWhile _ | TFor _ ->
@@ -849,7 +845,9 @@ and gen_block_element ?(after=false) ctx e =
 			| [e] -> gen_block_element ~after ctx e
 			| _ -> assert false)
 	| TFunction _ ->
-		gen_block_element ~after ctx (mk (TParenthesis e) e.etype e.epos)
+		spr ctx "(";
+		gen_block_element ~after ctx e;
+		spr ctx ")"
 	| TObjectDecl fl ->
 		List.iter (fun (_,e) -> gen_block_element ~after ctx e) fl
 	| _ ->
@@ -896,7 +894,6 @@ and gen_value ctx e =
 	| TEnumParameter _
 	| TEnumIndex _
 	| TTypeExpr _
-	| TParenthesis _
 	| TObjectDecl _
 	| TArrayDecl _
 	| TNew _
@@ -945,12 +942,6 @@ and gen_value ctx e =
 		loop el;
 		v();
 	| TIf (cond,e,eo) ->
-		(* remove parenthesis unless it's an operation with higher precedence than ?: *)
-		let cond = (match cond.eexpr with
-			| TParenthesis { eexpr = TBinop ((Ast.OpAssign | Ast.OpAssignOp _),_,_) | TIf _ } -> cond
-			| TParenthesis e -> e
-			| _ -> cond
-		) in
 		gen_value ctx cond;
 		spr ctx " ? ";
 		gen_value ctx e;

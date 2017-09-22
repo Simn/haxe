@@ -112,7 +112,7 @@ let configure gen unwrap_null wrap_val null_to_dynamic has_value opeq_handler =
 			let v = mk_temp "nulltmp" e.etype in
 			add_tmp v (Some (null e.etype e.epos)) e.epos;
 			let local = { e with eexpr = TLocal(v) } in
-			mk_paren { e with eexpr = TBinop(Ast.OpAssign, local, e) }, local
+			{ e with eexpr = TBinop(Ast.OpAssign, local, e) }, local
 	in
 	let rec run e =
 		match e.eexpr with

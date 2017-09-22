@@ -1022,7 +1022,7 @@ let rec gen_expr_content ctx retval e =
 		gen_expr ctx true e;
 		write ctx HThrow;
 		no_value ctx retval;
-	| TParenthesis e | TMeta (_,e) ->
+	| TMeta (_,e) ->
 		gen_expr ctx retval e
 	| TObjectDecl fl ->
 		List.iter (fun (name,e) ->
@@ -1243,7 +1243,7 @@ let rec gen_expr_content ctx retval e =
 			let rec get_int e =
 				match e.eexpr with
 				| TConst (TInt n) -> if n < 0l || n > 512l then raise Exit; Int32.to_int n
-				| TParenthesis e | TBlock [e] | TMeta (_,e) -> get_int e
+				| TBlock [e] | TMeta (_,e) -> get_int e
 				| _ -> raise Not_found
 			in
 			List.iter (fun (vl,_) -> List.iter (fun v ->
@@ -1722,12 +1722,12 @@ and generate_function ctx fdata stat =
 					match e.eexpr with
 					| TSwitch _ | TFor _ | TWhile _ | TTry _ -> false
 					| TIf _ -> loop e
-					| TParenthesis e | TMeta(_,e) -> inner_loop e
+					| TMeta(_,e) -> inner_loop e
 					| _ -> true
 				in
 				inner_loop e
 			| TIf (_,e1,Some e2) -> loop e1 && loop e2
-			| TParenthesis e | TMeta(_,e) -> loop e
+			| TMeta(_,e) -> loop e
 			| _ -> false
 		in
 		if not (loop fdata.tf_expr) then write ctx HRetVoid;
@@ -1736,7 +1736,7 @@ and generate_function ctx fdata stat =
 
 and jump_expr_gen ctx e jif jfun =
 	match e.eexpr with
-	| TParenthesis e | TMeta(_,e) -> jump_expr_gen ctx e jif jfun
+	| TMeta(_,e) -> jump_expr_gen ctx e jif jfun
 	| TBinop (op,e1,e2) ->
 		let j t f =
 			check_binop ctx e1 e2;
@@ -1820,7 +1820,7 @@ let rec is_const e =
 	| TConst _ -> true
 	| TArrayDecl el | TBlock el -> List.for_all is_const el
 	| TObjectDecl fl -> List.for_all (fun (_,e) -> is_const e) fl
-	| TParenthesis e | TMeta(_,e) -> is_const e
+	| TMeta(_,e) -> is_const e
 	| TFunction _ -> true
 	| _ -> false
 

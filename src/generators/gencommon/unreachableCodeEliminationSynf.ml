@@ -60,7 +60,7 @@ let rec get_constant_expr e =
 	match e.eexpr with
 		| TConst (v) -> Some v
 		| TBinop(op, v1, v2) -> aggregate_constant op (get_constant_expr v1) (get_constant_expr v2)
-		| TParenthesis(e) | TMeta(_,e) -> get_constant_expr e
+		| TMeta(_,e) -> get_constant_expr e
 		| _ -> None
 
 let init com java_mode =

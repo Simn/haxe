@@ -461,7 +461,7 @@ module Diagnostics = struct
 			| TIf _ | TTry _ | TSwitch _ | TWhile _ | TFor _ ->
 				had_effect := true;
 				Type.iter (loop true) e
-			| TParenthesis e1 | TMeta(_,e1) ->
+			| TMeta(_,e1) ->
 				loop in_value e1
 			| TArray _ | TCast (_,None) | TBinop _ | TUnop _
 			| TField _ | TArrayDecl _ | TObjectDecl _ when in_value ->

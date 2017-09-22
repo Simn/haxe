@@ -430,9 +430,7 @@ let open_block ctx =
 	(fun() -> ctx.tabs <- oldt)
 
 let parent e =
-	match e.eexpr with
-	| TParenthesis _ -> e
-	| _ -> mk (TParenthesis e) e.etype e.epos
+	e (* TODO PARENS *)
 
 let inc_extern_path ctx path =
 	let rec slashes n =
@@ -626,7 +624,6 @@ and gen_call ctx e el =
 	| TLocal _, []
 	| TFunction _, []
 	| TCall _, []
-	| TParenthesis _, []
 	| TMeta _, []
 	| TBlock _, [] ->
 		ctx.is_call <- true;
@@ -637,7 +634,6 @@ and gen_call ctx e el =
 	| TLocal _, el
 	| TFunction _, el
 	| TCall _, el
-	| TParenthesis _, el
 	| TMeta _, el
 	| TBlock _, el ->
 		ctx.is_call <- true;
@@ -845,7 +841,6 @@ and gen_field_access ctx isvar e s =
 		spr ctx ")";
 		gen_member_access ctx isvar e s
 	| TBlock _
-	| TParenthesis _
 	| TMeta _
 	| TObjectDecl _
 	| TArrayDecl _
@@ -1061,7 +1056,6 @@ and gen_expr ctx e =
 		(match e1.eexpr with
 		| TCall _
 		| TBlock _
-		| TParenthesis _
 		| TMeta _
 		| TArrayDecl _ ->
 			spr ctx "_hx_array_get(";
@@ -1088,7 +1082,7 @@ and gen_expr ctx e =
 		in
 		(match e1.eexpr with
 		| TBinop (op2,_,_) when non_assoc op && non_assoc op2 ->
-			gen_expr ctx { e with eexpr = TBinop (op,mk (TParenthesis e1) e1.etype e1.epos,e2) }
+			gen_expr ctx { e with eexpr = TBinop (op,e1,e2) }
 		| _ ->
 		let leftside e =
 			(match e.eexpr with
@@ -1126,7 +1120,7 @@ and gen_expr ctx e =
 			spr ctx ")";
 		| Ast.OpAssign ->
 			(match e1.eexpr with
-			| TArray(te1, te2) when (match te1.eexpr with | TCall _ | TParenthesis _ -> true | _ -> false) ->
+			| TArray(te1, te2) when (match te1.eexpr with | TCall _ -> true | _ -> false) ->
 				spr ctx "_hx_array_assign(";
 				gen_value ctx te1;
 				spr ctx ", ";
@@ -1320,16 +1314,6 @@ and gen_expr ctx e =
 		gen_tfield ctx e e1 s
 	| TTypeExpr t ->
 		print ctx "_hx_qtype(\"%s\")" (s_path_haxe (t_path t))
-	| TParenthesis e ->
-		(match e.eexpr with
-		| TParenthesis _
-		| TReturn _ ->
-			gen_value ctx e;
-		| _ ->
-			spr ctx "(";
-			gen_value ctx e;
-			spr ctx ")"
-		);
 	| TMeta (_,e) ->
 		gen_expr ctx e
 	| TReturn eo ->
@@ -1776,7 +1760,6 @@ and canbe_ternary_param e =
 	| TConst _
 	| TLocal _
 	| TField (_,FEnum _)
-	| TParenthesis _
 	| TMeta _
 	| TObjectDecl _
 	| TArrayDecl _
@@ -1808,7 +1791,6 @@ and gen_value ctx e =
 	| TEnumParameter _
 	| TEnumIndex _
 	| TField _
-	| TParenthesis _
 	| TObjectDecl _
 	| TArrayDecl _
 	| TCall _

@@ -254,8 +254,6 @@ and gen_expr ctx e =
 		field p (gen_expr ctx e) (field_name f)
 	| TTypeExpr t ->
 		gen_type_path p (t_path t)
-	| TParenthesis e ->
-		(EParenthesis (gen_expr ctx e),p)
 	| TMeta (_,e) ->
 		gen_expr ctx e
 	| TObjectDecl fl ->
@@ -319,7 +317,7 @@ and gen_expr ctx e =
 		,p)
 	| TIf (cond,e1,e2) ->
 		(* if(e)-1 is parsed as if( e - 1 ) *)
-		let parent e = mk (TParenthesis e) e.etype e.epos in
+		let parent e = e in (* TODO PARENS *)
 		let e1 = (match e1.eexpr with TConst (TInt n) when n < 0l -> parent e1 | TConst (TFloat f) when f.[0] = '-' -> parent e1 | _ -> e1) in
 		(EIf (gen_expr ctx cond,gen_expr ctx e1,(match e2 with None -> None | Some e -> Some (gen_expr ctx e))),p)
 	| TWhile (econd,e,flag) ->

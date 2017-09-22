@@ -105,7 +105,7 @@ let rec is_null t =
 		| _ -> false
 
 let rec get_ptr e = match e.eexpr with
-	| TParenthesis e | TMeta(_,e)
+	| TMeta(_,e)
 	| TCast(e,_) -> get_ptr e
 	| TCall( { eexpr = TIdent "__ptr__" }, [ e ] ) ->
 		Some e
@@ -220,7 +220,7 @@ struct
 								let eisint = mk_is local (TAbstractDecl (get_ab_from_t basic.tint)) in
 								let eisuint = mk_is local (TAbstractDecl (get_ab_from_t uint)) in
 								let eisfloat = mk_is local md in
-								mk_paren (mk_or eisfloat (mk_or eisint eisuint))
+								mk_or eisfloat (mk_or eisint eisuint)
 							in
 							wrap_if_needed obj mk_is
 
@@ -239,7 +239,7 @@ struct
 							let mk_is local =
 								let eisint = mk_is local (TAbstractDecl (get_ab_from_t basic.tint)) in
 								let eisuint = mk_is local (TAbstractDecl (get_ab_from_t uint)) in
-								mk_paren (mk_or (mk_or eisint eisuint) (mk_isint_call local))
+								mk_or (mk_or eisint eisuint) (mk_isint_call local)
 							in
 							wrap_if_needed obj mk_is
 
@@ -257,7 +257,7 @@ struct
 							in
 							let mk_is local =
 								let eisuint = mk_is local (TAbstractDecl (get_ab_from_t uint)) in
-								mk_paren (mk_or eisuint (mk_isuint_call local))
+								mk_or eisuint (mk_isuint_call local)
 							in
 							wrap_if_needed obj mk_is
 
@@ -750,7 +750,7 @@ let generate con =
 		in
 
 		let rec field_is_hxgeneric e = match e.eexpr with
-			| TParenthesis e | TMeta(_,e) -> field_is_hxgeneric e
+			| TMeta(_,e) -> field_is_hxgeneric e
 			| TField(_, (FStatic(cl,_) | FInstance(cl,_,_)) ) ->
 				(* print_endline ("is_hxgeneric " ^ s_type_path cl.cl_path ^ " : " ^ string_of_bool (is_hxgeneric (TClassDecl cl))); *)
 				is_hxgeneric (TClassDecl cl)
@@ -1071,7 +1071,7 @@ let generate con =
 			match e.eexpr with
 				| TLocal _ -> e
 				| TCast(e,_)
-				| TParenthesis e | TMeta(_,e) -> ensure_local e explain
+				| TMeta(_,e) -> ensure_local e explain
 				| _ -> gen.gcon.error ("This function argument " ^ explain ^ " must be a local variable.") e.epos; e
 		in
 
@@ -1079,7 +1079,7 @@ let generate con =
 			match e.eexpr with
 				| TField _ | TLocal _ -> e
 				| TCast(e,_)
-				| TParenthesis e | TMeta(_,e) -> ensure_refout e explain
+				| TMeta(_,e) -> ensure_refout e explain
 				| _ -> gen.gcon.error ("This function argument " ^ explain ^ " must be a local variable.") e.epos; e
 		in
 
@@ -1156,7 +1156,6 @@ let generate con =
 				| TObjectDecl _
 				| TArrayDecl _
 				| TCast _
-				| TParenthesis _
 				| TUnop _ ->
 					Type.iter loop expr
 				| TFunction _ -> () (* do not extract parameters from inside of it *)
@@ -1333,8 +1332,6 @@ let generate con =
 							| TTypeDecl td -> write w (t_s (gen.gfollow#run_f (TType(td, List.map (fun _ -> t_empty) td.t_params))))
 							| TAbstractDecl a -> write w (t_s (TAbstract(a, List.map (fun _ -> t_empty) a.a_params)))
 						)
-					| TParenthesis e ->
-						write w "("; expr_s w e; write w ")"
 					| TMeta ((Meta.LoopLabel,[(EConst(Int n),_)],_), e) ->
 						(match e.eexpr with
 						| TFor _ | TWhile _ ->
@@ -1536,22 +1533,22 @@ let generate con =
 					| TIf (econd, e1, Some(eelse)) when was_in_value ->
 						let base = t_s e.etype in
 						write w "( ";
-						expr_s w (mk_paren econd);
+						expr_s w econd;
 						write w " ? ";
 						if t_s e1.etype <> base then
 							expr_s w (mk_cast e.etype e1)
 						else
-							expr_s w (mk_paren e1);
+							expr_s w e1;
 
 						write w " : ";
 						if t_s eelse.etype <> base then
 							expr_s w (mk_cast e.etype eelse)
 						else
-							expr_s w (mk_paren eelse);
+							expr_s w eelse;
 						write w " )";
 					| TIf (econd, e1, eelse) ->
 						write w "if ";
-						expr_s w (mk_paren econd);
+						expr_s w econd;
 						write w " ";
 						in_value := false;
 						expr_s w (mk_block e1);
@@ -1571,7 +1568,7 @@ let generate con =
 						(match flag with
 							| Ast.NormalWhile ->
 								write w "while ";
-								expr_s w (mk_paren econd);
+								expr_s w econd;
 								write w " ";
 								in_value := false;
 								expr_s w (mk_block eblock)
@@ -1581,11 +1578,11 @@ let generate con =
 								expr_s w (mk_block eblock);
 								write w "while ";
 								in_value := true;
-								expr_s w (mk_paren econd);
+								expr_s w econd;
 						)
 					| TSwitch (econd, ele_l, default) ->
 						write w "switch ";
-						expr_s w (mk_paren econd);
+						expr_s w econd;
 						write w " ";
 						begin_block w;
 						List.iter (fun (el, e) ->
@@ -2046,7 +2043,6 @@ let generate con =
 						let rec check_empty expr = match expr.eexpr with
 							| TBlock(bl) -> bl = [] || List.for_all check_empty bl
 							| TMeta(_,e) -> check_empty e
-							| TParenthesis(e) -> check_empty e
 							| TConst(TNull) -> true
 							| TFunction(tf) -> check_empty tf.tf_expr
 							| _ -> false
@@ -2690,7 +2686,7 @@ let generate con =
 					| TConst TThis, _ when gen.gcurrent_path = (["haxe";"lang"], "Null") ->
 						e
 					| _, TInst({ cl_path = (["haxe";"lang"], "Null") }, [t]) ->
-						let e = { e with eexpr = TParenthesis(e) } in
+						(* let e = { e with eexpr = TParenthesis(e) } in *) (* TODO PARENS *)
 						{ (mk_field_access gen e "value" e.epos) with etype = t }
 					| _ ->
 						trace (debug_type e.etype); gen.gcon.error "This expression is not a Nullable expression" e.epos; assert false
@@ -2709,7 +2705,7 @@ let generate con =
 			(fun e ->
 				{
 					eexpr = TCall(
-						{ (mk_field_access gen { (mk_paren e) with etype = real_type e.etype } "toDynamic" e.epos) with etype = TFun([], t_dynamic) },
+						{ (mk_field_access gen { e with etype = real_type e.etype } "toDynamic" e.epos) with etype = TFun([], t_dynamic) },
 						[]);
 					etype = t_dynamic;
 					epos = e.epos

@@ -1190,7 +1190,6 @@ and encode_texpr e =
 			| TBinop(op,e1,e2) -> 3,[encode_binop op;loop e1;loop e2]
 			| TField(e1,fa) -> 4,[loop e1;encode_field_access fa]
 			| TTypeExpr mt -> 5,[encode_module_type mt]
-			| TParenthesis e1 -> 6,[loop e1]
 			| TObjectDecl fl -> 7, [encode_array (List.map (fun (f,e) ->
 				encode_obj OTypedExprDef_fields [
 					"name",encode_string f;
@@ -1354,7 +1353,6 @@ and decode_texpr v =
 		| 3, [op;v1;v2] -> TBinop(decode_op op,loop v1,loop v2)
 		| 4, [v1;fa] -> TField(loop v1,decode_field_access fa)
 		| 5, [mt] -> TTypeExpr(decode_module_type mt)
-		| 6, [v1] -> TParenthesis(loop v1)
 		| 7, [v] -> TObjectDecl(List.map (fun v -> decode_string (field v "name"),loop (field v "expr")) (decode_array v))
 		| 8, [vl] -> TArrayDecl(List.map loop (decode_array vl))
 		| 9, [v1;vl] -> TCall(loop v1,List.map loop (decode_array vl))
@@ -1474,7 +1472,7 @@ let rec make_const e =
 		| TBool b -> vbool b
 		| TNull -> vnull
 		| TThis | TSuper -> raise Exit)
-	| TParenthesis e | TMeta(_,e) | TCast(e,None) ->
+	| TMeta(_,e) | TCast(e,None) ->
 		make_const e
 	| TObjectDecl el ->
 		encode_obj O__Const (List.map (fun (f,e) -> f, make_const e) el)

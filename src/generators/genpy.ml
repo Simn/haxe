@@ -430,7 +430,7 @@ module Transformer = struct
 			let mk_or e1 e2 = mk (TBinop(OpOr,e1,e2)) !t_bool (punion e1.epos e2.epos) in
 			let mk_if (el,e) eo =
 				let eif = List.fold_left (fun eacc e -> mk_or eacc (mk_eq e1 e)) (mk_eq e1 (List.hd el)) (List.tl el) in
-				mk (TIf(Codegen.mk_parent eif,e,eo)) e.etype e.epos
+				mk (TIf(eif,e,eo)) e.etype e.epos
 			in
 			let cases = Hashtbl.fold (fun i el acc ->
 				let eint = mk (TConst (TInt (Int32.of_int i))) !t_int e1.epos in
@@ -675,7 +675,7 @@ module Transformer = struct
 			let ebody = Type.concat var_assign (a2) in
 
 			let var_decl = mk (TVar (t_var,Some a1.a_expr)) (!t_void) e1.epos in
-			let twhile = mk (TWhile((mk (TParenthesis ehasnext) ehasnext.etype ehasnext.epos),ebody,NormalWhile)) (!t_void) e1.epos in
+			let twhile = mk (TWhile(ehasnext,ebody,NormalWhile)) (!t_void) e1.epos in
 
 			let blocks = a1.a_blocks @ [var_decl] in
 
@@ -705,10 +705,6 @@ module Transformer = struct
 				| blocks ->
 					let f = exprs_to_func (blocks @ [x1.a_expr]) (ae.a_next_id()) ae in
 					lift true f.a_blocks {a_expr with eexpr = TReturn (Some f.a_expr)})
-		| (_, TParenthesis(e1)) ->
-			let e1 = trans true [] e1 in
-			let p = { ae.a_expr with eexpr = TParenthesis(e1.a_expr)} in
-			lift true e1.a_blocks p
 		| (_, TEnumParameter(e1,ef,i)) ->
 			let e1 = trans true [] e1 in
 			let p = { ae.a_expr with eexpr = TEnumParameter(e1.a_expr,ef,i)} in
@@ -1084,7 +1080,6 @@ module Printer = struct
 		Printf.sprintf "@%s" name
 
 	let rec remove_outer_parens e = match e.eexpr with
-		| TParenthesis(e) -> remove_outer_parens e
 		| TMeta((Meta.Custom ":ternaryIf",_,_),_) -> e
 		| TMeta(_,e) -> remove_outer_parens e
 		| _ -> e
@@ -1118,7 +1113,7 @@ module Printer = struct
 
 	let rec print_op_assign_right pctx e =
 		match e.eexpr with
-			| TIf({eexpr = TParenthesis econd},eif,Some eelse)
+			| TIf(econd,eif,Some eelse)
 			| TIf(econd,eif,Some eelse) ->
 				Printf.sprintf "%s if %s else %s" (print_expr pctx eif) (print_expr pctx econd) (print_expr pctx eelse)
 			| _ ->
@@ -1167,14 +1162,10 @@ module Printer = struct
 		| _ -> default
 
 	and is_safe_string pctx x =
-		let follow_parens e = match e.eexpr with
-			| TParenthesis e -> e
-			| _ -> e
-		in
-		match (follow_parens x).eexpr with
+		match x.eexpr with
 		| TBinop(OpAdd, e1, e2) -> is_safe_string pctx e1 && is_safe_string pctx e2
 		| TCall (e1,_) ->
-			let id = print_expr pctx (follow_parens e1) in
+			let id = print_expr pctx e1 in
 			(match id with
 			| "Std.string" -> true
 			| _ -> false)
@@ -1189,7 +1180,7 @@ module Printer = struct
 				print_constant ct
 			| TTypeExpr mt ->
 				print_module_type mt
-			| (TLocal v | TParenthesis({ eexpr = (TLocal v) })) ->
+			| (TLocal v) ->
 				handle_keywords v.v_name
 			| TEnumParameter(e1,_,index) ->
 				Printf.sprintf "%s.params[%i]" (print_expr pctx e1) index
@@ -1212,7 +1203,7 @@ module Printer = struct
 			| TBinop(OpAssign,e1,e2) ->
 				Printf.sprintf "%s = %s" (print_expr pctx e1) (print_expr pctx (remove_outer_parens e2))
 			| TBinop(op,e1,({eexpr = TBinop(_,_,_)} as e2)) ->
-				print_expr pctx { e with eexpr = TBinop(op, e1, { e2 with eexpr = TParenthesis(e2) })}
+				print_expr pctx { e with eexpr = TBinop(op, e1, e2)}
 			| TBinop(OpEq,{eexpr = TCall({eexpr = TIdent "__typeof__"},[e1])},e2) ->
 				begin match e2.eexpr with
 					| TConst(TString s) ->
@@ -1307,8 +1298,6 @@ module Printer = struct
 				Printf.sprintf "(%s %s %s)" (print_expr pctx e1) (print_binop op) (print_expr pctx e2)
 			| TField(e1,fa) ->
 				print_field pctx e1 fa false
-			| TParenthesis e1 ->
-				Printf.sprintf "(%s)" (print_expr pctx e1)
 			| TObjectDecl fl ->
 				let fl2 = ref fl in
 				begin match follow e.etype with
@@ -1387,10 +1376,7 @@ module Printer = struct
 				assert false
 
 	and print_if_else pctx econd eif eelse as_elif =
-		let econd1 = match econd.eexpr with
-			| TParenthesis e -> e
-			| _ -> econd
-		in
+		let econd1 = econd in
 		let if_str = print_expr {pctx with pc_indent = "    " ^ pctx.pc_indent} eif in
 		let indent = pctx.pc_indent in
 		let else_str = if as_elif then

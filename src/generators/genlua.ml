@@ -321,7 +321,6 @@ let rec is_int_type ctx t =
     | _ -> false
 
 let rec extract_expr e = match e.eexpr with
-    | TParenthesis e
     | TMeta (_,e)
     | TCast(e,_) -> extract_expr e
     | _ -> e
@@ -618,8 +617,8 @@ and gen_expr ?(local=true) ctx e = begin
     | TField ({ eexpr = TConst(TInt _ | TFloat _| TString _| TBool _) } as e , ((FInstance _ | FAnon _) as ef)) ->
         gen_paren ctx [e];
         print ctx (".%s") (field_name ef);
-    | TField ({ eexpr = TConst (TInt _ | TFloat _) } as x,f) ->
-        gen_expr ctx { e with eexpr = TField(mk (TParenthesis x) x.etype x.epos,f) }
+    (* | TField ({ eexpr = TConst (TInt _ | TFloat _) } as x,f) ->
+        gen_expr ctx { e with eexpr = TField(mk (TParenthesis x) x.etype x.epos,f) } *) (* TODO PARENS *)
     | TField ({ eexpr = TObjectDecl fields }, ef ) ->
         spr ctx "(function(x) return x.";
         print ctx "%s" (field_name ef);
@@ -640,8 +639,6 @@ and gen_expr ?(local=true) ctx e = begin
         spr ctx (match f with FStatic _ | FEnum _ | FInstance _ | FAnon _ | FDynamic _ | FClosure _ -> field name)
     | TTypeExpr t ->
         spr ctx (ctx.type_accessor t)
-    | TParenthesis e ->
-        gen_paren ctx [e];
     | TMeta (_,e) ->
         gen_expr ctx e
     | TReturn eo -> gen_return ctx e eo;
@@ -992,7 +989,7 @@ and gen_block_element ctx e  =
     begin match e.eexpr with
         | TTypeExpr _ | TConst _ | TLocal _ | TFunction _ ->
             ()
-        | TCast (e',_) | TParenthesis e' | TMeta (_,e') ->
+        | TCast (e',_) | TMeta (_,e') ->
             gen_block_element ctx e'
         | TArray (e1,e2) ->
             gen_block_element ctx e1;
@@ -1120,7 +1117,6 @@ and gen_value ctx e =
     | TEnumParameter _
     | TEnumIndex _
     | TTypeExpr _
-    | TParenthesis _
     | TObjectDecl _
     | TArrayDecl _
     | TNew _

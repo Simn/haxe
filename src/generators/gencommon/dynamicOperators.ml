@@ -74,7 +74,7 @@ let init com handle_strings (should_change:texpr->bool) (equals_handler:texpr->t
 		| TBinop (OpAssignOp op, e1, e2) when should_change e -> (* e1 will never contain another TBinop *)
 			(match e1.eexpr with
 			| TLocal _ ->
-				mk_paren { e with eexpr = TBinop(OpAssign, e1, run { e with eexpr = TBinop(op, e1, e2) }) }
+				{ e with eexpr = TBinop(OpAssign, e1, run { e with eexpr = TBinop(op, e1, e2) }) }
 			| TField _ | TArray _ ->
 				let eleft, rest =
 					match e1.eexpr with
@@ -103,7 +103,7 @@ let init com handle_strings (should_change:texpr->bool) (equals_handler:texpr->t
 			| OpEq -> (* type 1 *)
 				equals_handler (run e1) (run e2)
 			| OpNotEq -> (* != -> !equals() *)
-				mk_parent (mk (TUnop (Not, Prefix, (equals_handler (run e1) (run e2)))) com.basic.tbool e.epos)
+				mk (TUnop (Not, Prefix, (equals_handler (run e1) (run e2)))) com.basic.tbool e.epos
 			| OpAdd  ->
 				if handle_strings && (is_string e.etype || is_string e1.etype || is_string e2.etype) then
 					{ e with eexpr = TBinop (op, mk_cast com.basic.tstring (run e1), mk_cast com.basic.tstring (run e2)) }
@@ -166,7 +166,7 @@ let init com handle_strings (should_change:texpr->bool) (equals_handler:texpr->t
 
 	| TUnop (op, flag, e1) when should_change e ->
 		let etype = match op with Not -> com.basic.tbool | _ -> com.basic.tint in
-		mk_parent (mk (TUnop (op, flag, mk_cast etype (run e1))) etype e.epos)
+		mk (TUnop (op, flag, mk_cast etype (run e1))) etype e.epos
 
 	| _ ->
 		Type.map_expr run e

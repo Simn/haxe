@@ -356,8 +356,6 @@ and jit_expr jit return e =
 		end else begin
 			emit_constant_switch exec (DynArray.to_array execs) (DynArray.to_array constants) exec_def
 		end
-	| TWhile({eexpr = TParenthesis e1},e2,flag) ->
-		loop {e with eexpr = TWhile(e1,e2,flag)}
 	| TWhile({eexpr = TBinop(OpLt,{eexpr = TLocal v;epos=pv},eto)},e2,NormalWhile) when (Meta.has Meta.ForLoopVariable v.v_meta) ->
 		let has_break = ref false in
 		let has_continue = ref false in
@@ -783,7 +781,7 @@ and jit_expr jit return e =
 	(* rewrites/skips *)
 	| TFor(v,e1,e2) ->
 		loop (Codegen.for_remap (ctx.curapi.MacroApi.get_com()) v e1 e2 e.epos)
-	| TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) ->
+	| TMeta(_,e1) | TCast(e1,None) ->
 		loop e1
 	| TIdent s ->
 		Error.error ("Unknown identifier: " ^ s) e.epos

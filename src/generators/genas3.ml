@@ -231,11 +231,6 @@ let open_block ctx =
 	ctx.tabs <- "\t" ^ ctx.tabs;
 	(fun() -> ctx.tabs <- oldt)
 
-let parent e =
-	match e.eexpr with
-	| TParenthesis _ -> e
-	| _ -> mk (TParenthesis e) e.etype e.epos
-
 let default_value tstr =
 	match tstr with
 	| "int" | "uint" -> "0"
@@ -641,10 +636,6 @@ and gen_expr ctx e =
 		gen_field_access ctx e.etype (field_name s)
 	| TTypeExpr t ->
 		spr ctx (s_path ctx true (t_path t) e.epos)
-	| TParenthesis e ->
-		spr ctx "(";
-		gen_value ctx e;
-		spr ctx ")";
 	| TMeta (_,e) ->
 		gen_expr ctx e
 	| TReturn eo ->
@@ -722,9 +713,9 @@ and gen_expr ctx e =
 		concat ctx "," (gen_value ctx) el;
 		spr ctx ")"
 	| TIf (cond,e,eelse) ->
-		spr ctx "if";
-		gen_value ctx (parent cond);
-		spr ctx " ";
+		spr ctx "if (";
+		gen_value ctx cond;
+		spr ctx ") ";
 		gen_expr ctx e;
 		(match eelse with
 		| None -> ()
@@ -740,17 +731,18 @@ and gen_expr ctx e =
 		spr ctx (Ast.s_unop op)
 	| TWhile (cond,e,Ast.NormalWhile) ->
 		let handle_break = handle_break ctx e in
-		spr ctx "while";
-		gen_value ctx (parent cond);
-		spr ctx " ";
+		spr ctx "while (";
+		gen_value ctx cond;
+		spr ctx ") ";
 		gen_expr ctx e;
 		handle_break();
 	| TWhile (cond,e,Ast.DoWhile) ->
 		let handle_break = handle_break ctx e in
 		spr ctx "do ";
 		gen_expr ctx e;
-		spr ctx " while";
-		gen_value ctx (parent cond);
+		spr ctx " while (";
+		gen_value ctx cond;
+		spr ctx ")";
 		handle_break();
 	| TObjectDecl fields ->
 		spr ctx "{ ";
@@ -777,9 +769,9 @@ and gen_expr ctx e =
 			gen_expr ctx e;
 		) catchs;
 	| TSwitch (e,cases,def) ->
-		spr ctx "switch";
-		gen_value ctx (parent e);
-		spr ctx " {";
+		spr ctx "switch (";
+		gen_value ctx e;
+		spr ctx ") {";
 		newline ctx;
 		List.iter (fun (el,e2) ->
 			List.iter (fun e ->
@@ -886,7 +878,6 @@ and gen_value ctx e =
 	| TEnumParameter _
 	| TEnumIndex _
 	| TTypeExpr _
-	| TParenthesis _
 	| TObjectDecl _
 	| TArrayDecl _
 	| TCall _

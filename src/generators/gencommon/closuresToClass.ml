@@ -100,7 +100,7 @@ let null_map_info = { in_unsafe = false; in_unused = false; }
 *)
 
 let rec cleanup_delegate e = match e.eexpr with
-	| TParenthesis e | TMeta(_,e)
+	| TMeta(_,e)
 	| TCast(e,_) -> cleanup_delegate e
 	| _ -> e
 

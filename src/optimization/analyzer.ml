@@ -441,7 +441,7 @@ module ConstPropagation = DataFlow(struct
 					| None -> raise Exit
 					| Some e -> eval bb e
 				end
-			| TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) ->
+			| TMeta(_,e1) | TCast(e1,None) ->
 				eval bb e1
 			| _ ->
 				let e1 = match ctx.com.platform,e.eexpr with
@@ -539,7 +539,7 @@ module CopyPropagation = DataFlow(struct
 		let rec loop e = match e.eexpr with
 			| TLocal v when not v.v_capture ->
 				Local v
-			| TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) ->
+			| TMeta(_,e1) | TCast(e1,None) ->
 				loop e1
 			| _ ->
 				Bottom
@@ -611,7 +611,7 @@ module LocalDce = struct
 			| TNew _ | TCall _ | TBinop ((OpAssignOp _ | OpAssign),_,_) | TUnop ((Increment|Decrement),_,_) -> raise Exit
 			| TReturn _ | TBreak | TContinue | TThrow _ | TCast (_,Some _) -> raise Exit
 			| TFor _ -> raise Exit
-			| TArray _ | TEnumParameter _ | TEnumIndex _ | TCast (_,None) | TBinop _ | TUnop _ | TParenthesis _ | TMeta _ | TWhile _
+			| TArray _ | TEnumParameter _ | TEnumIndex _ | TCast (_,None) | TBinop _ | TUnop _ | TMeta _ | TWhile _
 			| TField _ | TIf _ | TTry _ | TSwitch _ | TArrayDecl _ | TBlock _ | TObjectDecl _ | TVar _ -> Type.iter loop e
 		in
 		try

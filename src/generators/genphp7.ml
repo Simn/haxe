@@ -215,14 +215,13 @@ let rec reveal_expr expr =
 		| _ -> expr
 
 (**
-	If `expr` is a TCast or TMeta or TParenthesis, then returns underlying expression (recursively bypassing nested casts and parenthesis).
+	If `expr` is a TCast or TMeta, then returns underlying expression (recursively bypassing nested casts and parenthesis).
 	Otherwise returns `expr` as is.
 *)
 let rec reveal_expr_with_parenthesis expr =
 	match expr.eexpr with
 		| TCast (e, _) -> reveal_expr_with_parenthesis e
 		| TMeta (_, e) -> reveal_expr_with_parenthesis e
-		| TParenthesis e -> reveal_expr_with_parenthesis e
 		| _ -> expr
 
 (**
@@ -352,10 +351,6 @@ let get_boot ctx : tclass =
 				| Some value -> value
 				| None -> fail dummy_pos __POS__
 
-(**
-	@return `expr` wrapped in parenthesis
-*)
-let parenthesis expr = {eexpr = TParenthesis expr; etype = expr.etype; epos = expr.epos}
 
 (**
 	Check if `current` binary should be surrounded with parenthesis
@@ -383,7 +378,6 @@ let need_parenthesis_for_binop current parent =
 let needs_dereferencing for_assignment expr =
 	let rec is_create target_expr =
 		match (reveal_expr target_expr).eexpr with
-			| TParenthesis e -> is_create e
 			| TCast (e, _) -> is_create e
 			| TNew _ -> for_assignment
 			| TArrayDecl _ -> for_assignment
@@ -1578,10 +1572,6 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 				| TField (fexpr, access) when needs_dereferencing (self#is_in_write_context) expr -> self#write_expr (self#dereference expr)
 				| TField (fexpr, access) -> self#write_expr_field fexpr access
 				| TTypeExpr mtype -> self#write_expr_type mtype
-				| TParenthesis expr ->
-					self#write "(";
-					self#write_expr expr;
-					self#write ")"
 				| TObjectDecl fields -> self#write_expr_object_declaration fields
 				| TArrayDecl exprs -> self#write_expr_array_decl exprs
 				| TCall (target, [arg1; arg2]) when is_std_is target && instanceof_compatible arg1 arg2 -> self#write_expr_lang_instanceof [arg1; arg2]
@@ -1589,7 +1579,7 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 				| TCall ({ eexpr = TIdent name}, args) when is_magic expr -> self#write_expr_magic name args
 				| TCall ({ eexpr = TField (expr, access) }, args) when is_string expr -> self#write_expr_call_string expr access args
 				| TCall (expr, args) when is_lang_extern expr -> self#write_expr_call_lang_extern expr args
-				| TCall (target, args) when is_sure_var_field_access target -> self#write_expr_call (parenthesis target) args
+				| TCall (target, args) when is_sure_var_field_access target -> self#write_expr_call target args (* TODO PARENS *)
 				| TCall (target, args) -> self#write_expr_call target args
 				| TNew (_, _, args) when is_string expr -> write_args self#write self#write_expr args
 				| TNew (tcls, _, args) -> self#write_expr_new tcls args
@@ -2187,7 +2177,7 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 			(match (reveal_expr expr).eexpr with
 				| TNew _
 				| TArrayDecl _
-				| TObjectDecl _ -> self#write_expr (parenthesis expr)
+				| TObjectDecl _ -> self#write_expr expr (* TODO PARENS *)
 				| TConst TSuper ->
 					self#write "parent";
 					access_str := "::"
@@ -2527,7 +2517,7 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 					let add_parentheses = match self#parent_expr with Some e -> is_access e | None -> false
 					and expr = match expr.eexpr with
 						| TLocal e -> expr
-						| _ -> parenthesis expr
+						| _ -> expr (* TODO PARENS *)
 					in
 					if add_parentheses then self#write "(";
 					self#write ("(" ^ type_name ^")");
@@ -2600,7 +2590,7 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 				| TConst TSuper ->
 					no_call := not has_super_constructor;
 					if not !no_call then self#write "parent::__construct"
-				| TField (expr, FClosure (_,_)) -> self#write_expr (parenthesis target_expr)
+				| TField (expr, FClosure (_,_)) -> self#write_expr target_expr (* TODO PARENS *)
 				| _ -> self#write_expr target_expr
 			);
 			if not !no_call then
@@ -2639,10 +2629,7 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 			let if_expr = unpack_single_expr_block if_expr
 			and else_expr = unpack_single_expr_block else_expr in
 			self#write "(";
-			(match condition.eexpr with
-				| TParenthesis expr -> self#write_expr expr;
-				| _ -> self#write_expr else_expr
-			);
+			self#write_expr else_expr;
 			self#write " ? ";
 			self#write_expr if_expr;
 			self#write " : ";

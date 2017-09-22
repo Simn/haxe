@@ -593,7 +593,7 @@ let implement_dynamic_object_ctor ctx cl =
 			| TIf(cond,e1,Some e2) ->
 				is_side_effects_free cond && is_side_effects_free e1 && is_side_effects_free e2
 			| TField(e,_)
-			| TParenthesis e | TMeta(_,e) -> is_side_effects_free e
+			| TMeta(_,e) -> is_side_effects_free e
 			| TArrayDecl el -> List.for_all is_side_effects_free el
 			| TCast(e,_) -> is_side_effects_free e
 			| _ -> false

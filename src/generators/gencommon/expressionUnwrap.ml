@@ -146,18 +146,12 @@ type shallow_expr_type = | Statement | Expression of texpr | Both of texpr (* sh
 
 type expr_kind = | KNormalExpr | KNoSideEffects (* -> short-circuit is considered side-effects *) | KExprWithStatement | KStatement
 
-let rec no_paren e =
-	match e.eexpr with
-		| TParenthesis e -> no_paren e
-		| _ -> e
-
 (* must be called in a statement. Will execute fn whenever an expression (not statement) is expected *)
 let rec expr_stat_map fn (expr:texpr) =
-	match (no_paren expr).eexpr with
+	match expr.eexpr with
 		| TBinop ( (OpAssign as op), left_e, right_e )
 		| TBinop ( (OpAssignOp _ as op), left_e, right_e ) ->
 			{ expr with eexpr = TBinop(op, fn left_e, fn right_e) }
-		| TParenthesis _ -> assert false
 		| TCall(left_e, params) ->
 			{ expr with eexpr = TCall(fn left_e, List.map fn params) }
 		| TNew(cl, tparams, params) ->
@@ -234,7 +228,7 @@ let rec shallow_expr_type expr : shallow_expr_type =
 		| TFunction _
 		| TCast _
 		| TUnop _ -> Expression (expr)
-		| TParenthesis p | TMeta(_,p) -> shallow_expr_type p
+		| TMeta(_,p) -> shallow_expr_type p
 		| TBlock ([e]) -> shallow_expr_type e
 		| TCall _
 		| TVar _
@@ -283,7 +277,6 @@ and expr_kind expr =
 			| k -> k)
 		| TArray (e1,e2) ->
 			aggregate true [e1;e2]
-		| TParenthesis e
 		| TMeta(_,e)
 		| TField (e,_) ->
 			aggregate true [e]
@@ -373,7 +366,7 @@ let rec apply_assign assign_fun right =
 		| TReturn _
 		| TBreak
 		| TContinue -> right
-		| TParenthesis p | TMeta(_,p) ->
+		| TMeta(_,p) ->
 			apply_assign assign_fun p
 		| TVar _ ->
 			right
@@ -458,7 +451,7 @@ let twhile_with_condition_statement com add_statement twhile cond e1 flag =
 		else
 			Type.concat e1 { e1 with
 				eexpr = TIf({
-					eexpr = TUnop(Not, Prefix, mk_paren cond);
+					eexpr = TUnop(Not, Prefix, cond);
 					etype = com.basic.tbool;
 					epos = cond.epos
 				}, { e1 with eexpr = TBreak; etype = com.basic.tvoid }, None);
@@ -575,7 +568,6 @@ let configure gen =
 		| TBlock el ->
 			let new_block = ref [] in
 			let rec process_statement e =
-				let e = no_paren e in
 				match e.eexpr, shallow_expr_type e with
 				| TCall( { eexpr = TIdent s } as elocal, elist ), _ when String.get s 0 = '_' && Hashtbl.mem gen.gspecial_vars s ->
 					new_block := { e with eexpr = TCall( elocal, List.map (fun e ->

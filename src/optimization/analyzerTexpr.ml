@@ -27,7 +27,6 @@ let s_expr_pretty e = s_expr_pretty false "" false (s_type (print_context())) e
 
 let rec is_true_expr e1 = match e1.eexpr with
 	| TConst(TBool true) -> true
-	| TParenthesis e1 -> is_true_expr e1
 	| _ -> false
 
 let is_stack_allocated c = Meta.has Meta.StructAccess c.cl_meta
@@ -72,8 +71,6 @@ let map_values ?(allow_control_flow=true) f e =
 			{e with eexpr = TTry(e1,catches)}
 		| TMeta(m,e1) ->
 			{e with eexpr = TMeta(m,loop complex e1)}
-		| TParenthesis e1 ->
-			{e with eexpr = TParenthesis (loop complex e1)}
 		| TBreak | TContinue | TThrow _ | TReturn _ ->
 			if not allow_control_flow then raise Exit;
 			e
@@ -98,7 +95,7 @@ let can_throw e =
 
 let rec can_be_inlined e = match e.eexpr with
 	| TConst _ -> true
-	| TParenthesis e1 | TMeta(_,e1) -> can_be_inlined e1
+	| TMeta(_,e1) -> can_be_inlined e1
 	| _ -> false
 
 let target_handles_unops com = match com.platform with
@@ -269,8 +266,6 @@ module TexprKindMapper = struct
 			{ e with eexpr = TEnumIndex (f KAccess e1) }
 		| TField (e1,v) ->
 			{ e with eexpr = TField (f KAccess e1,v) }
-		| TParenthesis e1 ->
-			{ e with eexpr = TParenthesis (f kind e1) }
 		| TUnop (op,pre,e1) ->
 			{ e with eexpr = TUnop (op,pre,f KRead e1) }
 		| TArrayDecl el ->
@@ -357,7 +352,7 @@ module TexprFilter = struct
 		| TWhile(e1,e2,flag) when not (is_true_expr e1) ->
 			let p = e.epos in
 			let e_break = mk TBreak t_dynamic p in
-			let e_not = mk (TUnop(Not,Prefix,Codegen.mk_parent e1)) e1.etype e1.epos in
+			let e_not = mk (TUnop(Not,Prefix,e1)) e1.etype e1.epos in
 			let e_if eo = mk (TIf(e_not,e_break,eo)) com.basic.tvoid p in
 			let rec map_continue e = match e.eexpr with
 				| TContinue ->
@@ -371,7 +366,7 @@ module TexprFilter = struct
 			let e_if = e_if None in
 			let e_block = if flag = NormalWhile then Type.concat e_if e2 else Type.concat e2 e_if in
 			let e_true = mk (TConst (TBool true)) com.basic.tbool p in
-			let e = mk (TWhile(Codegen.mk_parent e_true,e_block,NormalWhile)) e.etype p in
+			let e = mk (TWhile(e_true,e_block,NormalWhile)) e.etype p in
 			loop e
 		| TFor(v,e1,e2) ->
 			let e = Codegen.for_remap com v e1 e2 e.epos in
@@ -658,7 +653,7 @@ module Fusion = struct
 			| {eexpr = TNew(c,tl,el1)} :: el2 when (match c.cl_constructor with Some cf when PurityState.is_pure c cf -> true | _ -> false) && config.local_dce ->
 				block_element acc (el1 @ el2)
 			(* no-side-effect composites *)
-			| {eexpr = TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) | TField(e1,_) | TUnop(_,_,e1)} :: el ->
+			| {eexpr = TMeta(_,e1) | TCast(e1,None) | TField(e1,_) | TUnop(_,_,e1)} :: el ->
 				block_element acc (e1 :: el)
 			| {eexpr = TArray(e1,e2) | TBinop(_,e1,e2)} :: el ->
 				block_element acc (e1 :: e2 :: el)
@@ -811,7 +806,7 @@ module Fusion = struct
 							let is_php_safe e1 =
 								let rec loop e = match e.eexpr with
 									| TCall _ -> raise Exit
-									| TCast(e1,_) | TParenthesis e1 | TMeta(_,e1) -> loop e1
+									| TCast(e1,_) | TMeta(_,e1) -> loop e1
 									| _ -> ()
 								in
 								try loop e1; true with Exit -> false

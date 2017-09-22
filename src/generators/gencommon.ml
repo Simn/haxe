@@ -975,9 +975,6 @@ let dump_descriptor gen name path_s module_s =
 	various helper functions
 *)
 
-let mk_paren e =
-	match e.eexpr with | TParenthesis _ -> e | _ -> { e with eexpr=TParenthesis(e) }
-
 (* private *)
 
 let get_real_fun gen t =

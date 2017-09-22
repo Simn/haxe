@@ -147,9 +147,6 @@ let rec func ctx bb tf t p =
 		| TMeta(m,e1) ->
 			let bb,e1 = value bb e1 in
 			bb,{e with eexpr = TMeta(m,e1)}
-		| TParenthesis e1 ->
-			let bb,e1 = value bb e1 in
-			bb,{e with eexpr = TParenthesis e1}
 		| TCast(e1,mto) ->
 			let bb,e1 = value bb e1 in
 			bb,{e with eexpr = TCast(e1,mto)}
@@ -190,7 +187,6 @@ let rec func ctx bb tf t p =
 		let might_be_affected,collect_modified_locals = create_affection_checker() in
 		let rec can_be_optimized e = match e.eexpr with
 			| TBinop _ | TArray _ | TCall _ -> true
-			| TParenthesis e1 -> can_be_optimized e1
 			| _ -> false
 		in
 		let _,el = List.fold_left (fun (had_side_effect,acc) e ->
@@ -234,7 +230,7 @@ let rec func ctx bb tf t p =
 		let fl,e = loop [] e in
 		let rec loop e = match e.eexpr with
 			| TLocal v -> v.v_name
-			| TArray(e1,_) | TField(e1,_) | TParenthesis e1 | TCast(e1,None) | TMeta(_,e1) -> loop e1
+			| TArray(e1,_) | TField(e1,_) | TCast(e1,None) | TMeta(_,e1) -> loop e1
 			| _ -> match ctx.name_stack with
 				| s :: _ -> s
 				| [] -> ctx.temp_var_name
@@ -251,8 +247,6 @@ let rec func ctx bb tf t p =
 	and declare_var_and_assign bb v e p =
 		(* TODO: this section shouldn't be here because it can be handled as part of the normal value processing *)
 		let rec loop bb e = match e.eexpr with
-			| TParenthesis e1 ->
-				loop bb e1
 			| TBlock el ->
 				let rec loop2 bb el = match el with
 					| [e] ->
@@ -609,7 +603,7 @@ let rec func ctx bb tf t p =
 		| TEnumParameter _ | TEnumIndex _ | TFunction _ | TConst _ | TTypeExpr _ | TLocal _ | TIdent _ ->
 			bb
 		(* no-side-effect composites *)
-		| TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) | TField(e1,_) | TUnop(_,_,e1) ->
+		| TMeta(_,e1) | TCast(e1,None) | TField(e1,_) | TUnop(_,_,e1) ->
 			block_element bb e1
 		| TArray(e1,e2) | TBinop(_,e1,e2) ->
 			let bb = block_element bb e1 in

@@ -362,7 +362,7 @@ struct
 			(* this is hack to not use 'break' on switch cases *)
 			| TIdent "__fallback__" when is_switch -> true
 			| TMeta ((Meta.LoopLabel,_,_), { eexpr = TBreak }) -> true
-			| TParenthesis p | TMeta (_,p) -> is_final_return_expr p
+			| TMeta (_,p) -> is_final_return_expr p
 			| TBlock bl -> is_final_return_block is_switch bl
 			| TSwitch (_, el_e_l, edef) ->
 				List.for_all (fun (_,e) -> is_final_return_expr e) el_e_l && Option.map_default is_final_return_expr false edef
@@ -386,7 +386,6 @@ struct
 
 	let rec is_null e = match e.eexpr with
 		| TConst(TNull) -> true
-		| TParenthesis(e)
 		| TMeta(_,e) -> is_null e
 		| _ -> false
 
@@ -550,7 +549,7 @@ struct
 									if there is more than one case, we should test first if hash equals to the one specified.
 									This way we can save a heavier string compare
 								*)
-								let equals_test = mk_paren {
+								let equals_test = {
 									eexpr = TBinop(Ast.OpBoolAnd, { eexpr = TBinop(Ast.OpEq, get_hash_cache(), hashed_expr); etype = basic.tbool; epos = e.epos }, equals_test);
 									etype = basic.tbool;
 									epos = e.epos;
@@ -1425,7 +1424,6 @@ let generate con =
 			| TObjectDecl _
 			| TArrayDecl _
 			| TCast _
-			| TParenthesis _
 			| TUnop _ ->
 				Type.iter loop expr
 			| TFunction _ -> () (* do not extract parameters from inside of it *)
@@ -1504,8 +1502,6 @@ let generate con =
 				| TTypeExpr (TClassDecl { cl_path = (["haxe"], "Int64") }) ->
 					write w (path_s_import e.epos (["haxe"], "Int64") [])
 				| TTypeExpr mt -> write w (md_s e.epos mt)
-				| TParenthesis e ->
-					write w "("; expr_s w e; write w ")"
 				| TMeta ((Meta.LoopLabel,[(EConst(Int n),_)],_), e) ->
 					(match e.eexpr with
 					| TFor _ | TWhile _ ->
@@ -1568,7 +1564,7 @@ let generate con =
 						| TTypeExpr md ->
 							expr_s w eobj;
 							write w ".class"
-						| TMeta(_,e) | TParenthesis(e) ->
+						| TMeta(_,e) ->
 							loop e
 						| _ ->
 							expr_s w eobj
@@ -1688,15 +1684,15 @@ let generate con =
 					end_block w
 				| TIf (econd, e1, Some(eelse)) when was_in_value ->
 					write w "( ";
-					expr_s w (mk_paren econd);
+					expr_s w econd;
 					write w " ? ";
-					expr_s w (mk_paren e1);
+					expr_s w e1;
 					write w " : ";
-					expr_s w (mk_paren eelse);
+					expr_s w eelse;
 					write w " )";
 				| TIf (econd, e1, eelse) ->
 					write w "if ";
-					expr_s w (mk_paren econd);
+					expr_s w econd;
 					write w " ";
 					in_value := false;
 					expr_s w (mk_block e1);
@@ -1711,7 +1707,7 @@ let generate con =
 					(match flag with
 						| Ast.NormalWhile ->
 							write w "while ";
-							expr_s w (mk_paren econd);
+							expr_s w econd;
 							write w "";
 							in_value := false;
 							expr_s w (mk_block eblock)
@@ -1721,11 +1717,11 @@ let generate con =
 							expr_s w (mk_block eblock);
 							write w "while ";
 							in_value := true;
-							expr_s w (mk_paren econd);
+							expr_s w econd;
 					)
 				| TSwitch (econd, ele_l, default) ->
 					write w "switch ";
-					expr_s w (mk_paren econd);
+					expr_s w econd;
 					begin_block w;
 					List.iter (fun (el, e) ->
 						List.iter (fun e ->

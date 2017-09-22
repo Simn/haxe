@@ -170,7 +170,7 @@ let check_local_vars_init e =
 				vars := intersect !vars v1)
 		| TWhile (cond,e,flag) ->
 			(match flag with
-			| NormalWhile when (match cond.eexpr with TParenthesis {eexpr = TConst (TBool true)} -> false | _ -> true) ->
+			| NormalWhile when (match cond.eexpr with TConst (TBool true) -> false | _ -> true) ->
 				loop vars cond;
 				let old = !vars in
 				loop vars e;
@@ -200,7 +200,7 @@ let check_local_vars_init e =
 				v
 			) cases in
 			(match def with
-			| None when (match e.eexpr with TMeta((Meta.Exhaustive,_,_),_) | TParenthesis({eexpr = TMeta((Meta.Exhaustive,_,_),_)}) -> true | _ -> false) ->
+			| None when (match e.eexpr with TMeta((Meta.Exhaustive,_,_),_) -> true | _ -> false) ->
 				(match cvars with
 				| cv :: cvars ->
 					PMap.iter (fun i b -> if b then vars := PMap.add i b !vars) cv;
@@ -497,7 +497,6 @@ module VarLazifier = struct
 				begin try
 					let e_init = PMap.find v.v_id var_inits in
 					let e = {e with eexpr = TBinop(OpAssign,e,e_init)} in
-					let e = {e with eexpr = TParenthesis e} in
 					let var_inits = PMap.remove v.v_id var_inits in
 					var_inits,e
 				with Not_found ->

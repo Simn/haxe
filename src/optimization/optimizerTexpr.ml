@@ -69,7 +69,7 @@ let has_side_effect e =
 		| TNew(c,_,el) when (match c.cl_constructor with Some cf when PurityState.is_pure c cf -> true | _ -> false) -> List.iter loop el
 		| TNew _ | TCall _ | TBinop ((OpAssignOp _ | OpAssign),_,_) | TUnop ((Increment|Decrement),_,_) -> raise Exit
 		| TReturn _ | TBreak | TContinue | TThrow _ | TCast (_,Some _) -> raise Exit
-		| TArray _ | TEnumParameter _ | TEnumIndex _ | TCast (_,None) | TBinop _ | TUnop _ | TParenthesis _ | TMeta _ | TWhile _ | TFor _
+		| TArray _ | TEnumParameter _ | TEnumIndex _ | TCast (_,None) | TBinop _ | TUnop _ | TMeta _ | TWhile _ | TFor _
 		| TField _ | TIf _ | TTry _ | TSwitch _ | TArrayDecl _ | TBlock _ | TObjectDecl _ | TVar _ -> Type.iter loop e
 	in
 	try
@@ -79,7 +79,7 @@ let has_side_effect e =
 
 let rec is_exhaustive e1 = match e1.eexpr with
 	| TMeta((Meta.Exhaustive,_,_),_) -> true
-	| TMeta(_, e1) | TParenthesis e1 -> is_exhaustive e1
+	| TMeta(_, e1) -> is_exhaustive e1
 	| _ -> false
 
 
@@ -276,8 +276,8 @@ let optimize_unop e op flag esub =
 		| _ -> false
 	in
 	match op, esub.eexpr with
-		| Not, (TConst (TBool f) | TParenthesis({eexpr = TConst (TBool f)})) -> { e with eexpr = TConst (TBool (not f)) }
-		| Not, (TBinop(op,e1,e2) | TParenthesis({eexpr = TBinop(op,e1,e2)})) ->
+		| Not, (TConst (TBool f)) -> { e with eexpr = TConst (TBool (not f)) }
+		| Not, (TBinop(op,e1,e2)) ->
 			begin
 				let is_int = is_int e1.etype && is_int e2.etype in
 				try

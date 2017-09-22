@@ -397,7 +397,7 @@ let rec unify_min_raise ctx (el:texpr list) : t =
 				(match List.rev el with
 				| [] -> false
 				| e :: _ -> chk_null e)
-			| TParenthesis e | TMeta(_,e) -> chk_null e
+			| TMeta(_,e) -> chk_null e
 			| _ -> false
 		in
 
@@ -1660,7 +1660,7 @@ let unify_int ctx e k =
 		| TArray({ etype = t } as e,_) -> is_dynamic_array t || maybe_dynamic_rec e t
 		| TField({ etype = t } as e,f) -> is_dynamic_field t (field_name f) || maybe_dynamic_rec e t
 		| TCall({ etype = t } as e,_) -> is_dynamic_return t || maybe_dynamic_rec e t
-		| TParenthesis e | TMeta(_,e) -> maybe_dynamic_mono e
+		| TMeta(_,e) -> maybe_dynamic_mono e
 		| TIf (_,a,Some b) -> maybe_dynamic_mono a || maybe_dynamic_mono b
 		| _ -> false
 	and maybe_dynamic_rec e t =
@@ -3423,7 +3423,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 		e
 	| EParenthesis e ->
 		let e = type_expr ctx e with_type in
-		mk (TParenthesis e) e.etype p
+		e
 	| EObjectDecl fl ->
 		type_object_decl ctx fl with_type p
 	| EArrayDecl [(EFor _,_) | (EWhile _,_) as e] ->

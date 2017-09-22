@@ -49,7 +49,7 @@ open Globals
 	which is converted into TBlocks by the caller as needed.
 *)
 
-type inline_object_kind = 
+type inline_object_kind =
 	| IOKCtor of tclass_field * bool * tvar list
 	| IOKStructure
 	| IOKArray of int
@@ -245,7 +245,7 @@ let inline_constructors ctx e =
 					| e :: el ->
 						begin match e.eexpr with
 						| TConst _ -> loop (vs, decls, e::es) el
-						| _ -> 
+						| _ ->
 							let v = alloc_var "arg" e.etype e.epos in
 							let decle = mk (TVar(v, Some e)) ctx.t.tvoid e.epos in
 							let io_id_start = !current_io_id in
@@ -263,9 +263,9 @@ let inline_constructors ctx e =
 				| Some inlined_expr ->
 					let has_untyped = (Meta.has Meta.HasUntyped cf.cf_meta) in
 					let io = mk_io (IOKCtor(cf,is_extern_ctor c cf,argvs)) io_id inlined_expr ~has_untyped:has_untyped in
-					let rec loop (c:tclass) (tl:t list) = 
+					let rec loop (c:tclass) (tl:t list) =
 						let apply = apply_params c.cl_params tl in
-						List.iter (fun cf -> 
+						List.iter (fun cf ->
 							match cf.cf_kind,cf.cf_expr with
 							| Var _, _ ->
 								let fieldt = apply cf.cf_type in
@@ -361,12 +361,12 @@ let inline_constructors ctx e =
 				| [] -> None
 			in loop el
 		| TMeta((Meta.InlineConstructorArgument (vid,_),_,_),_),_ ->
-			(try 
+			(try
 				let iv = get_iv vid in
 				if iv.iv_closed || not captured then cancel_iv iv e.epos;
 				Some(get_iv vid)
 			with Not_found -> None)
-		| TParenthesis e,_ | TMeta(_,e),_ | TCast(e,None),_ ->
+		| TMeta(_,e),_ | TCast(e,None),_ ->
 			analyze_aliases captured e
 		| _,_ ->
 			let old = !scoped_ivs in
@@ -387,16 +387,16 @@ let inline_constructors ctx e =
 			let v = iv.iv_var in
 			[(mk (TVar(v,None)) ctx.t.tvoid v.v_pos)]
 		| _ -> []
-	and get_io_var_decls (io:inline_object) : texpr list = 
+	and get_io_var_decls (io:inline_object) : texpr list =
 		if io.io_declared then [] else begin
 			io.io_declared <- true;
 			PMap.foldi (fun _ iv acc -> acc@(get_iv_var_decls iv)) io.io_fields []
 		end
 	in
 	let included_untyped = ref false in
-	let rec final_map ?(unwrap_block = false) (e:texpr) : ((texpr list) * (inline_object option)) = 
+	let rec final_map ?(unwrap_block = false) (e:texpr) : ((texpr list) * (inline_object option)) =
 		increment_io_id e;
-		let default_case e = 
+		let default_case e =
 			let f e =
 				let (el,_) = final_map e in
 				make_expr_for_rev_list el e.etype e.epos
@@ -437,7 +437,7 @@ let inline_constructors ctx e =
 				let rve = make_expr_for_rev_list rvel rve.etype rve.epos in
 				begin match lvel with
 				| [] -> assert false
-				| e::el -> 
+				| e::el ->
 					let e = mk (TBinop(OpAssign, e, rve)) e.etype e.epos in
 					(e::el), None
 				end
@@ -504,7 +504,7 @@ let inline_constructors ctx e =
 			let result = final_map e in
 			current_io_id := old_io_id;
 			result
-		| TParenthesis e' | TCast(e',None) | TMeta(_,e') ->
+		| TCast(e',None) | TMeta(_,e') ->
 			let el, io = final_map e' in
 			begin match io with
 			| Some io ->

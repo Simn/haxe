@@ -35,7 +35,7 @@ let priority = solve_deps name []
 
 let rec simplify_expr e =
 	match e.eexpr with
-	| TParenthesis e | TMeta (_, e) -> simplify_expr e
+	| TMeta (_, e) -> simplify_expr e
 	| _ -> e
 
 let configure gen (should_convert:texpr->bool) =

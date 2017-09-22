@@ -458,9 +458,6 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 			let eelse = map term eelse in
 			let t = return_type e.etype [eif;eelse] in
 			{ e with eexpr = TIf(econd,eif,Some eelse); etype = t }
-		| TParenthesis e1 ->
-			let e1 = map term e1 in
-			mk (TParenthesis e1) e1.etype e.epos
 		| TUnop ((Increment|Decrement) as op,flag,({ eexpr = TLocal v } as e1)) ->
 			had_side_effect := true;
 			let l = read_local v in
@@ -926,20 +923,7 @@ let standard_precedence op =
 	| OpAssignOp OpAssign -> 18, right (* mimics ?: *)
 	| OpAssign | OpAssignOp _ -> 19, right
 
-let rec need_parent e =
-	match e.eexpr with
-	| TConst _ | TLocal _ | TArray _ | TField _ | TEnumParameter _ | TEnumIndex _ | TParenthesis _
-	| TCall _ | TNew _ | TTypeExpr _ | TObjectDecl _ | TArrayDecl _ | TIdent _ -> false
-	| TCast (e,None) | TMeta(_,e) -> need_parent e
-	| TCast _ | TThrow _ | TReturn _ | TTry _ | TSwitch _ | TFor _ | TIf _ | TWhile _ | TBinop _ | TContinue | TBreak
-	| TBlock _ | TVar _ | TFunction _ | TUnop _ -> true
-
 let sanitize_expr com e =
-	let parent e =
-		match e.eexpr with
-		| TParenthesis _ -> e
-		| _ -> mk (TParenthesis e) e.etype e.epos
-	in
 	let block e =
 		match e.eexpr with
 		| TBlock _ -> e
@@ -988,24 +972,24 @@ let sanitize_expr com e =
 			| TCast (e,None) | TMeta (_,e) -> loop e left
 			| _ -> false
 		in
-		let e1 = if loop e1 true then parent e1 else e1 in
-		let e2 = if loop e2 false then parent e2 else e2 in
+		let e1 = if loop e1 true then e1 else e1 in
+		let e2 = if loop e2 false then e2 else e2 in
 		{ e with eexpr = TBinop (op,e1,e2) }
 	| TUnop (op,mode,e1) ->
 		let rec loop ee =
 			match ee.eexpr with
-			| TBinop _ | TIf _ | TUnop _ -> parent e1
+			| TBinop _ | TIf _ | TUnop _ -> e1
 			| TCast (e,None) | TMeta (_, e) -> loop e
 			| _ -> e1
 		in
 		{ e with eexpr = TUnop (op,mode,loop e1)}
 	| TIf (e1,e2,eelse) ->
-		let e1 = parent e1 in
+		let e1 = e1 in
 		let e2 = (if (eelse <> None && has_if e2) || (match e2.eexpr with TIf _ -> true | _ -> false) then block e2 else complex e2) in
 		let eelse = (match eelse with None -> None | Some e -> Some (complex e)) in
 		{ e with eexpr = TIf (e1,e2,eelse) }
 	| TWhile (e1,e2,flag) ->
-		let e1 = parent e1 in
+		let e1 = e1 in
 		let e2 = complex e2 in
 		{ e with eexpr = TWhile (e1,e2,flag) }
 	| TFor (v,e1,e2) ->
@@ -1017,22 +1001,11 @@ let sanitize_expr com e =
 			| _ -> { f with tf_expr = block f.tf_expr }
 		) in
 		{ e with eexpr = TFunction f }
-	| TCall (e2,args) ->
-		if need_parent e2 then { e with eexpr = TCall(parent e2,args) } else e
-	| TEnumParameter (e2,ef,i) ->
-		if need_parent e2 then { e with eexpr = TEnumParameter(parent e2,ef,i) } else e
-	| TEnumIndex e2 ->
-		if need_parent e2 then { e with eexpr = TEnumIndex(parent e2) } else e
-	| TField (e2,f) ->
-		if need_parent e2 then { e with eexpr = TField(parent e2,f) } else e
-	| TArray (e1,e2) ->
-		if need_parent e1 then { e with eexpr = TArray(parent e1,e2) } else e
 	| TTry (e1,catches) ->
 		let e1 = block e1 in
 		let catches = List.map (fun (v,e) -> v, block e) catches in
 		{ e with eexpr = TTry (e1,catches) }
 	| TSwitch (e1,cases,def) ->
-		let e1 = parent e1 in
 		let cases = List.map (fun (el,e) -> el, complex e) cases in
 		let def = (match def with None -> None | Some e -> Some (complex e)) in
 		{ e with eexpr = TSwitch (e1,cases,def) }
@@ -1065,8 +1038,6 @@ let reduce_expr com e =
 			) l with
 			| [] -> ec
 			| l -> { e with eexpr = TBlock (List.rev (ec :: l)) })
-	| TParenthesis ec ->
-		{ ec with epos = e.epos }
 	| TTry (e,[]) ->
 		e
 	| _ ->
@@ -1155,11 +1126,6 @@ let rec make_constant_expression ctx ?(concat_strings=false) e =
 		(match make_constant_expression ctx e1 with
 		| None -> None
 		| Some e1 -> Some {e with eexpr = TCast(e1,None)})
-	| TParenthesis e1 ->
-		begin match make_constant_expression ctx ~concat_strings e1 with
-			| None -> None
-			| Some e1 -> Some {e with eexpr = TParenthesis e1}
-		end
 	| TMeta(m,e1) ->
 		begin match make_constant_expression ctx ~concat_strings e1 with
 			| None -> None
@@ -1311,7 +1277,7 @@ let inline_constructors ctx e =
 					) (el_init,0) el in
 					let e = mk (TBlock (List.rev el)) ctx.t.tvoid e.epos in
 					add v e (IKArray (List.length el))
-				| TCast(e1,None) | TParenthesis e1 ->
+				| TCast(e1,None) ->
 					loop el_init e1
 				| _ ->
 					()

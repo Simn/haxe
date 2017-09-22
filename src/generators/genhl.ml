@@ -515,7 +515,6 @@ and real_type ctx e =
 				) args args2, ret)
 			| _ -> ft)
 		| TLocal v -> v.v_type
-		| TParenthesis e -> loop e
 		| _ -> e.etype
 	in
 	to_type ctx (loop e)
@@ -1251,8 +1250,6 @@ and get_access ctx e =
 		(match captured_index ctx v with
 		| None -> ALocal (v, alloc_var ctx v false)
 		| Some idx -> ACaptured idx)
-	| TParenthesis e ->
-		get_access ctx e
 	| TArray (a,i) ->
 		let rec loop t =
 			match follow t with
@@ -1327,8 +1324,6 @@ and array_read ctx ra (at,vt) ridx p =
 
 and jump_expr ctx e jcond =
 	match e.eexpr with
-	| TParenthesis e ->
-		jump_expr ctx e jcond
 	| TUnop (Not,_,e) ->
 		jump_expr ctx e (not jcond)
 	| TBinop (OpEq,{ eexpr = TConst(TNull) },e) | TBinop (OpEq,e,{ eexpr = TConst(TNull) }) ->
@@ -1481,8 +1476,6 @@ and eval_expr ctx e =
 		before_return ctx;
 		op ctx (ORet r);
 		alloc_tmp ctx HDyn
-	| TParenthesis e ->
-		eval_expr ctx e
 	| TBlock el ->
 		let rec loop = function
 			| [e] -> eval_expr ctx e
@@ -1817,7 +1810,7 @@ and eval_expr ctx e =
 				abort "Ref should be a local variable" v.epos)
 		| "$setref", [e1;e2] ->
 			let rec loop e = match e.eexpr with
-				| TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) -> loop e1
+				| TMeta(_,e1) | TCast(e1,None) -> loop e1
 				| TLocal v -> v
 				| _ -> invalid()
 			in
@@ -1828,7 +1821,7 @@ and eval_expr ctx e =
 			r
 		| "$unref", [e1] ->
 			let rec loop e = match e.eexpr with
-				| TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) -> loop e1
+				| TMeta(_,e1) | TCast(e1,None) -> loop e1
 				| TLocal v -> v
 				| _ -> invalid()
 			in
@@ -3043,7 +3036,6 @@ and make_fun ?gen_content ctx name fidx f cthis cparent =
 		(* prevents a jump outside function bounds error *)
 		match e.eexpr with
 		| TBlock el -> (match List.rev el with e :: _ -> has_final_jump e | [] -> false)
-		| TParenthesis e -> has_final_jump e
 		| TReturn _ -> false
 		| _ -> true
 	in

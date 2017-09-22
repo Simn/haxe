@@ -63,7 +63,6 @@ struct
 
 	let default_implementation gen =
 		let rec extract_expr e = match e.eexpr with
-			| TParenthesis e
 			| TMeta (_,e)
 			| TCast(e,_) -> extract_expr e
 			| _ -> e
@@ -342,7 +341,7 @@ let rec handle_cast gen e real_to_t real_from_t =
 							clean_cast expr
 						| _ ->
 							e)
-					| TParenthesis(e) | TMeta(_,e) -> clean_cast e
+					| TMeta(_,e) -> clean_cast e
 					| _ -> e
 				in
 			(* see #5751 . NativeArray is special because of its ties to Array. We could potentially deal with this for all *)
@@ -775,7 +774,7 @@ let handle_type_parameter gen e e1 ef ~clean_ef ~overloads_cast_to_base f elist 
 				| Some(cf_orig,actual_t,_,_,declared_cl,tl,tlch) ->
 					let rec is_super e = match e.eexpr with
 						| TConst TSuper -> true
-						| TParenthesis p | TMeta(_,p) -> is_super p
+						| TMeta(_,p) -> is_super p
 						| _ -> false
 					in
 					if declared_cl != cl && overloads_cast_to_base && not (is_super !ef) then begin
@@ -926,7 +925,7 @@ let configure gen ?(overloads_cast_to_base = false) maybe_empty_t calls_paramete
 
 	let rec clean_cast e = match e.eexpr with
 		| TCast(e,_) -> clean_cast e
-		| TParenthesis(e) | TMeta(_,e) -> clean_cast e
+		| TMeta(_,e) -> clean_cast e
 		| _ -> e
 	in
 
@@ -1191,7 +1190,7 @@ let configure gen ?(overloads_cast_to_base = false) maybe_empty_t calls_paramete
 				let rec get_null e =
 					match e.eexpr with
 					| TConst TNull -> Some e
-					| TParenthesis e | TMeta(_,e) -> get_null e
+					| TMeta(_,e) -> get_null e
 					| _ -> None
 				in
 

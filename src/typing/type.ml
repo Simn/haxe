@@ -124,7 +124,6 @@ and texpr_expr =
 	| TBinop of Ast.binop * texpr * texpr
 	| TField of texpr * tfield_access
 	| TTypeExpr of module_type
-	| TParenthesis of texpr
 	| TObjectDecl of (string * texpr) list
 	| TArrayDecl of texpr list
 	| TCall of texpr * texpr list
@@ -997,7 +996,6 @@ let s_expr_kind e =
 	| TEnumIndex _ -> "EnumIndex"
 	| TField (_,_) -> "Field"
 	| TTypeExpr _ -> "TypeExpr"
-	| TParenthesis _ -> "Parenthesis"
 	| TObjectDecl _ -> "ObjectDecl"
 	| TArrayDecl _ -> "ArrayDecl"
 	| TCall (_,_) -> "Call"
@@ -1058,8 +1056,6 @@ let rec s_expr s_type e =
 		sprintf "%s.%s" (loop e) fstr
 	| TTypeExpr m ->
 		sprintf "TypeExpr %s" (s_type_path (t_path m))
-	| TParenthesis e ->
-		sprintf "Parenthesis %s" (loop e)
 	| TObjectDecl fl ->
 		sprintf "ObjectDecl {%s}" (slist (fun (f,e) -> sprintf "%s : %s" f (loop e)) fl)
 	| TArrayDecl el ->
@@ -1125,7 +1121,6 @@ let rec s_expr_pretty print_var_ids tabs top_level s_type e =
 	| TEnumIndex e1 -> sprintf "enumIndex %s" (loop e1)
 	| TField (e1,s) -> sprintf "%s.%s" (loop e1) (field_name s)
 	| TTypeExpr mt -> (s_type_path (t_path mt))
-	| TParenthesis e1 -> sprintf "(%s)" (loop e1)
 	| TObjectDecl fl -> sprintf "{%s}" (clist (fun (f,e) -> sprintf "%s : %s" f (loop e)) fl)
 	| TArrayDecl el -> sprintf "[%s]" (clist loop el)
 	| TCall (e1,el) -> sprintf "%s(%s)" (loop e1) (clist loop el)
@@ -1220,7 +1215,6 @@ let rec s_expr_ast print_var_ids tabs s_type e =
 		in
 		tag "Field" [loop e1; sfa]
 	| TTypeExpr mt -> module_type mt
-	| TParenthesis e1 -> tag "Parenthesis" [loop e1]
 	| TObjectDecl fl -> tag "ObjectDecl" (List.map (fun (s,e) -> sprintf "%s: %s" s (loop e)) fl)
 	| TArrayDecl el -> tag "ArrayDecl" (List.map loop el)
 	| TCall (e1,el) -> tag "Call" (loop e1 :: (List.map loop el))
@@ -2245,7 +2239,6 @@ let iter f e =
 	| TField (e,_)
 	| TEnumParameter (e,_,_)
 	| TEnumIndex e
-	| TParenthesis e
 	| TCast (e,_)
 	| TUnop (_,_,e)
 	| TMeta(_,e) ->
@@ -2306,8 +2299,6 @@ let map_expr f e =
 		{ e with eexpr = TEnumIndex (f e1) }
 	| TField (e1,v) ->
 		{ e with eexpr = TField (f e1,v) }
-	| TParenthesis e1 ->
-		{ e with eexpr = TParenthesis (f e1) }
 	| TUnop (op,pre,e1) ->
 		{ e with eexpr = TUnop (op,pre,f e1) }
 	| TArrayDecl el ->
@@ -2386,8 +2377,6 @@ let map_expr_type f ft fv e =
 			v
 		in
 		{ e with eexpr = TField (e1,v); etype = ft e.etype }
-	| TParenthesis e1 ->
-		{ e with eexpr = TParenthesis (f e1); etype = ft e.etype }
 	| TUnop (op,pre,e1) ->
 		{ e with eexpr = TUnop (op,pre,f e1); etype = ft e.etype }
 	| TArrayDecl el ->
@@ -2544,7 +2533,6 @@ module TExprToExpr = struct
 		| TBinop (op,e1,e2) -> EBinop (op, convert_expr e1, convert_expr e2)
 		| TField (e,f) -> EField (convert_expr e, field_name f)
 		| TTypeExpr t -> fst (mk_path (full_type_path t) e.epos)
-		| TParenthesis e -> EParenthesis (convert_expr e)
 		| TObjectDecl fl -> EObjectDecl (List.map (fun (f,e) -> (f,null_pos), convert_expr e) fl)
 		| TArrayDecl el -> EArrayDecl (List.map convert_expr el)
 		| TCall (e,el) -> ECall (convert_expr e,List.map convert_expr el)
@@ -2617,7 +2605,6 @@ module Texpr = struct
 		| TBinop(op1,lhs1,rhs1),TBinop(op2,lhs2,rhs2) -> op1 = op2 && equal lhs1 lhs2 && equal rhs1 rhs2
 		| TField(e1,fa1),TField(e2,fa2) -> equal e1 e2 && equal_fa fa1 fa2
 		| TTypeExpr mt1,TTypeExpr mt2 -> mt1 == mt2
-		| TParenthesis e1,TParenthesis e2 -> equal e1 e2
 		| TObjectDecl fl1,TObjectDecl fl2 -> safe_for_all2 (fun (s1,e1) (s2,e2) -> s1 = s2 && equal e1 e2) fl1 fl2
 		| (TArrayDecl el1,TArrayDecl el2) | (TBlock el1,TBlock el2) -> safe_for_all2 equal el1 el2
 		| TCall(e1,el1),TCall(e2,el2) -> equal e1 e2 && safe_for_all2 equal el1 el2
@@ -2688,7 +2675,7 @@ module Texpr = struct
 		build_expr e
 
 	let rec skip e = match e.eexpr with
-		| TParenthesis e1 | TMeta(_,e1) | TBlock [e1] | TCast(e1,None) -> skip e1
+		| TMeta(_,e1) | TBlock [e1] | TCast(e1,None) -> skip e1
 		| _ -> e
 
 	let foldmap_list f acc el =
@@ -2747,9 +2734,6 @@ module Texpr = struct
 		| TField (e1,v) ->
 			let acc,e1 = f acc e1 in
 			acc,{ e with eexpr = TField (e1,v) }
-		| TParenthesis e1 ->
-			let acc,e1 = f acc e1 in
-			acc,{ e with eexpr = TParenthesis (e1) }
 		| TUnop (op,pre,e1) ->
 			let acc,e1 = f acc e1 in
 			acc,{ e with eexpr = TUnop (op,pre,e1) }

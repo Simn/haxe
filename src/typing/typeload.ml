@@ -973,7 +973,7 @@ let rec return_flow ctx e =
 	let has_unconditional_flow e = try uncond e; false with Exit -> true in
 	match e.eexpr with
 	| TReturn _ | TThrow _ -> ()
-	| TParenthesis e | TMeta(_,e) ->
+	| TMeta(_,e) ->
 		return_flow e
 	| TBlock el ->
 		let rec loop = function
@@ -1082,7 +1082,7 @@ let rec process_meta_argument ?(toplevel=true) ctx expr = match expr.eexpr with
 		(EConst(Ident "null"), expr.epos)
 	| TConst(TBool b) ->
 		(EConst(Ident (string_of_bool b)), expr.epos)
-	| TCast(e,_) | TMeta(_,e) | TParenthesis(e) ->
+	| TCast(e,_) | TMeta(_,e) ->
 		process_meta_argument ~toplevel ctx e
 	| TTypeExpr md when toplevel ->
 		let p = expr.epos in
