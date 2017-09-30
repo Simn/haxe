@@ -1489,6 +1489,7 @@ module Inheritance = struct
 					)
 				| TDynamic t ->
 					if c.cl_dynamic <> None then error "Cannot have several dynamics" p;
+					if not c.cl_extern then ctx.com.warning "`implements Dynamic` is deprecated for non-extern classes and will be removed soon" p;
 					c.cl_dynamic <- Some t;
 					(fun () -> ())
 				| _ ->
