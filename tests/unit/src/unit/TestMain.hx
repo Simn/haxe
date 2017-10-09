@@ -1,6 +1,7 @@
 package unit;
 
 import unit.Test.*;
+import haxe.ds.List;
 
 @:access(unit.Test)
 @:expose("unit.TestMain")
@@ -87,10 +88,13 @@ class TestMain {
 			#if (java || cs)
 			new TestOverloads(),
 			#end
+			new TestInterface(),
 			new TestNaN(),
-			// #if ((dce == "full") && !interp && !as3)
-			// new TestDCE(),
-			// #end
+			#if ((dce == "full") && !interp && !as3)
+			new TestDCE(),
+			#end
+			new TestMapComprehension(),
+			new TestMacro(),
 			// #if ( (java || neko) && !macro && !interp)
 			// new TestThreads(),
 			// #end

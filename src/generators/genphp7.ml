@@ -1,5 +1,5 @@
 (**
-	Compatible with PHP 7+
+	Compatible with PHP 7.0+
 *)
 
 open Ast
@@ -184,9 +184,9 @@ let get_php_prefix ctx =
 		| Some prefix -> prefix
 		| None ->
 			let lst =
-				match ctx.php_prefix with
-					| None -> []
-					| Some str ->
+				match Common.defined_value_safe ctx Define.PhpPrefix with
+					| "" -> []
+					| str ->
 						if String.length str = 0 then
 							[]
 						else
@@ -701,7 +701,7 @@ let is_access expr =
 *)
 let is_magic expr =
 	match expr.eexpr with
-	| TCall ({ eexpr = TLocal { v_name = name }}, _) ->
+	| TCall ({ eexpr = TIdent name}, _) ->
 		(match name with
 			| "__php__" -> true
 			| "__call__" -> true
@@ -1586,7 +1586,7 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 				| TArrayDecl exprs -> self#write_expr_array_decl exprs
 				| TCall (target, [arg1; arg2]) when is_std_is target && instanceof_compatible arg1 arg2 -> self#write_expr_lang_instanceof [arg1; arg2]
 				| TCall (_, [arg]) when is_native_struct_array_cast expr && is_object_declaration arg -> self#write_assoc_array_decl arg
-				| TCall ({ eexpr = TLocal { v_name = name }}, args) when is_magic expr -> self#write_expr_magic name args
+				| TCall ({ eexpr = TIdent name}, args) when is_magic expr -> self#write_expr_magic name args
 				| TCall ({ eexpr = TField (expr, access) }, args) when is_string expr -> self#write_expr_call_string expr access args
 				| TCall (expr, args) when is_lang_extern expr -> self#write_expr_call_lang_extern expr args
 				| TCall (target, args) when is_sure_var_field_access target -> self#write_expr_call (parenthesis target) args
@@ -1612,6 +1612,7 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 				| TMeta (_, expr) -> self#write_expr expr
 				| TEnumParameter (expr, constructor, index) -> self#write_expr_enum_parameter expr constructor index
 				| TEnumIndex expr -> self#write_expr_enum_index expr
+				| TIdent s -> self#write s
 			);
 			expr_hierarchy <- List.tl expr_hierarchy
 		(**
@@ -1687,7 +1688,7 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 						self#write "[\n";
 						self#indent_more;
 						List.iter
-							(fun (name, field) ->
+							(fun ((name,_,_), field) ->
 								self#write_indentation;
 								self#write_const_string name;
 								self#write " => ";
@@ -2095,10 +2096,6 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 						write_method ((self#use boot_type_path) ^ "::addOrConcat")
 					else
 						write_binop " + "
-				| OpMult -> write_binop " * "
-				| OpDiv -> write_binop " / "
-				| OpSub -> write_binop " - "
-				| OpAssign -> write_binop " = "
 				| OpEq ->
 					if need_boot_equal expr1 expr2 then
 						write_method ((self#use boot_type_path) ^ "::equal")
@@ -2112,17 +2109,6 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 						end
 					else
 						write_binop " !== "
-				| OpGt -> compare " > "
-				| OpGte -> compare " >= "
-				| OpLt -> compare " < "
-				| OpLte -> compare " <= "
-				| OpAnd -> write_binop " & "
-				| OpOr -> write_binop " | "
-				| OpXor -> write_binop " ^ "
-				| OpBoolAnd -> write_binop " && "
-				| OpBoolOr -> write_binop " || "
-				| OpShl  -> write_binop " << "
-				| OpShr -> write_binop " >> "
 				| OpMod ->
 					if is_int expr1 && is_int expr2 then
 						write_binop " % "
@@ -2144,14 +2130,6 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 						end
 					else
 						write_binop " += "
-				| OpAssignOp OpMult -> write_binop " *= "
-				| OpAssignOp OpDiv -> write_binop " /= "
-				| OpAssignOp OpSub -> write_binop " -= "
-				| OpAssignOp OpAnd -> write_binop " &= "
-				| OpAssignOp OpOr -> write_binop " |= "
-				| OpAssignOp OpXor -> write_binop " ^= "
-				| OpAssignOp OpShl  -> write_binop " <<= "
-				| OpAssignOp OpShr -> write_binop " >>= "
 				| OpAssignOp OpMod ->
 					if is_int expr1 && is_int expr2 then
 						write_binop " %= "
@@ -2161,26 +2139,21 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 					self#write_expr expr1;
 					self#write " = ";
 					write_method ((self#use boot_type_path) ^ "::shiftRightUnsigned")
-				| _ -> fail self#pos __POS__
+				| OpGt | OpGte | OpLt | OpLte ->
+					compare (" " ^ (Ast.s_binop operation) ^ " ")
+				| _ ->
+					write_binop (" " ^ (Ast.s_binop operation) ^ " ")
 		(**
 			Writes TUnOp to output buffer
 		*)
 		method write_expr_unop operation flag expr =
-			let write_unop operation =
-				match operation with
-					| Increment -> self#write "++"
-					| Decrement -> self#write "--"
-					| Not -> self#write "!"
-					| Neg -> self#write "-"
-					| NegBits -> self#write "~"
-			in
 			match flag with
 				| Prefix ->
-					write_unop operation;
+					self#write (Ast.s_unop operation);
 					self#write_expr expr
 				| Postfix ->
 					self#write_expr expr;
-					write_unop operation
+					self#write (Ast.s_unop operation)
 		method private write_expr_for_field_access expr access_str field_str =
 			let access_str = ref access_str in
 			(match (reveal_expr expr).eexpr with
@@ -2358,7 +2331,7 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 				| _ ->
 					self#write ("new " ^ (self#use hxanon_type_path)  ^ "([\n");
 					self#indent_more;
-					let write_field (key, value) = self#write_array_item ~key:key value in
+					let write_field ((key,_,_), value) = self#write_array_item ~key:key value in
 					List.iter write_field fields;
 					self#indent_less;
 					self#write_indentation;
@@ -3474,7 +3447,7 @@ class class_builder ctx (cls:tclass) =
 		method private write_field is_static field =
 			match field.cf_kind with
 				| Var { v_read = AccInline; v_write = AccNever } -> self#write_const field
-				| Var _ when not (is_extern_field field) ->
+				| Var _ when is_physical_field field ->
 					(* Do not generate fields for RTTI meta, because this generator uses another way to store it *)
 					let is_auto_meta_var = is_static && field.cf_name = "__meta__" && (has_rtti_meta ctx wrapper#get_module_type) in
 					if not is_auto_meta_var then self#write_var field is_static;
@@ -3692,10 +3665,11 @@ class generator (ctx:context) =
 			match self#get_entry_point with
 				| None -> ()
 				| Some (uses, entry_point) ->
-					let filename = match ctx.php_front with None -> "index.php" | Some n -> n in
+					let filename = Common.defined_value_safe ~default:"index.php" ctx Define.PhpFront in
 					let channel = open_out (root_dir ^ "/" ^ filename) in
 					output_string channel "<?php\n";
 					output_string channel uses;
+					output_string channel "\n";
 					output_string channel ("set_include_path(__DIR__.'/" ^ (String.concat "/" self#get_lib_path) ^ "');\n");
 					output_string channel "spl_autoload_register(\n";
 					output_string channel "	function($class){\n";
@@ -3723,9 +3697,8 @@ class generator (ctx:context) =
 			Returns path from `index.php` to directory which will contain all generated classes
 		*)
 		method private get_lib_path : string list =
-			match ctx.php_lib with
-				| None -> ["lib"];
-				| Some path -> (Str.split (Str.regexp "/")  path)
+			let path = Common.defined_value_safe ~default:"lib" ctx Define.PhpLib in
+			(Str.split (Str.regexp "/")  path)
 		(**
 			Returns PHP code for entry point
 		*)

@@ -1351,18 +1351,13 @@ let load_native ctx lib name t =
 			(function
 			| [VBytes str; VInt pos; VInt len] ->
 				(try
-					let i = (match Interp.parse_int (hl_to_caml_sub str (int pos) (int len)) with
-						| Interp.VInt v -> Int32.of_int v
-						| Interp.VInt32 v -> v
-						| _ -> assert false
-					) in
-					VDyn (VInt i,HI32)
+					VDyn (VInt (Common.parse_int (hl_to_caml_sub str (int pos) (int len))),HI32)
 				with _ ->
 					VNull)
 			| l -> assert false)
 		| "parse_float" ->
 			(function
-			| [VBytes str; VInt pos; VInt len] -> (try VFloat (Interp.parse_float (hl_to_caml_sub str (int pos) (int len))) with _ -> VFloat nan)
+			| [VBytes str; VInt pos; VInt len] -> (try VFloat (Common.parse_float (hl_to_caml_sub str (int pos) (int len))) with _ -> VFloat nan)
 			| _ -> assert false)
 		| "dyn_compare" ->
 			(function

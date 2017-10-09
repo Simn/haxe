@@ -41,7 +41,6 @@ env:
 
 sudo: required
 dist: trusty
-osx_image: xcode6.4
 addons: &addons
   ssh_known_hosts:
     - haxe.org
@@ -130,12 +129,12 @@ install_osx: &install_osx
   # Install dependencies
   - travis_retry brew update --merge
   - brew uninstall --force brew-cask # https://github.com/caskroom/homebrew-cask/pull/15381
-  - travis_retry brew install opam ninja zlib pcre awscli;
-  - brew outdated cmake || brew upgrade cmake # we need a recent cmake to use CMAKE_OSX_DEPLOYMENT_TARGET
+  - travis_retry brew tap Homebrew/bundle
+  - travis_retry brew bundle --file=tests/Brewfile
   - export OPAMYES=1
   - opam init
-  - opam install camlp4 sedlex ocamlfind xml-light extlib rope ptmap
   - eval `opam config env`
+  - opam install camlp4 sedlex ocamlfind xml-light extlib rope ptmap
   # check if we need to install neko
   - export REF_CHANGED=1;
   - if [ ! -d "$HOME/neko" ]; then
@@ -184,7 +183,7 @@ matrix:
     #########
     - os: linux
       env:
-        - TEST=macro,neko,js,php,php7,flash9,as3,java,cs,python,hl,lua
+        - TEST=macro,neko,js,php,flash9,as3,java,cs,python,hl,lua
         - DEPLOY_API_DOCS=1
         - DEPLOY_NIGHTLIES=1
         # - SAUCE=1
@@ -213,13 +212,20 @@ matrix:
     # osx #
     #######
     - os: osx
+      osx_image: xcode7.3 # to compile binaries that support older versions of Mac, and 10.11 is the min version that brew provides bottles
       env:
-        - TEST=macro,neko,js,php,python,hl,lua
+        - TEST=macro,neko,js,php,flash9,python
         - DEPLOY_NIGHTLIES=1
       install: *install_osx
 
     - os: osx
-      osx_image: xcode8.3
+      osx_image: xcode8.3 # to compile faster
+      env:
+        - TEST=java,cs,hl,lua
+      install: *install_osx
+
+    - os: osx
+      osx_image: xcode8.3 # to compile faster
       env:
         - TEST=cpp
         - HXCPP_COMPILE_CACHE=~/hxcache
@@ -236,7 +242,6 @@ script:
   - test $CAN_BUILD && mkdir ~/haxelib && haxelib setup ~/haxelib
   - test $CAN_BUILD && haxe -version
   - test $CAN_BUILD && haxe RunCi.hxml
-  - test $CAN_BUILD && neko RunCi.n
   - test $CAN_BUILD && popd
 
 branches:

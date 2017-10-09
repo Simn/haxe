@@ -135,7 +135,7 @@ let is_to_string t =
 	| _ -> false
 
 let is_extern_field f =
-	Type.is_extern_field f || (match f.cf_kind with Method MethNormal -> List.exists (fun (m,_,_) -> m = Meta.Custom ":hlNative") f.cf_meta | _ -> false) || Meta.has Meta.Extern f.cf_meta
+	not (Type.is_physical_field f) || (match f.cf_kind with Method MethNormal -> List.exists (fun (m,_,_) -> m = Meta.Custom ":hlNative") f.cf_meta | _ -> false) || Meta.has Meta.Extern f.cf_meta
 
 let is_array_class name =
 	match name with
@@ -246,7 +246,7 @@ let efield_name e f =
 let global_type ctx g =
 	DynArray.get ctx.cglobals.arr g
 
-let is_overriden ctx c f =
+let is_overridden ctx c f =
 	ctx.is_macro || Hashtbl.mem ctx.overrides (f.cf_name,c.cl_path)
 
 let alloc_float ctx f =
@@ -334,6 +334,12 @@ let make_debug ctx arr =
 	done;
 	out
 
+let fake_tnull =
+	{null_abstract with
+		a_path = [],"Null";
+		a_params = ["T",t_dynamic];
+	}
+
 let rec to_type ?tref ctx t =
 	match t with
 	| TMono r ->
@@ -353,11 +359,10 @@ let rec to_type ?tref ctx t =
 			t
 		) in
 		(match td.t_path with
-		| [], "Null" when not (is_nullable t) -> HNull t
 		| ["haxe";"macro"], name -> Hashtbl.replace ctx.macro_typedefs name t; t
 		| _ -> t)
 	| TLazy f ->
-		to_type ?tref ctx (!f())
+		to_type ?tref ctx (lazy_type f)
 	| TFun (args, ret) ->
 		HFun (List.map (fun (_,o,t) ->
 			let pt = to_type ctx t in
@@ -425,6 +430,9 @@ let rec to_type ?tref ctx t =
 			in
 			loop tl
 		| _ -> class_type ~tref ctx c pl false)
+	| TAbstract ({a_path = [],"Null"},[t1]) ->
+		let t = to_type ?tref ctx t1 in
+		if not (is_nullable t) then HNull t else t
 	| TAbstract (a,pl) ->
 		if Meta.has Meta.CoreType a.a_meta then
 			(match a.a_path with
@@ -501,8 +509,7 @@ and real_type ctx e =
 						If we have a number, it is more accurate to cast it to the type parameter before wrapping it as dynamic
 					*)
 					| TInst ({cl_kind=KTypeParameter _},_), t when is_number (to_type ctx t) ->
-						let tnull = { t_path = [],"Null"; t_module = null_module; t_pos = null_pos; t_name_pos = null_pos; t_private = false; t_doc = None; t_meta = []; t_params = ["T",t_dynamic]; t_type = t_dynamic } in
-						(name, opt, TType (tnull,[t]))
+						(name, opt, TAbstract (fake_tnull,[t]))
 					| _ ->
 						a
 				) args args2, ret)
@@ -585,7 +592,7 @@ and class_type ?(tref=None) ctx c pl statics =
 					let vid = (try -(fst (get_index f.cf_name p))-1 with Not_found -> assert false) in
 					DynArray.set virtuals vid g;
 					Some vid
-				else if is_overriden ctx c f then begin
+				else if is_overridden ctx c f then begin
 					let vid = DynArray.length virtuals in
 					DynArray.add virtuals g;
 					p.pindex <- PMap.add f.cf_name (-vid-1,HVoid) p.pindex;
@@ -1201,7 +1208,7 @@ and direct_method_call ctx c f ethis =
 		false
 	else if (match c.cl_kind with KTypeParameter _ ->  true | _ -> false) then
 		false
-	else if is_overriden ctx c f && ethis.eexpr <> TConst(TSuper) then
+	else if is_overridden ctx c f && ethis.eexpr <> TConst(TSuper) then
 		false
 	else
 		true
@@ -1508,9 +1515,9 @@ and eval_expr ctx e =
 				r
 			)
 		| _ -> assert false);
-	| TCall ({ eexpr = TLocal v }, el) when v.v_name.[0] = '$' ->
+	| TCall ({ eexpr = TIdent s }, el) when s.[0] = '$' ->
 		let invalid() = abort "Invalid native call" e.epos in
-		(match v.v_name, el with
+		(match s, el with
 		| "$new", [{ eexpr = TTypeExpr (TClassDecl _) }] ->
 			(match follow e.etype with
 			| TInst (c,pl) ->
@@ -1914,7 +1921,7 @@ and eval_expr ctx e =
 			free ctx min;
 			r
 		| _ ->
-			abort ("Unknown native call " ^ v.v_name) e.epos)
+			abort ("Unknown native call " ^ s) e.epos)
 	| TEnumIndex v ->
 		get_enum_index ctx v
 	| TCall ({ eexpr = TField (_,FStatic ({ cl_path = [],"Type" },{ cf_name = "enumIndex" })) },[{ eexpr = TCast(v,_) }]) when (match follow v.etype with TEnum _ -> true | _ -> false) ->
@@ -2045,11 +2052,11 @@ and eval_expr ctx e =
 		unsafe_cast_to ctx r (to_type ctx e.etype) e.epos
 	| TObjectDecl fl ->
 		(match to_type ctx e.etype with
-		| HVirtual vp as t when Array.length vp.vfields = List.length fl && not (List.exists (fun (s,e) -> s = "toString" && is_to_string e.etype) fl)  ->
+		| HVirtual vp as t when Array.length vp.vfields = List.length fl && not (List.exists (fun ((s,_,_),e) -> s = "toString" && is_to_string e.etype) fl)  ->
 			let r = alloc_tmp ctx t in
 			op ctx (ONew r);
 			hold ctx r;
-			List.iter (fun (s,ev) ->
+			List.iter (fun ((s,_,_),ev) ->
 				let fidx = (try PMap.find s vp.vindex with Not_found -> assert false) in
 				let _, _, ft = vp.vfields.(fidx) in
 				let v = eval_to ctx ev ft in
@@ -2062,7 +2069,7 @@ and eval_expr ctx e =
 			op ctx (ONew r);
 			hold ctx r;
 			let a = (match follow e.etype with TAnon a -> Some a | t -> if t == t_dynamic then None else assert false) in
-			List.iter (fun (s,ev) ->
+			List.iter (fun ((s,_,_),ev) ->
 				let ft = (try (match a with None -> raise Not_found | Some a -> PMap.find s a.a_fields).cf_type with Not_found -> ev.etype) in
 				let v = eval_to ctx ev (to_type ctx ft) in
 				op ctx (ODynSet (r,alloc_string ctx s,v));
@@ -2309,7 +2316,7 @@ and eval_expr ctx e =
 					free ctx r;
 					binop r r b;
 					r))
-		| OpInterval | OpArrow ->
+		| OpInterval | OpArrow | OpIn ->
 			assert false)
 	| TUnop (Not,_,v) ->
 		let tmp = alloc_tmp ctx HBool in
@@ -2710,6 +2717,8 @@ and eval_expr ctx e =
 		else
 			op ctx (OSafeCast (r,re));
 		r
+	| TIdent s ->
+		assert false
 
 and gen_assign_op ctx acc e1 f =
 	let f r =

@@ -106,7 +106,6 @@ let report_times print =
 	let max_calls = ref 0 in
 	let rec loop depth node =
 		let l = (String.length node.name) + 2 * depth in
-		if l > !max_name then max_name := l;
 		List.iter (fun child ->
 			if depth = 0 then begin
 				node.num_calls <- node.num_calls + child.num_calls;
@@ -116,6 +115,7 @@ let report_times print =
 		) node.children;
 		node.children <- List.sort (fun node1 node2 -> compare node2.time node1.time) node.children;
 		if node.num_calls > !max_calls then max_calls := node.num_calls;
+		if node.time > 0.0009 && l > !max_name then max_name := l;
 	in
 	loop 0 root;
 	let max_calls = String.length (string_of_int !max_calls) in
@@ -193,7 +193,7 @@ let rec wait_loop process_params verbose accept =
 	let test_server_messages = DynArray.create () in
 	let cs = CompilationServer.create () in
 	let sign_string com =
-		let sign = get_signature com in
+		let sign = Define.get_signature com.defines in
 		let	sign_id =
 			try
 				CompilationServer.get_sign cs sign;
@@ -245,7 +245,7 @@ let rec wait_loop process_params verbose accept =
 		| true, Some stdin when Common.defined com2 Define.DisplayStdin ->
 			Typeload.parse_file_from_string com2 file p stdin
 		| _ ->
-			let sign = get_signature com2 in
+			let sign = Define.get_signature com2.defines in
 			let ftime = file_time ffile in
 			let fkey = (ffile,sign) in
 			try
@@ -291,7 +291,7 @@ let rec wait_loop process_params verbose accept =
 	let get_changed_directories (ctx : Typecore.typer) =
 		let t = Common.timer ["server";"module cache";"changed dirs"] in
 		let com = ctx.Typecore.com in
-		let sign = get_signature com in
+		let sign = Define.get_signature com.defines in
 		let dirs = try
 			(* First, check if we already have determined changed directories for current compilation. *)
 			Hashtbl.find changed_directories sign
@@ -357,7 +357,7 @@ let rec wait_loop process_params verbose accept =
 	Typeload.type_module_hook := (fun (ctx:Typecore.typer) mpath p ->
 		let t = Common.timer ["server";"module cache"] in
 		let com2 = ctx.Typecore.com in
-		let sign = get_signature com2 in
+		let sign = Define.get_signature com2.defines in
 		let content_changed m file =
 			let ffile = Path.unique_full_path file in
 			let fkey = (ffile,sign) in
@@ -377,7 +377,7 @@ let rec wait_loop process_params verbose accept =
 			let check_module_path () =
 				let directories = get_changed_directories ctx in
 				match m.m_extra.m_kind with
-				| MFake | MSub | MImport -> () (* don't get classpath *)
+				| MFake | MImport -> () (* don't get classpath *)
 				| MExtern ->
 					(* if we have a file then this will override our extern type *)
 					let has_file = (try check_module_shadowing com2 directories m; true with Not_found -> false) in
@@ -471,7 +471,7 @@ let rec wait_loop process_params verbose accept =
 							a.a_meta <- List.filter (fun (m,_,_) -> m <> Meta.ValueUsed) a.a_meta
 						| _ -> ()
 					) m.m_types;
-					if m.m_extra.m_kind <> MSub then Typeload.add_module ctx m p;
+					Typeload.add_module ctx m p;
 					PMap.iter (Hashtbl.replace com2.resources) m.m_extra.m_binded_res;
 					if ctx.Typecore.in_macro || com2.display.dms_full_typing then
 						PMap.iter (fun _ m2 -> add_modules (tabs ^ "  ") m0 m2) m.m_extra.m_deps;
@@ -527,9 +527,9 @@ let rec wait_loop process_params verbose accept =
 				end else cache_context ctx.com;
 			);
 			ctx.setup <- (fun() ->
-				let sign = get_signature ctx.com in
+				let sign = Define.get_signature ctx.com.defines in
 				if verbose then begin
-					let defines = PMap.foldi (fun k v acc -> (k ^ "=" ^ v) :: acc) ctx.com.defines [] in
+					let defines = PMap.foldi (fun k v acc -> (k ^ "=" ^ v) :: acc) ctx.com.defines.Define.values [] in
 					print_endline ("Defines " ^ (String.concat "," (List.sort compare defines)));
 					print_endline ("Using signature " ^ Digest.to_hex sign);
 					print_endline ("Display position: " ^ (Printer.s_pos !Parser.resume_display));

@@ -218,7 +218,7 @@ module Initialize = struct
 				add_std "neko";
 				"n"
 			| Js ->
-				if not (PMap.exists (fst (Define.infos Define.JqueryVer)) com.defines) then
+				if not (PMap.exists (fst (Define.infos Define.JqueryVer)) com.defines.Define.values) then
 					Common.define_value com Define.JqueryVer "11204";
 
 				let es_version =
@@ -242,14 +242,7 @@ module Initialize = struct
 				add_std "lua";
 				"lua"
 			| Php ->
-				if Common.is_php7 com then
-					begin
-						com.package_rules <- PMap.add "php" (Directory "php7") com.package_rules;
-						com.package_rules <- PMap.add "php7" Forbidden com.package_rules;
-						add_std "php7"
-					end
-				else
-					add_std "php";
+				add_std "php";
 				"php"
 			| Cpp ->
 				Common.define_value com Define.HxcppApiLevel "332";
@@ -296,7 +289,7 @@ let generate tctx ext xml_out interp swf_header =
 		Codegen.Dump.dump_dependencies com;
 		if not tctx.Typecore.in_macro then match tctx.Typecore.g.Typecore.macros with
 			| None -> ()
-			| Some(_,ctx) -> print_endline "generate"; Codegen.Dump.dump_dependencies ~target_override:(Some "macro") ctx.Typecore.com
+			| Some(_,ctx) -> Codegen.Dump.dump_dependencies ~target_override:(Some "macro") ctx.Typecore.com
 	end;
 	begin match com.platform with
 		| Neko | Hl | Eval when interp -> ()
@@ -321,10 +314,7 @@ let generate tctx ext xml_out interp swf_header =
 		| Lua ->
 			Genlua.generate,"lua"
 		| Php ->
-			if Common.is_php7 com then
-				Genphp7.generate,"php"
-			else
-				Genphp.generate,"php"
+			Genphp7.generate,"php"
 		| Cpp ->
 			Gencpp.generate,"cpp"
 		| Cs ->
@@ -654,19 +644,6 @@ try
 			com.foptimize <- false;
 			Common.define com Define.NoOpt;
 		), ": disable code optimizations");
-		("--php-front",Arg.String (fun f ->
-			if com.php_front <> None then raise (Arg.Bad "Multiple --php-front");
-			com.php_front <- Some f;
-		),"<filename> : select the name for the php front file");
-		("--php-lib",Arg.String (fun f ->
-			if com.php_lib <> None then raise (Arg.Bad "Multiple --php-lib");
-			com.php_lib <- Some f;
-		),"<filename> : select the name for the php lib folder");
-		("--php-prefix", Arg.String (fun f ->
-			if com.php_prefix <> None then raise (Arg.Bad "Multiple --php-prefix");
-			com.php_prefix <- Some f;
-			Common.define com Define.PhpPrefix;
-		),"<name> : prefix all classes with given name");
 		("--remap", Arg.String (fun s ->
 			let pack, target = (try ExtString.String.split s ":" with _ -> raise (Arg.Bad "Invalid remap format, expected source:target")) in
 			com.package_rules <- PMap.add pack (Remap target) com.package_rules;
@@ -702,18 +679,8 @@ try
 			did_something := true;
 		),": print version and exit");
 		("--help-defines", Arg.Unit (fun() ->
-			let m = ref 0 in
-			let rec loop i =
-				let d = Obj.magic i in
-				if d <> Define.Last then begin
-					let t, doc = Define.infos d in
-					if String.length t > !m then m := String.length t;
-					((String.concat "-" (ExtString.String.nsplit t "_")),doc) :: (loop (i + 1))
-				end else
-					[]
-			in
-			let all = List.sort (fun (s1,_) (s2,_) -> String.compare s1 s2) (loop 0) in
-			let all = List.map (fun (n,doc) -> Printf.sprintf " %-*s: %s" !m n (limit_string doc (!m + 3))) all in
+			let all,max_length = Define.get_documentation_list() in
+			let all = List.map (fun (n,doc) -> Printf.sprintf " %-*s: %s" max_length n (limit_string doc (max_length + 3))) all in
 			List.iter (fun msg -> ctx.com.print (msg ^ "\n")) all;
 			did_something := true
 		),": print help for all compiler specific defines");
@@ -758,7 +725,17 @@ try
 		com.warning <- if com.display.dms_error_policy = EPCollect then (fun s p -> add_diagnostics_message com s p DisplayTypes.DiagnosticsSeverity.Warning) else message ctx;
 		com.error <- error ctx;
 	end;
-	Lexer.zero_based_columns := Common.defined com Define.OldErrorFormat;
+	Lexer.old_format := Common.defined com Define.OldErrorFormat;
+	if !Lexer.old_format && Parser.do_resume () then begin
+		let p = !Parser.resume_display in
+		(* convert byte position to utf8 position *)
+		try
+			let content = Std.input_file ~bin:true (Path.get_real_path p.pfile) in
+			let pos = UTF8.length (String.sub content 0 p.pmin) in
+			Parser.resume_display := { p with pmin = pos; pmax = pos }
+		with _ ->
+			() (* ignore *)
+	end;
 	DisplayOutput.process_display_file com classes;
 	let ext = Initialize.initialize_target ctx com classes in
 	(* if we are at the last compilation step, allow all packages accesses - in case of macros or opening another project file *)
@@ -779,7 +756,7 @@ try
 	end else begin
 		ctx.setup();
 		Common.log com ("Classpath : " ^ (String.concat ";" com.class_path));
-		Common.log com ("Defines : " ^ (String.concat ";" (PMap.foldi (fun k v acc -> (match v with "1" -> k | _ -> k ^ "=" ^ v) :: acc) com.defines [])));
+		Common.log com ("Defines : " ^ (String.concat ";" (PMap.foldi (fun k v acc -> (match v with "1" -> k | _ -> k ^ "=" ^ v) :: acc) com.defines.Define.values [])));
 		let t = Common.timer ["typing"] in
 		Typecore.type_expr_ref := (fun ctx e with_type -> Typer.type_expr ctx e with_type);
 		let tctx = Typer.create com in
@@ -842,7 +819,7 @@ with
 		end
 	| Error.Error (m,p) ->
 		error ctx (Error.error_msg m) p
-	| Interp.Error (msg,p :: l) | Hlmacro.Error (msg,p :: l) ->
+	| Hlmacro.Error (msg,p :: l) ->
 		message ctx msg p;
 		List.iter (message ctx "Called from") l;
 		error ctx "Aborted" null_pos;
@@ -901,7 +878,7 @@ with
 		Option.may (fun fields -> raise (DisplayOutput.Completion (DisplayOutput.print_fields fields))) fields
 	| Display.ModuleSymbols s | Display.Diagnostics s | Display.Statistics s | Display.Metadata s ->
 		raise (DisplayOutput.Completion s)
-	| Interp.Sys_exit i | Hlinterp.Sys_exit i ->
+	| EvalExceptions.Sys_exit i | Hlinterp.Sys_exit i ->
 		ctx.flush();
 		if !measure_times then report_times prerr_endline;
 		exit i

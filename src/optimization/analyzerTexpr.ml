@@ -125,7 +125,6 @@ let rec can_be_used_as_value com e =
 		(* | TCall _ | TNew _ when (match com.platform with Cpp | Php -> true | _ -> false) -> raise Exit *)
 		| TReturn _ | TThrow _ | TBreak | TContinue -> raise Exit
 		| TUnop((Increment | Decrement),_,_) when not (target_handles_unops com) -> raise Exit
-		| TNew _ when com.platform = Php && not (Common.is_php7 com) -> raise Exit
 		| TFunction _ -> ()
 		| _ -> Type.iter loop e
 	in
@@ -142,12 +141,12 @@ let rec can_be_used_as_value com e =
 let wrap_meta s e =
 	mk (TMeta((Meta.Custom s,[],e.epos),e)) e.etype e.epos
 
-let is_really_unbound v = match v.v_name with
+let is_really_unbound s = match s with
 	| "`trace" | "__int__" -> false
-	| _ -> is_unbound v
+	| _ -> true
 
 let r = Str.regexp "^\\([A-Za-z0-9_]\\)+$"
-let is_unbound_call_that_might_have_side_effects v el = match v.v_name,el with
+let is_unbound_call_that_might_have_side_effects s el = match s,el with
 	| "__js__",[{eexpr = TConst (TString s)}] when Str.string_match r s 0 -> false
 	| _ -> true
 
@@ -167,7 +166,7 @@ let rec is_asvar_type t =
 	| TEnum(en,_) -> check en.e_meta
 	| TType(t,tl) -> check t.t_meta || (is_asvar_type (apply_params t.t_params tl t.t_type))
 	| TAbstract(a,_) -> check a.a_meta
-	| TLazy f -> is_asvar_type (!f())
+	| TLazy f -> is_asvar_type (lazy_type f)
 	| TMono r ->
 		(match !r with
 		| Some t -> is_asvar_type t
@@ -188,10 +187,10 @@ let type_change_ok com t1 t2 =
 		let rec is_nullable_or_whatever = function
 			| TMono r ->
 				(match !r with None -> false | Some t -> is_nullable_or_whatever t)
-			| TType ({ t_path = ([],"Null") },[_]) ->
+			| TAbstract ({ a_path = ([],"Null") },[_]) ->
 				true
 			| TLazy f ->
-				is_nullable_or_whatever (!f())
+				is_nullable_or_whatever (lazy_type f)
 			| TType (t,tl) ->
 				is_nullable_or_whatever (apply_params t.t_params tl t.t_type)
 			| TFun _ ->
@@ -236,7 +235,8 @@ module TexprKindMapper = struct
 		| TLocal _
 		| TBreak
 		| TContinue
-		| TTypeExpr _ ->
+		| TTypeExpr _
+		| TIdent _ ->
 			e
 		| TArray(e1,e2) ->
 			let e1 = f KAccess e1 in
@@ -487,7 +487,7 @@ module InterferenceReport = struct
 				loop e1;
 				loop e2;
 			(* state *)
-			| TCall({eexpr = TLocal v},el) when not (is_unbound_call_that_might_have_side_effects v el) ->
+			| TCall({eexpr = TIdent s},el) when not (is_unbound_call_that_might_have_side_effects s el) ->
 				List.iter loop el
 			| TNew(c,_,el) when (match c.cl_constructor with Some cf when PurityState.is_pure c cf -> true | _ -> false) ->
 				set_state_read ir;
@@ -619,6 +619,7 @@ module Fusion = struct
 		| OpBoolOr
 		| OpAssignOp _
 		| OpInterval
+		| OpIn
 		| OpArrow ->
 			false
 
@@ -655,6 +656,15 @@ module Fusion = struct
 				block_element acc (e1 :: el1 @ el2)
 			| {eexpr = TNew(c,tl,el1)} :: el2 when (match c.cl_constructor with Some cf when PurityState.is_pure c cf -> true | _ -> false) && config.local_dce ->
 				block_element acc (el1 @ el2)
+			| {eexpr = TIf ({ eexpr = TConst (TBool t) },e1,e2)} :: el ->
+				if t then
+					block_element acc (e1 :: el)
+				else begin match e2 with
+					| None ->
+						block_element acc el
+					| Some e ->
+						block_element acc (e :: el)
+				end
 			(* no-side-effect composites *)
 			| {eexpr = TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) | TField(e1,_) | TUnop(_,_,e1)} :: el ->
 				block_element acc (e1 :: el)
@@ -704,7 +714,6 @@ module Fusion = struct
 				can_be_used_as_value com e1 &&
 				not (ExtType.is_void e1.etype) &&
 				(match com.platform with
-					| Php when not (Common.is_php7 com) -> false
 					| Cpp when not (Common.defined com Define.Cppia) -> false
 					| _ -> true)
 				->
@@ -805,17 +814,8 @@ module Fusion = struct
 							let el = List.map replace el in
 							let e2 = replace e2 in
 							e2,el
-						| Php | Cpp  when not (Common.defined com Define.Cppia) && not (Common.is_php7 com) ->
-							let is_php_safe e1 =
-								let rec loop e = match e.eexpr with
-									| TCall _ -> raise Exit
-									| TCast(e1,_) | TParenthesis e1 | TMeta(_,e1) -> loop e1
-									| _ -> ()
-								in
-								try loop e1; true with Exit -> false
-							in
-							(* PHP5 doesn't like call()() expressions. *)
-							let e2 = if com.platform = Php && not (is_php_safe e1) then explore e2 else replace e2 in
+						| Cpp ->
+							let e2 = replace e2 in
 							let el = handle_el el in
 							e2,el
 						| _ ->
@@ -879,7 +879,7 @@ module Fusion = struct
 							|| has_field_write ir (field_name fa) || has_state_write ir ->
 							raise Exit
 						(* state *)
-						| TCall({eexpr = TLocal v},el) when not (is_unbound_call_that_might_have_side_effects v el) ->
+						| TCall({eexpr = TIdent s},el) when not (is_unbound_call_that_might_have_side_effects s el) ->
 							e
 						| TNew(c,tl,el) when (match c.cl_constructor with Some cf when PurityState.is_pure c cf -> true | _ -> false) ->
 							let el = handle_el el in
@@ -890,7 +890,7 @@ module Fusion = struct
 							if not !found && (has_state_write ir || has_state_read ir || has_any_field_read ir || has_any_field_write ir) then raise Exit;
 							{e with eexpr = TNew(c,tl,el)}
 						| TCall({eexpr = TField(_,FEnum _)} as ef,el) ->
-							let el = List.map replace el in
+							let el = handle_el el in
 							{e with eexpr = TCall(ef,el)}
 						| TCall({eexpr = TField(_,fa)} as ef,el) when PurityState.is_pure_field_access fa ->
 							let ef,el = handle_call ef el in
@@ -898,7 +898,7 @@ module Fusion = struct
 							{e with eexpr = TCall(ef,el)}
 						| TCall(e1,el) ->
 							let e1,el = match e1.eexpr with
-								| TLocal v when is_really_unbound v -> e1,el
+								| TIdent s when s <> "`trace" && s <> "__int__" -> e1,el
 								| _ -> handle_call e1 el
 							in
 							if not !found && (((has_state_read ir || has_any_field_read ir)) || has_state_write ir || has_any_field_write ir) then raise Exit;
@@ -917,7 +917,7 @@ module Fusion = struct
 							let e3 = replace e3 in
 							if not !found && has_state_read ir then raise Exit;
 							{e with eexpr = TBinop(OpAssign,{ea with eexpr = TArray(e1,e2)},e3)}
-						| TBinop(op,e1,e2) when (match com.platform with Cpp | Php when not (Common.is_php7 com) -> true | _ -> false) ->
+						| TBinop(op,e1,e2) when (match com.platform with Cpp -> true | _ -> false) ->
 							let e1 = replace e1 in
 							let temp_found = !found in
 							found := false;
@@ -1037,7 +1037,7 @@ module Fusion = struct
 				in
 				let el = fuse_loop el in
 				{e with eexpr = TBlock el}
-			| TCall({eexpr = TLocal v},_) when is_really_unbound v ->
+			| TCall({eexpr = TIdent s},_) when is_really_unbound s ->
 				e
 			| _ ->
 				Type.map_expr loop e
@@ -1069,7 +1069,7 @@ module Cleanup = struct
 				if_or_op e e1 e2 e3;
 			| TUnop((Increment | Decrement),_,e1) when (match (Texpr.skip e1).eexpr with TConst _ -> true | _ -> false) ->
 				loop e1
-			| TCall({eexpr = TLocal v},_) when is_really_unbound v ->
+			| TCall({eexpr = TIdent s},_) when is_really_unbound s ->
 				e
 			| TBlock el ->
 				let el = List.map (fun e ->
@@ -1222,7 +1222,7 @@ module Purity = struct
 					| _ ->
 						taint_raise node (* Can that even happen? *)
 				end
-			| TCall({eexpr = TLocal v},el) when not (is_unbound_call_that_might_have_side_effects v el) ->
+			| TCall({eexpr = TIdent s},el) when not (is_unbound_call_that_might_have_side_effects s el) ->
 				List.iter loop el;
 			| TCall _ ->
 				taint_raise node

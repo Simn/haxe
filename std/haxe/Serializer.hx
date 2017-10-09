@@ -21,6 +21,7 @@
  */
 package haxe;
 
+import haxe.ds.List;
 /**
 	The Serializer class can be used to encode values and objects into a `String`,
 	from which the `Unserializer` class can recreate the original representation.
@@ -288,7 +289,7 @@ class Serializer {
 					}
 				}
 				buf.add("h");
-			case #if (neko || cs || python) "List" #else cast List #end:
+			case #if (neko || cs || python) "haxe.ds.List" #else cast List #end:
 				buf.add("l");
 				var v : List<Dynamic> = v;
 				for( i in v )
@@ -377,7 +378,7 @@ class Serializer {
 				#end
 			default:
 				if( useCache ) cache.pop();
-				if( #if flash try v.hxSerialize != null catch( e : Dynamic ) false #elseif (cs || java || python) Reflect.hasField(v, "hxSerialize") #elseif (php && php7) php.Global.method_exists(v, 'hxSerialize') #else v.hxSerialize != null #end  ) {
+				if( #if flash try v.hxSerialize != null catch( e : Dynamic ) false #elseif (cs || java || python) Reflect.hasField(v, "hxSerialize") #elseif php php.Global.method_exists(v, 'hxSerialize') #else v.hxSerialize != null #end  ) {
 					buf.add("C");
 					serializeString(Type.getClassName(c));
 					if( useCache ) cache.push(v);
@@ -477,10 +478,8 @@ class Serializer {
 			else {
 				buf.add(l);
 				for( i in 0...l ) {
-					#if (php && php7)
+					#if php
 					serialize(v.params[i]);
-					#elseif php
-					serialize(untyped __field__(v, __php__("params"), i));
 					#end
 				}
 			}
@@ -501,6 +500,16 @@ class Serializer {
 				buf.add("0");
 			}
 
+			#elseif js_enums_as_objects
+			if( useEnumIndex ) {
+				buf.add(":");
+				buf.add(v._hx_index);
+			} else
+				serializeString(Type.enumConstructor(v));
+			buf.add(":");
+			var params = Type.enumParameters(v);
+			buf.add(params.length);
+			for(p in params) serialize(p);
 			#else
 			if( useEnumIndex ) {
 				buf.add(":");

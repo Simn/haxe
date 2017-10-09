@@ -9,6 +9,7 @@
 *.exe
 .*.swp
 /out
+/installer
 
 /extra/hxclasses
 /extra/*.swf
@@ -68,6 +69,7 @@ build.bat
 /.vscode
 tests/unit/compile.php.hxml
 /extra/*.xml
+!/extra/build-haxesetup.xml
 tests/optimization/testopt.js
 tests/misc/pythonImport/native_python/__pycache__
 tests/unit/unit.py
@@ -107,3 +109,6 @@ tests/server/test/cases/
 tests/server/test.js
 
 tests/unit/pypy3-*
+tmp.tmp
+
+dev-display.hxml
