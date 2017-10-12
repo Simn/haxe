@@ -60,7 +60,7 @@ let make_hxb_macro_api com state =
 	}
 
 let run com path =
-	let hxb = Std.finally (Common.timer ["hxb";"read"]) HxbReader.read path in
+	let hxb = Std.finally (Timer.timer ["hxb";"read"]) HxbReader.read path in
 	List.iter (fun m ->
 		begin match m.m_path with
 		| ([],"String") ->

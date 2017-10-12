@@ -650,7 +650,7 @@ let add_field_inits reserved ctx t =
 (* Adds the __meta__ field if required *)
 let add_meta_field ctx t = match t with
 	| TClassDecl c ->
-		(match Codegen.build_metadata ctx.com.basic t with
+		(match Texpr.build_metadata ctx.com.basic t with
 		| None -> ()
 		| Some e ->
 			add_feature ctx.com "has_metadata";
@@ -834,7 +834,7 @@ let iter_expressions fl mt =
 		()
 
 let filter_timer detailed s =
-	timer (if detailed then "filters" :: s else ["filters"])
+	Timer.timer (if detailed then "filters" :: s else ["filters"])
 
 let run com tctx main =
 	let detail_times = Common.raw_defined com "filter-times" in

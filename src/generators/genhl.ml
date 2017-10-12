@@ -2534,7 +2534,7 @@ and eval_expr ctx e =
 	| TMeta (_,e) ->
 		eval_expr ctx e
 	| TFor (v,it,loop) ->
-		eval_expr ctx (Codegen.for_remap ctx.com.basic v it loop e.epos)
+		eval_expr ctx (Texpr.for_remap ctx.com.basic v it loop e.epos)
 	| TSwitch (en,cases,def) ->
 		let rt = to_type ctx e.etype in
 		let r = alloc_tmp ctx rt in
@@ -3260,7 +3260,7 @@ let generate_static_init ctx types main =
 					op ctx (OSetGlobal (g, rt));
 				end;
 
-				(match Codegen.build_metadata ctx.com.basic (TClassDecl c) with
+				(match Texpr.build_metadata ctx.com.basic (TClassDecl c) with
 				| None -> ()
 				| Some e ->
 					let r = eval_to ctx e HDyn in
@@ -3306,7 +3306,7 @@ let generate_static_init ctx types main =
 						op ctx (OSetGlobal (g,r));
 				) e.e_names;
 
-				(match Codegen.build_metadata ctx.com.basic (TEnumDecl e) with
+				(match Texpr.build_metadata ctx.com.basic (TEnumDecl e) with
 				| None -> ()
 				| Some e -> op ctx (OSetField (r,index "__meta__",eval_to ctx e HDyn)));
 
@@ -3800,7 +3800,7 @@ let generate com =
 		check ctx;
 		Hlinterp.check code false;
 	end;
-	let t = Common.timer ["write";"hl"] in
+	let t = Timer.timer ["write";"hl"] in
 
 	let escape_command s =
 		let b = Buffer.create 0 in
@@ -3810,7 +3810,7 @@ let generate com =
 
 	if file_extension com.file = "c" then begin
 		Hl2c.write_c com com.file code;
-		let t = Common.timer ["nativecompile";"hl"] in
+		let t = Timer.timer ["nativecompile";"hl"] in
 		if not (Common.defined com Define.NoCompilation) && com.run_command ("haxelib run hashlink build " ^ escape_command com.file) <> 0 then failwith "Build failed";
 		t();
 	end else begin
@@ -3849,7 +3849,7 @@ let generate com =
 	end;
 	if Common.defined com Define.Interp then
 		try
-			let t = Common.timer ["generate";"hl";"interp"] in
+			let t = Timer.timer ["generate";"hl";"interp"] in
 			let ctx = Hlinterp.create true in
 			Hlinterp.add_code ctx code;
 			t();

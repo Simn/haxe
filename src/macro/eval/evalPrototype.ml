@@ -175,7 +175,7 @@ let is_removable_field cf =
 let create_static_prototype ctx mt =
 	let key = path_hash (t_infos mt).mt_path in
 	let com = ctx.curapi.MacroApi.get_com() in
-	let meta = Codegen.build_metadata com.Common.basic mt in
+	let meta = Texpr.build_metadata com.Common.basic mt in
 	let o = match mt with
 	| TClassDecl c ->
 		let pparent = match c.cl_super with
@@ -270,7 +270,7 @@ let get_object_prototype ctx l =
 		proto,l
 
 let add_types ctx types ready =
-	let t = Common.timer [(if ctx.is_macro then "macro" else "interp");"add_types"] in
+	let t = Timer.timer [(if ctx.is_macro then "macro" else "interp");"add_types"] in
 	let new_types = List.filter (fun mt ->
 		let inf = Type.t_infos mt in
 		let key = path_hash inf.mt_path in
