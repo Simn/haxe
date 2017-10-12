@@ -821,120 +821,11 @@ let find_file ctx f =
 		| None -> raise Not_found
 		| Some f -> f)
 
-let rec mkdir_recursive base dir_list =
-	match dir_list with
-	| [] -> ()
-	| dir :: remaining ->
-		let path = match base with
-				   | "" ->  dir
-				   | "/" -> "/" ^ dir
-				   | _ -> base ^ "/" ^ dir
-		in
-		let path_len = String.length path in
-		let path =
-			if path_len > 0 && (path.[path_len - 1] = '/' || path.[path_len - 1] == '\\') then
-				String.sub path 0 (path_len - 1)
-			else
-				path
-		in
-		if not ( (path = "") || ( (path_len = 2) && ((String.sub path 1 1) = ":") ) ) then
-			if not (Sys.file_exists path) then
-				Unix.mkdir path 0o755;
-		mkdir_recursive (if (path = "") then "/" else path) remaining
-
-let mkdir_from_path path =
-	let parts = Str.split_delim (Str.regexp "[\\/]+") path in
-	match parts with
-		| [] -> (* path was "" *) ()
-		| _ ->
-			let dir_list = List.rev (List.tl (List.rev parts)) in
-			mkdir_recursive "" dir_list
 
 let mem_size v =
 	Objsize.size_with_headers (Objsize.objsize v [] [])
 
-(* ------------------------- TIMERS ----------------------------- *)
-
-type timer_infos = {
-	id : string list;
-	mutable start : float list;
-	mutable total : float;
-	mutable calls : int;
-}
-
-let get_time = Extc.time
-let htimers = Hashtbl.create 0
-
-let new_timer id =
-	let key = String.concat "." id in
-	try
-		let t = Hashtbl.find htimers key in
-		t.start <- get_time() :: t.start;
-		t.calls <- t.calls + 1;
-		t
-	with Not_found ->
-		let t = { id = id; start = [get_time()]; total = 0.; calls = 1; } in
-		Hashtbl.add htimers key t;
-		t
-
-let curtime = ref []
-
-let close t =
-	let start = (match t.start with
-		| [] -> assert false
-		| s :: l -> t.start <- l; s
-	) in
-	let now = get_time() in
-	let dt = now -. start in
-	t.total <- t.total +. dt;
-	let rec loop() =
-		match !curtime with
-		| [] -> failwith ("Timer " ^ (String.concat "." t.id) ^ " closed while not active")
-		| tt :: l -> curtime := l; if t != tt then loop()
-	in
-	loop();
-	(* because of rounding errors while adding small times, we need to make sure that we don't have start > now *)
-	List.iter (fun ct -> ct.start <- List.map (fun t -> let s = t +. dt in if s > now then now else s) ct.start) !curtime
-
-let timer id =
-	let t = new_timer id in
-	curtime := t :: !curtime;
-	(function() -> close t)
-
-let rec close_times() =
-	match !curtime with
-	| [] -> ()
-	| t :: _ -> close t; close_times()
-
-;;
-
-(*  Taken from OCaml source typing/oprint.ml
-
-	This is a better version of string_of_float which prints without loss of precision
-	so that float_of_string (float_repres x) = x for all floats x
-*)
-let valid_float_lexeme s =
-	let l = String.length s in
-	let rec loop i =
-		if i >= l then s ^ "." else
-		match s.[i] with
-		| '0' .. '9' | '-' -> loop (i+1)
-		| _ -> s
-	in loop 0
-
-let float_repres f =
-	match classify_float f with
-	| FP_nan -> "nan"
-	| FP_infinite ->
-		if f < 0.0 then "neg_infinity" else "infinity"
-	| _ ->
-		let float_val =
-			let s1 = Printf.sprintf "%.12g" f in
-			if f = float_of_string s1 then s1 else
-			let s2 = Printf.sprintf "%.15g" f in
-			if f = float_of_string s2 then s2 else
-			Printf.sprintf "%.18g" f
-		in valid_float_lexeme float_val
+let timer = Timer.timer
 
 let hash f =
 	let h = ref 0 in
@@ -959,31 +850,3 @@ let dump_context com = s_record_fields "" [
 	"defines",s_pmap (fun s -> s) (fun s -> s) com.defines.values;
 	"defines_signature",s_opt (fun s -> Digest.to_hex s) com.defines.defines_signature;
 ]
-
-let parse_float s =
-	let rec loop sp i =
-		if i = String.length s then (if sp = 0 then s else String.sub s sp (i - sp)) else
-		match String.unsafe_get s i with
-		| ' ' when sp = i -> loop (sp + 1) (i + 1)
-		| '0'..'9' | '-' | '+' | 'e' | 'E' | '.' -> loop sp (i + 1)
-		| _ -> String.sub s sp (i - sp)
-	in
-	float_of_string (loop 0 0)
-
-let parse_int s =
-	let rec loop_hex i =
-		if i = String.length s then s else
-		match String.unsafe_get s i with
-		| '0'..'9' | 'a'..'f' | 'A'..'F' -> loop_hex (i + 1)
-		| _ -> String.sub s 0 i
-	in
-	let rec loop sp i =
-		if i = String.length s then (if sp = 0 then s else String.sub s sp (i - sp)) else
-		match String.unsafe_get s i with
-		| '0'..'9' -> loop sp (i + 1)
-		| ' ' when sp = i -> loop (sp + 1) (i + 1)
-		| '-' when i = 0 -> loop sp (i + 1)
-		| ('x' | 'X') when i = 1 && String.get s 0 = '0' -> loop_hex (i + 1)
-		| _ -> String.sub s sp (i - sp)
-	in
-	Int32.of_string (loop 0 0)

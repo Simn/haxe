@@ -176,7 +176,7 @@ let cached_source_writer common_ctx filename =
    new source_writer common_ctx (add_header) (add_buf) (close)
 ;;
 
-let make_class_directories = Common.mkdir_recursive;;
+let make_class_directories = Path.mkdir_recursive;;
 
 let make_base_directory dir =
    make_class_directories "" ( ( Str.split_delim (Str.regexp "[\\/]+") dir ) );;
@@ -4736,7 +4736,7 @@ let find_referenced_types_flags ctx obj field_name super_deps constructor_deps h
          | _ -> () );
          ) enum_def.e_constrs;
       if (not header_only) then begin
-         let meta = Codegen.build_metadata ctx.ctx_common (TEnumDecl enum_def) in
+         let meta = Codegen.build_metadata ctx.ctx_common.basic (TEnumDecl enum_def) in
          match meta with Some expr -> visit_params expr | _ -> ();
       end;
    in
@@ -6051,7 +6051,7 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
          )
       in
 
-      output_cpp "#if HXCPP_SCRIPTABLE\n";
+      output_cpp "#ifdef HXCPP_SCRIPTABLE\n";
 
       let stored_fields = List.filter is_data_member implemented_instance_fields in
       if ( (List.length stored_fields) > 0) then begin
@@ -8076,7 +8076,7 @@ let generate_cppia ctx =
          if (is_internal) then
             (if (debug>=4) then print_endline (" internal enum " ^ (join_class_path enum_def.e_path ".") ))
          else begin
-            let meta = Codegen.build_metadata common_ctx object_def in
+            let meta = Codegen.build_metadata common_ctx.basic object_def in
             if (enum_def.e_extern) then
                (if (debug>=4) then print_endline ("external enum " ^  (join_class_path enum_def.e_path ".") ));
             generate_script_enum common_ctx script enum_def meta
@@ -8171,7 +8171,7 @@ let generate_source ctx =
          if (is_internal) then
             (if (debug>1) then print_endline (" internal enum " ^ name ))
          else begin
-            let meta = Codegen.build_metadata common_ctx object_def in
+            let meta = Codegen.build_metadata common_ctx.basic object_def in
             if (enum_def.e_extern) then
                (if (debug>1) then print_endline ("external enum " ^ name ));
             boot_enums := enum_def.e_path :: !boot_enums;

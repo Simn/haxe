@@ -294,8 +294,8 @@ let generate tctx ext xml_out interp swf_header =
 	begin match com.platform with
 		| Neko | Hl | Eval when interp -> ()
 		| Cpp when Common.defined com Define.Cppia -> ()
-		| Cpp | Cs | Java | Php -> Common.mkdir_from_path (com.file ^ "/.")
-		| _ -> Common.mkdir_from_path com.file
+		| Cpp | Cs | Java | Php -> Path.mkdir_from_path (com.file ^ "/.")
+		| _ -> Path.mkdir_from_path com.file
 	end;
 	if interp then
 		Std.finally (Common.timer ["interp"]) MacroContext.interpret tctx
@@ -798,7 +798,7 @@ try
 			Genxml.generate_hx com
 		| Some file ->
 			Common.log com ("Generating xml : " ^ file);
-			Common.mkdir_from_path file;
+			Path.mkdir_from_path file;
 			Genxml.generate com file);
 		begin match !hxb_out with
 			| None -> ()
@@ -860,7 +860,7 @@ with
 		) fields in
 		let fields =
 			if !measure_times then begin
-				close_times();
+				Timer.close_times();
 				(List.map (fun (name,value) -> ("@TIME " ^ name, Display.FKTimer value, "")) (DisplayOutput.get_timer_fields !start_time)) @ fields
 			end else
 				fields
@@ -879,7 +879,7 @@ with
 	| Display.DisplayToplevel il ->
 		let il =
 			if !measure_times then begin
-				close_times();
+				Timer.close_times();
 				(List.map (fun (name,value) -> IdentifierType.ITTimer ("@TIME " ^ name ^ ": " ^ value)) (DisplayOutput.get_timer_fields !start_time)) @ il
 			end else
 				il

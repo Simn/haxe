@@ -1134,7 +1134,7 @@ module StdFileSystem = struct
 	)
 
 	let createDirectory = vfun1 (fun path ->
-		(try Common.mkdir_from_path (Path.add_trailing_slash (decode_string path)) with Unix.Unix_error (_,cmd,msg) -> exc_string (cmd ^ " " ^ msg));
+		(try Path.mkdir_from_path (Path.add_trailing_slash (decode_string path)) with Unix.Unix_error (_,cmd,msg) -> exc_string (cmd ^ " " ^ msg));
 		vnull
 	)
 
@@ -1853,11 +1853,11 @@ module StdStd = struct
 	)
 
 	let parseInt = vfun1 (fun v ->
-		try vint32 (Common.parse_int (decode_string v)) with _ -> vnull
+		try vint32 (Numeric.parse_int (decode_string v)) with _ -> vnull
 	)
 
 	let parseFloat = vfun1 (fun v ->
-		try vfloat (Common.parse_float (decode_string v)) with _ -> vnull
+		try vfloat (Numeric.parse_float (decode_string v)) with _ -> vnull
 	)
 
 	let random = vfun1 (fun v ->

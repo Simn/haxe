@@ -283,7 +283,7 @@ let haxe_float f p =
 	else if (f <> f) then
 		(Ast.EField (math, "NaN"), p)
 	else
-		(Ast.EConst (Ast.Float (float_repres f)), p)
+		(Ast.EConst (Ast.Float (Numeric.float_repres f)), p)
 
 (* ------------------------------------------------------------------------------------------------------------- *)
 (* Our macro api functor *)
@@ -1665,7 +1665,7 @@ let macro_api ccom get_api =
 						encode_string ("\"" ^ Ast.s_escape (decode_string v) ^ "\"")
 					);
 					"buildMetaData", vfun1 (fun t ->
-						match Codegen.build_metadata com (decode_type_decl t) with
+						match Codegen.build_metadata com.basic (decode_type_decl t) with
 						| None -> vnull
 						| Some e -> encode_texpr e
 					);

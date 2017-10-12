@@ -228,7 +228,7 @@ let make_macro_api ctx p =
 			tp.tp_meta <- tp.tp_meta @ m;
 		);
 		MacroApi.set_js_generator = (fun gen ->
-			Common.mkdir_from_path ctx.com.file;
+			Path.mkdir_from_path ctx.com.file;
 			let js_ctx = Genjs.alloc_ctx ctx.com in
 			ctx.com.js_gen <- Some (fun() ->
 				let t = macro_timer ctx ["jsGenerator"] in
@@ -638,7 +638,7 @@ let type_macro ctx mode cpath f (el:Ast.expr list) p =
 		let constants = List.map (fun e ->
 			let p = snd e in
 			let e = (try
-				(match Codegen.type_constant_value ctx.com e with
+				(match Codegen.type_constant_value ctx.com.basic e with
 				| { eexpr = TConst (TString _); epos = p } when Lexer.is_fmt_string p ->
 					Lexer.remove_fmt_string p;
 					todo := (fun() -> Lexer.add_fmt_string p) :: !todo;
