@@ -804,7 +804,7 @@ try
 			| None -> ()
 			| Some file ->
 				Common.log com ("Generating hxb : " ^ file);
-				Common.mkdir_from_path file;
+				Path.mkdir_from_path file;
 				let t = Common.timer ["generate";"hxb"] in
 				HxbWriter.write com file;
 				t();
