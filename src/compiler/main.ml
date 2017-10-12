@@ -511,9 +511,17 @@ try
 		),"<file> : generate haxe binary as target file");
 		("-main",Arg.String (fun cl ->
 			if com.main_class <> None then raise (Arg.Bad "Multiple -main");
-			let cpath = Path.parse_type_path cl in
-			com.main_class <- Some cpath;
-			classes := cpath :: !classes
+			begin match file_extension cl with
+			| "hxb" ->
+				pre_compilation := (fun () ->
+					HxbRunner.run com cl;
+					did_something := true
+				) :: !pre_compilation;
+			| _ ->
+				let cpath = Path.parse_type_path cl in
+				com.main_class <- Some cpath;
+				classes := cpath :: !classes
+			end
 		),"<class> : select startup class");
 		("-lib",Arg.String (fun l ->
 			cp_libs := l :: !cp_libs;
