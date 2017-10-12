@@ -8,7 +8,8 @@ import runci.targets.Python.*;
 
 class Macro {
 	static public function run(args:Array<String>) {
-		runCommand("haxe", ["compile-macro.hxml"].concat(args));
+		runCommand("haxe", ["--times", "compile-macro.hxml", "--hxb", "bin/unit.hxb", "-D", "hxb-texpr-pos=relative"].concat(args));
+		runCommand("haxe", ["--times", "--run", "bin/unit.hxb"]);
 
 		changeDirectory(displayDir);
 		runCommand("haxe", ["build.hxml"]);
@@ -20,7 +21,8 @@ class Macro {
 
 		changeDirectory(sysDir);
 		haxelibInstall("utest");
-		runCommand("haxe", ["compile-macro.hxml"]);
+		runCommand("haxe", ["compile-macro.hxml", "--hxb", "bin/sys.hxb"]);
+		runCommand("haxe", ["--run", "bin/sys.hxb"]);
 		runCommand("haxe", ["compile-each.hxml", "--run", "Main"]);
 	}
 }
