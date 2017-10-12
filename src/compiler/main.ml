@@ -429,6 +429,7 @@ and init ctx =
 	let classes = ref [([],"Std")] in
 try
 	let xml_out = ref None in
+	let hxb_out = ref None in
 	let swf_header = ref None in
 	let cmds = ref [] in
 	let config_macros = ref [] in
@@ -505,6 +506,9 @@ try
 			Parser.use_doc := true;
 			xml_out := Some file
 		),"<file> : generate XML types description");
+		("--hxb",Arg.String (fun file ->
+			hxb_out := Some file;
+		),"<file> : generate haxe binary as target file");
 		("-main",Arg.String (fun cl ->
 			if com.main_class <> None then raise (Arg.Bad "Multiple -main");
 			let cpath = Path.parse_type_path cl in
@@ -788,6 +792,15 @@ try
 			Common.log com ("Generating xml : " ^ file);
 			Common.mkdir_from_path file;
 			Genxml.generate com file);
+		begin match !hxb_out with
+			| None -> ()
+			| Some file ->
+				Common.log com ("Generating hxb : " ^ file);
+				Common.mkdir_from_path file;
+				let t = Common.timer ["generate";"hxb"] in
+				HxbWriter.write com file;
+				t();
+		end;
 		if not !no_output then generate tctx ext !xml_out !interp !swf_header;
 	end;
 	Sys.catch_break false;

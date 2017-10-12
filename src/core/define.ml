@@ -249,6 +249,10 @@ let defined ctx v =
 let raw_defined_value ctx k =
 	PMap.find k ctx.values
 
+let raw_defined_value_safe ?(default="") ctx k =
+	try raw_defined_value ctx k
+	with Not_found -> default
+
 let defined_value ctx v =
 	raw_defined_value ctx (fst (infos v))
 
