@@ -1550,8 +1550,19 @@ let type_function_params ctx fd fname p =
 	params := type_type_params ctx ([],fname) (fun() -> !params) p fd.f_params;
 	!params
 
+let save_function_state ctx =
+	let old_ret = ctx.ret in
+	let old_fun = ctx.curfun in
+	let old_opened = ctx.opened in
+	let locals = ctx.locals in
+	(fun () ->
+		ctx.locals <- locals;
+		ctx.ret <- old_ret;
+		ctx.curfun <- old_fun;
+		ctx.opened <- old_opened;
+	)
+
 let type_function ctx args ret fmode f do_display p =
-	let locals = save_locals ctx in
 	let fargs = List.map2 (fun (n,c,t) ((_,pn),_,m,_,_) ->
 		if n.[0] = '$' then error "Function argument names starting with a dollar are not allowed" p;
 		let c = type_function_arg_value ctx t c do_display in
@@ -1562,9 +1573,6 @@ let type_function ctx args ret fmode f do_display p =
 		if n = "this" then v.v_meta <- (Meta.This,[],null_pos) :: v.v_meta;
 		v,c
 	) args f.f_args in
-	let old_ret = ctx.ret in
-	let old_fun = ctx.curfun in
-	let old_opened = ctx.opened in
 	ctx.curfun <- fmode;
 	ctx.ret <- ret;
 	ctx.opened <- [];
@@ -1674,7 +1682,6 @@ let type_function ctx args ret fmode f do_display p =
 		| None ->
 			e
 	end in
-	locals();
 	let e = match ctx.curfun, ctx.vthis with
 		| (FunMember|FunConstructor), Some v ->
 			let ev = mk (TVar (v,Some (mk (TConst TThis) ctx.tthis p))) ctx.t.tvoid p in
@@ -1684,10 +1691,11 @@ let type_function ctx args ret fmode f do_display p =
 		| _ -> e
 	in
 	List.iter (fun r -> r := Closed) ctx.opened;
-	ctx.ret <- old_ret;
-	ctx.curfun <- old_fun;
-	ctx.opened <- old_opened;
 	e , fargs
+
+let type_function ctx args ret fmode f do_display p =
+	let save = save_function_state ctx in
+	Std.finally save (type_function ctx args ret fmode f do_display) p
 
 let load_core_class ctx c =
 	let ctx2 = (match ctx.g.core_api with
@@ -2706,6 +2714,7 @@ module ClassInitializer = struct
 			with Not_found ->
 				()
 		in
+		let delay_check = if c.cl_interface then delay_late ctx PBuildClass else delay ctx PTypeField in
 		let get = (match get with
 			| "null",_ -> AccNo
 			| "dynamic",_ -> AccCall
@@ -2714,7 +2723,7 @@ module ClassInitializer = struct
 			| get,pget ->
 				let get = if get = "get" then "get_" ^ name else get in
 				if fctx.is_display_field && Display.is_display_position pget then delay ctx PTypeField (fun () -> display_accessor get pget);
-				if not cctx.is_lib then delay_late ctx PBuildClass (fun() -> check_method get t_get (if get <> "get" && get <> "get_" ^ name then Some ("get_" ^ name) else None));
+				if not cctx.is_lib then delay_check (fun() -> check_method get t_get (if get <> "get" && get <> "get_" ^ name then Some ("get_" ^ name) else None));
 				AccCall
 		) in
 		let set = (match set with
@@ -2730,7 +2739,7 @@ module ClassInitializer = struct
 			| set,pset ->
 				let set = if set = "set" then "set_" ^ name else set in
 				if fctx.is_display_field && Display.is_display_position pset then delay ctx PTypeField (fun () -> display_accessor set pset);
-				if not cctx.is_lib then delay_late ctx PBuildClass (fun() -> check_method set t_set (if set <> "set" && set <> "set_" ^ name then Some ("set_" ^ name) else None));
+				if not cctx.is_lib then delay_check (fun() -> check_method set t_set (if set <> "set" && set <> "set_" ^ name then Some ("set_" ^ name) else None));
 				AccCall
 		) in
 		if set = AccNormal && (match get with AccCall -> true | _ -> false) then error (name ^ ": Unsupported property combination") p;
