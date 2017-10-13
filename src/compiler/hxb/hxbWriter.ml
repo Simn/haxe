@@ -12,6 +12,7 @@ type context = {
 	mutable curpmin : int;
 	mutable curpmax : int;
 	texpr_positions : texpr_position_mode;
+	write_kind      : write_kind;
 }
 
 let create_table ctx =
@@ -880,7 +881,12 @@ module HxbModuleType = struct
 		write_option ctx write_string info.mt_doc;
 		write_list_8 ctx write_metadata info.mt_meta
 
+	let write_extern_ref ctx path =
+		IO.write_byte ctx.ch 1;
+		write_dot_path ctx path
+
 	let write_class1 ctx c =
+		IO.write_byte ctx.ch 0;
 		write_module_infos ctx (Obj.magic c);
 		write_bool ctx c.cl_extern;
 		write_bool ctx c.cl_interface
@@ -905,6 +911,7 @@ module HxbModuleType = struct
 		write_list ctx write_class_ref c.cl_descendants
 
 	let write_typedef1 ctx td =
+		IO.write_byte ctx.ch 0;
 		write_module_infos ctx (Obj.magic td)
 
 	let write_typedef2 ctx td =
@@ -912,6 +919,7 @@ module HxbModuleType = struct
 		write_typeref ctx td.t_type
 
 	let write_enum1 ctx en =
+		IO.write_byte ctx.ch 0;
 		write_module_infos ctx (Obj.magic en);
 		write_typedef1 ctx en.e_type;
 		write_bool ctx en.e_extern
@@ -925,6 +933,7 @@ module HxbModuleType = struct
 		) en.e_names
 
 	let write_abstract1 ctx a =
+		IO.write_byte ctx.ch 0;
 		write_module_infos ctx (Obj.magic a)
 
 	let write_abstract2 ctx a =
@@ -1073,8 +1082,11 @@ module HxbFile = struct
 end
 
 module HxbHeader = struct
-	let write ctx ctx =
+	let write ctx =
 		IO.write_byte ctx.ch hxb_version;
+		IO.write_byte ctx.ch (match ctx.write_kind with
+			| Full _ -> 1
+			| SingleModule _ -> 0);
 		IO.write_byte ctx.ch Globals.version_major;
 		IO.write_byte ctx.ch Globals.version_minor;
 		IO.write_byte ctx.ch Globals.version_revision;
@@ -1124,15 +1136,7 @@ let explore_anon_types ctx =
 		anon_fields an
 	) ctx.pool.Pool.anons
 
-type write_kind =
-	| Full of common_state
-	| SingleModule of module_def
-
 let write def ch_file wk =
-	HxbTexpr.write_class := (fun ctx c ->
-		HxbModuleType.write_class1 ctx c;
-		HxbModuleType.write_class2 ctx c;
-	);
 	let ctx = {
 		ch = IO.output_bytes();
 		pool = Pool.create();
@@ -1143,6 +1147,7 @@ let write def ch_file wk =
 			| "relative" -> RelativePositions
 			| "none" -> NoPositions
 			| _ -> AbsolutePositions);
+		write_kind = wk;
 	} in
 	IO.nwrite_string ch_file "HXB";
 
@@ -1172,7 +1177,7 @@ let write def ch_file wk =
 		write_lut' name EqLut.length EqLut.iter lut f
 	in
 
-	let head = write_table "HEAD" (HxbHeader.write ctx) in
+	let head = write_table "HEAD" HxbHeader.write in
 
 	(* The order of everything from here on out is very sensitive. In particular, the order
 	   in which we handle tables here is completely different from the actual output order
@@ -1192,6 +1197,14 @@ let write def ch_file wk =
 			[md],md.m_types,None
 	in
 
+	HxbTexpr.write_class := (fun ctx c ->
+		if List.memq c.cl_module modules then begin
+			HxbModuleType.write_class1 ctx c;
+			HxbModuleType.write_class2 ctx c;
+		end else
+			HxbModuleType.write_extern_ref ctx c.cl_path
+	);
+
 	let mod1 = write_table "MOD1" (write_mod1 modules) in
 	let mod2 = write_table "MOD2" (write_mod2 modules) in
 
@@ -1199,13 +1212,18 @@ let write def ch_file wk =
 		HxbWrite.write_list ctx HxbModule.write_module_type_ref types
 	) in
 
+	let classes = Lut.copy (ctx.pool.Pool.classes) in
+	let typedefs = Lut.copy (ctx.pool.Pool.typedefs) in
+	let enums = Lut.copy (ctx.pool.Pool.enums) in
+	let abstracts = Lut.copy (ctx.pool.Pool.abstracts) in
+
 	(* 2. Handle module type definitions. Don't write out declarations yet because there
 	      might be more being discovered, i.e. references that are not part of this
 	      "compilation unit". *)
-	let enm2 = write_lut "ENM2" ctx.pool.Pool.enums (HxbModuleType.write_enum2 ctx) in
-	let tdf2 = write_lut "TDF2" ctx.pool.Pool.typedefs (HxbModuleType.write_typedef2 ctx) in
-	let abs2 = write_lut "ABS2" ctx.pool.Pool.abstracts (HxbModuleType.write_abstract2 ctx) in
-	let cls2 = write_lut "CLS2" ctx.pool.Pool.classes (HxbModuleType.write_class2 ctx) in
+	let enm2 = write_lut "ENM2" enums (HxbModuleType.write_enum2 ctx) in
+	let tdf2 = write_lut "TDF2" typedefs (HxbModuleType.write_typedef2 ctx) in
+	let abs2 = write_lut "ABS2" abstracts (HxbModuleType.write_abstract2 ctx) in
+	let cls2 = write_lut "CLS2" classes (HxbModuleType.write_class2 ctx) in
 
 	(* 3. Handle expressions of all class fields we know. This might fill various other
 	      pools. *)
@@ -1276,22 +1294,26 @@ let write def ch_file wk =
 	      module types that are involved in this compilation. *)
 	Lut.close ctx.pool.Pool.classes;
 	let cls1 = write_lut "CLS1" ctx.pool.Pool.classes (fun c ->
-		HxbModuleType.write_class1 ctx c
+		if List.memq c.cl_module modules then HxbModuleType.write_class1 ctx c
+		else HxbModuleType.write_extern_ref ctx c.cl_path
 	) in
 
 	Lut.close ctx.pool.Pool.enums;
 	let enm1 = write_lut "ENM1" ctx.pool.Pool.enums (fun en ->
-		HxbModuleType.write_enum1 ctx en
+		if List.memq en.e_module modules then HxbModuleType.write_enum1 ctx en
+		else HxbModuleType.write_extern_ref ctx en.e_path
 	) in
 
 	Lut.close ctx.pool.Pool.typedefs;
 	let tdf1 = write_lut "TDF1" ctx.pool.Pool.typedefs (fun td ->
-		HxbModuleType.write_typedef1 ctx td
+		if List.memq td.t_module modules then HxbModuleType.write_typedef1 ctx td
+		else HxbModuleType.write_extern_ref ctx td.t_path
 	) in
 
 	Lut.close ctx.pool.Pool.abstracts;
 	let abs1 = write_lut "ABS1" ctx.pool.Pool.abstracts (fun a ->
-		HxbModuleType.write_abstract1 ctx a
+		if List.memq a.a_module modules then HxbModuleType.write_abstract1 ctx a
+		else HxbModuleType.write_extern_ref ctx a.a_path
 	) in
 
 	(* 9. Handle resources and such *)

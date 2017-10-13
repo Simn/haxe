@@ -6,6 +6,7 @@ open HxbData
 type hxb_context = {
 	ch : IO.input;
 	mutable texpr_positions : texpr_position_mode;
+	mutable full_read       : bool;
 	(* tables *)
 	mutable strings         : string array;
 	mutable classes         : tclass array;
@@ -902,19 +903,24 @@ module HxbModuleType = struct
 		| _ -> assert false
 
 	let read_class1 ctx is_tp =
-		let c = {
-			null_class with
-			cl_path = read_dot_path ctx
-		} in
-		c.cl_module <- read_module_ref ctx;
-		c.cl_pos <- read_position ctx;
-		c.cl_name_pos <- read_position ctx;
-		c.cl_private <- read_bool ctx;
-		c.cl_doc <- read_option ctx read_string;
-		c.cl_meta <- read_list_8 ctx read_metadata;
-		c.cl_extern <- read_bool ctx;
-		c.cl_interface <- read_bool ctx;
-		c
+		match IO.read_byte ctx.ch with
+		| 0 ->
+			let c = {
+				null_class with
+				cl_path = read_dot_path ctx
+			} in
+			c.cl_module <- read_module_ref ctx;
+			c.cl_pos <- read_position ctx;
+			c.cl_name_pos <- read_position ctx;
+			c.cl_private <- read_bool ctx;
+			c.cl_doc <- read_option ctx read_string;
+			c.cl_meta <- read_list_8 ctx read_metadata;
+			c.cl_extern <- read_bool ctx;
+			c.cl_interface <- read_bool ctx;
+			c
+		| _ ->
+			let path = read_dot_path ctx in
+			failwith (s_type_path path)
 
 	let read_class2 ctx c =
 		c.cl_params <- read_list_8 ctx read_type_parameter;
@@ -932,55 +938,65 @@ module HxbModuleType = struct
 		c.cl_descendants <- read_list ctx read_class_ref
 
 	let read_typedef1 ctx =
-		let path = read_dot_path ctx in
-		let m = read_module_ref ctx in
-		let p = read_position ctx in
-		let pn = read_position ctx in
-		let priv = read_bool ctx in
-		let doc = read_option ctx read_string in
-		let meta = read_list_8 ctx read_metadata in
-		let td = {
-			t_path = path;
-			t_module = m;
-			t_pos = p;
-			t_name_pos = pn;
-			t_private = priv;
-			t_doc = doc;
-			t_meta = meta;
-			t_params = [];
-			t_type = t_dynamic;
-		} in
-		td
+		match IO.read_byte ctx.ch with
+		| 0 ->
+			let path = read_dot_path ctx in
+			let m = read_module_ref ctx in
+			let p = read_position ctx in
+			let pn = read_position ctx in
+			let priv = read_bool ctx in
+			let doc = read_option ctx read_string in
+			let meta = read_list_8 ctx read_metadata in
+			let td = {
+				t_path = path;
+				t_module = m;
+				t_pos = p;
+				t_name_pos = pn;
+				t_private = priv;
+				t_doc = doc;
+				t_meta = meta;
+				t_params = [];
+				t_type = t_dynamic;
+			} in
+			td
+		| _ ->
+			let path = read_dot_path ctx in
+			failwith (s_type_path path)
 
 	let read_typedef2 ctx td =
 		td.t_params <- read_list_8 ctx read_type_parameter;
 		td.t_type <- read_typeref ctx
 
 	let read_enum1 ctx =
-		let path = read_dot_path ctx in
-		let m = read_module_ref ctx in
-		let p = read_position ctx in
-		let pn = read_position ctx in
-		let priv = read_bool ctx in
-		let doc = read_option ctx read_string in
-		let meta = read_list_8 ctx read_metadata in
+		match IO.read_byte ctx.ch with
+		| 0 ->
+			let path = read_dot_path ctx in
+			let m = read_module_ref ctx in
+			let p = read_position ctx in
+			let pn = read_position ctx in
+			let priv = read_bool ctx in
+			let doc = read_option ctx read_string in
+			let meta = read_list_8 ctx read_metadata in
 		let tdef = read_typedef1 ctx in
-		let extern = read_bool ctx in
-		let en = {
-			e_path = path;
-			e_module = m;
-			e_pos = p;
-			e_name_pos = pn;
-			e_private = priv;
-			e_doc = doc;
-			e_meta = meta;
-			e_params = [];
-			e_type = tdef;
-			e_extern = extern;
-			e_constrs = PMap.empty;
-			e_names = [];
-		} in
-		en
+			let extern = read_bool ctx in
+			let en = {
+				e_path = path;
+				e_module = m;
+				e_pos = p;
+				e_name_pos = pn;
+				e_private = priv;
+				e_doc = doc;
+				e_meta = meta;
+				e_params = [];
+				e_type = tdef;
+				e_extern = extern;
+				e_constrs = PMap.empty;
+				e_names = [];
+			} in
+			en
+		| _ ->
+			let path = read_dot_path ctx in
+			failwith (s_type_path path)
 
 	let read_enum2 ctx en =
 		en.e_params <- read_list_8 ctx read_type_parameter;
@@ -991,34 +1007,39 @@ module HxbModuleType = struct
 		en.e_names <- names
 
 	let read_abstract1 ctx =
-		let path = read_dot_path ctx in
-		let m = read_module_ref ctx in
-		let p = read_position ctx in
-		let pn = read_position ctx in
-		let priv = read_bool ctx in
-		let doc = read_option ctx read_string in
-		let meta = read_list_8 ctx read_metadata in
-		let a = {
-			a_path = path;
-			a_module = m;
-			a_pos = p;
-			a_name_pos = pn;
-			a_private = priv;
-			a_doc = doc;
-			a_meta = meta;
-			a_params = [];
-			a_ops = [];
-			a_unops = [];
-			a_impl = None;
-			a_this = t_dynamic;
-			a_from = [];
-			a_from_field = [];
-			a_to = [];
-			a_to_field = [];
-			a_array = [];
-			a_resolve = None;
-		} in
-		a
+		match IO.read_byte ctx.ch with
+		| 0 ->
+			let path = read_dot_path ctx in
+			let m = read_module_ref ctx in
+			let p = read_position ctx in
+			let pn = read_position ctx in
+			let priv = read_bool ctx in
+			let doc = read_option ctx read_string in
+			let meta = read_list_8 ctx read_metadata in
+			let a = {
+				a_path = path;
+				a_module = m;
+				a_pos = p;
+				a_name_pos = pn;
+				a_private = priv;
+				a_doc = doc;
+				a_meta = meta;
+				a_params = [];
+				a_ops = [];
+				a_unops = [];
+				a_impl = None;
+				a_this = t_dynamic;
+				a_from = [];
+				a_from_field = [];
+				a_to = [];
+				a_to_field = [];
+				a_array = [];
+				a_resolve = None;
+			} in
+			a
+		| _ ->
+			let path = read_dot_path ctx in
+			failwith (s_type_path path)
 
 	let read_abstract2 ctx a =
 		a.a_params <- read_list_8 ctx read_type_parameter;
@@ -1085,8 +1106,6 @@ module HxbModule = struct
 			m_extra = extra;
 		}
 
-
-
 	let read_module_type_ref ctx =
 		match IO.read_byte ctx.ch with
 		| 0 -> TClassDecl (read_class_ref ctx)
@@ -1115,6 +1134,11 @@ module HxbTables = struct
 	let read_head_table ctx =
 		let version = IO.read_byte ctx.ch in
 		if version <> hxb_version then failwith (Printf.sprintf "Version mismatch: data has version %i, reader has version %i" version hxb_version);
+		ctx.full_read <- (match IO.read_byte ctx.ch with
+			| 0 -> false
+			| 1 -> true
+			| _ -> assert false);
+		if not ctx.full_read then failwith "Only full read is currently supported";
 		let major = IO.read_byte ctx.ch in
 		let minor = IO.read_byte ctx.ch in
 		let patch = IO.read_byte ctx.ch in
@@ -1317,6 +1341,7 @@ let read file =
 	end;
 	let ctx = {
 		ch = ch;
+		full_read = true;
 		texpr_positions = RelativePositions;
 		strings = Array.make 0 "";
 		classes = Array.make 0 null_class;

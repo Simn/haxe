@@ -14,4 +14,8 @@ type common_state = {
 	mutable resources     : (string,string) Hashtbl.t;
 }
 
+type write_kind =
+	| Full of common_state
+	| SingleModule of module_def
+
 let hxb_version = 1

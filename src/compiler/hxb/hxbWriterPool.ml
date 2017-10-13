@@ -36,6 +36,12 @@ module Lut = struct
 
 	let close lut =
 		lut.closed <- true
+
+	let copy lut = {
+		tbl = DynArray.copy lut.tbl;
+		lut = Hashtbl.copy lut.lut;
+		closed = lut.closed;
+	}
 end
 
 module EqLut = struct
