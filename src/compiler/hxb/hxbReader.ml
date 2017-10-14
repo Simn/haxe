@@ -200,17 +200,26 @@ module HxbTypeRef = struct
 		| 5 ->
 			let en = read_enum_ref ctx in
 			TEnum(en,read_typeref_params ctx)
-		| 6 -> TType(read_typedef_ref ctx,[])
+		| 6 ->
+			let c = read_class_ref ctx in
+			TType(class_module_type c,[])
 		| 7 ->
+			let en = read_enum_ref ctx in
+			TType(enum_module_type en.e_module en.e_path en.e_pos,[])
+		| 8 ->
+			let a = read_abstract_ref ctx in
+			TType(abstract_module_type a [],[])
+		| 9 -> TType(read_typedef_ref ctx,[])
+		| 10 ->
 			let td = read_typedef_ref ctx in
 			TType(td,read_typeref_params ctx)
-		| 8 -> TAbstract(read_abstract_ref ctx,[])
-		| 9 ->
+		| 11 -> TAbstract(read_abstract_ref ctx,[])
+		| 12 ->
 			let a = read_abstract_ref ctx in
 			TAbstract(a,read_typeref_params ctx)
-		| 10 -> TAnon(read_anon_ref ctx)
-		| 11 -> TFun([],read_typeref ctx)
-		| 12 ->
+		| 13 -> TAnon(read_anon_ref ctx)
+		| 14 -> TFun([],read_typeref ctx)
+		| 15 ->
 			let args = read_list_8 ctx read_function_arg in
 			TFun(args,read_typeref ctx)
 		| _ -> assert false
@@ -1258,15 +1267,21 @@ module HxbTables = struct
 		done
 
 	let read_anon_table2 ctx =
+		let length = IO.read_i32 ctx.ch in
+		for i = 0 to length - 1 do
+			match IO.read_byte ctx.ch with
+			| 0 | 1 | 2 ->
+				()
+			| 3 ->
 		let read_anon_field _ =
 			let cf = HxbTypeRef.read_anon_field_ref ctx in
 			HxbField.read_class_field_data ctx cf;
 			cf
 		in
-		let length = IO.read_i32 ctx.ch in
-		for i = 0 to length - 1 do
 			let an = ctx.anons.(i) in
 			an.a_fields <- list_to_pmap (read_list_8 ctx read_anon_field) (fun cf -> cf.cf_name)
+			| _ ->
+				assert false
 		done
 
 	let read_class_table2 ctx =

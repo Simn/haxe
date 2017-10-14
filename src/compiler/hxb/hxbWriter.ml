@@ -135,27 +135,45 @@ module HxbTypeRef = struct
 			write_enum_ref ctx en;
 			write_typeref_params ctx tl;
 		| TType (td,[]) ->
+			begin match td.t_type with
+				| TAnon an ->
+					begin match !(an.a_status) with
+					| Statics c ->
 			IO.write_byte ctx.ch 6;
+						write_class_ref ctx c
+					| EnumStatics en ->
+						IO.write_byte ctx.ch 7;
+						write_enum_ref ctx en
+					| AbstractStatics a ->
+						IO.write_byte ctx.ch 8;
+						write_abstract_ref ctx a
+					| _ ->
+						IO.write_byte ctx.ch 9;
 			write_typedef_ref ctx td;
+					end
+				| _ ->
+					IO.write_byte ctx.ch 9;
+					write_typedef_ref ctx td;
+			end
 		| TType (td,tl) ->
-			IO.write_byte ctx.ch 7;
+			IO.write_byte ctx.ch 10;
 			write_typedef_ref ctx td;
 			write_typeref_params ctx tl;
 		| TAbstract (a,[]) ->
-			IO.write_byte ctx.ch 8;
+			IO.write_byte ctx.ch 11;
 			write_abstract_ref ctx a;
 		| TAbstract (a,tl) ->
-			IO.write_byte ctx.ch 9;
+			IO.write_byte ctx.ch 12;
 			write_abstract_ref ctx a;
 			write_typeref_params ctx tl;
 		| TAnon an ->
-			IO.write_byte ctx.ch 10;
+			IO.write_byte ctx.ch 13;
 			write_lut ctx (Pool.add_anon ctx.pool an);
 		| TFun ([],tr) ->
-			IO.write_byte ctx.ch 11;
+			IO.write_byte ctx.ch 14;
 			write_typeref ctx tr;
 		| TFun (tl,tr) ->
-			IO.write_byte ctx.ch 12;
+			IO.write_byte ctx.ch 15;
 			let write_fun_arg _ (n,o,t) =
 				write_string ctx n;
 				write_bool ctx o;
@@ -871,7 +889,6 @@ module HxbModuleType = struct
 			IO.write_byte ctx.ch 7;
 			write_abstract_ref ctx a
 
-
 	let write_module_infos ctx info =
 		write_dot_path ctx info.mt_path;
 		write_lut ctx (Pool.get_module ctx.pool info.mt_module);
@@ -985,11 +1002,20 @@ module HxbAnon = struct
 		write_anon_status ctx !(an.a_status)
 
 	let write_anon_structure ctx an =
+		match !(an.a_status) with
+		| Statics c ->
+			IO.write_byte ctx.ch 0
+		| EnumStatics en ->
+			IO.write_byte ctx.ch 1
+		| AbstractStatics a ->
+			IO.write_byte ctx.ch 2
+		| _ ->
+			IO.write_byte ctx.ch 3;
 		let i,l = PMap.fold (fun cf (i,acc) -> (i + 1,cf :: acc)) an.a_fields (0,[]) in
 		IO.write_byte ctx.ch i;
 		List.iter (fun cf ->
 			write_anon_field_ref ctx cf;
-			write_class_field_data ctx cf;
+				write_class_field_data ctx cf
 		) l
 end
 
@@ -1198,11 +1224,8 @@ let write def ch_file wk =
 	in
 
 	HxbTexpr.write_class := (fun ctx c ->
-		if List.memq c.cl_module modules then begin
 			HxbModuleType.write_class1 ctx c;
 			HxbModuleType.write_class2 ctx c;
-		end else
-			HxbModuleType.write_extern_ref ctx c.cl_path
 	);
 
 	let mod1 = write_table "MOD1" (write_mod1 modules) in
