@@ -135,17 +135,7 @@ let module_pass_1 ctx m tdecls loadp =
 				e_extern = List.mem EExtern d.d_flags;
 				e_constrs = PMap.empty;
 				e_names = [];
-				e_type = {
-					t_path = [], "Enum<" ^ (s_type_path path) ^ ">";
-					t_module = m;
-					t_doc = None;
-					t_pos = p;
-					t_name_pos = null_pos;
-					t_type = mk_mono();
-					t_private = true;
-					t_params = [];
-					t_meta = [];
-				};
+				e_type = enum_module_type m path p;
 			} in
 			decls := (TEnumDecl e, decl) :: !decls;
 			acc
@@ -3898,7 +3888,7 @@ let rec build_generic ctx c p tl =
 			   we need the full substitution list first. *)
 			let param_subst,params = List.fold_left (fun (subst,params) (s,t) -> match follow t with
 				| TInst(c,tl) as t ->
-					let t2 = TInst({c with cl_pos = c.cl_pos;},tl) in
+					let t2 = TInst({c with cl_module = mg;},tl) in
 					(t,t2) :: subst,(s,t2) :: params
 				| _ -> assert false
 			) ([],[]) cf_old.cf_params in
