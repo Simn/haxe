@@ -1944,9 +1944,15 @@ module StdString = struct
 		let delimiter = decode_string delimiter in
 		let l_delimiter = String.length delimiter in
 		let l_this = Rope.length this in
-		if l_delimiter = 0 then
-			encode_array (List.map (fun chr -> encode_string (String.make 1 chr)) (ExtString.String.explode s))
-		else if l_delimiter > l_this then
+		if l_delimiter = 0 then begin
+			let a = Array.make (UTF8.length s) vnull in
+			let i = ref 0 in
+			UTF8.iter (fun c ->
+				a.(!i) <- encode_string (String.make 1 (UChar.char_of c));
+				incr i;
+			) s;
+			encode_array_instance (EvalArray.create a)
+		end else if l_delimiter > l_this then
 			encode_array [encode_rope this]
 		else begin
 			let chr = delimiter.[0] in
