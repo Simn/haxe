@@ -1,5 +1,6 @@
+import haxe.ds.List;
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -32,9 +33,11 @@
 	If the first argument to any of the methods is null, the result is
 	unspecified.
 
-	@see http://haxe.org/manual/std-Lambda.html
+	@see https://haxe.org/manual/std-Lambda.html
 **/
+
 class Lambda {
+	
 
 	/**
 		Creates an Array from Iterable `it`.

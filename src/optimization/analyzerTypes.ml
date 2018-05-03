@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2016  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -17,6 +17,7 @@
 	Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *)
 
+open Globals
 open Ast
 open Type
 open Common
@@ -45,7 +46,6 @@ module BasicBlock = struct
 	type cfg_edge_Flag =
 		| FlagExecutable      (* Used by constant propagation to handle live edges *)
 		| FlagDce             (* Used by DCE to keep track of handled edges *)
-		| FlagCodeMotion      (* Used by code motion to track handled edges *)
 		| FlagCopyPropagation (* Used by copy propagation to track handled eges *)
 
 	type cfg_edge_kind =
@@ -63,15 +63,14 @@ module BasicBlock = struct
 	}
 
 	and syntax_edge =
-		| SEIfThen of t * t                                (* `if` with "then" and "next" *)
-		| SEIfThenElse of t * t * t * Type.t               (* `if` with "then", "else" and "next" *)
-		| SESwitch of (texpr list * t) list * t option * t (* `switch` with cases, "default" and "next" *)
-		| SETry of t * t * (tvar * t) list * t             (* `try` with "exc", catches and "next" *)
-		| SEWhile of t * t * t                             (* `while` with "head", "body" and "next" *)
-		| SESubBlock of t * t                              (* "sub" with "next" *)
-		| SEMerge of t                                     (* Merge to same block *)
-		| SEEnd                                            (* End of syntax *)
-		| SENone                                           (* No syntax exit *)
+		| SEIfThen of t * t * pos                                (* `if` with "then" and "next" *)
+		| SEIfThenElse of t * t * t * Type.t * pos               (* `if` with "then", "else" and "next" *)
+		| SESwitch of (texpr list * t) list * t option * t * pos (* `switch` with cases, "default" and "next" *)
+		| SETry of t * t * (tvar * t) list * t *  pos            (* `try` with "exc", catches and "next" *)
+		| SEWhile of t * t * t                                   (* `while` with "head", "body" and "next" *)
+		| SESubBlock of t * t                                    (* "sub" with "next" *)
+		| SEMerge of t                                           (* Merge to same block *)
+		| SENone                                                 (* No syntax exit *)
 
 	and t = {
 		bb_id : int;                          (* The unique ID of the block *)
@@ -111,7 +110,7 @@ module BasicBlock = struct
 		| CFGGoto -> "CFGGoto"
 		| CFGFunction -> "CFGFunction"
 		| CFGMaybeThrow -> "CFGMaybeThrow"
-		| CFGCondBranch e -> "CFGCondBranch " ^ (s_expr_pretty "" (s_type (print_context())) e)
+		| CFGCondBranch e -> "CFGCondBranch " ^ (s_expr_pretty false "" false (s_type (print_context())) e)
 		| CFGCondElse -> "CFGCondElse"
 
 	let has_flag edge flag =
@@ -159,7 +158,7 @@ module BasicBlock = struct
 		bb
 
 	let in_scope bb bb' = match bb'.bb_scopes with
-		| [] -> error (Printf.sprintf "Scope-less block (kind: %s)" (s_block_kind bb'.bb_kind)) bb'.bb_pos
+		| [] -> abort (Printf.sprintf "Scope-less block (kind: %s)" (s_block_kind bb'.bb_kind)) bb'.bb_pos
 		| scope :: _ -> List.mem scope bb.bb_scopes
 end
 
@@ -211,14 +210,18 @@ module Graph = struct
 		} in
 		DynArray.add g.g_var_infos vi;
 		let i = DynArray.length g.g_var_infos - 1 in
-		v.v_extra <- Some([],Some (mk (TConst (TInt (Int32.of_int i))) t_dynamic null_pos))
+		v.v_extra <- Some([],Some (mk (TConst (TInt (Int32.of_int i))) t_dynamic null_pos));
+		vi
 
 	let get_var_info g v = match v.v_extra with
 		| Some(_,Some {eexpr = TConst (TInt i32)}) -> DynArray.get g.g_var_infos (Int32.to_int i32)
-		| _ -> assert false
+		| _ ->
+			print_endline "Unbound variable, please report this";
+			print_endline (Printer.s_tvar v);
+			create_var_info g g.g_unreachable v
 
 	let declare_var g v bb =
-		create_var_info g bb v
+		ignore(create_var_info g bb v)
 
 	let add_var_def g bb v =
 		if bb.bb_id > 0 then begin
@@ -308,15 +311,15 @@ module Graph = struct
 		List.iter (fun bb ->
 			List.iter (fun edge ->
 				if edge.cfg_to = g.g_unreachable then
-					prerr_endline (Printf.sprintf "Outgoing edge from %i to the unreachable block" bb.bb_id)
+					print_endline (Printf.sprintf "Outgoing edge from %i to the unreachable block" bb.bb_id)
 				else if not (List.memq edge edge.cfg_to.bb_incoming) then
-					prerr_endline (Printf.sprintf "Outgoing edge %i -> %i has no matching incoming edge" edge.cfg_from.bb_id edge.cfg_to.bb_id)
+					print_endline (Printf.sprintf "Outgoing edge %i -> %i has no matching incoming edge" edge.cfg_from.bb_id edge.cfg_to.bb_id)
 			) bb.bb_outgoing;
 			List.iter (fun edge ->
 				if edge.cfg_from == g.g_unreachable then
-					prerr_endline (Printf.sprintf "Incoming edge to %i from the unreachable block" bb.bb_id)
+					print_endline (Printf.sprintf "Incoming edge to %i from the unreachable block" bb.bb_id)
 				else if not (List.memq edge edge.cfg_from.bb_outgoing) then
-					prerr_endline (Printf.sprintf "Incoming edge %i <- %i has no matching outgoing edge" edge.cfg_to.bb_id edge.cfg_from.bb_id)
+					print_endline (Printf.sprintf "Incoming edge %i <- %i has no matching outgoing edge" edge.cfg_to.bb_id edge.cfg_from.bb_id)
 			) bb.bb_incoming
 		) g.g_nodes
 
@@ -454,10 +457,10 @@ module Graph = struct
 					()
 			end;
 			DynArray.iter (fun e -> match e.eexpr with
-				| TVar(v,eo) when not (is_unbound v) ->
+				| TVar(v,eo) ->
 					declare_var g v bb;
 					if eo <> None then add_var_def g bb v;
-				| TBinop(OpAssign,{eexpr = TLocal v},_) when not (is_unbound v) ->
+				| TBinop(OpAssign,{eexpr = TLocal v},_) ->
 					add_var_def g bb v
 				| _ ->
 					()
@@ -475,18 +478,18 @@ module Graph = struct
 		let rec loop scopes bb =
 			bb.bb_scopes <- scopes;
 			begin match bb.bb_syntax_edge with
-				| SEIfThen(bb_then,bb_next) ->
+				| SEIfThen(bb_then,bb_next,_) ->
 					loop (next_scope scopes) bb_then;
 					loop scopes bb_next
-				| SEIfThenElse(bb_then,bb_else,bb_next,_) ->
+				| SEIfThenElse(bb_then,bb_else,bb_next,_,_) ->
 					loop (next_scope scopes) bb_then;
 					loop (next_scope scopes) bb_else;
 					loop scopes bb_next
-				| SESwitch(cases,bbo,bb_next) ->
+				| SESwitch(cases,bbo,bb_next,_) ->
 					List.iter (fun (_,bb_case) -> loop (next_scope scopes) bb_case) cases;
 					(match bbo with None -> () | Some bb -> loop (next_scope scopes) bb);
 					loop scopes bb_next;
-				| SETry(bb_try,bb_exc,catches,bb_next) ->
+				| SETry(bb_try,bb_exc,catches,bb_next,_) ->
 					let scopes' = next_scope scopes in
 					loop scopes' bb_try;
 					loop scopes' bb_exc;
@@ -502,7 +505,7 @@ module Graph = struct
 					loop scopes bb_next
 				| SEMerge bb ->
 					loop scopes bb
-				| SEEnd | SENone ->
+				| SENone ->
 					()
 			end
 		in
@@ -514,9 +517,10 @@ type analyzer_context = {
 	config : AnalyzerConfig.t;
 	graph : Graph.t;
 	temp_var_name : string;
-	is_real_function : bool;
 	mutable entry : BasicBlock.t;
 	mutable has_unbound : bool;
 	mutable loop_counter : int;
 	mutable loop_stack : int list;
+	mutable debug_exprs : (string * texpr) list;
+	mutable name_stack : string list;
 }

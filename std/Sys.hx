@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 /**
-	This class gives you access to many base functionalities of system platforms. Looks in [sys] sub packages for more system APIs.
+	This class gives you access to many base functionalities of system platforms. Looks in `sys` sub packages for more system APIs.
 **/
 @:require(sys)
 extern class Sys {
@@ -36,7 +36,7 @@ extern class Sys {
 	static function println( v : Dynamic ) : Void;
 
 	/**
-		Returns all the arguments that were passed by the commandline.
+		Returns all the arguments that were passed by the command line.
 	**/
 	static function args() : Array<String>;
 
@@ -51,7 +51,7 @@ extern class Sys {
 	static function putEnv( s : String, v : String ) : Void;
 
 	/**
-		Returns the whole environement variables.
+		Returns all environment variables.
 	**/
 	static function environment() : Map<String,String>;
 
@@ -61,7 +61,7 @@ extern class Sys {
 	static function sleep( seconds : Float ) : Void;
 
 	/**
-		Change the current time locale, which will affect [DateTools.format] date formating.
+		Change the current time locale, which will affect `DateTools.format` date formating.
 		Returns true if the locale was successfully changed
 	**/
 	static function setTimeLocale( loc : String ) : Bool;
@@ -126,12 +126,12 @@ extern class Sys {
 	static function programPath() : String;
 
 	/**
-		Read a single input character from the standard input (without blocking) and returns it. Setting [echo] to true will also display it on the output.
+		Read a single input character from the standard input and returns it. Setting `echo` to true will also display it on the output.
 	**/
 	static function getChar( echo : Bool ) : Int;
 
 	/**
-		Returns the process standard input, from which you can read what user enters. Usually it will block until the user send a full input line. See [getChar] for an alternative.
+		Returns the process standard input, from which you can read what user enters. Usually it will block until the user send a full input line. See `getChar` for an alternative.
 	**/
 	static function stdin() : haxe.io.Input;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -229,19 +229,19 @@ class Path {
 		var colon = false;
 		var slashes = false;
 		for (i in 0...tmp.length) {
-			switch (tmp.charCodeAt(i)) {
+			switch (StringTools.fastCodeAt(tmp, i)) {
 				case ":".code:
 					acc.add(":");
 					colon = true;
 				case "/".code if (!colon):
 					slashes = true;
-				case i:
+				case var i:
 					colon = false;
 					if (slashes) {
 						acc.add("/");
 						slashes = false;
 					}
-					acc.add(String.fromCharCode(i));
+					acc.addChar(i);
 			}
 		}
 		return acc.toString();
@@ -301,6 +301,7 @@ class Path {
 	public static function isAbsolute ( path : String ) : Bool {
 		if (StringTools.startsWith(path, '/')) return true;
 		if (path.charAt(1) == ':') return true;
+		if (StringTools.startsWith(path, '\\\\')) return true;
 		return false;
 	}
 

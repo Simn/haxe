@@ -1,8 +1,7 @@
 var vec = new haxe.ds.Vector(3);
-var vNullInt = #if (flash || cpp || java || cs || hl) 0 #else null #end;
-var vNullBool = #if (flash || cpp || java || cs || hl) false #else null #end;
-var vNullFloat = #if (flash || cpp || java || cs || hl) 0.0 #else null #end;
-
+var vNullInt = #if static 0 #else null #end;
+var vNullBool = #if static false #else null #end;
+var vNullFloat = #if static 0.0 #else null #end;
 vec.length == 3;
 vec.get(0) == vNullInt;
 vec.get(1) == vNullInt;
@@ -31,7 +30,7 @@ vec.get(2) == vNullBool;
 // fromArray
 var arr = ["1", "2", "3"];
 var vec:haxe.ds.Vector<String> = haxe.ds.Vector.fromArrayCopy(arr);
-#if (!flash && !neko && !cs && !java)
+#if (!flash && !neko && !cs && !java && !lua && !eval)
 arr != vec.toData();
 #end
 vec.length == 3;
@@ -88,6 +87,30 @@ vec3[3] == 4;
 vec3[4] == 4;
 vec3[5] == 5;
 vec3[6] == 6;
+
+var vec5 = haxe.ds.Vector.fromArrayCopy([0,1,2,3,4]);
+haxe.ds.Vector.blit(vec5, 0, vec5, 1, 4);
+vec5[0] == 0;
+vec5[1] == 0;
+vec5[2] == 1;
+vec5[3] == 2;
+vec5[4] == 3;
+
+var vec5 = haxe.ds.Vector.fromArrayCopy([0,1,2,3,4]);
+haxe.ds.Vector.blit(vec5, 1, vec5, 0, 4);
+vec5[0] == 1;
+vec5[1] == 2;
+vec5[2] == 3;
+vec5[3] == 4;
+vec5[4] == 4;
+
+var vec5 = haxe.ds.Vector.fromArrayCopy([0,1,2,3,4]);
+haxe.ds.Vector.blit(vec5, 0, vec5, 0, 5);
+vec5[0] == 0;
+vec5[1] == 1;
+vec5[2] == 2;
+vec5[3] == 3;
+vec5[4] == 4;
 
 // test iteration
 
@@ -150,7 +173,7 @@ vec2[1] == "value: 13";
 
 // sort
 
-#if !(neko || cs || java)
+#if !(neko || cs || java || eval)
 var vec = new haxe.ds.Vector(4);
 vec[0] = 99;
 vec[1] = 101;

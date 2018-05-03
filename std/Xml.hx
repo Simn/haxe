@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,9 +23,9 @@
 /**
 	Xml node types.
 
-	@see http://haxe.org/manual/std-Xml.html
+	@see https://haxe.org/manual/std-Xml.html
 **/
-@:enum abstract XmlType(Int) {
+enum abstract XmlType(Int) {
 	/**
 		Represents an XML element type.
 	**/
@@ -57,9 +57,9 @@
 }
 
 /**
-	Crossplatform Xml API.
+	Cross-platform Xml API.
 
-	@see http://haxe.org/manual/std-Xml.html
+	@see https://haxe.org/manual/std-Xml.html
 **/
 class Xml {
 	/**
@@ -117,7 +117,7 @@ class Xml {
 
 	/**
 		Returns the parent object in the Xml hierarchy.
-		The parent can be [null], an Element or a Document.
+		The parent can be `null`, an Element or a Document.
 	**/
 	public var parent(default, null) : Xml;
 
@@ -214,7 +214,7 @@ class Xml {
 	}
 
 	/**
-		Get the given attribute of an Element node. Returns [null] if not found.
+		Get the given attribute of an Element node. Returns `null` if not found.
 		Attributes are case-sensitive.
 	**/
 	public function get( att : String ) : String {
@@ -258,7 +258,7 @@ class Xml {
 	}
 
 	/**
-		Returns an [Iterator] on all the attribute names.
+		Returns an `Iterator` on all the attribute names.
 	**/
 	public function attributes() : Iterator<String> {
 		if (nodeType != Element) {
@@ -319,7 +319,7 @@ class Xml {
 
 	/**
 		Adds a child node to the Document or Element.
-		A child node can only be inside one given parent node, which is indicated by the [parent] property.
+		A child node can only be inside one given parent node, which is indicated by the `parent` property.
 		If the child is already inside this Document or Element, it will be moved to the last position among the Document or Element's children.
 		If the child node was previously inside a different node, it will be moved to this Document or Element.
 	**/

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -113,9 +113,24 @@ using haxe.Int64;
 	public static function command( cmd : String, ?args : Array<String> ) : Int
 	{
 		var pb = Process.createProcessBuilder(cmd, args);
+#if java6
+		pb.redirectErrorStream(true);
+#else
 		pb.redirectOutput(java.lang.ProcessBuilder.ProcessBuilder_Redirect.INHERIT);
 		pb.redirectError(java.lang.ProcessBuilder.ProcessBuilder_Redirect.INHERIT);
+#end
 		var proc = pb.start();
+#if java6
+		var reader = new java.io.NativeInput(proc.getInputStream());
+		try
+		{
+			while(true) {
+				var ln = reader.readLine();
+				Sys.println(ln);
+			}
+		}
+		catch(e:haxe.io.Eof) {}
+#end
 		proc.waitFor();
 		var exitCode = proc.exitValue();
 		proc.destroy();
@@ -129,7 +144,7 @@ using haxe.Int64;
 
 	public static function time() : Float
 	{
-		return cast(System.currentTimeMillis().div(Int64.ofInt(1000)), Float);
+		return cast(System.currentTimeMillis(), Float) / 1000;
 	}
 
 	public static function cpuTime() : Float

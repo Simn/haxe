@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -75,7 +75,7 @@ enum ValueType {
 		if (Internal.hasClassName(c)) {
 			return Internal.fieldClassName(c);
 		} else {
-			// it's not a haxe class
+			// it's not a Haxe class
 			if (c == Array) return "Array";
 			if (c == Math) return "Math";
 			if (c == String) return "String";
@@ -113,7 +113,7 @@ enum ValueType {
 
 	public static inline function createInstance<T>( cl : Class<T>, args : Array<Dynamic> ) : T
 	{
-		return Syntax.newInstance(cl, Syntax.varArgs(args));
+		return Syntax.construct(cl, Syntax.varArgs(args));
 	}
 
 	public static function createEmptyInstance<T>( cl : Class<T> ) : T

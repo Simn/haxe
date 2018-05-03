@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2016  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -17,6 +17,7 @@
 	Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *)
 
+open Globals
 open Ast
 open Type
 open Common
@@ -25,6 +26,7 @@ open AnalyzerTypes
 open AnalyzerTypes.BasicBlock
 open AnalyzerTypes.Graph
 open AnalyzerTexpr
+open OptimizerTexpr
 
 (*
 	Transforms an expression to a graph, and a graph back to an expression. This module relies on TexprFilter being
@@ -79,14 +81,22 @@ let rec func ctx bb tf t p =
 		close_node g bb;
 		g.g_unreachable
 	in
-	let check_unbound_call v el =
-		if is_unbound_call_that_might_have_side_effects v el then ctx.has_unbound <- true
+	let check_unbound_call s el =
+		if s = "$ref" then begin match el with
+			| [{eexpr = TLocal v}] -> v.v_capture <- true
+			| _ -> ()
+		end;
+		if is_unbound_call_that_might_have_side_effects s el then ctx.has_unbound <- true;
 	in
 	let no_void t p =
-		if ExtType.is_void (follow t) then error "Cannot use Void as value" p
+		if ExtType.is_void (follow t) then Error.error "Cannot use Void as value" p
 	in
-	let rec value bb e = match e.eexpr with
-		| TLocal v ->
+	let push_name s =
+		ctx.name_stack <- s :: ctx.name_stack;
+		(fun () -> ctx.name_stack <- List.tl ctx.name_stack)
+	in
+	let rec value' bb e = match e.eexpr with
+		| TLocal _ | TIdent _ ->
 			bb,e
 		| TBinop(OpAssign,({eexpr = TLocal v} as e1),e2) ->
 			block_element bb e,e1
@@ -94,14 +104,18 @@ let rec func ctx bb tf t p =
 			value bb e1
 		| TBlock _ | TIf _ | TSwitch _ | TTry _ ->
 			bind_to_temp bb false e
-		| TCall({eexpr = TLocal v},el) when is_really_unbound v ->
-			check_unbound_call v el;
+		| TCall({eexpr = TIdent s},el) when is_really_unbound s ->
+			check_unbound_call s el;
 			bb,e
 		| TCall(e1,el) ->
 			call bb e e1 el
+		| TBinop(OpAssignOp op,({eexpr = TArray(e1,e2)} as ea),e3) ->
+			array_assign_op bb op e ea e1 e2 e3
+		| TBinop(OpAssignOp op,({eexpr = TField(e1,fa)} as ef),e2) ->
+			field_assign_op bb op e ef e1 fa e2
 		| TBinop((OpAssign | OpAssignOp _) as op,e1,e2) ->
-			let bb,e2 = value bb e2 in
 			let bb,e1 = value bb e1 in
+			let bb,e2 = value bb e2 in
 			bb,{e with eexpr = TBinop(op,e1,e2)}
 		| TBinop(op,e1,e2) ->
 			let bb,e1,e2 = match ordered_value_list bb [e1;e2] with
@@ -145,6 +159,9 @@ let rec func ctx bb tf t p =
 		| TEnumParameter(e1,ef,ei) ->
 			let bb,e1 = value bb e1 in
 			bb,{e with eexpr = TEnumParameter(e1,ef,ei)}
+		| TEnumIndex e1 ->
+			let bb,e1 = value bb e1 in
+			bb,{e with eexpr = TEnumIndex e1}
 		| TFunction tf ->
 			let bb_func,bb_func_end = func ctx bb tf e.etype e.epos in
 			let e_fun = mk (TConst (TString "fun")) t_dynamic p in
@@ -156,20 +173,21 @@ let rec func ctx bb tf t p =
 			close_node g bb;
 			add_cfg_edge bb_func_end bb_next CFGGoto;
 			bb_next,ec
-		| TTypeExpr(TClassDecl {cl_kind = KAbstractImpl a}) when not (Meta.has Meta.RuntimeValue a.a_meta) ->
-			error "Cannot use abstract as value" e.epos
-		| TTypeExpr(TClassDecl c) ->
-			List.iter (fun cf -> if not (Meta.has Meta.MaybeUsed cf.cf_meta) then cf.cf_meta <- (Meta.MaybeUsed,[],cf.cf_pos) :: cf.cf_meta;) c.cl_ordered_statics;
-			bb,e
+		(*| TTypeExpr(TClassDecl {cl_kind = KAbstractImpl a}) when not (Meta.has Meta.RuntimeValue a.a_meta) ->
+			error "Cannot use abstract as value" e.epos*)
 		| TConst _ | TTypeExpr _ ->
 			bb,e
 		| TThrow _ | TReturn _ | TBreak | TContinue ->
 			let bb = block_element bb e in
 			bb,mk (TConst TNull) t_dynamic e.epos
 		| TVar _ | TFor _ | TWhile _ ->
-			error "Cannot use this expression as value" e.epos
+			Error.error "Cannot use this expression as value" e.epos
+	and value bb e =
+		let bb,e = value' bb e in
+		no_void e.etype e.epos;
+		bb,e
 	and ordered_value_list bb el =
-		let might_be_affected,collect_modified_locals = Optimizer.create_affection_checker() in
+		let might_be_affected,collect_modified_locals = create_affection_checker() in
 		let rec can_be_optimized e = match e.eexpr with
 			| TBinop _ | TArray _ | TCall _ -> true
 			| TParenthesis e1 -> can_be_optimized e1
@@ -177,9 +195,9 @@ let rec func ctx bb tf t p =
 		in
 		let _,el = List.fold_left (fun (had_side_effect,acc) e ->
 			if had_side_effect then
-				(true,(might_be_affected e || Optimizer.has_side_effect e,can_be_optimized e,e) :: acc)
+				(true,(might_be_affected e || has_side_effect e,can_be_optimized e,e) :: acc)
 			else begin
-				let had_side_effect = Optimizer.has_side_effect e in
+				let had_side_effect = has_side_effect e in
 				if had_side_effect then collect_modified_locals e;
 				let opt = can_be_optimized e in
 				(had_side_effect || opt,(false,opt,e) :: acc)
@@ -190,24 +208,48 @@ let rec func ctx bb tf t p =
 			bb,(value :: acc)
 		) (bb,[]) el in
 		bb,List.rev values
-	and bind_to_temp bb sequential e =
+	and bind_to_temp ?(v=None) bb sequential e =
+		let is_probably_not_affected e e1 fa = match fa with
+			| FAnon cf | FInstance (_,_,cf) | FStatic (_,cf) | FClosure (_,cf) when cf.cf_kind = Method MethNormal -> true
+			| FStatic(_,{cf_kind = Method MethDynamic}) -> false
+			| FEnum _ -> true
+			| FDynamic ("cca" | "__Index" | "__s") -> true (* This is quite retarded, but we have to deal with this somehow... *)
+			| _ -> match follow e.etype,follow e1.etype with
+				| TFun _,TInst _ -> false
+				| TFun _,_ -> true (* We don't know what's going on here, don't create a temp var (see #5082). *)
+				| _ -> false
+		in
 		let rec loop fl e = match e.eexpr with
-			| TField(e1,fa) when (match extract_field fa with Some {cf_kind = Method MethNormal} -> true | _ -> false) ->
+			| TField(e1,fa) when is_probably_not_affected e e1 fa ->
 				loop ((fun e' -> {e with eexpr = TField(e',fa)}) :: fl) e1
+			| TField(e1,fa) ->
+				let fa = match fa with
+					| FInstance(c,tl,({cf_kind = Method _ } as cf)) -> FClosure(Some(c,tl),cf)
+					| _ -> fa
+				in
+				fl,{e with eexpr = TField(e1,fa)}
 			| _ ->
 				fl,e
 		in
 		let fl,e = loop [] e in
-		let v = alloc_var ctx.temp_var_name e.etype in
+		let rec loop e = match e.eexpr with
+			| TLocal v -> v.v_name
+			| TArray(e1,_) | TField(e1,_) | TParenthesis e1 | TCast(e1,None) | TMeta(_,e1) -> loop e1
+			| _ -> match ctx.name_stack with
+				| s :: _ -> s
+				| [] -> ctx.temp_var_name
+		in
+		let v = match v with Some v -> v | None -> alloc_var (loop e) e.etype e.epos in
 		begin match ctx.com.platform with
-			| Cpp when sequential && not (Common.defined ctx.com Define.Cppia) -> ()
+			| Globals.Cpp when sequential && not (Common.defined ctx.com Define.Cppia) -> ()
 			| _ -> v.v_meta <- [Meta.CompilerGenerated,[],e.epos];
 		end;
-		let bb = declare_var_and_assign bb v e in
+		let bb = declare_var_and_assign bb v e e.epos in
 		let e = {e with eexpr = TLocal v} in
-		let e = List.fold_left (fun e f -> f e) e (List.rev fl) in
+		let e = List.fold_left (fun e f -> f e) e fl in
 		bb,e
-	and declare_var_and_assign bb v e =
+	and declare_var_and_assign bb v e p =
+		(* TODO: this section shouldn't be here because it can be handled as part of the normal value processing *)
 		let rec loop bb e = match e.eexpr with
 			| TParenthesis e1 ->
 				loop bb e1
@@ -217,6 +259,7 @@ let rec func ctx bb tf t p =
 						bb,e
 					| e1 :: el ->
 						let bb = block_element bb e1 in
+						if bb == g.g_unreachable then raise Exit;
 						loop2 bb el
 					| [] ->
 						assert false
@@ -226,24 +269,33 @@ let rec func ctx bb tf t p =
 			| _ ->
 				bb,e
 		in
-		let bb,e = loop bb e in
-		no_void v.v_type e.epos;
-		let ev = mk (TLocal v) v.v_type e.epos in
-		let was_assigned = ref false in
-		let assign e =
-			if not !was_assigned then begin
-				was_assigned := true;
-				add_texpr bb (mk (TVar(v,None)) ctx.com.basic.tvoid ev.epos);
-			end;
-			mk (TBinop(OpAssign,ev,e)) ev.etype e.epos
-		in
-		begin try
-			block_element_plus bb (map_values assign e) (fun e -> mk (TVar(v,Some e)) ctx.com.basic.tvoid e.epos)
-		with Exit ->
-			let bb,e = value bb e in
-			add_texpr bb (mk (TVar(v,Some e)) ctx.com.basic.tvoid ev.epos);
+		let generate bb e =
+			no_void v.v_type p;
+			let ev = mk (TLocal v) v.v_type p in
+			let was_assigned = ref false in
+			let assign e =
+				if not !was_assigned then begin
+					was_assigned := true;
+					add_texpr bb (mk (TVar(v,None)) ctx.com.basic.tvoid ev.epos);
+				end;
+				mk (TBinop(OpAssign,ev,e)) ev.etype ev.epos
+			in
+			let close = push_name v.v_name in
+			let bb = try
+				block_element_plus bb (map_values assign e) (fun e -> mk (TVar(v,Some e)) ctx.com.basic.tvoid ev.epos)
+			with Exit ->
+				let bb,e = value bb e in
+				add_texpr bb (mk (TVar(v,Some e)) ctx.com.basic.tvoid ev.epos);
+				bb
+			in
+			close();
 			bb
-		end
+		in
+		try
+			let bb,e = loop bb e in
+			generate bb e
+		with Exit ->
+			g.g_unreachable
 	and block_element_plus bb (e,efinal) f =
 		let bb = block_element bb e in
 		let bb = match efinal with
@@ -255,41 +307,66 @@ let rec func ctx bb tf t p =
 		let e,efinal = map_values f e in
 		block_element_plus bb (e,efinal) f
 	and call bb e e1 el =
-		begin match e1.eexpr with
-			| TConst TSuper when ctx.com.platform = Java || ctx.com.platform = Cs ->
-				bb,e
+		let bb = ref bb in
+		let check e t = match e.eexpr with
+			| TLocal v when is_ref_type t ->
+				v.v_capture <- true;
+				e
 			| _ ->
-				let check e t = match e.eexpr with
-					| TLocal v when is_ref_type t ->
-						v.v_capture <- true;
-						e
-					| _ ->
-						e
-				in
-				let el = Codegen.UnificationCallback.check_call check el e1.etype in
-				let bb,el = ordered_value_list bb (e1 :: el) in
-				match el with
-					| e1 :: el -> bb,{e with eexpr = TCall(e1,el)}
-					| _ -> assert false
-		end
+				if is_asvar_type t then begin
+					let v = alloc_var "tmp" t e.epos in
+					let bb',e = bind_to_temp ~v:(Some v) !bb false e in
+					bb := bb';
+					e
+				end else
+					e
+		in
+		let el = Codegen.UnificationCallback.check_call check el e1.etype in
+		let bb,el = ordered_value_list !bb (e1 :: el) in
+		match el with
+			| e1 :: el -> bb,{e with eexpr = TCall(e1,el)}
+			| _ -> assert false
+	and array_assign_op bb op e ea e1 e2 e3 =
+		let bb,e1 = bind_to_temp bb false e1 in
+		let bb,e2 = bind_to_temp bb false e2 in
+		let ea = {ea with eexpr = TArray(e1,e2)} in
+		let bb,e4 = bind_to_temp bb false ea in
+		let bb,e3 = bind_to_temp bb false e3 in
+		let eop = {e with eexpr = TBinop(op,e4,e3)} in
+		add_texpr bb {e with eexpr = TBinop(OpAssign,ea,eop)};
+		bb,ea
+	and field_assign_op bb op e ef e1 fa e2 =
+		let bb,e1 = match fa with
+			| FInstance(c,_,_) | FClosure(Some(c,_),_) when is_stack_allocated c -> bb,e1
+			| _ -> bind_to_temp bb false e1
+		in
+		let ef = {ef with eexpr = TField(e1,fa)} in
+		let bb,e3 = bind_to_temp bb false ef in
+		let bb,e2 = bind_to_temp bb false e2 in
+		let eop = {e with eexpr = TBinop(op,e3,e2)} in
+		add_texpr bb {e with eexpr = TBinop(OpAssign,ef,eop)};
+		bb,ef
 	and block_element bb e = match e.eexpr with
 		(* variables *)
 		| TVar(v,None) ->
 			add_texpr bb e;
 			bb
 		| TVar(v,Some e1) ->
-			declare_var_and_assign bb v e1
+			declare_var_and_assign bb v e1 e.epos
 		| TBinop(OpAssign,({eexpr = TLocal v} as e1),e2) ->
 			let assign e =
 				mk (TBinop(OpAssign,e1,e)) e.etype e.epos
 			in
-			begin try
+			let close = push_name v.v_name in
+			let bb = try
 				block_element_value bb e2 assign
 			with Exit ->
 				let bb,e2 = value bb e2 in
 				add_texpr bb {e with eexpr = TBinop(OpAssign,e1,e2)};
 				bb
-			end
+			in
+			close();
+			bb
 		(* branching *)
 		| TMeta((Meta.MergeBlock,_,_),{eexpr = TBlock el}) ->
 			block_el bb el
@@ -311,41 +388,49 @@ let rec func ctx bb tf t p =
 			end
 		| TIf(e1,e2,None) ->
 			let bb,e1 = bind_to_temp bb false e1 in
-			let bb_then = create_node BKConditional e2.etype e2.epos in
-			add_texpr bb (wrap_meta ":cond-branch" e1);
-			add_cfg_edge bb bb_then (CFGCondBranch (mk (TConst (TBool true)) ctx.com.basic.tbool e2.epos));
-			let bb_then_next = block bb_then e2 in
-			let bb_next = create_node BKNormal bb.bb_type bb.bb_pos in
-			set_syntax_edge bb (SEIfThen(bb_then,bb_next));
-			add_cfg_edge bb bb_next CFGCondElse;
-			close_node g bb;
-			add_cfg_edge bb_then_next bb_next CFGGoto;
-			close_node g bb_then_next;
-			bb_next
-		| TIf(e1,e2,Some e3) ->
-			let bb,e1 = bind_to_temp bb false e1 in
-			let bb_then = create_node BKConditional e2.etype e2.epos in
-			let bb_else = create_node BKConditional e3.etype e3.epos in
-			add_texpr bb (wrap_meta ":cond-branch" e1);
-			add_cfg_edge bb bb_then (CFGCondBranch (mk (TConst (TBool true)) ctx.com.basic.tbool e2.epos));
-			add_cfg_edge bb bb_else CFGCondElse;
-			close_node g bb;
-			let bb_then_next = block bb_then e2 in
-			let bb_else_next = block bb_else e3 in
-			if bb_then_next == g.g_unreachable && bb_else_next == g.g_unreachable then begin
-				set_syntax_edge bb (SEIfThenElse(bb_then,bb_else,g.g_unreachable,e.etype));
-				g.g_unreachable
-			end else begin
+			if bb == g.g_unreachable then
+				bb
+			else begin
+				let bb_then = create_node BKConditional e2.etype e2.epos in
+				add_texpr bb (wrap_meta ":cond-branch" e1);
+				add_cfg_edge bb bb_then (CFGCondBranch (mk (TConst (TBool true)) ctx.com.basic.tbool e2.epos));
+				let bb_then_next = block bb_then e2 in
 				let bb_next = create_node BKNormal bb.bb_type bb.bb_pos in
-				set_syntax_edge bb (SEIfThenElse(bb_then,bb_else,bb_next,e.etype));
+				set_syntax_edge bb (SEIfThen(bb_then,bb_next,e.epos));
+				add_cfg_edge bb bb_next CFGCondElse;
+				close_node g bb;
 				add_cfg_edge bb_then_next bb_next CFGGoto;
-				add_cfg_edge bb_else_next bb_next CFGGoto;
 				close_node g bb_then_next;
-				close_node g bb_else_next;
 				bb_next
 			end
+		| TIf(e1,e2,Some e3) ->
+			let bb,e1 = bind_to_temp bb false e1 in
+			if bb == g.g_unreachable then
+				bb
+			else begin
+				let bb_then = create_node BKConditional e2.etype e2.epos in
+				let bb_else = create_node BKConditional e3.etype e3.epos in
+				add_texpr bb (wrap_meta ":cond-branch" e1);
+				add_cfg_edge bb bb_then (CFGCondBranch (mk (TConst (TBool true)) ctx.com.basic.tbool e2.epos));
+				add_cfg_edge bb bb_else CFGCondElse;
+				close_node g bb;
+				let bb_then_next = block bb_then e2 in
+				let bb_else_next = block bb_else e3 in
+				if bb_then_next == g.g_unreachable && bb_else_next == g.g_unreachable then begin
+					set_syntax_edge bb (SEIfThenElse(bb_then,bb_else,g.g_unreachable,e.etype,e.epos));
+					g.g_unreachable
+				end else begin
+					let bb_next = create_node BKNormal bb.bb_type bb.bb_pos in
+					set_syntax_edge bb (SEIfThenElse(bb_then,bb_else,bb_next,e.etype,e.epos));
+					add_cfg_edge bb_then_next bb_next CFGGoto;
+					add_cfg_edge bb_else_next bb_next CFGGoto;
+					close_node g bb_then_next;
+					close_node g bb_else_next;
+					bb_next
+				end
+			end
 		| TSwitch(e1,cases,edef) ->
-			let is_exhaustive = edef <> None || Optimizer.is_exhaustive e1 in
+			let is_exhaustive = edef <> None || is_exhaustive e1 in
 			let bb,e1 = bind_to_temp bb false e1 in
 			add_texpr bb (wrap_meta ":cond-branch" e1);
 			let reachable = ref [] in
@@ -371,14 +456,14 @@ let rec func ctx bb tf t p =
 					Some (bb_case)
 			in
 			if is_exhaustive && !reachable = [] then begin
-				set_syntax_edge bb (SESwitch(cases,def,g.g_unreachable));
+				set_syntax_edge bb (SESwitch(cases,def,g.g_unreachable,e.epos));
 				close_node g bb;
 				g.g_unreachable;
 			end else begin
 				let bb_next = create_node BKNormal bb.bb_type bb.bb_pos in
 				if not is_exhaustive then add_cfg_edge bb bb_next CFGGoto;
 				List.iter (fun bb -> add_cfg_edge bb bb_next CFGGoto) !reachable;
-				set_syntax_edge bb (SESwitch(cases,def,bb_next));
+				set_syntax_edge bb (SESwitch(cases,def,bb_next,e.epos));
 				close_node g bb;
 				bb_next
 			end
@@ -417,47 +502,38 @@ let rec func ctx bb tf t p =
 			let close = begin_try bb_exc in
 			let bb_try_next = block bb_try e1 in
 			close();
-			let bb_next = if bb_exc.bb_incoming = [] then
-				let bb_next = if bb_try_next == g.g_unreachable then
-					g.g_unreachable
-				else begin
-					let bb_next = create_node BKNormal bb.bb_type bb.bb_pos in
-					add_cfg_edge bb_try_next bb_next CFGGoto;
-					close_node g bb_try_next;
-					bb_next
-				end in
-				set_syntax_edge bb (SESubBlock(bb_try,bb_next));
-				bb_next
-			else begin
-				let is_reachable = ref (not (bb_try_next == g.g_unreachable)) in
-				let catches = List.map (fun (v,e) ->
-					let bb_catch = create_node (BKCatch v) e.etype e.epos in
-					add_cfg_edge bb_exc bb_catch CFGGoto;
-					let bb_catch_next = block bb_catch e in
-					is_reachable := !is_reachable || (not (bb_catch_next == g.g_unreachable));
-					v,bb_catch,bb_catch_next
-				) catches in
-				let bb_next = if !is_reachable then create_node BKNormal bb.bb_type bb.bb_pos else g.g_unreachable in
-				let catches = List.map (fun (v,bb_catch,bb_catch_next) ->
-					if bb_catch_next != g.g_unreachable then add_cfg_edge bb_catch_next bb_next CFGGoto;
-					close_node g bb_catch_next;
-					v,bb_catch
-				) catches in
-				set_syntax_edge bb (SETry(bb_try,bb_exc,catches,bb_next));
-				if bb_try_next != g.g_unreachable then add_cfg_edge bb_try_next bb_next CFGGoto;
-				close_node g bb_try_next;
-				bb_next
-			end in
-            close_node g bb_exc;
-            close_node g bb;
+			(* We always want to keep catch-blocks, so let's add a pseudo CFG edge if it's unreachable. *)
+			if bb_exc.bb_incoming = [] then add_cfg_edge (if bb_try_next == g.g_unreachable then bb_try else bb_try_next) bb_exc CFGMaybeThrow;
+			let is_reachable = ref (not (bb_try_next == g.g_unreachable)) in
+			let catches = List.map (fun (v,e) ->
+				let bb_catch = create_node (BKCatch v) e.etype e.epos in
+				add_cfg_edge bb_exc bb_catch CFGGoto;
+				let bb_catch_next = block bb_catch e in
+				is_reachable := !is_reachable || (not (bb_catch_next == g.g_unreachable));
+				v,bb_catch,bb_catch_next
+			) catches in
+			let bb_next = if !is_reachable then create_node BKNormal bb.bb_type bb.bb_pos else g.g_unreachable in
+			let catches = List.map (fun (v,bb_catch,bb_catch_next) ->
+				if bb_catch_next != g.g_unreachable then add_cfg_edge bb_catch_next bb_next CFGGoto;
+				close_node g bb_catch_next;
+				v,bb_catch
+			) catches in
+			set_syntax_edge bb (SETry(bb_try,bb_exc,catches,bb_next,e.epos));
+			if bb_try_next != g.g_unreachable then add_cfg_edge bb_try_next bb_next CFGGoto;
+			close_node g bb_try_next;
+			close_node g bb_exc;
+			close_node g bb;
 			bb_next
 		(* control flow *)
 		| TReturn None ->
 			add_cfg_edge bb bb_exit CFGGoto;
 			add_terminator bb e
+		| TReturn (Some e1) when ExtType.is_void (follow e1.etype) ->
+			let bb = block_element bb e1 in
+			block_element bb (mk (TReturn None) t_dynamic e.epos)
 		| TReturn (Some e1) ->
 			begin try
-				let mk_return e1 = mk (TReturn (Some e1)) t_dynamic e.epos in
+				let mk_return e1 = mk (TReturn (Some e1)) t_dynamic e1.epos in
 				block_element_value bb e1 mk_return
 			with Exit ->
 				let bb,e1 = value bb e1 in
@@ -476,7 +552,6 @@ let rec func ctx bb tf t p =
 		| TThrow e1 ->
 			begin try
 				let mk_throw e1 =
-					no_void e1.etype e1.epos;
 					mk (TThrow e1) t_dynamic e.epos
 				in
 				block_element_value bb e1 mk_throw
@@ -486,12 +561,11 @@ let rec func ctx bb tf t p =
 					| [] -> add_cfg_edge bb bb_exit CFGGoto
 					| _ -> List.iter (fun bb_exc -> add_cfg_edge bb bb_exc CFGGoto) !b_try_stack;
 				end;
-				no_void e1.etype e1.epos;
 				add_terminator bb {e with eexpr = TThrow e1};
 			end
 		(* side_effects *)
-		| TCall({eexpr = TLocal v},el) when is_really_unbound v ->
-			check_unbound_call v el;
+		| TCall({eexpr = TIdent s},el) when is_really_unbound s ->
+			check_unbound_call s el;
 			add_texpr bb e;
 			bb
 		| TCall(e1,el) ->
@@ -506,12 +580,18 @@ let rec func ctx bb tf t p =
 			let b,e1 = value bb e1 in
 			add_texpr bb {e with eexpr = TCast(e1,Some mt)};
 			bb
-		| TBinop((OpAssign | OpAssignOp _) as op,({eexpr = TArray(e1,e2)} as ea),e3) ->
+		| TBinop(OpAssignOp op,({eexpr = TArray(e1,e2)} as ea),e3) ->
+			let bb,_ = array_assign_op bb op e ea e1 e2 e3 in
+			bb
+		| TBinop(OpAssignOp op,({eexpr = TField(e1,fa)} as ef),e2) ->
+			let bb,_ = field_assign_op bb op e ef e1 fa e2 in
+			bb
+		| TBinop(OpAssign,({eexpr = TArray(e1,e2)} as ea),e3) ->
 			let bb,e1,e2,e3 = match ordered_value_list bb [e1;e2;e3] with
 				| bb,[e1;e2;e3] -> bb,e1,e2,e3
 				| _ -> assert false
 			in
-			add_texpr bb {e with eexpr = TBinop(op,{ea with eexpr = TArray(e1,e2)},e3)};
+			add_texpr bb {e with eexpr = TBinop(OpAssign,{ea with eexpr = TArray(e1,e2)},e3)};
 			bb
 		| TBinop((OpAssign | OpAssignOp _ as op),e1,e2) ->
 			let bb,e1 = value bb e1 in
@@ -526,7 +606,7 @@ let rec func ctx bb tf t p =
 			add_texpr bb e;
 			bb
 		(* no-side-effect *)
-		| TEnumParameter _ | TFunction _ | TConst _ | TTypeExpr _ | TLocal _ ->
+		| TEnumParameter _ | TEnumIndex _ | TFunction _ | TConst _ | TTypeExpr _ | TLocal _ | TIdent _ ->
 			bb
 		(* no-side-effect composites *)
 		| TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) | TField(e1,_) | TUnop(_,_,e1) ->
@@ -580,36 +660,12 @@ let rec func ctx bb tf t p =
 	close_node g bb_exit;
 	bb_root,bb_exit
 
-let from_texpr com config e =
-	let g = Graph.create e.etype e.epos in
-	let tf,is_real_function = match e.eexpr with
-		| TFunction tf ->
-			tf,true
-		| _ ->
-			(* Wrap expression in a function so we don't have to treat it as a special case throughout. *)
-			let e = mk (TReturn (Some e)) t_dynamic e.epos in
-			let tf = { tf_args = []; tf_type = e.etype; tf_expr = e; } in
-			tf,false
-	in
-	let ctx = {
-		com = com;
-		config = config;
-		graph = g;
-		(* For CPP we want to use variable names which are "probably" not used by users in order to
-		   avoid problems with the debugger, see https://github.com/HaxeFoundation/hxcpp/issues/365 *)
-		temp_var_name = (match com.platform with Cpp -> "_hx_tmp" | _ -> "tmp");
-		is_real_function = is_real_function;
-		entry = g.g_unreachable;
-		has_unbound = false;
-		loop_counter = 0;
-		loop_stack = [];
-	} in
-	let bb_func,bb_exit = func ctx g.g_root tf e.etype e.epos in
+let from_tfunction ctx tf t p =
+	let g = ctx.graph in
+	let bb_func,bb_exit = func ctx g.g_root tf t p in
 	ctx.entry <- bb_func;
 	close_node g g.g_root;
-	g.g_exit <- bb_exit;
-	set_syntax_edge bb_exit SEEnd;
-	ctx
+	g.g_exit <- bb_exit
 
 let rec block_to_texpr_el ctx bb =
 	if bb.bb_dominator == ctx.graph.g_unreachable then
@@ -623,22 +679,22 @@ let rec block_to_texpr_el ctx bb =
 				Some bb_next,(block bb_sub) :: el
 			| el,SEMerge bb_next ->
 				Some bb_next,el
-			| el,(SEEnd | SENone) ->
+			| el,SENone ->
 				None,el
 			| {eexpr = TWhile(e1,_,flag)} as e :: el,(SEWhile(_,bb_body,bb_next)) ->
 				let e2 = block bb_body in
 				Some bb_next,{e with eexpr = TWhile(e1,e2,flag)} :: el
-			| el,SETry(bb_try,_,bbl,bb_next) ->
-				Some bb_next,(mk (TTry(block bb_try,List.map (fun (v,bb) -> v,block bb) bbl)) ctx.com.basic.tvoid bb_try.bb_pos) :: el
+			| el,SETry(bb_try,_,bbl,bb_next,p) ->
+				Some bb_next,(mk (TTry(block bb_try,List.map (fun (v,bb) -> v,block bb) bbl)) ctx.com.basic.tvoid p) :: el
 			| e1 :: el,se ->
 				let e1 = Texpr.skip e1 in
-				let bb_next,e1_def,t = match se with
-					| SEIfThen(bb_then,bb_next) -> Some bb_next,TIf(e1,block bb_then,None),ctx.com.basic.tvoid
-					| SEIfThenElse(bb_then,bb_else,bb_next,t) -> Some bb_next,TIf(e1,block bb_then,Some (block bb_else)),t
-					| SESwitch(bbl,bo,bb_next) -> Some bb_next,TSwitch(e1,List.map (fun (el,bb) -> el,block bb) bbl,Option.map block bo),ctx.com.basic.tvoid
-					| _ -> error (Printf.sprintf "Invalid node exit: %s" (s_expr_pretty e1)) bb.bb_pos
+				let bb_next,e1_def,t,p = match se with
+					| SEIfThen(bb_then,bb_next,p) -> Some bb_next,TIf(e1,block bb_then,None),ctx.com.basic.tvoid,p
+					| SEIfThenElse(bb_then,bb_else,bb_next,t,p) -> Some bb_next,TIf(e1,block bb_then,Some (block bb_else)),t,p
+					| SESwitch(bbl,bo,bb_next,p) -> Some bb_next,TSwitch(e1,List.map (fun (el,bb) -> el,block bb) bbl,Option.map block bo),ctx.com.basic.tvoid,p
+					| _ -> abort (Printf.sprintf "Invalid node exit: %s" (s_expr_pretty e1)) bb.bb_pos
 				in
-				bb_next,(mk e1_def t e1.epos) :: el
+				bb_next,(mk e1_def t p) :: el
 			| [],_ ->
 				None,[]
 		in
@@ -660,13 +716,13 @@ and func ctx i =
 	let bb,t,p,tf = Hashtbl.find ctx.graph.g_functions i in
 	let e = block_to_texpr ctx bb in
 	let rec loop e = match e.eexpr with
-		| TLocal v when not (is_unbound v) ->
+		| TLocal v ->
 			{e with eexpr = TLocal (get_var_origin ctx.graph v)}
-		| TVar(v,eo) when not (is_unbound v) ->
+		| TVar(v,eo) ->
 			let eo = Option.map loop eo in
 			let v' = get_var_origin ctx.graph v in
 			{e with eexpr = TVar(v',eo)}
-		| TBinop(OpAssign,e1,({eexpr = TBinop(op,e2,e3)} as e4)) ->
+		| TBinop(OpAssign,e1,({eexpr = TBinop(op,e2,e3)} as e4)) when target_handles_assign_ops ctx.com ->
 			let e1 = loop e1 in
 			let e2 = loop e2 in
 			let e3 = loop e3 in
@@ -674,15 +730,15 @@ and func ctx i =
 				| OpAdd | OpMult | OpDiv | OpSub | OpAnd
 				| OpOr | OpXor | OpShl | OpShr | OpUShr | OpMod ->
 					true
-				| OpAssignOp _ | OpInterval | OpArrow | OpAssign | OpEq
+				| OpAssignOp _ | OpInterval | OpArrow | OpIn | OpAssign | OpEq
 				| OpNotEq | OpGt | OpGte | OpLt | OpLte | OpBoolAnd | OpBoolOr ->
 					false
 			in
 			begin match e1.eexpr,e2.eexpr with
-				| TLocal v1,TLocal v2 when v1 == v2 && is_valid_assign_op op ->
+				| TLocal v1,TLocal v2 when v1 == v2 && not v1.v_capture && is_valid_assign_op op ->
 					begin match op,e3.eexpr with
-						| OpAdd,TConst (TInt i32) when Int32.to_int i32 = 1 -> {e with eexpr = TUnop(Increment,Prefix,e1)}
-						| OpSub,TConst (TInt i32) when Int32.to_int i32 = 1 -> {e with eexpr = TUnop(Decrement,Prefix,e1)}
+						| OpAdd,TConst (TInt i32) when Int32.to_int i32 = 1 && target_handles_assign_ops ctx.com -> {e with eexpr = TUnop(Increment,Prefix,e1)}
+						| OpSub,TConst (TInt i32) when Int32.to_int i32 = 1 && target_handles_assign_ops ctx.com -> {e with eexpr = TUnop(Decrement,Prefix,e1)}
 						| _ -> {e with eexpr = TBinop(OpAssignOp op,e1,e3)}
 					end
 				| _ ->
@@ -690,7 +746,7 @@ and func ctx i =
 			end
 		| TCall({eexpr = TConst (TString "fun")},[{eexpr = TConst (TInt i32)}]) ->
 			func ctx (Int32.to_int i32)
-		| TCall({eexpr = TLocal v},_) when is_really_unbound v ->
+		| TCall({eexpr = TIdent s},_) when is_really_unbound s ->
 			e
 		| _ ->
 			Type.map_expr loop e

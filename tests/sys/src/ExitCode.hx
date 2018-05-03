@@ -3,12 +3,16 @@ import sys.io.*;
 import haxe.io.*;
 
 /**
-	This is intented to be used by TestSys and io.TestProcess.
+	This is intended to be used by TestSys and io.TestProcess.
 */
 class ExitCode {
 	static public var bin:String =
-	#if neko
+	#if interp
+		"bin/interp/ExitCode";
+	#elseif neko
 		"bin/neko/ExitCode.n";
+	#elseif hl
+		"bin/hl/ExitCode.hl";
 	#elseif cpp
 		#if debug
 			"bin/cpp/ExitCode-debug";
@@ -31,13 +35,15 @@ class ExitCode {
 		"bin/python/ExitCode.py";
 	#elseif php
 		"bin/php/ExitCode/index.php";
+	#elseif lua
+		"bin/lua/ExitCode.lua";
 	#else
 		null;
 	#end
 
 	static public function getNative():String {
-		// This is just a script that behaves like ExitCode.hx, 
-		// which exits with the code same as the first given argument. 
+		// This is just a script that behaves like ExitCode.hx,
+		// which exits with the code same as the first given argument.
 		// var scriptContent = switch (Sys.systemName()) {
 		// 	case "Windows":
 		// 		'@echo off\nexit /b %1';
@@ -80,7 +86,7 @@ class ExitCode {
 
 		return binPath;
 	}
-	
+
 	static function main():Void {
 		Sys.exit(Std.parseInt(Sys.args()[0]));
 	}

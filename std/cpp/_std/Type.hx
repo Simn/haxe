@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 enum ValueType {
 	TNull;
 	TInt;
@@ -131,17 +132,19 @@ enum ValueType {
 
 	public static function enumConstructor( e : EnumValue ) : String {
 			var value:cpp.EnumBase = cast e;
-			return value.getTag();
+			return value._hx_getTag();
 	}
 
 	public static function enumParameters( e : EnumValue ) : Array<Dynamic> {
 			var value:cpp.EnumBase = cast e;
-			return value.getParameters();
+			return value._hx_getParameters();
 	}
 
-	public inline static function enumIndex( e : EnumValue ) : Int {
-			var value:cpp.EnumBase = cast e;
-			return value.getIndex();
+    @:native("_hx_getEnumValueIndex")
+	extern private static function getEnumValueIndex( e : EnumValue ) : Int return 0;
+
+	#if !cppia inline #end public static function enumIndex( e : EnumValue ) : Int {
+			return getEnumValueIndex(e);
 	}
 
 	public static function allEnums<T>( e : Enum<T> ) : Array<T> {

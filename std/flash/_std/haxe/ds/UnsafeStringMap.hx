@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -80,6 +80,12 @@ class UnsafeStringMap<T> implements haxe.Constraints.IMap<String,T> {
 	}
 
 	#end
+	
+	public function copy() : UnsafeStringMap<T> {
+		var copied = new UnsafeStringMap();
+		for(key in keys()) copied.set(key, get(key));
+		return copied;
+	}
 
 	public function toString() : String {
 		var s = new StringBuf();

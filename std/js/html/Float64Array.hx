@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated from typedarray.webidl line 194:0. Do not edit!
+// This file is generated from typedarray.webidl. Do not edit!
 
 package js.html;
 
@@ -39,8 +39,6 @@ extern class Float64Array extends ArrayBufferView implements ArrayAccess<Float>
 	@:overload( function( array : Float64Array ) : Void {} )
 	@:overload( function( array : Array<Float> ) : Void {} )
 	function new( buffer : ArrayBuffer, ?byteOffset : Int, ?length : Int ) : Void;
-	function get( index : Int ) : Float;
-	@:overload( function( index : Int, value : Float ) : Void {} )
 	@:overload( function( array : Float64Array, ?offset : Int ) : Void {} )
 	function set( array : Array<Float>, ?offset : Int ) : Void;
 	function subarray( start : Int, ?end : Int ) : Float64Array;

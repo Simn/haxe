@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,11 +20,11 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated from mozilla/Client.webidl line 57:0. Do not edit!
+// This file is generated from mozilla\Client.webidl. Do not edit!
 
 package js.html;
 
-@:enum abstract FrameType(String)
+enum abstract FrameType(String)
 {
 	var AUXILIARY = "auxiliary";
 	var TOP_LEVEL = "top-level";

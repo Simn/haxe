@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2016  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -75,7 +75,7 @@ let is_fixed_override cf t =
 
 let protect name =
 	match name with
-	| "Error" | "Namespace" -> "_" ^ name
+	| "Error" | "Namespace" | "Object" -> "_" ^ name
 	| _ -> name
 
 let s_path ctx stat path p =
@@ -109,7 +109,7 @@ let s_path ctx stat path p =
 		let name = protect name in
 		let packs = (try Hashtbl.find ctx.imports name with Not_found -> []) in
 		if not (List.mem pack packs) then Hashtbl.replace ctx.imports name (pack :: packs);
-		Ast.s_type_path (pack,name)
+		Globals.s_type_path (pack,name)
 
 let reserved =
 	let h = Hashtbl.create 0 in
@@ -190,7 +190,7 @@ let close ctx =
 	Hashtbl.iter (fun name paths ->
 		List.iter (fun pack ->
 			let path = pack, name in
-			if path <> ctx.path then output_string ctx.ch ("\timport " ^ Ast.s_type_path path ^ ";\n");
+			if path <> ctx.path then output_string ctx.ch ("\timport " ^ Globals.s_type_path path ^ ";\n");
 		) paths
 	) ctx.imports;
 	output_string ctx.ch (Buffer.contents ctx.buf);
@@ -203,7 +203,7 @@ let gen_local ctx l =
 let spr ctx s = Buffer.add_string ctx.buf s
 let print ctx = Printf.kprintf (fun s -> Buffer.add_string ctx.buf s)
 
-let unsupported p = error "This expression cannot be generated to AS3" p
+let unsupported p = abort "This expression cannot be generated to AS3" p
 
 let newline ctx =
 	let rec loop p =
@@ -247,7 +247,14 @@ let rec type_str ctx t p =
 	match t with
 	| TEnum _ | TInst _ when List.memq t ctx.local_types ->
 		"*"
-	| TAbstract (a,pl) when not (Ast.Meta.has Ast.Meta.CoreType a.a_meta) ->
+	| TAbstract ({a_path = [],"Null"},[t]) ->
+		(match follow t with
+		| TAbstract ({ a_path = [],"UInt" },_)
+		| TAbstract ({ a_path = [],"Int" },_)
+		| TAbstract ({ a_path = [],"Float" },_)
+		| TAbstract ({ a_path = [],"Bool" },_) -> "*"
+		| _ -> type_str ctx t p)
+	| TAbstract (a,pl) when not (Meta.has Meta.CoreType a.a_meta) ->
 		type_str ctx (Abstract.get_underlying_type a pl) p
 	| TAbstract (a,_) ->
 		(match a.a_path with
@@ -264,7 +271,7 @@ let rec type_str ctx t p =
 			| _ ->
 				let rec loop = function
 					| [] -> "Object"
-					| (Ast.Meta.FakeEnum,[Ast.EConst (Ast.Ident n),_],_) :: _ ->
+					| (Meta.FakeEnum,[Ast.EConst (Ast.Ident n),_],_) :: _ ->
 						(match n with
 						| "Int" -> "int"
 						| "UInt" -> "uint"
@@ -281,7 +288,7 @@ let rec type_str ctx t p =
 	| TInst (c,_) ->
 		(match c.cl_kind with
 		| KNormal | KGeneric | KGenericInstance _ | KAbstractImpl _ -> s_path ctx false c.cl_path p
-		| KTypeParameter _ | KExtension _ | KExpr _ | KMacroType | KGenericBuild _ -> "*")
+		| KTypeParameter _ | KExpr _ | KMacroType | KGenericBuild _ -> "*")
 	| TFun _ ->
 		"Function"
 	| TMono r ->
@@ -291,19 +298,9 @@ let rec type_str ctx t p =
 	| TType (t,args) ->
 		(match t.t_path with
 		| [], "UInt" -> "uint"
-		| [] , "Null" ->
-			(match args with
-			| [t] ->
-				(match follow t with
-				| TAbstract ({ a_path = [],"UInt" },_)
-				| TAbstract ({ a_path = [],"Int" },_)
-				| TAbstract ({ a_path = [],"Float" },_)
-				| TAbstract ({ a_path = [],"Bool" },_) -> "*"
-				| _ -> type_str ctx t p)
-			| _ -> assert false);
 		| _ -> type_str ctx (apply_params t.t_params args t.t_type) p)
 	| TLazy f ->
-		type_str ctx ((!f)()) p
+		type_str ctx (lazy_type f) p
 
 let rec iter_switch_break in_switch e =
 	match e.eexpr with
@@ -338,7 +335,7 @@ let generate_resources infos =
 		let dir = (infos.com.file :: ["__res"]) in
 		create_dir [] dir;
 		let add_resource name data =
-			let name = Base64.str_encode name in
+			let name = Bytes.unsafe_to_string (Base64.str_encode name) in
 			let ch = open_out_bin (String.concat "/" (dir @ [name])) in
 			output_string ch data;
 			close_out ch
@@ -353,7 +350,7 @@ let generate_resources infos =
 		Hashtbl.iter (fun name _ ->
 			let varname = ("v" ^ (string_of_int !k)) in
 			k := !k + 1;
-			print ctx "\t\t[Embed(source = \"__res/%s\", mimeType = \"application/octet-stream\")]\n" (Base64.str_encode name);
+			print ctx "\t\t[Embed(source = \"__res/%s\", mimeType = \"application/octet-stream\")]\n" (Bytes.unsafe_to_string (Base64.str_encode name));
 			print ctx "\t\tpublic static var %s:Class;\n" varname;
 			inits := ("list[\"" ^ Ast.s_escape name ^ "\"] = " ^ varname ^ ";") :: !inits;
 		) infos.com.resources;
@@ -397,8 +394,8 @@ let gen_function_header ctx name f params p =
 	print ctx "function%s(" (match name with None -> "" | Some (n,meta) ->
 		let rec loop = function
 			| [] -> n
-			| (Ast.Meta.Getter,[Ast.EConst (Ast.Ident i),_],_) :: _ -> "get " ^ i
-			| (Ast.Meta.Setter,[Ast.EConst (Ast.Ident i),_],_) :: _ -> "set " ^ i
+			| (Meta.Getter,[Ast.EConst (Ast.Ident i),_],_) :: _ -> "get " ^ i
+			| (Meta.Setter,[Ast.EConst (Ast.Ident i),_],_) :: _ -> "set " ^ i
 			| _ :: l -> loop l
 		in
 		" " ^ loop meta
@@ -433,32 +430,32 @@ let rec gen_call ctx e el r =
 		spr ctx "(";
 		concat ctx "," (gen_value ctx) el;
 		spr ctx ")";
-	| TLocal { v_name = "__is__" } , [e1;e2] ->
+	| TIdent "__is__" , [e1;e2] ->
 		gen_value ctx e1;
 		spr ctx " is ";
 		gen_value ctx e2;
-	| TLocal { v_name = "__in__" } , [e1;e2] ->
+	| TIdent "__in__" , [e1;e2] ->
 		spr ctx "(";
 		gen_value ctx e1;
 		spr ctx " in ";
 		gen_value ctx e2;
 		spr ctx ")"
-	| TLocal { v_name = "__as__" }, [e1;e2] ->
+	| TIdent "__as__", [e1;e2] ->
 		gen_value ctx e1;
 		spr ctx " as ";
 		gen_value ctx e2;
-	| TLocal { v_name = "__int__" }, [e] ->
+	| TIdent "__int__", [e] ->
 		spr ctx "int(";
 		gen_value ctx e;
 		spr ctx ")";
-	| TLocal { v_name = "__float__" }, [e] ->
+	| TIdent "__float__", [e] ->
 		spr ctx "Number(";
 		gen_value ctx e;
 		spr ctx ")";
-	| TLocal { v_name = "__typeof__" }, [e] ->
+	| TIdent "__typeof__", [e] ->
 		spr ctx "typeof ";
 		gen_value ctx e;
-	| TLocal { v_name = "__keys__" }, [e] ->
+	| TIdent "__keys__", [e] ->
 		let ret = (match ctx.in_value with None -> assert false | Some r -> r) in
 		print ctx "%s = new Array()" ret.v_name;
 		newline ctx;
@@ -466,7 +463,7 @@ let rec gen_call ctx e el r =
 		print ctx "for(var %s : String in " tmp;
 		gen_value ctx e;
 		print ctx ") %s.push(%s)" ret.v_name tmp;
-	| TLocal { v_name = "__hkeys__" }, [e] ->
+	| TIdent "__hkeys__", [e] ->
 		let ret = (match ctx.in_value with None -> assert false | Some r -> r) in
 		print ctx "%s = new Array()" ret.v_name;
 		newline ctx;
@@ -474,7 +471,7 @@ let rec gen_call ctx e el r =
 		print ctx "for(var %s : String in " tmp;
 		gen_value ctx e;
 		print ctx ") %s.push(%s.substr(1))" ret.v_name tmp;
-	| TLocal { v_name = "__foreach__" }, [e] ->
+	| TIdent "__foreach__", [e] ->
 		let ret = (match ctx.in_value with None -> assert false | Some r -> r) in
 		print ctx "%s = new Array()" ret.v_name;
 		newline ctx;
@@ -482,22 +479,22 @@ let rec gen_call ctx e el r =
 		print ctx "for each(var %s : * in " tmp;
 		gen_value ctx e;
 		print ctx ") %s.push(%s)" ret.v_name tmp;
-	| TLocal { v_name = "__new__" }, e :: args ->
+	| TIdent "__new__", e :: args ->
 		spr ctx "new ";
 		gen_value ctx e;
 		spr ctx "(";
 		concat ctx "," (gen_value ctx) args;
 		spr ctx ")";
-	| TLocal { v_name = "__delete__" }, [e;f] ->
+	| TIdent "__delete__", [e;f] ->
 		spr ctx "delete(";
 		gen_value ctx e;
 		spr ctx "[";
 		gen_value ctx f;
 		spr ctx "]";
 		spr ctx ")";
-	| TLocal { v_name = "__unprotect__" }, [e] ->
+	| TIdent "__unprotect__", [e] ->
 		gen_value ctx e
-	| TLocal { v_name = "__vector__" }, [e] ->
+	| TIdent "__vector__", [e] ->
 		spr ctx (type_str ctx r e.epos);
 		spr ctx "(";
 		gen_value ctx e;
@@ -595,7 +592,7 @@ and gen_expr ctx e =
 		gen_constant ctx e.epos c
 	| TLocal v ->
 		spr ctx (s_ident v.v_name)
-	| TArray ({ eexpr = TLocal { v_name = "__global__" } },{ eexpr = TConst (TString s) }) ->
+	| TArray ({ eexpr = TIdent "__global__" },{ eexpr = TConst (TString s) }) ->
 		let path = Ast.parse_path s in
 		spr ctx (s_path ctx false path e.epos)
 	| TArray (e1,e2) ->
@@ -633,6 +630,9 @@ and gen_expr ctx e =
 		gen_expr ctx e1;
 		spr ctx ")";
 		gen_field_access ctx e1.etype (field_name s)
+	| TEnumIndex e ->
+		gen_value ctx e;
+		print ctx ".index";
 	| TEnumParameter (e,_,i) ->
 		gen_value ctx e;
 		print ctx ".params[%i]" i;
@@ -676,7 +676,7 @@ and gen_expr ctx e =
 		let bend = open_block ctx in
 		let cb = (if not ctx.constructor_block then
 			(fun () -> ())
-		else if not (Codegen.constructor_side_effects e) then begin
+		else if not (Texpr.constructor_side_effects e) then begin
 			ctx.constructor_block <- false;
 			(fun () -> ())
 		end else begin
@@ -754,7 +754,7 @@ and gen_expr ctx e =
 		handle_break();
 	| TObjectDecl fields ->
 		spr ctx "{ ";
-		concat ctx ", " (fun (f,e) -> print ctx "%s : " (anon_field f); gen_value ctx e) fields;
+		concat ctx ", " (fun ((f,_,_),e) -> print ctx "%s : " (anon_field f); gen_value ctx e) fields;
 		spr ctx "}"
 	| TFor (v,it,e) ->
 		let handle_break = handle_break ctx e in
@@ -811,6 +811,8 @@ and gen_expr ctx e =
 		end
 	| TCast (e1,Some t) ->
 		gen_expr ctx (Codegen.default_cast ctx.inf.com e1 t e.etype e.epos)
+	| TIdent s ->
+		spr ctx s
 
 and gen_block_element ctx e = match e.eexpr with
 	| TObjectDecl fl ->
@@ -840,7 +842,7 @@ and gen_value ctx e =
 	let value block =
 		let old = ctx.in_value in
 		let t = type_str ctx e.etype e.epos in
-		let r = alloc_var (gen_local ctx "$r") e.etype in
+		let r = alloc_var (gen_local ctx "$r") e.etype e.epos in
 		ctx.in_value <- Some r;
 		if ctx.in_static then
 			print ctx "function() : %s " t
@@ -872,7 +874,7 @@ and gen_value ctx e =
 		)
 	in
 	match e.eexpr with
-	| TCall ({ eexpr = TLocal { v_name = "__keys__" } },_) | TCall ({ eexpr = TLocal { v_name = "__hkeys__" } },_) ->
+	| TCall ({ eexpr = TIdent "__keys__" },_) | TCall ({ eexpr = TIdent "__hkeys__" },_) ->
 		let v = value true in
 		gen_expr ctx e;
 		v()
@@ -882,6 +884,7 @@ and gen_value ctx e =
 	| TBinop _
 	| TField _
 	| TEnumParameter _
+	| TEnumIndex _
 	| TTypeExpr _
 	| TParenthesis _
 	| TObjectDecl _
@@ -889,7 +892,8 @@ and gen_value ctx e =
 	| TCall _
 	| TNew _
 	| TUnop _
-	| TFunction _ ->
+	| TFunction _
+	| TIdent _ ->
 		gen_expr ctx e
 	| TMeta (_,e1) ->
 		gen_value ctx e1
@@ -964,7 +968,7 @@ and gen_value ctx e =
 		v()
 
 let final m =
-	if Ast.Meta.has Ast.Meta.Final m then " final " else ""
+	if Meta.has Meta.Final m then " final " else ""
 
 let generate_field ctx static f =
 	newline ctx;
@@ -972,12 +976,12 @@ let generate_field ctx static f =
 	ctx.gen_uid <- 0;
 	List.iter (fun(m,pl,_) ->
 		match m,pl with
-		| Ast.Meta.Meta, [Ast.ECall ((Ast.EConst (Ast.Ident n),_),args),_] ->
+		| Meta.Meta, [Ast.ECall ((Ast.EConst (Ast.Ident n),_),args),_] ->
 			let mk_arg (a,p) =
 				match a with
 				| Ast.EConst (Ast.String s) -> (None, s)
 				| Ast.EBinop (Ast.OpAssign,(Ast.EConst (Ast.Ident n),_),(Ast.EConst (Ast.String s),_)) -> (Some n, s)
-				| _ -> error "Invalid meta definition" p
+				| _ -> abort "Invalid meta definition" p
 			in
 			print ctx "[%s" n;
 			(match args with
@@ -994,7 +998,7 @@ let generate_field ctx static f =
 		| _ -> ()
 	) f.cf_meta;
 	let public = f.cf_public || Hashtbl.mem ctx.get_sets (f.cf_name,static) || (f.cf_name = "main" && static)
-		|| f.cf_name = "resolve" || Ast.Meta.has Ast.Meta.Public f.cf_meta
+		|| f.cf_name = "resolve" || Meta.has Meta.Public f.cf_meta
 		(* consider all abstract methods public to avoid issues with inlined private access *)
 	    || (match ctx.curclass.cl_kind with KAbstractImpl _ -> true | _ -> false)
 	in
@@ -1024,8 +1028,8 @@ let generate_field ctx static f =
 			| TFun (args,r) when (match f.cf_kind with Method MethDynamic | Var _ -> false | _ -> true) ->
 				let rec loop = function
 					| [] -> f.cf_name
-					| (Ast.Meta.Getter,[Ast.EConst (Ast.String name),_],_) :: _ -> "get " ^ name
-					| (Ast.Meta.Setter,[Ast.EConst (Ast.String name),_],_) :: _ -> "set " ^ name
+					| (Meta.Getter,[Ast.EConst (Ast.String name),_],_) :: _ -> "get " ^ name
+					| (Meta.Setter,[Ast.EConst (Ast.String name),_],_) :: _ -> "set " ^ name
 					| _ :: l -> loop l
 				in
 				print ctx "function %s(" (loop f.cf_meta);
@@ -1137,13 +1141,13 @@ let generate_class ctx c =
 		newline ctx;
 		spr ctx "namespace static_init";
 		newline ctx;
-		print ctx "%s.static_init::init()" (s_path ctx true ctx.curclass.cl_path Ast.null_pos);
+		print ctx "%s.static_init::init()" (s_path ctx true ctx.curclass.cl_path Globals.null_pos);
 	end;
 	newline ctx;
-	if c.cl_interface && Ast.Meta.has (Ast.Meta.Custom ":hasMetadata") c.cl_meta then begin
+	if c.cl_interface && Meta.has (Meta.Custom ":hasMetadata") c.cl_meta then begin
 		(* we have to reference the metadata class in order for it to be compiled *)
 		let path = fst c.cl_path,snd c.cl_path ^ "_HxMeta" in
-		spr ctx (Ast.s_type_path path);
+		spr ctx (Globals.s_type_path path);
 		newline ctx
 	end
 
@@ -1152,7 +1156,7 @@ let generate_main ctx inits =
 	let pack = open_block ctx in
 	print ctx "\timport flash.Lib";
 	newline ctx;
-	print ctx "public class __main__ extends %s {" (s_path ctx true (["flash"],"Boot") Ast.null_pos);
+	print ctx "public class __main__ extends %s {" (s_path ctx true (["flash"],"Boot") Globals.null_pos);
 	let cl = open_block ctx in
 	newline ctx;
 	spr ctx "public function __main__() {";
@@ -1200,7 +1204,7 @@ let generate_enum ctx e =
 			print ctx "public static var %s : %s = new %s(\"%s\",%d)" c.ef_name ename ename c.ef_name c.ef_index;
 	) e.e_constrs;
 	newline ctx;
-	(match Codegen.build_metadata ctx.inf.com (TEnumDecl e) with
+	(match Texpr.build_metadata ctx.inf.com.basic (TEnumDecl e) with
 	| None -> ()
 	| Some e ->
 		print ctx "public static var __meta__ : * = ";

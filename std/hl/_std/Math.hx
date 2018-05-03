@@ -1,4 +1,24 @@
-
+/*
+ * Copyright (C)2005-2018 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 @:coreApi
 class Math {
 
@@ -25,6 +45,8 @@ class Math {
 	@:hlNative("std","math_pow") public static function pow( v : Float, exp : Float ) : Float 				return 0.;
 	@:hlNative("std","math_atan2") public static function atan2( y : Float, x : Float ) : Float 			return 0.;
 
+	public static function random() : Float return @:privateAccess Std.rnd_float(Std.rnd);
+
 	public static function min( a : Float, b : Float ) : Float 			return a < b || isNaN(a) ? a : b;
 	public static function max( a : Float, b : Float ) : Float 			return a < b || isNaN(b) ? b : a;
 
@@ -32,8 +54,6 @@ class Math {
 	public static var NaN(default,null) : Float;
 	public static var POSITIVE_INFINITY(default,null) : Float;
 	public static var NEGATIVE_INFINITY(default,null) : Float;
-
-	public static function random():Float return 0.15; // I rolled a D20
 
 	static function __init__() : Void {
 		PI = 3.1415926535897932384626433832795;

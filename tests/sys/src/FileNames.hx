@@ -8,9 +8,19 @@ class FileNames {
 		// a space inside
 		"two words",
 
+		// some valid seperators
+		"two-words",
+		"two_words",
+		"two,words",
+		"two.words",
+		"two;words",
+		"(two words)",
+		"[two words]",
+
 		// Chinese, Japanese
-		#if !(cs || python || php || neko || cpp || java)
-		"中文，にほんご",
+		#if !(cs || python || php || neko || cpp || java || lua)
+		"中文，にほんご",
+		// this is a (Unicode) equivalent, but fails on OS X: "中文，にほんご",
 		#end
 
 		// "aaa...a"

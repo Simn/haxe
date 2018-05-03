@@ -87,7 +87,7 @@ pos.len == 2;
 ~/a/g.replace("bab", "z") == "bzb";
 ~/a/g.replace("baba", "z") == "bzbz";
 
-#if !hl
+#if !(hl && interp) // not allowed in local interpreter, still allowed in hl runtime
 // replace + $
 ~/href="(.*?)"/.replace('lead href="foo" trail',"$1") == "lead foo trail";
 //~/href="(.*?)"/.replace('lead href="foo" trail',"$2") == "lead $2 trail";
@@ -99,9 +99,14 @@ pos.len == 2;
 #end
 
 ~/a(b)c/g.replace("abcabc", "$1") == "bb";
+~/(a)|(b)/.replace("abc", '*') == "*bc";
+~/(a)|(b)/g.replace("abc", '*') == "**c";
 
 // map
 ~/(Hello)/.map("Hello World", function(e) return "Hallo") == "Hallo World";
 ~/(Hello)/.map("Hello", function(e) return "Hallo") == "Hallo";
 ~/(World)/.map("Hello World", function(e) return "Hallo") == "Hello Hallo";
 ~/(Hola)/.map("Hello World", function(e) return throw "not called") == "Hello World";
+
+// escape
+new EReg("^" + EReg.escape("\\ ^ $ * + ? . ( ) | { } [ ]") + "$", "").match("\\ ^ $ * + ? . ( ) | { } [ ]") == true;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -21,7 +21,7 @@
  */
 /**
 	This class provides advanced methods on Strings. It is ideally used with
-	`using StringTools` and then acts as an [extension](http://haxe.org/manual/lf-static-extension.html)
+	`using StringTools` and then acts as an [extension](https://haxe.org/manual/lf-static-extension.html)
 	to the `String` class.
 
 	If the first argument to any of the methods is null, the result is
@@ -34,7 +34,7 @@ class StringTools {
 	/**
 		Encode an URL by using the standard format.
 	**/
-	#if (!java && !cpp) inline #end public static function urlEncode( s : String ) : String {
+	#if (!java && !cpp && !lua && !eval) inline #end public static function urlEncode( s : String ) : String {
 		#if flash
 			return untyped __global__["encodeURIComponent"](s);
 		#elseif neko
@@ -44,9 +44,7 @@ class StringTools {
 		#elseif cpp
 			return untyped s.__URLEncode();
 		#elseif java
-			try
-				return untyped __java__("java.net.URLEncoder.encode(s, \"UTF-8\")")
-			catch (e:Dynamic) throw e;
+			return postProcessUrlEncode(java.net.URLEncoder.encode(s, "UTF-8"));
 		#elseif cs
 			return untyped cs.system.Uri.EscapeDataString(s);
 		#elseif python
@@ -55,15 +53,58 @@ class StringTools {
 			var len = 0;
 			var b = @:privateAccess s.bytes.urlEncode(len);
 			return @:privateAccess String.__alloc__(b,len);
+		#elseif lua
+			s = lua.NativeStringTools.gsub(s, "\n", "\r\n");
+			s = lua.NativeStringTools.gsub(s, "([^%w %-%_%.%~])", function (c) {
+				return lua.NativeStringTools.format("%%%02X", lua.NativeStringTools.byte(c) + '');
+			});
+			s = lua.NativeStringTools.gsub(s, " ", "+");
+			return s;
 		#else
 			return null;
 		#end
 	}
 
+#if java
+	private static function postProcessUrlEncode( s : String ) : String {
+		var ret = new StringBuf();
+		var i = 0,
+		    len = s.length;
+		while (i < len) {
+			switch(_charAt(s, i++)) {
+			case '+'.code:
+				ret.add('%20');
+			case '%'.code if (i <= len - 2):
+				var c1 = _charAt(s, i++),
+				    c2 = _charAt(s, i++);
+				switch[c1, c2] {
+				case ['2'.code, '1'.code]:
+					ret.addChar('!'.code);
+				case ['2'.code, '7'.code]:
+					ret.addChar('\''.code);
+				case ['2'.code, '8'.code]:
+					ret.addChar('('.code);
+				case ['2'.code, '9'.code]:
+					ret.addChar(')'.code);
+				case ['7'.code, 'E'.code] | ['7'.code, 'e'.code]:
+					ret.addChar('~'.code);
+				case _:
+					ret.addChar('%'.code);
+					ret.addChar(cast c1);
+					ret.addChar(cast c2);
+				}
+			case var chr:
+				ret.addChar(cast chr);
+			}
+		}
+		return ret.toString();
+	}
+#end
+
 	/**
 		Decode an URL using the standard format.
 	**/
-	#if (!java && !cpp) inline #end public static function urlDecode( s : String ) : String {
+	#if (!java && !cpp && !lua && !eval) inline #end public static function urlDecode( s : String ) : String {
 		#if flash
 			return untyped __global__["decodeURIComponent"](s.split("+").join(" "));
 		#elseif neko
@@ -84,6 +125,12 @@ class StringTools {
 			var len = 0;
 			var b = @:privateAccess s.bytes.urlDecode(len);
 			return @:privateAccess String.__alloc__(b,len);
+		#elseif lua
+			s = lua.NativeStringTools.gsub (s, "+", " ");
+			s = lua.NativeStringTools.gsub (s, "%%(%x%x)",
+				function(h) {return lua.NativeStringTools.char(lua.Lua.tonumber(h,16));});
+			s = lua.NativeStringTools.gsub (s, "\r\n", "\n");
+			return s;
 		#else
 			return null;
 		#end
@@ -133,7 +180,7 @@ class StringTools {
 
 		If `start` is the empty String `""`, the result is true.
 	**/
-	public static #if (cs || java) inline #end function startsWith( s : String, start : String ) : Bool {
+	public static #if (cs || java || python) inline #end function startsWith( s : String, start : String ) : Bool {
 		#if java
 		return untyped s.startsWith(start);
 		#elseif cs
@@ -149,6 +196,8 @@ class StringTools {
 		return true;
 		#elseif hl
 		return @:privateAccess (s.length >= start.length && s.bytes.compare(0,start.bytes,0,start.length<<1) == 0);
+		#elseif python
+		return python.NativeStringTools.startswith(s, start);
 		#else
 		return( s.length >= start.length && s.substr(0, start.length) == start );
 		#end
@@ -161,7 +210,7 @@ class StringTools {
 
 		If `end` is the empty String `""`, the result is true.
 	**/
-	public static #if (cs || java) inline #end function endsWith( s : String, end : String ) : Bool {
+	public static #if (cs || java || python) inline #end function endsWith( s : String, end : String ) : Bool {
 		#if java
 		return untyped s.endsWith(end);
 		#elseif cs
@@ -179,6 +228,8 @@ class StringTools {
 		var elen = end.length;
 		var slen = s.length;
 		return @:privateAccess (slen >= elen && s.bytes.compare((slen - elen) << 1, end.bytes, 0, elen << 1) == 0);
+		#elseif python
+		return python.NativeStringTools.endswith(s, end);
 		#else
 		var elen = end.length;
 		var slen = s.length;
@@ -196,7 +247,7 @@ class StringTools {
 		`s`, the result is false.
 	**/
 	public static function isSpace( s : String, pos : Int ) : Bool {
-		#if python
+		#if (python || lua)
 		if (s.length == 0 || pos < 0 || pos >= s.length) return false;
 		#end
 		var c = s.charCodeAt( pos );
@@ -314,7 +365,7 @@ class StringTools {
 	}
 
 	/**
-		Replace all occurences of the String `sub` in the String `s` by the
+		Replace all occurrences of the String `sub` in the String `s` by the
 		String `by`.
 
 		If `sub` is the empty String `""`, `by` is inserted after each character
@@ -388,7 +439,7 @@ class StringTools {
 		This operation is not guaranteed to work if `s` contains the `\0`
 		character.
 	**/
-	public static inline function fastCodeAt( s : String, index : Int ) : Int {
+	public static #if !eval inline #end function fastCodeAt( s : String, index : Int ) : Int {
 		#if neko
 		return untyped __dollar__sget(s.__s, index);
 		#elseif cpp
@@ -400,11 +451,13 @@ class StringTools {
 		#elseif cs
 		return ( cast(index, UInt) < s.length ) ? cast(s[index], Int) : -1;
 		#elseif js
-		return (untyped s).charCodeAt(index);
+		return (cast s).charCodeAt(index);
 		#elseif python
 		return if (index >= s.length) -1 else python.internal.UBuiltins.ord(python.Syntax.arrayAccess(s, index));
 		#elseif hl
 		return @:privateAccess s.bytes.getUI16(index << 1);
+		#elseif lua
+		return lua.NativeStringTools.byte(s,index+1);
 		#else
 		return untyped s.cca(index);
 		#end
@@ -418,7 +471,7 @@ class StringTools {
 		return c == 0;
 		#elseif js
 		return c != c; // fast NaN
-		#elseif neko
+		#elseif (neko || lua || eval)
 		return c == null;
 		#elseif cs
 		return c == -1;
@@ -454,7 +507,7 @@ class StringTools {
 	/**
 		Character codes of the characters that will be escaped by `quoteWinArg(_, true)`.
 	*/
-	public static var winMetaCharacters = [" ".code, "(".code, ")".code, "%".code, "!".code, "^".code, "\"".code, "<".code, ">".code, "&".code, "|".code, "\n".code, "\r".code];
+	public static var winMetaCharacters = [" ".code, "(".code, ")".code, "%".code, "!".code, "^".code, "\"".code, "<".code, ">".code, "&".code, "|".code, "\n".code, "\r".code, ",".code, ";".code];
 
 	/**
 		Returns a String that can be used as a single command line argument
@@ -495,7 +548,7 @@ class StringTools {
 						result.add(bs);
 						bs_buf = new StringBuf();
 						result.add('\\"');
-					case c:
+					case var c:
 						// Normal char
 						if (bs_buf.length > 0) {
 							result.add(bs_buf.toString());

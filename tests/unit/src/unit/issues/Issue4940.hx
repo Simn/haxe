@@ -12,8 +12,7 @@ private class Base {
 private class A extends Base {}
 private class B extends Base {}
 
-@:enum
-private abstract K(Int) {
+private enum abstract K(Int) {
 	var grav = 19;
 	var other = 2;
 }
@@ -25,7 +24,7 @@ class Issue4940 extends Test {
             case KA: new A();
             case KB: new B();
         }
-		unit.TestType.typedAs(new Base(), base);
+		unit.HelperMacros.typedAs(new Base(), base);
 	}
 
 	function testResolutionOrder() {

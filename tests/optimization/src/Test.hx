@@ -8,12 +8,12 @@ class InlineCtor {
 	}
 }
 
-@:enum abstract MyEnum(String) to String {
+enum abstract MyEnum(String) to String {
 	var A = "a";
 }
 
 @:analyzer(no_local_dce)
-@:analyzer(no_fusion)
+@:analyzer(no_user_var_fusion)
 class Test {
 	@:js('')
 	static function testNoOpRemoval() {
@@ -68,11 +68,10 @@ class Test {
 
 	@:js('
 		var a = 0;
-		var b_x;
 		var c_x = 1;
 		var c_y = "c";
 		a = 1;
-		b_x = 2;
+		var b_x = 2;
 		var b_y = "b";
 		b_x = 1;
 	')
@@ -101,7 +100,7 @@ class Test {
 		var z = x.bar;
 	}
 
-	@:js('var x = { \'oh-my\' : "god"};')
+	@:js('var x = { "oh-my" : "god"};')
 	static function testStructureInlineInvalidField() {
         var x = {
             "oh-my": "god"

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -46,7 +46,7 @@ class Process {
 					pargs = new NativeArray(3);
 					pargs[0] = cmd = switch (Sys.getEnv("COMSPEC")) {
 						case null: "cmd.exe";
-						case comspec: comspec;
+						case var comspec: comspec;
 					}
 					pargs[1] = '/C';
 					pargs[2] = '"$cmdStr"';
@@ -77,8 +77,9 @@ class Process {
 		return new java.lang.ProcessBuilder(pargs);
 	}
 
-	public function new( cmd : String, ?args : Array<String> ) : Void
+	public function new( cmd : String, ?args : Array<String>, ?detached : Bool ) : Void
 	{
+		if( detached ) throw "Detached process is not supported on this platform";
 		var p = proc = createProcessBuilder(cmd, args).start();
 		stderr = new ProcessInput(p.getErrorStream());
 		stdout = new ProcessInput(p.getInputStream());
@@ -92,8 +93,16 @@ class Process {
 		return -1;
 	}
 
-	public function exitCode() : Int
+	public function exitCode( block : Bool = true ) : Null<Int>
 	{
+		if( block == false ) {
+			try {
+				return proc.exitValue();
+			} catch( e : Dynamic ) {
+				return null;
+			}
+		}
+
 		cast(stdout, ProcessInput).bufferContents();
 		cast(stderr, ProcessInput).bufferContents();
 		try

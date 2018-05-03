@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -25,10 +25,10 @@ package haxe.ds;
 @:coreApi
 class IntMap<T> implements haxe.Constraints.IMap<Int,T> {
 
-	var h : hl.types.NativeIntMap;
+	var h : hl.types.IntMap;
 
 	public function new() : Void {
-		h = new hl.types.NativeIntMap();
+		h = new hl.types.IntMap();
 	}
 
 	public function set( key : Int, value : T ) : Void {
@@ -48,11 +48,17 @@ class IntMap<T> implements haxe.Constraints.IMap<Int,T> {
 	}
 
 	public function keys() : Iterator<Int> {
-		return new hl.types.NativeArray.NativeArrayIterator<Int>(h.keysArray());
+		return new hl.NativeArray.NativeArrayIterator<Int>(h.keysArray());
 	}
 
 	public function iterator() : Iterator<T> {
 		return h.iterator();
+	}
+	
+	public function copy() : IntMap<T> {
+		var copied = new IntMap();
+		for(key in keys()) copied.set(key, get(key));
+		return copied;
 	}
 
 	public function toString() : String {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -41,6 +41,7 @@ package flash;
 }
 #end
 
+@:dox(hide)
 @:keep
 class Boot extends flash.display.MovieClip {
 
@@ -261,10 +262,14 @@ class Boot extends flash.display.MovieClip {
 				}
 			}
 		};
+		aproto.resize = function(len) {
+			__this__.length = len;
+		};
 		aproto.setPropertyIsEnumerable("copy", false);
 		aproto.setPropertyIsEnumerable("insert", false);
 		aproto.setPropertyIsEnumerable("remove", false);
 		aproto.setPropertyIsEnumerable("iterator", false);
+		aproto.setPropertyIsEnumerable("resize", false);
 		#if (as3 || no_flash_override)
 		aproto.filterHX = function(f) {
 			var ret = [];

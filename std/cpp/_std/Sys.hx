@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -28,8 +28,7 @@ import cpp.NativeSys;
 	}
 
 	public static function println( v : Dynamic ) : Void {
-		print(v);
-		print("\n");
+		untyped __global__.__hxcpp_println(v);
 	}
 
    @:access(sys.io.FileInput)

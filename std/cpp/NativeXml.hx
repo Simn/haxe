@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -21,7 +21,7 @@
  */
 package cpp;
 
-@:enum abstract XmlType(Int) {
+enum abstract XmlType(Int) {
    /**
       Represents an XML element type.
    **/
@@ -123,7 +123,7 @@ class NativeXmlState
       x._nodeValue = text.substr(1);
       cur.addChild(x);
    }
-   
+
    @:keep
    public function done()
    {
@@ -244,8 +244,8 @@ class Xml {
    function new() : Void {
    }
 
-   @:extern @:native("parse_xml")
-   static function parse_xml(str:String, state:NativeXmlState) { }
+   @:native("parse_xml")
+   extern static function parse_xml(str:String, state:NativeXmlState) { }
 
    public static function parse( str : String ) : Xml
    {

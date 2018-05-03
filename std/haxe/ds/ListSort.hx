@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -95,7 +95,7 @@ class ListSort {
 
 
 	/**
-		Same as [sort] but on single linked list.
+		Same as `sort` but on single linked list.
 	**/
 	public static inline function sortSingleLinked<T:{next:T}>(list:T, cmp : T -> T -> Int) : T {
 		if( list == null )

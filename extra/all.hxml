@@ -15,7 +15,7 @@
 
 -swf all9.swf
 -xml flash9.xml
--swf-version 11.4
+--swf-version 11.4
 
 --next
 
@@ -47,6 +47,10 @@
 --next
 -hl all_hl
 -xml hl.xml
+
+--next
+--interp
+-xml interp.xml
 
 --next
 

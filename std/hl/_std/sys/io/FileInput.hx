@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -38,7 +38,7 @@ import sys.io.File;
 
 	public override function readBytes( s : haxe.io.Bytes, p : Int, l : Int ) : Int {
 		if( p < 0 || l < 0 || p + l > s.length ) throw haxe.io.Error.OutsideBounds;
-		var v = file_read(__f, s.getData().b, p, l);
+		var v = file_read(__f, s.getData(), p, l);
 		if( v <= 0 ) throw new haxe.io.Eof();
 		return v;
 	}
@@ -46,6 +46,7 @@ import sys.io.File;
 	public override function close() : Void {
 		super.close();
 		file_close(__f);
+		__f = null;
 	}
 
 	public function seek( p : Int, pos : FileSeek ) : Void {
@@ -64,7 +65,7 @@ import sys.io.File;
 	}
 
 	@:hlNative("std", "file_eof") static function file_eof( f : FileHandle ) : Bool { return false; }
-	@:hlNative("std", "file_read") static function file_read( f : FileHandle, bytes : hl.types.Bytes, pos : Int, len : Int ) : Int { return 0; }
+	@:hlNative("std", "file_read") static function file_read( f : FileHandle, bytes : hl.Bytes, pos : Int, len : Int ) : Int { return 0; }
 	@:hlNative("std", "file_read_char") static function file_read_char( f : FileHandle ) : Int { return 0; }
 	@:hlNative("std", "file_close") static function file_close( f : FileHandle ) : Void { }
 	@:hlNative("std", "file_seek") static function file_seek( f : FileHandle, pos : Int, from : Int ) : Bool { return true; }

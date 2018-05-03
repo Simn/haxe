@@ -1,7 +1,12 @@
 import sys.*;
 import haxe.io.*;
+import utest.Assert;
 
-class TestCommandBase extends haxe.unit.TestCase {
+class TestCommandBase {
+	var runInfo:{out:String, err:String} = null;
+
+	public function new() { }
+
 	function run(cmd:String, ?args:Array<String>):Int {
 		throw "should be overridden";
 	}
@@ -12,14 +17,12 @@ class TestCommandBase extends haxe.unit.TestCase {
 
 		#if !cs
 		var exitCode = run("haxe", ["compile-each.hxml", "--run", "TestArguments"].concat(args));
-		if (exitCode != 0)
-			trace(sys.io.File.getContent(TestArguments.log));
-		assertEquals(0, exitCode);
+		Assert.equals(0, exitCode);
 		#end
 
 		var exitCode =
 			#if (macro || interp)
-				run(Sys.executablePath(), ["compile-each.hxml", "--run", "TestArguments"].concat(args));
+				run("haxe", ["compile-each.hxml", "--run", "TestArguments"].concat(args));
 			#elseif cpp
 				run(bin, args);
 			#elseif cs
@@ -34,18 +37,20 @@ class TestCommandBase extends haxe.unit.TestCase {
 			#elseif python
 				run(python.lib.Sys.executable, [bin].concat(args));
 			#elseif neko
-				run(Sys.executablePath(), [bin].concat(args));
+				run("neko", [bin].concat(args));
+			#elseif hl
+				run("hl", [bin].concat(args));
 			#elseif php
-				run(untyped __php__("defined('PHP_BINARY') ? PHP_BINARY : 'php'"), [bin].concat(args));
+				run(php.Global.defined('PHP_BINARY') ? php.Const.PHP_BINARY : 'php', [bin].concat(args));
+			#elseif lua
+				run("lua", [bin].concat(args));
 			#else
 				-1;
 			#end
-		if (exitCode != 0)
-			trace(sys.io.File.getContent(TestArguments.log));
-		assertEquals(0, exitCode);
+		Assert.equals(0, exitCode);
 	}
 
-	function testCommandName() {		
+	function testCommandName() {
 		var binExt = switch (Sys.systemName()) {
 			case "Windows":
 				".exe";
@@ -61,7 +66,7 @@ class TestCommandBase extends haxe.unit.TestCase {
 						sys.io.File.copy(ExitCode.getNative(), path);
 					case "Mac", "Linux", _:
 						var exitCode = run("cp", [ExitCode.getNative(), path]);
-						assertEquals(0, exitCode);
+						Assert.equals(0, exitCode);
 				}
 
 				Sys.sleep(0.1);
@@ -76,7 +81,7 @@ class TestCommandBase extends haxe.unit.TestCase {
 				}
 				if (exitCode != random)
 					trace(name);
-				assertEquals(random, exitCode);
+				Assert.equals(random, exitCode);
 				FileSystem.deleteFile(path);
 			}
 		}
@@ -92,14 +97,14 @@ class TestCommandBase extends haxe.unit.TestCase {
 		for (code in codes) {
 			var args = [Std.string(code)];
 			var exitCode = run(ExitCode.getNative(), args);
-			assertEquals(code, exitCode);
+			Assert.equals(code, exitCode);
 		}
 
 		for (code in codes) {
 			var args = [Std.string(code)];
 			var exitCode =
 				#if (macro || interp)
-					run(Sys.executablePath(), ["compile-each.hxml", "--run", "ExitCode"].concat(args));
+					run("haxe", ["compile-each.hxml", "--run", "ExitCode"].concat(args));
 				#elseif cpp
 					run(bin, args);
 				#elseif cs
@@ -114,13 +119,20 @@ class TestCommandBase extends haxe.unit.TestCase {
 				#elseif python
 					run(python.lib.Sys.executable, [bin].concat(args));
 				#elseif neko
-					run(Sys.executablePath(), [bin].concat(args));
+					run("neko", [bin].concat(args));
+				#elseif hl
+					run("hl", [bin].concat(args));
 				#elseif php
-					run(untyped __php__("defined('PHP_BINARY') ? PHP_BINARY : 'php'"), [bin].concat(args));
+					run(php.Global.defined('PHP_BINARY') ? php.Const.PHP_BINARY : 'php', [bin].concat(args));
+				#elseif lua
+					run("lua", [bin].concat(args));
 				#else
 					-1;
 				#end
-			assertEquals(code, exitCode);
+			if ((code != exitCode) && (runInfo != null)) {
+				trace(runInfo);
+			}
+			Assert.equals(code, exitCode);
 		}
 	}
 
@@ -128,6 +140,6 @@ class TestCommandBase extends haxe.unit.TestCase {
 		var bin = sys.FileSystem.absolutePath(ExitCode.bin);
 		var native = sys.FileSystem.absolutePath(ExitCode.getNative());
 		var exitCode = run('$native 1 || $native 0');
-		assertEquals(0, exitCode);
+		Assert.equals(0, exitCode);
 	}
 }

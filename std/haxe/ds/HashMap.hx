@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2016 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -26,7 +26,7 @@ package haxe.ds;
 
 	See `Map` for documentation details.
 
-	@see http://haxe.org/manual/std-Map.html
+	@see https://haxe.org/manual/std-Map.html
 **/
 abstract HashMap<K:{ function hashCode():Int; }, V >(HashMapData<K,V>) {
 	/**
@@ -71,6 +71,16 @@ abstract HashMap<K:{ function hashCode():Int; }, V >(HashMapData<K,V>) {
 	**/
 	public inline function keys() {
 		return this.keys.iterator();
+	}
+	
+	/**
+		See `Map.copy`
+	**/
+	public function copy() : HashMap<K, V> {
+		var copied = new HashMapData();
+		copied.keys = this.keys.copy();
+		copied.values = this.values.copy();
+		return cast copied;
 	}
 
 	/**
