@@ -1,5 +1,4 @@
 open Globals
-open Common.DisplayMode
 open Common
 open Ast
 open Type
@@ -148,7 +147,7 @@ let rec build_generic ctx c p tl =
 			()
 	in
 	List.iter check_recursive tl;
-	if !recurse || not (ctx.com.display.dms_full_typing) then begin
+	if !recurse then begin
 		TInst (c,tl) (* build a normal instance *)
 	end else begin
 	let gctx = make_generic ctx c.cl_params tl p in

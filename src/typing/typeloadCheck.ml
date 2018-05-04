@@ -23,7 +23,6 @@ open Globals
 open Ast
 open Type
 open Typecore
-open Common.DisplayMode
 open Common
 open Error
 
@@ -254,8 +253,7 @@ let check_global_metadata ctx meta f_add mpath tpath so =
 	List.iter (fun (sl2,m,(recursive,to_types,to_fields)) ->
 		let add = ((field_mode && to_fields) || (not field_mode && to_types)) && (match_path recursive sl1 sl2) in
 		if add then f_add m
-	) ctx.g.global_metadata;
-	if ctx.is_display_file then delay ctx PCheckConstraint (fun () -> Display.DisplayEmitter.check_display_metadata ctx meta)
+	) ctx.g.global_metadata
 
 let check_module_types ctx m p t =
 	let t = t_infos t in
@@ -304,10 +302,6 @@ module Inheritance = struct
 					else
 						t2, f2
 				in
-				if ctx.com.display.dms_collect_data then begin
-						let h = ctx.com.display_information in
-						h.interface_field_implementations <- (intf,f,c,Some f2) :: h.interface_field_implementations;
-				end;
 				ignore(follow f2.cf_type); (* force evaluation *)
 				let p = (match f2.cf_expr with None -> p | Some e -> e.epos) in
 				let mkind = function
@@ -388,7 +382,6 @@ module Inheritance = struct
 						List.find path_matches ctx.m.curmod.m_types
 					with Not_found ->
 						let t,pi = List.find (fun (lt,_) -> path_matches lt) ctx.m.module_types in
-						Display.ImportHandling.mark_import_position ctx.com pi;
 						t
 					in
 					{ t with tpackage = fst (t_path lt) },p
@@ -448,12 +441,8 @@ module Inheritance = struct
 			end
 		in
 		let fl = ExtList.List.filter_map (fun (is_extends,t) ->
-			try
-				let t = Typeload.load_instance ~allow_display:true ctx t false p in
-				Some (check_herit t is_extends)
-			with Error(Module_not_found(([],name)),p) when ctx.com.display.dms_display ->
-				if Display.Diagnostics.is_diagnostics_run ctx then DisplayToplevel.handle_unresolved_identifier ctx name p true;
-				None
+			let t = Typeload.load_instance ~allow_display:true ctx t false p in
+			Some (check_herit t is_extends)
 		) herits in
 		fl
 end

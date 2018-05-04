@@ -18,7 +18,6 @@
  *)
 
 open Ast
-open Common.DisplayMode
 open Common
 open Type
 open Typecore
@@ -123,7 +122,7 @@ let typing_timer ctx need_type f =
 			exit();
 			raise e
 
-let load_macro_ref : (typer -> bool -> path -> string -> pos -> (typer * ((string * bool * t) list * t * tclass * Type.tclass_field) * (Interp.value list -> Interp.value option))) ref = ref (fun _ _ _ _ -> assert false)
+let load_macro_ref : (typer -> path -> string -> pos -> (typer * ((string * bool * t) list * t * tclass * Type.tclass_field) * (Interp.value list -> Interp.value option))) ref = ref (fun _ _ _ -> assert false)
 
 let make_macro_api ctx p =
 	let parse_expr_string s p inl =
@@ -204,7 +203,7 @@ let make_macro_api ctx p =
 		MacroApi.type_macro_expr = (fun e ->
 			let e = typing_timer ctx true (fun() -> type_expr ctx e Value) in
 			let rec loop e = match e.eexpr with
-				| TField(_,FStatic(c,({cf_kind = Method _} as cf))) -> ignore(!load_macro_ref ctx false c.cl_path cf.cf_name e.epos)
+				| TField(_,FStatic(c,({cf_kind = Method _} as cf))) -> ignore(!load_macro_ref ctx c.cl_path cf.cf_name e.epos)
 				| _ -> Type.iter loop e
 			in
 			loop e;
@@ -503,7 +502,6 @@ let get_macro_context ctx p =
 		ctx.com.get_macros <- (fun() -> Some com2);
 		com2.package_rules <- PMap.empty;
 		com2.main_class <- None;
-		com2.display <- DisplayMode.create DMNone;
 		List.iter (fun p -> com2.defines.Define.values <- PMap.remove (Globals.platform_name p) com2.defines.Define.values) Globals.platforms;
 		com2.defines.Define.defines_signature <- None;
 		com2.class_path <- List.filter (fun s -> not (ExtString.String.exists s "/_std/")) com2.class_path;
@@ -515,11 +513,10 @@ let get_macro_context ctx p =
 		Common.define com2 Define.Macro;
 		Common.init_platform com2 !Globals.macro_platform;
 		let mctx = ctx.g.do_create com2 in
-		mctx.is_display_file <- ctx.is_display_file;
 		create_macro_interp ctx mctx;
 		api, mctx
 
-let load_macro ctx display cpath f p =
+let load_macro ctx cpath f p =
 	let api, mctx = get_macro_context ctx p in
 	let mint = Interp.get_ctx() in
 	let cpath, sub = (match List.rev (fst cpath) with
@@ -528,8 +525,6 @@ let load_macro ctx display cpath f p =
 	) in
 	let meth = try Hashtbl.find mctx.com.cached_macros (cpath,f) with Not_found ->
 		let t = macro_timer ctx ["typing";s_type_path cpath ^ "." ^ f] in
-		(* Temporarily enter display mode while typing the macro. *)
-		if display then mctx.com.display <- ctx.com.display;
 		let m = (try Hashtbl.find ctx.g.types_module cpath with Not_found -> cpath) in
 		let mloaded = TypeloadModule.load_module mctx m p in
 		api.MacroApi.current_macro_module <- (fun() -> mloaded);
@@ -549,10 +544,7 @@ let load_macro ctx display cpath f p =
 				c, (try PMap.find f c.cl_statics with Not_found -> error ("Method " ^ f ^ " not found on class " ^ s_type_path cpath) p)
 			| _ -> error "Macro should be called on a class" p
 		) in
-		if not (Common.defined ctx.com Define.NoDeprecationWarnings) then
-			Display.DeprecationCheck.check_cf mctx.com meth p;
 		let meth = (match follow meth.cf_type with TFun (args,ret) -> args,ret,cl,meth | _ -> error "Macro call should be a method" p) in
-		mctx.com.display <- DisplayMode.create DMNone;
 		if not ctx.in_macro then flush_macro_context mint ctx;
 		Hashtbl.add mctx.com.cached_macros (cpath,f) meth;
 		mctx.m <- {
@@ -583,7 +575,7 @@ type macro_arg_type =
 	| MAOther
 
 let type_macro ctx mode cpath f (el:Ast.expr list) p =
-	let mctx, (margs,mret,mclass,mfield), call_macro = load_macro ctx (mode = MDisplay) cpath f p in
+	let mctx, (margs,mret,mclass,mfield), call_macro = load_macro ctx cpath f p in
 	let mpos = mfield.cf_pos in
 	let ctexpr = { tpackage = ["haxe";"macro"]; tname = "Expr"; tparams = []; tsub = None } in
 	let expr = Typeload.load_instance mctx (ctexpr,null_pos) false p in
@@ -763,7 +755,7 @@ let type_macro ctx mode cpath f (el:Ast.expr list) p =
 	e
 
 let call_macro ctx path meth args p =
-	let mctx, (margs,_,mclass,mfield), call = load_macro ctx false path meth p in
+	let mctx, (margs,_,mclass,mfield), call = load_macro ctx path meth p in
 	let el, _ = Calls.unify_call_args mctx args margs t_dynamic p false false in
 	call (List.map (fun e -> try Interp.make_const e with Exit -> error "Parameter should be a constant" e.epos) el)
 

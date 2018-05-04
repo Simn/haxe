@@ -44,7 +44,6 @@
 
 open Printf
 open Common
-open Common.DisplayMode
 open Type
 open Server
 open Globals
@@ -121,7 +120,6 @@ let add_libs com libs =
 			| Some cs ->
 				(try
 					(* if we are compiling, really call haxelib since library path might have changed *)
-					if not com.display.dms_display then raise Not_found;
 					CompilationServer.find_haxelib cs libs
 				with Not_found ->
 					let lines = call_haxelib() in
@@ -271,6 +269,10 @@ module Initialize = struct
 				add_std "eval";
 				"eval"
 end
+
+let unquote v =
+	let len = String.length v in
+	if len > 0 && v.[0] = '"' && v.[len - 1] = '"' then String.sub v 1 (len - 2) else v
 
 let generate tctx ext xml_out interp swf_header =
 	let com = tctx.Typecore.com in
@@ -481,7 +483,7 @@ try
 	com.error <- error ctx;
 	if CompilationServer.runs() then com.run_command <- run_command ctx;
 	Parser.display_error := (fun e p -> com.error (Parser.error_msg e) p);
-	Parser.use_doc := !Common.display_default <> DMNone || (CompilationServer.runs());
+	Parser.use_doc := (CompilationServer.runs());
 	com.class_path <- get_std_class_paths ();
 	com.std_path <- List.filter (fun p -> ExtString.String.ends_with p "std/" || ExtString.String.ends_with p "std\\") com.class_path;
 	let define f = Arg.Unit (fun () -> Common.define com f) in
@@ -676,15 +678,12 @@ try
 		),"<file>[@name]","add a named resource file");
 		("Debug",["--prompt"],["-prompt"], Arg.Unit (fun() -> prompt := true),"","prompt on error");
 		("Compilation",["--cmd"],["-cmd"], Arg.String (fun cmd ->
-			cmds := DisplayOutput.unquote cmd :: !cmds
+			cmds := unquote cmd :: !cmds
 		),"<command>","run the specified command after successful compilation");
 		(* FIXME: replace with -D define *)
 		("Optimization",["--no-traces"],[], define Define.NoTraces, "","don't compile trace calls in the program");
 		("Batch",["--next"],[], Arg.Unit (fun() -> assert false), "","separate several haxe compilations");
 		("Batch",["--each"],[], Arg.Unit (fun() -> assert false), "","append preceding parameters to all haxe compilations separated by --next");
-		("Services",["--display"],[], Arg.String (fun file_pos ->
-			DisplayOutput.handle_display_argument com file_pos pre_compilation did_something;
-		),"","display code tips");
 		("Services",["--xml"],["-xml"],Arg.String (fun file ->
 			Parser.use_doc := true;
 			xml_out := Some file
@@ -775,14 +774,6 @@ try
 	process_ref := process;
 	process ctx.com.args;
 	process_libs();
-	if com.display.dms_display then begin
-		com.warning <-
-			if com.display.dms_error_policy = EPCollect then
-				(fun s p -> add_diagnostics_message com s p DisplayTypes.DiagnosticsSeverity.Warning)
-			else
-				(fun msg p -> message ctx (CMWarning(msg,p)));
-		com.error <- error ctx;
-	end;
 	Lexer.old_format := Common.defined com Define.OldErrorFormat;
 	if !Lexer.old_format && Parser.do_resume () then begin
 		let p = !Parser.resume_display in
@@ -794,12 +785,8 @@ try
 		with _ ->
 			() (* ignore *)
 	end;
-	DisplayOutput.process_display_file com classes;
 	let ext = Initialize.initialize_target ctx com classes in
 	(* if we are at the last compilation step, allow all packages accesses - in case of macros or opening another project file *)
-	if com.display.dms_display then begin
-		if not ctx.has_next then com.package_rules <- PMap.foldi (fun p r acc -> match r with Forbidden -> acc | _ -> PMap.add p r acc) com.package_rules PMap.empty;
-	end;
 	com.config <- get_config com; (* make sure to adapt all flags changes defined after platform *)
 	List.iter (fun f -> f()) (List.rev (!pre_compilation));
 	if !classes = [([],"Std")] && not !force_typing then begin
@@ -815,19 +802,12 @@ try
 		List.iter (fun cpath -> ignore(tctx.Typecore.g.Typecore.do_load_module tctx cpath null_pos)) (List.rev !classes);
 		Finalization.finalize tctx;
 		t();
-		if not ctx.com.display.dms_display && ctx.has_error then raise Abort;
-		if ctx.com.display.dms_exit_during_typing then begin
-			if ctx.has_next || ctx.has_error then raise Abort;
-			failwith "No completion point was found";
-		end;
+		if ctx.has_error then raise Abort;
 		let t = Timer.timer ["filters"] in
 		let main, types, modules = Finalization.generate tctx in
 		com.main <- main;
 		com.types <- types;
 		com.modules <- modules;
-		DisplayOutput.process_global_display_mode com tctx;
-		if not (Common.defined com Define.NoDeprecationWarnings) then
-			Display.DeprecationCheck.run com;
 		Filters.run com tctx main;
 		t();
 		if ctx.has_error then raise Abort;
@@ -861,13 +841,8 @@ with
 	| Parser.Error (m,p) ->
 		error ctx (Parser.error_msg m) p
 	| Typecore.Forbid_package ((pack,m,p),pl,pf)  ->
-		if !Common.display_default <> DMNone && ctx.has_next then begin
-			ctx.has_error <- false;
-			ctx.messages <- [];
-		end else begin
-			error ctx (Printf.sprintf "You cannot access the %s package while %s (for %s)" pack (if pf = "macro" then "in a macro" else "targeting " ^ pf) (s_type_path m) ) p;
-			List.iter (error ctx "    referenced here") (List.rev pl);
-		end
+		error ctx (Printf.sprintf "You cannot access the %s package while %s (for %s)" pack (if pf = "macro" then "in a macro" else "targeting " ^ pf) (s_type_path m) ) p;
+		List.iter (error ctx "    referenced here") (List.rev pl);
 	| Error.Error (m,p) ->
 		error ctx (Error.error_msg m) p
 	| Hlmacro.Error (msg,p :: l) ->
@@ -882,53 +857,6 @@ with
 		error ctx ("Error: " ^ msg) null_pos
 	| HelpMessage msg ->
 		message ctx (CMInfo(msg,null_pos))
-	| Display.DisplayPackage pack ->
-		raise (DisplayOutput.Completion (String.concat "." pack))
-	| Display.DisplayFields fields ->
-		let fields = List.map (
-			fun (name,kind,doc) -> name, kind, (Option.default "" doc)
-		) fields in
-		let fields =
-			if !measure_times then begin
-				Timer.close_times();
-				(List.map (fun (name,value) -> ("@TIME " ^ name, Display.FKTimer value, "")) (DisplayOutput.get_timer_fields !start_time)) @ fields
-			end else
-				fields
-		in
-		raise (DisplayOutput.Completion (DisplayOutput.print_fields fields))
-	| Display.DisplayType (t,p,doc) ->
-		let doc = match doc with Some _ -> doc | None -> DisplayOutput.find_doc t in
-		raise (DisplayOutput.Completion (DisplayOutput.print_type t p doc))
-	| Display.DisplaySignatures(signatures,display_arg) ->
-		if ctx.com.display.dms_kind = DMSignature then
-			raise (DisplayOutput.Completion (DisplayOutput.print_signature signatures display_arg))
-		else
-			raise (DisplayOutput.Completion (DisplayOutput.print_signatures signatures))
-	| Display.DisplayPosition pl ->
-		raise (DisplayOutput.Completion (DisplayOutput.print_positions pl))
-	| Display.DisplayToplevel il ->
-		let il =
-			if !measure_times then begin
-				Timer.close_times();
-				(List.map (fun (name,value) -> IdentifierType.ITTimer ("@TIME " ^ name ^ ": " ^ value)) (DisplayOutput.get_timer_fields !start_time)) @ il
-			end else
-				il
-		in
-		raise (DisplayOutput.Completion (DisplayOutput.print_toplevel il))
-	| Parser.TypePath (p,c,is_import) ->
-		let fields =
-			try begin match c with
-				| None ->
-					DisplayOutput.TypePathHandler.complete_type_path com p
-				| Some (c,cur_package) ->
-					DisplayOutput.TypePathHandler.complete_type_path_inner com p c cur_package is_import
-			end with Common.Abort(msg,p) ->
-				error ctx msg p;
-				None
-		in
-		Option.may (fun fields -> raise (DisplayOutput.Completion (DisplayOutput.print_fields fields))) fields
-	| Display.ModuleSymbols s | Display.Diagnostics s | Display.Statistics s | Display.Metadata s ->
-		raise (DisplayOutput.Completion s)
 	| EvalExceptions.Sys_exit i | Hlinterp.Sys_exit i ->
 		ctx.flush();
 		if !measure_times then Timer.report_times prerr_endline;
@@ -946,11 +874,8 @@ let args = List.tl (Array.to_list Sys.argv) in
 	let server = Sys.getenv "HAXE_COMPILATION_SERVER" in
 	let host, port = (try ExtString.String.split server ":" with _ -> "127.0.0.1", server) in
 	do_connect host (try int_of_string port with _ -> failwith "Invalid HAXE_COMPILATION_SERVER port") args
-with Not_found -> try
+with Not_found ->
 	process_params create_context args
-with DisplayOutput.Completion c ->
-	prerr_endline c;
-	exit 0
 | Arg.Bad msg ->
 	prerr_endline ("Error: " ^ msg);
 	exit 1

@@ -2,10 +2,8 @@ open Printf
 open Globals
 open Ast
 open Common
-open Common.DisplayMode
 open Timer
 open Type
-open DisplayOutput
 open Json
 
 exception Dirty of module_def
@@ -64,6 +62,10 @@ let create_context params =
 	} in
 	ctx.flush <- (fun() -> default_flush ctx);
 	ctx
+
+let unquote v =
+	let len = String.length v in
+	if len > 0 && v.[0] = '"' && v.[len - 1] = '"' then String.sub v 1 (len - 2) else v
 
 let parse_hxml_data data =
 	let lines = Str.split (Str.regexp "[\r\n]+") data in
@@ -170,7 +172,6 @@ let rec wait_loop process_params verbose accept =
 					else begin try
 						(* We assume that when not in display mode it's okay to cache stuff that has #if display
 						   checks. The reasoning is that non-display mode has more information than display mode. *)
-						if not com2.display.dms_display then raise Not_found;
 						let ident = Hashtbl.find Parser.special_identifier_files ffile in
 						Printf.sprintf "not cached, using \"%s\" define" ident,true
 					with Not_found ->
@@ -383,8 +384,7 @@ let rec wait_loop process_params verbose accept =
 					) m.m_types;
 					TypeloadModule.add_module ctx m p;
 					PMap.iter (Hashtbl.replace com2.resources) m.m_extra.m_binded_res;
-					if ctx.Typecore.in_macro || com2.display.dms_full_typing then
-						PMap.iter (fun _ m2 -> add_modules (tabs ^ "  ") m0 m2) m.m_extra.m_deps;
+					PMap.iter (fun _ m2 -> add_modules (tabs ^ "  ") m0 m2) m.m_extra.m_deps;
 					List.iter (MacroContext.call_init_macro ctx) m.m_extra.m_reuse_macro_calls
 				)
 			end
@@ -418,11 +418,9 @@ let rec wait_loop process_params verbose accept =
 				CompilationServer.cache_module cs (m.m_path,m.m_extra.m_sign) m;
 				(*if verbose then print_endline (Printf.sprintf "%scached %s" (sign_string com) (s_type_path m.m_path));*)
 			in
-			if com.display.dms_full_typing then begin
-				was_compilation := true;
-				List.iter cache_module com.modules;
-				if verbose then print_endline ("Cached " ^ string_of_int (List.length com.modules) ^ " modules");
-			end;
+			was_compilation := true;
+			List.iter cache_module com.modules;
+			if verbose then print_endline ("Cached " ^ string_of_int (List.length com.modules) ^ " modules");
 			match com.get_macros() with
 			| None -> ()
 			| Some com -> cache_context com
@@ -453,13 +451,6 @@ let rec wait_loop process_params verbose accept =
 					print_endline ("Display position: " ^ (Printer.s_pos !Parser.resume_display));
 				end;
 				Parser.display_error := (fun e p -> has_parse_error := true; ctx.com.error (Parser.error_msg e) p);
-				if ctx.com.display.dms_display then begin
-					let file = (!Parser.resume_display).pfile in
-					let fkey = (file,sign) in
-					(* force parsing again : if the completion point have been changed *)
-					CompilationServer.remove_file cs fkey;
-					CompilationServer.taint_modules cs file;
-				end;
 				try
 					if (Hashtbl.find arguments sign) <> ctx.com.class_path then begin
 						if verbose then print_endline (Printf.sprintf "%sclass paths changed, resetting directories" (sign_string ctx.com));
@@ -489,7 +480,6 @@ let rec wait_loop process_params verbose accept =
 			(try
 				DynArray.clear test_server_messages;
 				Hashtbl.clear changed_directories;
-				Common.display_default := DMNone;
 				Parser.resume_display := null_pos;
 				return_partial_type := false;
 				measure_times := false;
@@ -507,9 +497,6 @@ let rec wait_loop process_params verbose accept =
 				close_times();
 				if !measure_times then report_times (fun s -> write (s ^ "\n"))
 			with
-			| Completion str ->
-				if verbose then print_endline ("Completion Response =\n" ^ str);
-				write str
 			| Arg.Bad msg ->
 				print_endline ("Error: " ^ msg);
 			);

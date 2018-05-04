@@ -23,7 +23,6 @@ open Globals
 open Ast
 open Type
 open Typecore
-open Common.DisplayMode
 open Common
 open Typeload
 open Error
@@ -335,19 +334,9 @@ let init_module_type ctx context_init do_init (decl,p) =
 	let get_type name =
 		try List.find (fun t -> snd (t_infos t).mt_path = name) ctx.m.curmod.m_types with Not_found -> assert false
 	in
-	let check_path_display path p = match ctx.com.display.dms_kind with
-		(* We cannot use ctx.is_display_file because the import could come from an import.hx file. *)
-		| DMDiagnostics b when (b || Display.is_display_file p.pfile) && not (ExtString.String.ends_with p.pfile "import.hx") ->
-			Display.ImportHandling.add_import_position ctx.com p path;
-		| DMStatistics | DMUsage _ ->
-			Display.ImportHandling.add_import_position ctx.com p path;
-		| _ ->
-			if Display.is_display_file p.pfile then handle_path_display ctx path p
-	in
 	match decl with
 	| EImport (path,mode) ->
 		ctx.m.module_imports <- (path,mode) :: ctx.m.module_imports;
-		check_path_display path p;
 		let rec loop acc = function
 			| x :: l when is_lower_ident (fst x) -> loop (x::acc) l
 			| rest -> List.rev acc, rest
@@ -360,7 +349,7 @@ let init_module_type ctx context_init do_init (decl,p) =
 				ctx.m.wildcard_packages <- (List.map fst pack,p) :: ctx.m.wildcard_packages
 			| _ ->
 				(match List.rev path with
-				| [] -> raise (Display.DisplayToplevel (DisplayToplevel.collect ctx true));
+				| [] -> assert false
 				| (_,p) :: _ -> error "Module name must start with an uppercase letter" p))
 		| (tname,p2) :: rest ->
 			let p1 = (match pack with [] -> p2 | (_,p1) :: _ -> p1) in
@@ -461,7 +450,6 @@ let init_module_type ctx context_init do_init (decl,p) =
 				) :: !context_init
 			))
 	| EUsing path ->
-		check_path_display path p;
 		let t = match List.rev path with
 			| (s1,_) :: (s2,_) :: sl ->
 				if is_lower_ident s2 then { tpackage = (List.rev (s2 :: List.map fst sl)); tname = s1; tsub = None; tparams = [] }
@@ -469,7 +457,7 @@ let init_module_type ctx context_init do_init (decl,p) =
 			| (s1,_) :: sl ->
 				{ tpackage = List.rev (List.map fst sl); tname = s1; tsub = None; tparams = [] }
 			| [] ->
-				raise (Display.DisplayToplevel (DisplayToplevel.collect ctx true));
+				assert false
 		in
 		(* do the import first *)
 		let types = (match t.tsub with
@@ -500,8 +488,6 @@ let init_module_type ctx context_init do_init (decl,p) =
 		context_init := (fun() -> ctx.m.module_using <- filter_classes types @ ctx.m.module_using) :: !context_init
 	| EClass d ->
 		let c = (match get_type (fst d.d_name) with TClassDecl c -> c | _ -> assert false) in
-		if ctx.is_display_file && Display.is_display_position (pos d.d_name) then
-			Display.DisplayEmitter.display_module_type ctx.com.display (match c.cl_kind with KAbstractImpl a -> TAbstractDecl a | _ -> TClassDecl c) (pos d.d_name);
 		TypeloadCheck.check_global_metadata ctx c.cl_meta (fun m -> c.cl_meta <- m :: c.cl_meta) c.cl_module.m_path c.cl_path None;
 		let herits = d.d_flags in
 		c.cl_extern <- List.mem HExtern herits;
@@ -562,8 +548,6 @@ let init_module_type ctx context_init do_init (decl,p) =
 			);
 	| EEnum d ->
 		let e = (match get_type (fst d.d_name) with TEnumDecl e -> e | _ -> assert false) in
-		if ctx.is_display_file && Display.is_display_position (pos d.d_name) then
-			Display.DisplayEmitter.display_module_type ctx.com.display (TEnumDecl e) (pos d.d_name);
 		let ctx = { ctx with type_params = e.e_params } in
 		let h = (try Some (Hashtbl.find ctx.g.type_patches e.e_path) with Not_found -> None) in
 		TypeloadCheck.check_global_metadata ctx e.e_meta (fun m -> e.e_meta <- m :: e.e_meta) e.e_module.m_path e.e_path None;
@@ -666,8 +650,6 @@ let init_module_type ctx context_init do_init (decl,p) =
 				cf_doc = f.ef_doc;
 				cf_params = f.ef_params;
 			} in
- 			if ctx.is_display_file && Display.is_display_position p then
- 				Display.DisplayEmitter.display_enum_field ctx.com.display f p;
 			e.e_constrs <- PMap.add f.ef_name f e.e_constrs;
 			fields := PMap.add cf.cf_name cf !fields;
 			incr index;
@@ -693,8 +675,6 @@ let init_module_type ctx context_init do_init (decl,p) =
 			);
 	| ETypedef d ->
 		let t = (match get_type (fst d.d_name) with TTypeDecl t -> t | _ -> assert false) in
-		if ctx.is_display_file && Display.is_display_position (pos d.d_name) then
-			Display.DisplayEmitter.display_module_type ctx.com.display (TTypeDecl t) (pos d.d_name);
 		TypeloadCheck.check_global_metadata ctx t.t_meta (fun m -> t.t_meta <- m :: t.t_meta) t.t_module.m_path t.t_path None;
 		let ctx = { ctx with type_params = t.t_params } in
 		let tt = load_complex_type ctx true p d.d_data in
@@ -744,8 +724,6 @@ let init_module_type ctx context_init do_init (decl,p) =
 			);
 	| EAbstract d ->
 		let a = (match get_type (fst d.d_name) with TAbstractDecl a -> a | _ -> assert false) in
-		if ctx.is_display_file && Display.is_display_position (pos d.d_name) then
-			Display.DisplayEmitter.display_module_type ctx.com.display (TAbstractDecl a) (pos d.d_name);
 		TypeloadCheck.check_global_metadata ctx a.a_meta (fun m -> a.a_meta <- m :: a.a_meta) a.a_module.m_path a.a_path None;
 		let ctx = { ctx with type_params = a.a_params } in
 		let is_type = ref false in
@@ -847,7 +825,6 @@ let type_types_into_module ctx m tdecls p =
 			wildcard_packages = [];
 			module_imports = [];
 		};
-		is_display_file = (ctx.com.display.dms_display && Display.is_display_file m.m_extra.m_file);
 		meta = [];
 		this_stack = [];
 		with_type_stack = [];
@@ -864,7 +841,6 @@ let type_types_into_module ctx m tdecls p =
 		curfun = FunStatic;
 		untyped = false;
 		in_macro = ctx.in_macro;
-		in_display = false;
 		in_loop = false;
 		opened = [];
 		in_call_args = false;
@@ -927,14 +903,8 @@ let type_module ctx mpath file ?(is_extern=false) tdecls p =
 	let m = make_module ctx mpath file p in
 	Hashtbl.add ctx.g.modules m.m_path m;
 	let tdecls = handle_import_hx ctx m tdecls p in
-	let ctx = type_types_into_module ctx m tdecls p in
+	let _ = type_types_into_module ctx m tdecls p in
 	if is_extern then m.m_extra.m_kind <- MExtern;
-	begin if ctx.is_display_file then match ctx.com.display.dms_kind with
-		| DMResolve s ->
-			resolve_position_by_path ctx {tname = s; tpackage = []; tsub = None; tparams = []} p
-		| _ ->
-			()
-	end;
 	m
 
 let type_module_hook = ref (fun _ _ _ -> None)

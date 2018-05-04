@@ -21,7 +21,6 @@
 
 open Ast
 open Common
-open Common.DisplayMode
 open Type
 open Typecore
 open Error
@@ -39,7 +38,6 @@ let type_function_params_rec = ref (fun _ _ _ _ -> assert false)
 let rec load_type_def ctx p t =
 	let no_pack = t.tpackage = [] in
 	let tname = (match t.tsub with None -> t.tname | Some n -> n) in
-	if tname = "" then raise (Display.DisplayToplevel (DisplayToplevel.collect ctx true));
 	try
 		if t.tsub <> None then raise Not_found;
 		let path_matches t2 =
@@ -50,7 +48,6 @@ let rec load_type_def ctx p t =
 			List.find path_matches ctx.m.curmod.m_types
 		with Not_found ->
 			let t,pi = List.find (fun (t2,pi) -> path_matches t2) ctx.m.module_types in
-			Display.ImportHandling.mark_import_position ctx.com pi;
 			t
 	with
 		Not_found ->
@@ -78,7 +75,6 @@ let rec load_type_def ctx p t =
 					| (wp,pi) :: l ->
 						try
 							let t = load_type_def ctx p { t with tpackage = wp } in
-							Display.ImportHandling.mark_import_position ctx.com pi;
 							t
 						with
 							| Error (Module_not_found _,p2)
@@ -112,11 +108,6 @@ let rec load_type_def ctx p t =
 				loop (List.rev (fst ctx.m.curmod.m_path));
 			with
 				Exit -> next()
-
-let resolve_position_by_path ctx path p =
-	let mt = load_type_def ctx p path in
-	let p = (t_infos mt).mt_pos in
-	raise (Display.DisplayPosition [p])
 
 let check_param_constraints ctx types t pl c p =
 	match follow t with
@@ -198,7 +189,7 @@ let rec load_instance ?(allow_display=false) ctx (t,pn) allow_no_params p =
 			| [TPType t] -> TDynamic (load_complex_type ctx true p t)
 			| _ -> error "Too many parameters for Dynamic" p
 		else begin
-			if not is_rest && ctx.com.display.dms_error_policy <> EPIgnore && List.length types <> List.length t.tparams then error ("Invalid number of type parameters for " ^ s_type_path path) p;
+			if not is_rest && List.length types <> List.length t.tparams then error ("Invalid number of type parameters for " ^ s_type_path path) p;
 			let tparams = List.map (fun t ->
 				match t with
 				| TPExpr e ->
@@ -248,8 +239,6 @@ let rec load_instance ?(allow_display=false) ctx (t,pn) allow_no_params p =
 					[]
 				| [],["Rest",_] when is_generic_build ->
 					[]
-				| [],(_,t) :: tl when ctx.com.display.dms_error_policy = EPIgnore ->
-					t :: loop [] tl is_rest
 				| [],_ ->
 					error ("Not enough type parameters for " ^ s_type_path path) p
 				| t :: tl,[] ->
@@ -262,7 +251,6 @@ let rec load_instance ?(allow_display=false) ctx (t,pn) allow_no_params p =
 			f params
 		end
 	in
-	if allow_display then Display.DisplayEmitter.check_display_type ctx t pn;
 	t
 
 (*
@@ -400,10 +388,6 @@ and load_complex_type ctx allow_display p (t,pn) =
 				cf_meta = f.cff_meta;
 			} in
 			init_meta_overloads ctx None cf;
-			if ctx.is_display_file then begin
-				Display.DisplayEmitter.check_display_metadata ctx cf.cf_meta;
-				Display.DisplayEmitter.maybe_display_field ctx (cf.cf_name_pos) cf;
-			end;
 			PMap.add n cf acc
 		in
 		mk_anon (List.fold_left loop PMap.empty l)
@@ -515,9 +499,7 @@ let load_type_hint ?(opt=false) ctx pcur t =
 			try
 				load_complex_type ctx true pcur (t,p)
 			with Error(Module_not_found(([],name)),p) as exc ->
-				if Display.Diagnostics.is_diagnostics_run ctx then DisplayToplevel.handle_unresolved_identifier ctx name p true;
-				(* Default to Dynamic in display mode *)
-				if ctx.com.display.dms_display then t_dynamic else raise exc
+				raise exc
 	in
 	if opt then ctx.t.tnull t else t
 
@@ -566,8 +548,6 @@ let rec type_type_param ?(enum_constructor=false) ctx path get_params p tp =
 	c.cl_meta <- tp.Ast.tp_meta;
 	if enum_constructor then c.cl_meta <- (Meta.EnumConstructorParam,[],null_pos) :: c.cl_meta;
 	let t = TInst (c,List.map snd c.cl_params) in
-	if ctx.is_display_file && Display.is_display_position (pos tp.tp_name) then
-		Display.DisplayEmitter.display_type ctx.com.display t (pos tp.tp_name);
 	match tp.tp_constraints with
 	| [] ->
 		n, t
@@ -699,34 +679,3 @@ let init_core_api ctx c =
 let string_list_of_expr_path (e,p) =
 	try string_list_of_expr_path_raise (e,p)
 	with Exit -> error "Invalid path" p
-
-let handle_path_display ctx path p =
-	let open Display.ImportHandling in
-	match Display.ImportHandling.convert_import_to_something_usable !Parser.resume_display path,ctx.com.display.dms_kind with
-		| (IDKPackage sl,_),_ ->
-			raise (Parser.TypePath(sl,None,true))
-		| (IDKModule(sl,s),_),DMPosition ->
-			(* We assume that we want to go to the module file, not a specific type
-			   which might not even exist anyway. *)
-			let mt = ctx.g.do_load_module ctx (sl,s) p in
-			let p = { pfile = mt.m_extra.m_file; pmin = 0; pmax = 0} in
-			raise (Display.DisplayPosition [p])
-		| (IDKModule(sl,s),_),_ ->
-			(* TODO: wait till nadako requests @type display for these, then implement it somehow *)
-			raise (Parser.TypePath(sl,Some(s,false),true))
-		| (IDKSubType(sl,sm,st),p),DMPosition ->
-			resolve_position_by_path ctx { tpackage = sl; tname = sm; tparams = []; tsub = Some st} p
-		| (IDKSubType(sl,sm,st),_),_ ->
-			raise (Parser.TypePath(sl @ [sm],Some(st,false),true))
-		| ((IDKSubTypeField(sl,sm,st,sf) | IDKModuleField(sl,(sm as st),sf)),p),_ ->
-			let m = ctx.g.do_load_module ctx (sl,sm) p in
-			List.iter (fun t -> match t with
-				| TClassDecl c when snd c.cl_path = st ->
-					ignore(c.cl_build());
-					let cf = PMap.find sf c.cl_statics in
-					Display.DisplayEmitter.display_field ctx.com.display cf p
-				| _ ->
-					()
-			) m.m_types;
-		| (IDK,_),_ ->
-			()

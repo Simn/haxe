@@ -24,7 +24,6 @@ open Ast
 open Type
 open Typecore
 open Typeload
-open Common.DisplayMode
 open Common
 open Error
 
@@ -55,7 +54,6 @@ type field_init_ctx = {
 	is_extern : bool;
 	is_macro : bool;
 	is_abstract_member : bool;
-	is_display_field : bool;
 	is_field_debug : bool;
 	field_kind : field_kind;
 	mutable do_bind : bool;
@@ -89,7 +87,6 @@ let dump_field_context fctx =
 		"is_extern",string_of_bool fctx.is_extern;
 		"is_macro",string_of_bool fctx.is_macro;
 		"is_abstract_member",string_of_bool fctx.is_abstract_member;
-		"is_display_field",string_of_bool fctx.is_display_field;
 		"is_field_debug",string_of_bool fctx.is_field_debug;
 		"field_kind",s_field_kind fctx.field_kind;
 		"do_bind",string_of_bool fctx.do_bind;
@@ -425,7 +422,6 @@ let create_field_context (ctx,cctx) c cff =
 		is_macro = is_macro;
 		is_extern = is_extern;
 		is_final = List.mem AFinal cff.cff_access;
-		is_display_field = ctx.is_display_file && Display.is_display_position cff.cff_pos;
 		is_field_debug = cctx.is_class_debug;
 		is_abstract_member = cctx.abstract <> None && Meta.has Meta.Impl cff.cff_meta;
 		field_kind = field_kind;
@@ -508,44 +504,12 @@ let build_fields (ctx,cctx) c fields =
 	!fields
 
 let bind_type (ctx,cctx,fctx) cf r p =
-	let c = cctx.tclass in
-	let rec is_full_type t =
-		match t with
-		| TFun (args,ret) -> is_full_type ret && List.for_all (fun (_,_,t) -> is_full_type t) args
-		| TMono r -> (match !r with None -> false | Some t -> is_full_type t)
-		| TAbstract _ | TInst _ | TEnum _ | TLazy _ | TDynamic _ | TAnon _ | TType _ -> true
-	in
-	let force_macro () =
-		(* force macro system loading of this class in order to get completion *)
-		delay ctx PTypeField (fun() -> try ignore(ctx.g.do_macro ctx MDisplay c.cl_path cf.cf_name [] p) with Exit | Error _ -> ())
-	in
-	let handle_display_field () =
-		if fctx.is_macro && not ctx.in_macro then
-			force_macro()
-		else begin
-			cf.cf_type <- TLazy r;
-			cctx.delayed_expr <- (ctx,Some r) :: cctx.delayed_expr;
-		end
-	in
-	if ctx.com.display.dms_full_typing then begin
-		if fctx.is_macro && not ctx.in_macro then
-			()
-		else begin
-			cf.cf_type <- TLazy r;
-			(* is_lib ? *)
-			cctx.delayed_expr <- (ctx,Some r) :: cctx.delayed_expr;
-		end
-	end else if ctx.com.display.dms_force_macro_typing && fctx.is_macro && not ctx.in_macro then
-		force_macro()
+	if fctx.is_macro && not ctx.in_macro then
+		()
 	else begin
-		if fctx.is_display_field then begin
-			handle_display_field()
-		end else begin
-			if not (is_full_type cf.cf_type) then begin
-				cctx.delayed_expr <- (ctx, None) :: cctx.delayed_expr;
-				cf.cf_type <- TLazy r;
-			end;
-		end
+		cf.cf_type <- TLazy r;
+		(* is_lib ? *)
+		cctx.delayed_expr <- (ctx,Some r) :: cctx.delayed_expr;
 	end
 
 let bind_var (ctx,cctx,fctx) cf e =
@@ -579,7 +543,7 @@ let bind_var (ctx,cctx,fctx) cf e =
 
 	match e with
 	| None ->
-		if fctx.is_display_field then Display.DisplayEmitter.maybe_display_field ctx (cf.cf_name_pos) cf;
+		()
 	| Some e ->
 		if requires_value_meta ctx.com (Some c) then cf.cf_meta <- ((Meta.Value,[e],null_pos) :: cf.cf_meta);
 		let check_cast e =
@@ -600,15 +564,13 @@ let bind_var (ctx,cctx,fctx) cf e =
 				r := lazy_processing (fun() -> t);
 				cctx.context_init();
 				if ctx.com.verbose then Common.log ctx.com ("Typing " ^ (if ctx.in_macro then "macro " else "") ^ s_type_path c.cl_path ^ "." ^ cf.cf_name);
-				let e = TypeloadFunction.type_var_field ctx t e fctx.is_static fctx.is_display_field p in
+				let e = TypeloadFunction.type_var_field ctx t e fctx.is_static p in
 				let maybe_run_analyzer e = match e.eexpr with
 					| TConst _ | TLocal _ | TFunction _ -> e
 					| _ -> !analyzer_run_on_expr_ref ctx.com e
 				in
 				let require_constant_expression e msg =
-					if ctx.com.display.dms_display && ctx.com.display.dms_error_policy <> EPCollect then
-						e
-					else match Optimizer.make_constant_expression ctx (maybe_run_analyzer e) with
+					match Optimizer.make_constant_expression ctx (maybe_run_analyzer e) with
 					| Some e -> e
 					| None -> display_error ctx msg p; e
 				in
@@ -625,9 +587,7 @@ let bind_var (ctx,cctx,fctx) cf e =
 					(* disallow initialization of non-physical fields (issue #1958) *)
 					display_error ctx "This field cannot be initialized because it is not a real variable" p; e
 				| Var v when not fctx.is_static ->
-					let e = if ctx.com.display.dms_display && ctx.com.display.dms_error_policy <> EPCollect then
-						e
-					else begin
+					begin
 						let e = Optimizer.reduce_loop ctx (maybe_run_analyzer e) in
 						let e = (match Optimizer.make_constant_expression ctx e with
 							| Some e -> e
@@ -644,8 +604,7 @@ let bind_var (ctx,cctx,fctx) cf e =
 							Type.iter check_this e
 						in
 						(try check_this e with Exit -> ());
-						e
-					end in
+					end;
 					e
 				| Var v when v.v_read = AccInline ->
 					let e = require_constant_expression e "Inline variable initialization must be a constant value" in
@@ -666,7 +625,6 @@ let bind_var (ctx,cctx,fctx) cf e =
 				let e = check_cast e in
 				cf.cf_expr <- Some e;
 				cf.cf_type <- t;
-				if fctx.is_display_field then Display.DisplayEmitter.maybe_display_field ctx (cf.cf_name_pos) cf;
 			end;
 			t
 		) "bind_var" in
@@ -962,7 +920,7 @@ let create_method (ctx,cctx,fctx) c f fd p =
 					cf.cf_expr <- None;
 					cf.cf_type <- t
 				| _ ->
-					let e , fargs = TypeloadFunction.type_function ctx args ret fmode fd fctx.is_display_field p in
+					let e , fargs = TypeloadFunction.type_function ctx args ret fmode fd p in
 					begin match fctx.field_kind with
 					| FKNormal when not fctx.is_static -> TypeloadCheck.check_overriding ctx c cf
 					| _ -> ()
@@ -982,12 +940,11 @@ let create_method (ctx,cctx,fctx) c f fd p =
 						| _ -> c.cl_init <- Some e);
 					cf.cf_expr <- Some (mk (TFunction tf) t p);
 					cf.cf_type <- t;
-				if fctx.is_display_field then Display.DisplayEmitter.maybe_display_field ctx (cf.cf_name_pos) cf);
+			);
 		end;
 		t
 	) "type_fun" in
-	if fctx.do_bind then bind_type (ctx,cctx,fctx) cf r (match fd.f_expr with Some e -> snd e | None -> f.cff_pos)
-	else if fctx.is_display_field then Display.DisplayEmitter.maybe_display_field ctx (cf.cf_name_pos) cf;
+	if fctx.do_bind then bind_type (ctx,cctx,fctx) cf r (match fd.f_expr with Some e -> snd e | None -> f.cff_pos);
 	cf
 
 let create_property (ctx,cctx,fctx) c f (get,set,t,eo) p =
@@ -1025,7 +982,6 @@ let create_property (ctx,cctx,fctx) c f (get,set,t,eo) p =
 				| _, t,f -> t,f ]
 	in
 	let check_method m t req_name =
-		if ctx.com.display.dms_error_policy = EPIgnore then () else
 		try
 			let overloads = find_accessor m in
 			(* choose the correct overload if and only if there is more than one overload found *)
@@ -1078,13 +1034,6 @@ let create_property (ctx,cctx,fctx) c f (get,set,t,eo) p =
 						display_error ctx ("Method " ^ m ^ " required by property " ^ name ^ " is missing") p
 				end
 	in
-	let display_accessor m p =
-		try
-			let cf = match find_accessor m with [_,cf] -> cf | _ -> raise Not_found in
-			Display.DisplayEmitter.display_field ctx.com.display cf p
-		with Not_found ->
-			()
-	in
 	let delay_check = if c.cl_interface then delay_late ctx PBuildClass else delay ctx PTypeField in
 	let get = (match get with
 		| "null",_ -> AccNo
@@ -1093,7 +1042,6 @@ let create_property (ctx,cctx,fctx) c f (get,set,t,eo) p =
 		| "default",_ -> AccNormal
 		| get,pget ->
 			let get = if get = "get" then "get_" ^ name else get in
-			if fctx.is_display_field && Display.is_display_position pget then delay ctx PTypeField (fun () -> display_accessor get pget);
 			if not cctx.is_lib then delay_check (fun() -> check_method get t_get (if get <> "get" && get <> "get_" ^ name then Some ("get_" ^ name) else None));
 			AccCall
 	) in
@@ -1109,7 +1057,6 @@ let create_property (ctx,cctx,fctx) c f (get,set,t,eo) p =
 		| "default",_ -> AccNormal
 		| set,pset ->
 			let set = if set = "set" then "set_" ^ name else set in
-			if fctx.is_display_field && Display.is_display_position pset then delay ctx PTypeField (fun () -> display_accessor set pset);
 			if not cctx.is_lib then delay_check (fun() -> check_method set t_set (if set <> "set" && set <> "set_" ^ name then Some ("set_" ^ name) else None));
 			AccCall
 	) in
@@ -1164,7 +1111,6 @@ let init_class ctx c p context_init herits fields =
 	if cctx.is_class_debug then print_endline ("Created class context: " ^ dump_class_context cctx);
 	let fields = patch_class ctx c fields in
 	let fields = build_fields (ctx,cctx) c fields in
-	if cctx.is_core_api && ctx.com.display.dms_check_core_api then delay ctx PForce (fun() -> init_core_api ctx c);
 	if not cctx.is_lib then begin
 		if ctx.com.config.pf_overload then delay ctx PForce (fun() -> check_overloads ctx c)
 	end;

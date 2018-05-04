@@ -21,7 +21,6 @@
 
 open Globals
 open Ast
-open Common.DisplayMode
 open Common
 open Typecore
 open Error
@@ -40,13 +39,6 @@ let parse_file_from_lexbuf com file p lexbuf =
 			t();
 			raise e
 	in
-	begin match !display_default with
-		| DMModuleSymbols filter when filter <> None || Display.is_display_file file ->
-			let ds = Display.DocumentSymbols.collect_module_symbols data in
-			com.shared.shared_display_information.document_symbols <- (file,ds) :: com.shared.shared_display_information.document_symbols;
-		| _ ->
-			()
-	end;
 	t();
 	Common.log com ("Parsed " ^ file);
 	data
@@ -54,25 +46,9 @@ let parse_file_from_lexbuf com file p lexbuf =
 let parse_file_from_string com file p string =
 	parse_file_from_lexbuf com file p (Sedlexing.Utf8.from_string string)
 
-let current_stdin = ref None (* TODO: we're supposed to clear this at some point *)
-
 let parse_file com file p =
-	let use_stdin = (Common.defined com Define.DisplayStdin) && Display.is_display_file file in
-	if use_stdin then
-		let s =
-			match !current_stdin with
-			| Some s ->
-				s
-			| None ->
-				let s = Std.input_all stdin in
-				close_in stdin;
-				current_stdin := Some s;
-				s
-		in
-		parse_file_from_string com file p s
-	else
-		let ch = try open_in_bin file with _ -> error ("Could not open " ^ file) p in
-		Std.finally (fun() -> close_in ch) (parse_file_from_lexbuf com file p) (Sedlexing.Utf8.from_channel ch)
+	let ch = try open_in_bin file with _ -> error ("Could not open " ^ file) p in
+	Std.finally (fun() -> close_in ch) (parse_file_from_lexbuf com file p) (Sedlexing.Utf8.from_channel ch)
 
 let parse_hook = ref parse_file
 

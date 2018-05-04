@@ -189,8 +189,6 @@ module Pattern = struct
 				v
 		in
 		let con_enum en ef p =
-			Display.DeprecationCheck.check_enum pctx.ctx.com en p;
-			Display.DeprecationCheck.check_ef pctx.ctx.com ef p;
 			ConEnum(en,ef)
 		in
 		let check_expr e =
@@ -439,17 +437,16 @@ module Pattern = struct
 				) pctx1.current_locals;
 				PatOr(pat1,pat2)
 			| EBinop(OpAssign,e1,e2) ->
-				let rec loop in_display e = match e with
+				let rec loop e = match e with
 					| (EConst (Ident s),p) ->
 						let v = add_local s p in
-						if in_display then ignore(TyperDisplay.display_expr ctx e (mk (TLocal v) v.v_type p) (WithType t) p);
 						let pat = make pctx false t e2 in
 						PatBind(v,pat)
-					| (EParenthesis e1,_) -> loop in_display e1
-					| (EDisplay(e1,_),_) -> loop true e1
+					| (EParenthesis e1,_) -> loop e1
+					| (EDisplay(e1,_),_) -> loop e1
 					| _ -> fail()
 				in
-				loop false e1
+				loop e1
 			| EBinop(OpArrow,e1,e2) ->
 				let restore = save_locals ctx in
 				ctx.locals <- pctx.ctx_locals;
@@ -459,11 +456,6 @@ module Pattern = struct
 				restore();
 				let pat = make pctx toplevel e1.etype e2 in
 				PatExtractor(v,e1,pat)
-			| EDisplay(e,iscall) ->
-				let pat = loop e in
-				let _ = if iscall then TyperDisplay.handle_signature_display ctx e (WithType t)
-				else TyperDisplay.handle_display ctx e (WithType t) in
-				pat
 			| _ ->
 				fail()
 		in
@@ -534,11 +526,6 @@ module Case = struct
 		ctx.ret <- old_ret;
 		List.iter (fun (v,t) -> v.v_type <- t) old_types;
 		save();
-		if ctx.is_display_file && Display.is_display_position p then begin match eo,eo_ast with
-			| Some e,Some e_ast -> ignore(TyperDisplay.display_expr ctx e_ast e with_type p)
-			| None,None -> ignore(TyperDisplay.display_expr ctx (EBlock [],p) (mk (TBlock []) ctx.t.tvoid p) with_type p)
-			| _ -> assert false
-		end;
 		{
 			case_guard = eg;
 			case_expr = eo;
@@ -1300,19 +1287,11 @@ module TexprConverter = struct
 		let p = dt.dt_pos in
 		let c_type = match follow (Typeload.load_instance ctx ({ tpackage = ["std"]; tname="Type"; tparams=[]; tsub = None},null_pos) true p) with TInst(c,_) -> c | t -> assert false in
 		let mk_index_call e =
-			if not ctx.in_macro && not ctx.com.display.DisplayMode.dms_full_typing then
-				(* If we are in display mode there's a chance that these fields don't exist. Let's just use a
-				   (correctly typed) neutral value because it doesn't actually matter. *)
-				mk (TConst (TInt (Int32.of_int 0))) ctx.t.tint e.epos
-			else
-				mk (TEnumIndex e) com.basic.tint e.epos
+			mk (TEnumIndex e) com.basic.tint e.epos
 		in
 		let mk_name_call e =
-			if not ctx.in_macro && not ctx.com.display.DisplayMode.dms_full_typing then
-				mk (TConst (TString "")) ctx.t.tstring e.epos
-			else
-				let cf = PMap.find "enumConstructor" c_type.cl_statics in
-				make_static_call ctx c_type cf (fun t -> t) [e] com.basic.tstring e.epos
+			let cf = PMap.find "enumConstructor" c_type.cl_statics in
+			make_static_call ctx c_type cf (fun t -> t) [e] com.basic.tstring e.epos
 		in
 		let rec loop toplevel params dt = match dt.dt_t with
 			| Leaf case ->
@@ -1330,7 +1309,6 @@ module TexprConverter = struct
 					with Not_exhaustive -> match with_type,finiteness with
 						| NoValue,Infinite -> None
 						| _,CompileTimeFinite when unmatched = [] -> None
-						| _ when ctx.com.display.DisplayMode.dms_error_policy = DisplayMode.EPIgnore -> None
 						| _ -> report_not_exhaustive e_subject unmatched
 				in
 				let cases = ExtList.List.filter_map (fun (con,_,dt) -> match unify_constructor ctx params e_subject.etype con with
@@ -1403,7 +1381,6 @@ module TexprConverter = struct
 					)
 				with Not_exhaustive ->
 					if toplevel then (fun () -> loop false params dt2)
-					else if ctx.com.display.DisplayMode.dms_error_policy = DisplayMode.EPIgnore then (fun () -> mk (TConst TNull) (mk_mono()) dt2.dt_pos)
 					else report_not_exhaustive e [ConConst TNull,dt.dt_pos]
 				in
 				f()

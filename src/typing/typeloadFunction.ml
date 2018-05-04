@@ -23,7 +23,6 @@ open Globals
 open Ast
 open Type
 open Typecore
-open Common.DisplayMode
 open Common
 open Error
 
@@ -35,9 +34,8 @@ let type_function_arg ctx t e opt p =
 		let t = match e with Some (EConst (Ident "null"),null_pos) -> ctx.t.tnull t | _ -> t in
 		t, e
 
-let type_var_field ctx t e stat do_display p =
+let type_var_field ctx t e stat p =
 	if stat then ctx.curfun <- FunStatic else ctx.curfun <- FunMember;
-	let e = if do_display then Display.ExprPreprocessing.process_expr ctx.com e else e in
 	let e = type_expr ctx e (WithType t) in
 	let e = AbstractCast.cast_or_unify ctx t e p in
 	match t with
@@ -49,20 +47,18 @@ let type_function_params ctx fd fname p =
 	params := Typeload.type_type_params ctx ([],fname) (fun() -> !params) p fd.f_params;
 	!params
 
-let type_function_arg_value ctx t c do_display =
+let type_function_arg_value ctx t c =
 	match c with
 		| None -> None
 		| Some e ->
 			let p = pos e in
-			let e = if do_display then Display.ExprPreprocessing.process_expr ctx.com e else e in
 			let e = ctx.g.do_optimize ctx (type_expr ctx e (WithType t)) in
 			unify ctx e.etype t p;
 			let rec loop e = match e.eexpr with
 				| TConst c -> Some c
 				| TCast(e,None) -> loop e
 				| _ ->
-					if not ctx.com.display.dms_display || ctx.com.display.dms_inline && ctx.com.display.dms_error_policy = EPCollect then
-						display_error ctx "Parameter default value should be constant" p;
+					display_error ctx "Parameter default value should be constant" p;
 					None
 			in
 			loop e
@@ -79,14 +75,12 @@ let save_function_state ctx =
 		ctx.opened <- old_opened;
 	)
 
-let type_function ctx args ret fmode f do_display p =
+let type_function ctx args ret fmode f p =
 	let fargs = List.map2 (fun (n,c,t) ((_,pn),_,m,_,_) ->
 		if n.[0] = '$' then error "Function argument names starting with a dollar are not allowed" p;
-		let c = type_function_arg_value ctx t c do_display in
+		let c = type_function_arg_value ctx t c in
 		let v,c = add_local ctx n t pn, c in
 		v.v_meta <- m;
-		if do_display && Display.is_display_position pn then
-			Display.DisplayEmitter.display_variable ctx.com.display v pn;
 		if n = "this" then v.v_meta <- (Meta.This,[],null_pos) :: v.v_meta;
 		v,c
 	) args f.f_args in
@@ -94,30 +88,10 @@ let type_function ctx args ret fmode f do_display p =
 	ctx.ret <- ret;
 	ctx.opened <- [];
 	let e = match f.f_expr with
-		| None ->
-			if ctx.com.display.dms_error_policy = EPIgnore then
-				(* when we don't care because we're in display mode, just act like
-				   the function has an empty block body. this is fine even if function
-				   defines a return type, because returns aren't checked in this mode
-				*)
-				EBlock [],p
-			else
-				error "Function body required" p
+		| None -> error "Function body required" p
 		| Some e -> e
 	in
-	let e = if not do_display then
-		type_expr ctx e NoValue
-	else begin
-		let e = Display.ExprPreprocessing.process_expr ctx.com e in
-		try
-			if Common.defined ctx.com Define.NoCOpt then raise Exit;
-			type_expr ctx (Optimizer.optimize_completion_expr e) NoValue
-		with
-		| Parser.TypePath (_,None,_) | Exit ->
-			type_expr ctx e NoValue
-		| Display.DisplayType (t,_,_) when (match follow t with TMono _ -> true | _ -> false) ->
-			type_expr ctx (if ctx.com.display.dms_kind = DMToplevel then Display.ExprPreprocessing.find_enclosing ctx.com e else e) NoValue
-	end in
+	let e = type_expr ctx e NoValue in
 	let e = match e.eexpr with
 		| TMeta((Meta.MergeBlock,_,_), ({eexpr = TBlock el} as e1)) -> e1
 		| _ -> e
@@ -139,7 +113,6 @@ let type_function ctx args ret fmode f do_display p =
 		   can _not_ use type_iseq to avoid the Void check above because that
 		   would turn Dynamic returns to Void returns. *)
 		| TMono t when not (has_return e) -> ignore(link t ret ctx.t.tvoid)
-		| _ when ctx.com.display.dms_error_policy = EPIgnore -> ()
 		| _ -> (try TypeloadCheck.return_flow ctx e with Exit -> ())
 	end;
 	let rec loop e =
@@ -191,9 +164,9 @@ let type_function ctx args ret fmode f do_display p =
 	List.iter (fun r -> r := Closed) ctx.opened;
 	e , fargs
 
-let type_function ctx args ret fmode f do_display p =
+let type_function ctx args ret fmode f p =
 	let save = save_function_state ctx in
-	Std.finally save (type_function ctx args ret fmode f do_display) p
+	Std.finally save (type_function ctx args ret fmode f) p
 
 let add_constructor ctx c force_constructor p =
 	match c.cl_constructor, c.cl_super with
@@ -234,7 +207,7 @@ let add_constructor ctx c force_constructor p =
 					match follow cfsup.cf_type with
 					| TFun (args,_) ->
 						List.map (fun (n,o,t) ->
-							let def = try type_function_arg_value ctx t (Some (PMap.find n values)) false with Not_found -> if o then Some TNull else None in
+							let def = try type_function_arg_value ctx t (Some (PMap.find n values)) with Not_found -> if o then Some TNull else None in
 							map_arg (alloc_var n (if o then ctx.t.tnull t else t) p,def) (* TODO: var pos *)
 						) args
 					| _ -> assert false

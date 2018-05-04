@@ -106,7 +106,6 @@ and typer = {
 	mutable pass : typer_pass;
 	(* per-module *)
 	mutable m : typer_module;
-	mutable is_display_file : bool;
 	(* per-class *)
 	mutable curclass : tclass;
 	mutable tthis : t;
@@ -115,7 +114,6 @@ and typer = {
 	mutable curfield : tclass_field;
 	mutable untyped : bool;
 	mutable in_loop : bool;
-	mutable in_display : bool;
 	mutable in_macro : bool;
 	mutable macro_depth : int;
 	mutable curfun : current_fun;
@@ -147,9 +145,7 @@ let pass_name = function
 	| PForce -> "force"
 	| PFinal -> "final"
 
-let display_error ctx msg p = match ctx.com.display.DisplayMode.dms_error_policy with
-	| DisplayMode.EPShow | DisplayMode.EPIgnore -> ctx.on_error ctx msg p
-	| DisplayMode.EPCollect -> add_diagnostics_message ctx.com msg p DisplayTypes.DiagnosticsSeverity.Error
+let display_error ctx msg p = ctx.on_error ctx msg p
 
 let make_call ctx e el t p = (!make_call_ref) ctx e el t p
 

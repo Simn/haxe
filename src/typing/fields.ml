@@ -177,8 +177,6 @@ let field_access ctx mode f fmode t e p =
 				AKExpr (mk (TField (e,FClosure (None,f))) t p)
 			else
 				normal()
-		| AccCall | AccInline when ctx.in_display ->
-			normal()
 		| AccCall ->
 			let m = (match mode with MSet -> "set_" | _ -> "get_") ^ f.cf_name in
 			let is_abstract_this_access () = match e.eexpr,ctx.curfun with
@@ -258,7 +256,6 @@ let rec using_field ctx mode e i p =
 						| _ -> ()
 					) monos cf.cf_params;
 					let et = type_module_type ctx (TClassDecl c) None p in
-					Display.ImportHandling.maybe_mark_import_position ctx pc;
 					AKUsing (mk (TField (et,FStatic (c,cf))) t p,c,cf,e)
 				| _ ->
 					raise Not_found

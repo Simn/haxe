@@ -1,5 +1,4 @@
 open Globals
-open Common.DisplayMode
 open Common
 open Ast
 open Type
@@ -263,20 +262,10 @@ let unify_field_call ctx fa el args ret p inline =
 				candidates,(cf,err,p) :: failures
 			end
 	in
-	let fail_fun () =
-		let tf = TFun(args,ret) in
-		[],tf,(fun ethis p_field ->
-			let e1 = mk (TField(ethis,mk_fa cf)) tf p_field in
-			mk (TCall(e1,[])) ret p)
-	in
 	match candidates with
 	| [t,cf] ->
-		begin try
-			let el,tf,mk_call = attempt_call t cf in
-			List.map fst el,tf,mk_call
-		with Error _ when ctx.com.display.dms_error_policy = EPIgnore ->
-			fail_fun();
-		end
+		let el,tf,mk_call = attempt_call t cf in
+		List.map fst el,tf,mk_call
 	| _ ->
 		let candidates,failures = loop candidates in
 		let fail () =
@@ -408,14 +397,6 @@ let rec acc_get ctx g p =
 	| AKNo f -> error ("Field " ^ f ^ " cannot be accessed for reading") p
 	| AKExpr e -> e
 	| AKSet _ | AKAccess _ -> assert false
-	| AKUsing (et,c,cf,e) when ctx.in_display ->
-		(* Generate a TField node so we can easily match it for position/usage completion (issue #1968) *)
-		let ec = type_module_type ctx (TClassDecl c) None p in
-		let t = match follow et.etype with
-			| TFun (_ :: args,ret) -> TFun(args,ret)
-			| _ -> et.etype
-		in
-		mk (TField(ec,FStatic(c,cf))) t et.epos
 	| AKUsing (et,_,cf,e) ->
 		(* build a closure with first parameter applied *)
 		(match follow et.etype with
@@ -446,8 +427,6 @@ let rec acc_get ctx g p =
 		let cmode = (match fmode with FStatic _ -> fmode | FInstance (c,tl,f) -> FClosure (Some (c,tl),f) | _ -> assert false) in
 		ignore(follow f.cf_type); (* force computing *)
 		(match f.cf_expr with
-		| None when ctx.com.display.dms_display ->
-			mk (TField (e,cmode)) t p
 		| None ->
 			error "Recursive inline is not supported" p
 		| Some { eexpr = TFunction _ } ->
@@ -596,7 +575,6 @@ let rec build_call ctx acc el (with_type:with_type) p =
 			!ethis_f();
 			raise (Fatal_error ((error_msg m),p))
 		in
-		let e = Display.Diagnostics.secure_generated_code ctx e in
 		ctx.on_error <- old;
 		!ethis_f();
 		e
@@ -644,7 +622,7 @@ let type_bind ctx (e : texpr) (args,ret) params p =
 	let vexpr v = mk (TLocal v) v.v_type p in
 	let acount = ref 0 in
 	let alloc_name n =
-		if n = "" && not ctx.is_display_file then begin
+		if n = "" then begin
 			incr acount;
 			"a" ^ string_of_int !acount;
 		end else

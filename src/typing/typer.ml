@@ -17,7 +17,6 @@
 	Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 *)
 open Ast
-open Common.DisplayMode
 open Common
 open Type
 open Typecore
@@ -172,10 +171,7 @@ let merge_core_doc ctx c =
 		| Some ({cf_doc = None} as cf),Some cf2 -> cf.cf_doc <- cf2.cf_doc
 		| _ -> ()
 
-let check_error ctx err p = match err with
-	| Module_not_found ([],name) when Display.Diagnostics.is_diagnostics_run ctx ->
-		DisplayToplevel.handle_unresolved_identifier ctx name p true
-	| _ ->
+let check_error ctx err p =
 		display_error ctx (error_msg err) p
 
 (* ---------------------------------------------------------------------- *)
@@ -348,7 +344,7 @@ let rec type_ident_raise ctx i p mode =
 		| Some (params,e) ->
 			let t = monomorphs params v.v_type in
 			(match e with
-			| Some ({ eexpr = TFunction f } as e) when ctx.com.display.dms_full_typing ->
+			| Some ({ eexpr = TFunction f } as e) ->
 				begin match mode with
 					| MSet -> error "Cannot set inline closure" p
 					| MGet -> error "Cannot create closure on inline closure" p
@@ -404,7 +400,6 @@ let rec type_ident_raise ctx i p mode =
 							let et = type_module_type ctx (TClassDecl c) None p in
 							let fa = FStatic(c,cf) in
 							let t = monomorphs cf.cf_params cf.cf_type in
-							Display.ImportHandling.maybe_mark_import_position ctx pt;
 							begin match cf.cf_kind with
 								| Var {v_read = AccInline} -> AKInline(et,cf,fa,t)
 								| _ -> AKExpr (mk (TField(et,fa)) t p)
@@ -425,7 +420,6 @@ let rec type_ident_raise ctx i p mode =
 						let et = type_module_type ctx t None p in
 						let monos = List.map (fun _ -> mk_mono()) e.e_params in
 						let monos2 = List.map (fun _ -> mk_mono()) ef.ef_params in
-						Display.ImportHandling.maybe_mark_import_position ctx pt;
 						wrap (mk (TField (et,FEnum (e,ef))) (enum_field_type ctx e ef monos monos2 p) p)
 					with
 						Not_found -> loop l
@@ -434,7 +428,6 @@ let rec type_ident_raise ctx i p mode =
 	with Not_found ->
 		(* lookup imported globals *)
 		let t, name, pi = PMap.find i ctx.m.module_globals in
-		Display.ImportHandling.maybe_mark_import_position ctx pi;
 		let e = type_module_type ctx t None p in
 		type_field ctx e name p mode
 
@@ -1151,20 +1144,7 @@ and type_ident ctx i p mode =
 				end
 			with Not_found ->
 				let err = Unknown_ident i in
-				if ctx.in_display then begin
-					raise (Error (err,p))
-				end;
-				match ctx.com.display.dms_kind with
-					| DMNone ->
-						raise (Error(err,p))
-					| DMDiagnostics b when b || ctx.is_display_file ->
-						DisplayToplevel.handle_unresolved_identifier ctx i p false;
-						let t = mk_mono() in
-						AKExpr (mk (TIdent i) t p)
-					| _ ->
-						display_error ctx (error_msg err) p;
-						let t = mk_mono() in
-						AKExpr (mk (TIdent i) t p)
+				raise (Error(err,p))
 			end
 		end
 
@@ -1274,7 +1254,6 @@ and handle_efield ctx e p mode =
 									List.find path_match ctx.m.curmod.m_types (* types in this modules *)
 								with Not_found ->
 									let t,p = List.find (fun (t,_) -> path_match t) ctx.m.module_types in (* imported types *)
-									Display.ImportHandling.maybe_mark_import_position ctx p;
 									t
 							in
 							get_static true t
@@ -1331,8 +1310,6 @@ and handle_efield ctx e p mode =
 								raise (Error (Module_not_found (List.rev !path,name),p))
 							with
 								Not_found ->
-									(* if there was no module name part, last guess is that we're trying to get package completion *)
-									if ctx.in_display then raise (Parser.TypePath (List.map (fun (n,_,_) -> n) (List.rev acc),None,false));
 									raise e)
 		in
 		match path with
@@ -1470,8 +1447,6 @@ and type_vars ctx vl p =
 			if v.[0] = '$' then display_error ctx "Variables names starting with a dollar are not allowed" p;
 			let v = add_local ctx v t pv in
 			v.v_meta <- (Meta.UserVariable,[],pv) :: v.v_meta;
-			if ctx.in_display && Display.is_display_position pv then
-				Display.DisplayEmitter.display_variable ctx.com.display v pv;
 			v,e
 		with
 			Error (e,p) ->
@@ -1491,11 +1466,7 @@ and format_string ctx s p =
 	let min = ref (p.pmin + 1) in
 	let add_expr (enext,p) len =
 		min := !min + len;
-		let enext = if ctx.in_display && Display.is_display_position p then
-			Display.ExprPreprocessing.process_expr ctx.com (enext,p)
-		else
-			enext,p
-		in
+		let enext = enext,p in
 		match !e with
 		| None -> e := Some enext
 		| Some prev ->
@@ -1651,7 +1622,6 @@ and type_object_decl ctx fl with_type p =
 					| Some t -> t
 					| None ->
 						let cf = PMap.find n field_map in
-						if ctx.in_display && Display.is_display_position pn then Display.DisplayEmitter.display_field ctx.com.display cf pn;
 						cf.cf_type
 				in
 				let e = type_expr ctx e (WithType t) in
@@ -1689,7 +1659,6 @@ and type_object_decl ctx fl with_type p =
 			let e = type_expr ctx e Value in
 			(match follow e.etype with TAbstract({a_path=[],"Void"},_) -> error "Fields of type Void are not allowed in structures" e.epos | _ -> ());
 			let cf = mk_field f e.etype (punion pf e.epos) pf in
-			if ctx.in_display && Display.is_display_position pf then Display.DisplayEmitter.display_field ctx.com.display cf pf;
 			(((f,pf,qs),e) :: l, if is_valid then begin
 				if String.length f > 0 && f.[0] = '$' then error "Field names starting with a dollar are not allowed" p;
 				PMap.add f cf acc
@@ -1787,7 +1756,6 @@ and type_new ctx path el with_type p =
 		| mt ->
 			error ((s_type_path (t_infos mt).mt_path) ^ " cannot be constructed") p
 	in
-	Display.DisplayEmitter.check_display_type ctx t (pos path);
 	let build_constructor_call c tl =
 		let ct, f = get_constructor ctx c tl p in
 		if (Meta.has Meta.CompilerGenerated f.cf_meta) then display_error ctx (error_msg (No_constructor (TClassDecl c))) p;
@@ -1798,7 +1766,7 @@ and type_new ctx path el with_type p =
 		let el = unify_constructor_call c tl f ct in
 		el,f,ct
 	in
-	try begin match t with
+	begin match t with
 	| TInst ({cl_kind = KTypeParameter tl} as c,params) ->
 		if not (TypeloadCheck.is_generic_parameter ctx c) then error "Only generic type parameters can be constructed" p;
 		let el = List.map (fun e -> type_expr ctx e Value) el in
@@ -1827,9 +1795,7 @@ and type_new ctx path el with_type p =
 		mk (TNew (c,params,el)) t p
 	| _ ->
 		error (s_type (print_context()) t ^ " cannot be constructed") p
-	end with Error(No_constructor _ as err,p) when ctx.com.display.dms_display ->
-		display_error ctx (error_msg err) p;
-		Display.Diagnostics.secure_generated_code ctx (mk (TConst TNull) t p)
+	end
 
 and type_try ctx e1 catches with_type p =
 	let e1 = type_expr ctx (Expr.ensure_block e1) with_type in
@@ -1884,12 +1850,9 @@ and type_try ctx e1 catches with_type p =
 		check_unreachable acc t2 (pos e_ast);
 		let locals = save_locals ctx in
 		let v = add_local ctx v t pv in
-		if ctx.is_display_file && Display.is_display_position pv then
-			Display.DisplayEmitter.display_variable ctx.com.display v pv;
 		let e = type_expr ctx e_ast with_type in
 		(* If the catch position is the display position it means we get completion on the catch keyword or some
 		   punctuation. Otherwise we wouldn't reach this point. *)
-		if ctx.is_display_file && Display.is_display_position pc then ignore(TyperDisplay.display_expr ctx e_ast e with_type pc);
 		v.v_type <- t2;
 		locals();
 		if with_type <> NoValue then unify ctx e.etype e1.etype e.epos;
@@ -2025,7 +1988,7 @@ and type_local_function ctx name f with_type p =
 		| FunMemberAbstract -> FunMemberAbstractLocal
 		| _ -> FunMemberClassLocal
 	in
-	let e , fargs = TypeloadFunction.type_function ctx args rt curfun f ctx.in_display p in
+	let e , fargs = TypeloadFunction.type_function ctx args rt curfun f p in
 	ctx.type_params <- old_tp;
 	ctx.in_loop <- old_in_loop;
 	let f = {
@@ -2091,7 +2054,7 @@ and type_array_decl ctx el with_type p =
 		let t = try
 			unify_min_raise ctx.com.basic el
 		with Error (Unify l,p) ->
-			if ctx.untyped || ctx.com.display.dms_error_policy = EPIgnore then t_dynamic else begin
+			if ctx.untyped then t_dynamic else begin
 				display_error ctx "Arrays of mixed types are only allowed if the type is forced to Array<Dynamic>" p;
 				raise (Error (Unify l, p))
 			end
@@ -2210,7 +2173,6 @@ and type_if ctx e e1 e2 with_type p =
 		mk (TIf (e,e1,Some e2)) t p)
 
 and type_meta ctx m e1 with_type p =
-	if ctx.is_display_file then Display.DisplayEmitter.check_display_metadata ctx [m];
 	let old = ctx.meta in
 	ctx.meta <- m :: ctx.meta;
 	let e () = type_expr ctx e1 with_type in
@@ -2291,7 +2253,6 @@ and type_call ctx e el (with_type:with_type) p =
 	| (EConst (Ident "$type"),_) , [e] ->
 		let e = type_expr ctx e Value in
 		ctx.com.warning (s_type (print_context()) e.etype) e.epos;
-		let e = Display.Diagnostics.secure_generated_code ctx e in
 		e
 	| (EField(e,"match"),p), [epat] ->
 		let et = type_expr ctx e Value in
@@ -2311,8 +2272,6 @@ and type_call ctx e el (with_type:with_type) p =
 			mk (TCall (e_unprotect,[e])) e.etype e.epos
 		else
 			e
-	| (EDisplay((EConst (Ident "super"),_ as e1),false),_),_ ->
-		TyperDisplay.handle_display ctx (ECall(e1,el),p) with_type
 	| (EConst (Ident "super"),sp) , el ->
 		if ctx.curfun <> FunConstructor then error "Cannot call super constructor outside class constructor" p;
 		let el, t = (match ctx.curclass.cl_super with
@@ -2341,7 +2300,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 	| EField(_,n) when n.[0] = '$' ->
 		error "Field names starting with $ are not allowed" p
 	| EConst (Ident s) ->
-		if s = "super" && with_type <> NoValue && not ctx.in_display then error "Cannot use super as value" p;
+		if s = "super" && with_type <> NoValue then error "Cannot use super as value" p;
 		let e = maybe_type_against_enum ctx (fun () -> type_ident ctx s p MGet) with_type false p in
 		acc_get ctx e p
 	| EField _
@@ -2379,7 +2338,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 	| EVars vl ->
 		type_vars ctx vl p
 	| EFor (it,e2) ->
-		ForLoop.type_for_loop ctx TyperDisplay.handle_display it e2 p
+		ForLoop.type_for_loop ctx it e2 p
 	| ETernary (e1,e2,e3) ->
 		type_expr ctx (EIf (e1,e2,Some e3),p) with_type
 	| EIf (e,e1,e2) ->
@@ -2443,13 +2402,6 @@ and type_expr ctx (e,p) (with_type:with_type) =
 		mk (TCast (e,None)) (mk_mono()) p
 	| ECast (e, Some t) ->
 		type_cast ctx e t p
-	| EDisplay (e,iscall) ->
-		begin match ctx.com.display.dms_kind with
-			| DMField | DMSignature when iscall -> TyperDisplay.handle_signature_display ctx e with_type
-			| _ -> TyperDisplay.handle_display ctx e with_type
-		end
-	| EDisplayNew t ->
-		assert false
 	| ECheckType (e,t) ->
 		let t = Typeload.load_complex_type ctx true p t in
 		let e = type_expr ctx e (WithType t) in
@@ -2476,7 +2428,7 @@ let rec create com =
 			delayed = [];
 			debug_delayed = [];
 			delayed_macros = DynArray.create();
-			doinline = com.display.dms_inline && not (Common.defined com Define.NoInline);
+			doinline = not (Common.defined com Define.NoInline);
 			hook_generate = [];
 			get_build_infos = (fun() -> None);
 			std = null_module;
@@ -2499,7 +2451,6 @@ let rec create com =
 			wildcard_packages = [];
 			module_imports = [];
 		};
-		is_display_file = false;
 		meta = [];
 		this_stack = [];
 		with_type_stack = [];
@@ -2509,7 +2460,6 @@ let rec create com =
 		untyped = false;
 		curfun = FunStatic;
 		in_loop = false;
-		in_display = false;
 		in_macro = Common.defined com Define.Macro;
 		ret = mk_mono();
 		locals = PMap.empty;
