@@ -151,35 +151,23 @@ let rec wait_loop process_params verbose accept =
 	let current_stdin = ref None in
 	TypeloadParse.parse_hook := (fun com2 file p ->
 		let ffile = Path.unique_full_path file in
-		let is_display_file = ffile = (!Parser.resume_display).pfile in
-
-		match is_display_file, !current_stdin with
-		| true, Some stdin when Common.defined com2 Define.DisplayStdin ->
-			TypeloadParse.parse_file_from_string com2 file p stdin
-		| _ ->
-			let sign = Define.get_signature com2.defines in
-			let ftime = file_time ffile in
-			let fkey = (ffile,sign) in
-			try
-				let time, data = CompilationServer.find_file cs fkey in
-				if time <> ftime then raise Not_found;
-				data
-			with Not_found ->
-				has_parse_error := false;
-				let data = TypeloadParse.parse_file com2 file p in
-				let info,is_unusual = if !has_parse_error then "not cached, has parse error",true
-					else if is_display_file then "not cached, is display file",true
-					else begin try
-						(* We assume that when not in display mode it's okay to cache stuff that has #if display
-						   checks. The reasoning is that non-display mode has more information than display mode. *)
-						let ident = Hashtbl.find Parser.special_identifier_files ffile in
-						Printf.sprintf "not cached, using \"%s\" define" ident,true
-					with Not_found ->
-						CompilationServer.cache_file cs fkey (ftime,data);
-						"cached",false
-				end in
-				if verbose && is_unusual then process_server_message com2 "" (Parsed(ffile,info));
-				data
+		let sign = Define.get_signature com2.defines in
+		let ftime = file_time ffile in
+		let fkey = (ffile,sign) in
+		try
+			let time, data = CompilationServer.find_file cs fkey in
+			if time <> ftime then raise Not_found;
+			data
+		with Not_found ->
+			has_parse_error := false;
+			let data = TypeloadParse.parse_file com2 file p in
+			let info,is_unusual = if !has_parse_error then "not cached, has parse error",true
+				else begin
+				CompilationServer.cache_file cs fkey (ftime,data);
+				"cached",false
+			end in
+			if verbose && is_unusual then process_server_message com2 "" (Parsed(ffile,info));
+			data
 	);
 	let check_module_shadowing com paths m =
 		List.iter (fun (path,_) ->
@@ -448,7 +436,6 @@ let rec wait_loop process_params verbose accept =
 					let defines = PMap.foldi (fun k v acc -> (k ^ "=" ^ v) :: acc) ctx.com.defines.Define.values [] in
 					print_endline ("Defines " ^ (String.concat "," (List.sort compare defines)));
 					print_endline ("Using signature " ^ Digest.to_hex sign);
-					print_endline ("Display position: " ^ (Printer.s_pos !Parser.resume_display));
 				end;
 				Parser.display_error := (fun e p -> has_parse_error := true; ctx.com.error (Parser.error_msg e) p);
 				try
@@ -480,7 +467,6 @@ let rec wait_loop process_params verbose accept =
 			(try
 				DynArray.clear test_server_messages;
 				Hashtbl.clear changed_directories;
-				Parser.resume_display := null_pos;
 				return_partial_type := false;
 				measure_times := false;
 				close_times();

@@ -199,8 +199,6 @@ and expr_def =
 	| EUntyped of expr
 	| EThrow of expr
 	| ECast of expr * type_hint option
-	| EDisplay of expr * bool
-	| EDisplayNew of placed_type_path
 	| ETernary of expr * expr * expr
 	| ECheckType of expr * type_hint
 	| EMeta of metadata_entry * expr
@@ -653,8 +651,6 @@ let map_expr loop (e,p) =
 		let e = loop e in
 		let t = opt type_hint t in
 		ECast (e,t)
-	| EDisplay (e,f) -> EDisplay (loop e,f)
-	| EDisplayNew t -> EDisplayNew (tpath t)
 	| ETernary (e1,e2,e3) ->
 		let e1 = loop e1 in
 		let e2 = loop e2 in
@@ -672,9 +668,9 @@ let iter_expr loop (e,p) =
 	let opt eo = match eo with None -> () | Some e -> loop e in
 	let exprs = List.iter loop in
 	match e with
-	| EConst _ | EContinue | EBreak | EDisplayNew _ | EReturn None -> ()
+	| EConst _ | EContinue | EBreak | EReturn None -> ()
 	| EParenthesis e1 | EField(e1,_) | EUnop(_,_,e1) | EReturn(Some e1) | EThrow e1 | EMeta(_,e1)
-	| ECheckType(e1,_) | EDisplay(e1,_) | ECast(e1,_) | EUntyped e1 -> loop e1;
+	| ECheckType(e1,_) | ECast(e1,_) | EUntyped e1 -> loop e1;
 	| EArray(e1,e2) | EBinop(_,e1,e2) | EFor(e1,e2) | EWhile(e1,e2,_) | EIf(e1,e2,None) -> loop e1; loop e2;
 	| ETernary(e1,e2,e3) | EIf(e1,e2,Some e3) -> loop e1; loop e2; loop e3;
 	| EArrayDecl el | ENew(_,el) | EBlock el -> List.iter loop el
@@ -738,8 +734,6 @@ let s_expr e =
 		| ETernary (e1,e2,e3) -> s_expr_inner tabs e1 ^ " ? " ^ s_expr_inner tabs e2 ^ " : " ^ s_expr_inner tabs e3
 		| ECheckType (e,(t,_)) -> "(" ^ s_expr_inner tabs e ^ " : " ^ s_complex_type tabs t ^ ")"
 		| EMeta (m,e) -> s_metadata tabs m ^ " " ^ s_expr_inner tabs e
-		| EDisplay (e1,iscall) -> Printf.sprintf "#DISPLAY(%s, %b)" (s_expr_inner tabs e1) iscall
-		| EDisplayNew tp -> Printf.sprintf "#DISPLAY_NEW(%s)" (s_complex_type_path tabs tp)
 	and s_expr_list tabs el sep =
 		(String.concat sep (List.map (s_expr_inner tabs) el))
 	and s_complex_type_path tabs (t,_) =

@@ -547,10 +547,6 @@ and encode_expr e =
 				22, [loop e]
 			| ECast (e,t) ->
 				23, [loop e; null encode_ctype t]
-			| EDisplay (e,flag) ->
-				24, [loop e; vbool flag]
-			| EDisplayNew t ->
-				25, [encode_path t]
 			| ETernary (econd,e1,e2) ->
 				26, [loop econd;loop e1;loop e2]
 			| ECheckType (e,t) ->
@@ -817,10 +813,6 @@ and decode_expr v =
 			EThrow (loop e)
 		| 23, [e;t] ->
 			ECast (loop e,opt decode_ctype t)
-		| 24, [e;f] ->
-			EDisplay (loop e,decode_bool f)
-		| 25, [t] ->
-			EDisplayNew (decode_path t)
 		| 26, [e1;e2;e3] ->
 			ETernary (loop e1,loop e2,loop e3)
 		| 27, [e;t] ->
@@ -1865,13 +1857,6 @@ let macro_api ccom get_api =
 		"set_output", vfun1 (fun s ->
 			(ccom()).file <- decode_string s;
 			vnull
-		);
-		"get_display_pos", vfun0 (fun() ->
-			let p = !Parser.resume_display in
-			if p = Globals.null_pos then
-				vnull
-			else
-				encode_obj OCompiler_getDisplayPos ["file",encode_string p.Globals.pfile;"pos",vint p.Globals.pmin]
 		);
 		"pattern_locals", vfun2 (fun e t ->
 			let loc = (get_api()).get_pattern_locals (decode_expr e) (decode_type t) in

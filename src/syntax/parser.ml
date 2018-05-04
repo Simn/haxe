@@ -31,8 +31,6 @@ type error_msg =
 	| Custom of string
 
 exception Error of error_msg * pos
-exception TypePath of string list * (string * bool) option * bool (* in import *)
-exception Display of expr
 
 let error_msg = function
 	| Unexpected t -> "Unexpected "^(s_token t)
@@ -45,8 +43,6 @@ let error_msg = function
 
 let error m p = raise (Error (m,p))
 let display_error : (error_msg -> pos -> unit) ref = ref (fun _ _ -> assert false)
-
-let special_identifier_files : (string,string) Hashtbl.t = Hashtbl.create 0
 
 type decl_flag =
 	| DPrivate
@@ -76,7 +72,6 @@ end
 
 let last_doc : (string * int) option ref = ref None
 let use_doc = ref false
-let resume_display = ref null_pos
 let in_macro = ref false
 
 let last_token s =
@@ -95,34 +90,6 @@ let get_doc s =
 			if pos = p.pmin then Some d else None
 
 let serror() = raise (Stream.Error "")
-
-let do_resume() = !resume_display <> null_pos
-
-let display e = raise (Display e)
-
-let type_path sl in_import = match sl with
-	| n :: l when n.[0] >= 'A' && n.[0] <= 'Z' -> raise (TypePath (List.rev l,Some (n,false),in_import));
-	| _ -> raise (TypePath (List.rev sl,None,in_import))
-
-let is_resuming_file file =
-	Path.unique_full_path file = !resume_display.pfile
-
-let is_resuming p =
-	let p2 = !resume_display in
-	p.pmax = p2.pmin && is_resuming_file p.pfile
-
-let set_resume p =
-	resume_display := { p with pfile = Path.unique_full_path p.pfile }
-
-let encloses_resume p =
-	p.pmin <= !resume_display.pmin && p.pmax >= !resume_display.pmax
-
-let would_skip_resume p1 s =
-	match Stream.npeek 1 s with
-	| [ (_,p2) ] ->
-		is_resuming_file p2.pfile && encloses_resume (punion p1 p2)
-	| _ ->
-		false
 
 let is_dollar_ident e = match fst e with
 	| EConst (Ident n) when n.[0] = '$' ->

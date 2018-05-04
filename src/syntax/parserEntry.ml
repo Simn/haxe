@@ -124,7 +124,7 @@ let parse ctx code =
 	and enter_macro p =
 		let tk, e = parse_macro_cond sraw in
 		let tk = (match tk with None -> Lexer.token code | Some tk -> tk) in
-		if is_true (eval ctx e) || (match fst e with EConst (Ident "macro") when Path.unique_full_path p.pfile = (!resume_display).pfile -> true | _ -> false) then begin
+		if is_true (eval ctx e) then begin
 			mstack := p :: !mstack;
 			tk
 		end else
@@ -144,7 +144,7 @@ let parse ctx code =
 		| Sharp "if" ->
 			skip_tokens_loop p test (skip_tokens p false)
 		| Eof ->
-			if do_resume() then tk else error Unclosed_macro p
+			error Unclosed_macro p
 		| _ ->
 			skip_tokens p test
 
@@ -158,7 +158,7 @@ let parse ctx code =
 	) in
 	try
 		let l = parse_file s in
-		(match !mstack with p :: _ when not (do_resume()) -> error Unclosed_macro p | _ -> ());
+		(match !mstack with p :: _ -> error Unclosed_macro p | _ -> ());
 		restore_cache ();
 		Lexer.restore old;
 		l
@@ -177,19 +177,16 @@ let parse ctx code =
 let parse_string com s p error inlined =
 	let old = Lexer.save() in
 	let old_file = (try Some (Hashtbl.find Lexer.all_files p.pfile) with Not_found -> None) in
-	let old_display = !resume_display in
 	let old_de = !display_error in
 	let restore() =
 		(match old_file with
 		| None -> ()
 		| Some f -> Hashtbl.replace Lexer.all_files p.pfile f);
-		if not inlined then resume_display := old_display;
 		Lexer.restore old;
 		display_error := old_de
 	in
 	Lexer.init p.pfile true;
 	display_error := (fun e p -> raise (Error (e,p)));
-	if not inlined then resume_display := null_pos;
 	let pack, decls = try
 		parse com (Sedlexing.Utf8.from_string s)
 	with Error (e,pe) ->

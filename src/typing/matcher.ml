@@ -443,7 +443,6 @@ module Pattern = struct
 						let pat = make pctx false t e2 in
 						PatBind(v,pat)
 					| (EParenthesis e1,_) -> loop e1
-					| (EDisplay(e1,_),_) -> loop e1
 					| _ -> fail()
 				in
 				loop e1

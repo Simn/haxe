@@ -775,16 +775,6 @@ try
 	process ctx.com.args;
 	process_libs();
 	Lexer.old_format := Common.defined com Define.OldErrorFormat;
-	if !Lexer.old_format && Parser.do_resume () then begin
-		let p = !Parser.resume_display in
-		(* convert byte position to utf8 position *)
-		try
-			let content = Std.input_file ~bin:true (Path.get_real_path p.pfile) in
-			let pos = UTF8.length (String.sub content 0 p.pmin) in
-			Parser.resume_display := { p with pmin = pos; pmax = pos }
-		with _ ->
-			() (* ignore *)
-	end;
 	let ext = Initialize.initialize_target ctx com classes in
 	(* if we are at the last compilation step, allow all packages accesses - in case of macros or opening another project file *)
 	com.config <- get_config com; (* make sure to adapt all flags changes defined after platform *)
