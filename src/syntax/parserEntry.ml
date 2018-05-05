@@ -211,7 +211,8 @@ let parse_string com s p error inl =
 let parse_expr_string com s p error inl =
 	let rec loop e = let e = Ast.map_expr loop e in (fst e,p) in
     let s = String.make p.pmin ' ' ^ s in
-	let e = parse_string' com expr s p error inl in
+	(* TODO: not a good Pokemon, but this was the previous behavior I think *)
+	let e = try parse_string' com toplevel_expr s p error inl with _ -> raise Exit in
 	if inl then e else loop e
 
 let parse_block_element_string com s p error inl =
