@@ -736,10 +736,13 @@ and block_with_pos acc p s =
 			block_with_pos acc p s
 
 and parse_block_elt = parser
-	| [< '(Kwd Var,p1); vl = parse_var_decls p1; p2 = semicolon >] ->
-		(EVars vl,punion p1 p2)
-	| [< '(Kwd Inline,p1); '(Kwd Function,_); e = parse_function p1 true; _ = semicolon >] -> e
-	| [< e = expr; _ = semicolon >] -> e
+	| [< e = parse_block_element; _ = semicolon >] -> e
+
+and parse_block_element = parser
+	| [< '(Kwd Var,p1); vl = parse_var_decls p1; s >] ->
+		(EVars vl,punion p1 (pos (last_token s)))
+	| [< '(Kwd Inline,p1); '(Kwd Function,_); e = parse_function p1 true >] -> e
+	| [< e = expr >] -> e
 
 and parse_obj_decl = parser
 	| [< '(Comma,_); s >] ->

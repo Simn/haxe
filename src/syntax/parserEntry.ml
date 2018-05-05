@@ -71,7 +71,7 @@ let rec eval ctx (e,p) =
 		error (Custom "Invalid condition expression") p
 
 (* parse main *)
-let parse ctx code =
+let parse' ctx parse_fun code =
 	let old = Lexer.save() in
 	let restore_cache = TokenCache.clear () in
 	let mstack = ref [] in
@@ -157,7 +157,7 @@ let parse ctx code =
 		Some t
 	) in
 	try
-		let l = parse_file s in
+		let l = parse_fun s in
 		(match !mstack with p :: _ when not (do_resume()) -> error Unclosed_macro p | _ -> ());
 		restore_cache ();
 		Lexer.restore old;
@@ -174,7 +174,10 @@ let parse ctx code =
 			restore_cache ();
 			raise e
 
-let parse_string com s p error inlined =
+let parse ctx s =
+	parse' ctx parse_file s
+
+let parse_string' com parse_fun s p error inlined =
 	let old = Lexer.save() in
 	let old_file = (try Some (Hashtbl.find Lexer.all_files p.pfile) with Not_found -> None) in
 	let old_display = !resume_display in
@@ -191,7 +194,7 @@ let parse_string com s p error inlined =
 	display_error := (fun e p -> raise (Error (e,p)));
 	if not inlined then resume_display := null_pos;
 	let pack, decls = try
-		parse com (Sedlexing.Utf8.from_string s)
+		parse' com parse_fun (Sedlexing.Utf8.from_string s)
 	with Error (e,pe) ->
 		restore();
 		error (error_msg e) (if inlined then pe else p)
@@ -202,10 +205,14 @@ let parse_string com s p error inlined =
 	restore();
 	pack,decls
 
+let parse_string com s p error inl =
+	parse_string' com parse_file s p error inl
+
 let parse_expr_string com s p error inl =
-	let head = "class X{static function main() " in
-	let head = (if p.pmin > String.length head then head ^ String.make (p.pmin - String.length head) ' ' else head) in
 	let rec loop e = let e = Ast.map_expr loop e in (fst e,p) in
-	match parse_string com (head ^ s ^ ";}") p error inl with
-	| _,[EClass { d_data = [{ cff_name = "main",null_pos; cff_kind = FFun { f_expr = Some e } }]},_] -> if inl then e else loop e
-	| _ -> raise Exit
+    let s = String.make p.pmin ' ' ^ s in
+	let e = parse_string' com expr s p error inl in
+	if inl then e else loop e
+
+let parse_block_element_string com s p error inl =
+	parse_string' com parse_block_element s p error inl
