@@ -174,6 +174,13 @@ and func = {
 
 and placed_name = string * pos
 
+and display_kind =
+	| DKCall
+	| DKDot
+	| DKStructure
+	| DKToplevel
+	| DKMarked
+
 and expr_def =
 	| EConst of constant
 	| EArray of expr * expr
@@ -199,7 +206,7 @@ and expr_def =
 	| EUntyped of expr
 	| EThrow of expr
 	| ECast of expr * type_hint option
-	| EDisplay of expr * bool
+	| EDisplay of expr * display_kind
 	| EDisplayNew of placed_type_path
 	| ETernary of expr * expr * expr
 	| ECheckType of expr * type_hint
@@ -230,6 +237,8 @@ and access =
 	| AFinal
 	| AExtern
 
+and placed_access = access * pos
+
 and class_field_kind =
 	| FVar of type_hint option * expr option
 	| FFun of func
@@ -240,7 +249,7 @@ and class_field = {
 	cff_doc : documentation;
 	cff_pos : pos;
 	mutable cff_meta : metadata;
-	mutable cff_access : access list;
+	mutable cff_access : placed_access list;
 	mutable cff_kind : class_field_kind;
 }
 
@@ -372,6 +381,8 @@ let s_access = function
 	| AMacro -> "macro"
 	| AFinal -> "final"
 	| AExtern -> "extern"
+
+let s_placed_access (a,_) = s_access a
 
 let s_keyword = function
 	| Function -> "function"
@@ -700,6 +711,13 @@ let s_object_key_name name =  function
 	| DoubleQuotes -> "\"" ^ s_escape name ^ "\""
 	| NoQuotes -> name
 
+let s_display_kind = function
+	| DKCall -> "DKCall"
+	| DKDot -> "DKDot"
+	| DKStructure -> "DKStructure"
+	| DKToplevel -> "DKToplevel"
+	| DKMarked -> "TKMarked"
+
 let s_expr e =
 	let rec s_expr_inner tabs (e,_) =
 		match e with
@@ -738,7 +756,7 @@ let s_expr e =
 		| ETernary (e1,e2,e3) -> s_expr_inner tabs e1 ^ " ? " ^ s_expr_inner tabs e2 ^ " : " ^ s_expr_inner tabs e3
 		| ECheckType (e,(t,_)) -> "(" ^ s_expr_inner tabs e ^ " : " ^ s_complex_type tabs t ^ ")"
 		| EMeta (m,e) -> s_metadata tabs m ^ " " ^ s_expr_inner tabs e
-		| EDisplay (e1,iscall) -> Printf.sprintf "#DISPLAY(%s, %b)" (s_expr_inner tabs e1) iscall
+		| EDisplay (e1,dk) -> Printf.sprintf "#DISPLAY(%s, %s)" (s_expr_inner tabs e1) (s_display_kind dk)
 		| EDisplayNew tp -> Printf.sprintf "#DISPLAY_NEW(%s)" (s_complex_type_path tabs tp)
 	and s_expr_list tabs el sep =
 		(String.concat sep (List.map (s_expr_inner tabs) el))
@@ -769,7 +787,7 @@ let s_expr e =
 		| Some s -> "/**\n\t" ^ tabs ^ s ^ "\n**/\n"
 		| None -> "" ^
 		if List.length f.cff_meta > 0 then String.concat ("\n" ^ tabs) (List.map (s_metadata tabs) f.cff_meta) else "" ^
-		if List.length f.cff_access > 0 then String.concat " " (List.map s_access f.cff_access) else "" ^
+		if List.length f.cff_access > 0 then String.concat " " (List.map s_placed_access f.cff_access) else "" ^
 		match f.cff_kind with
 		| FVar (t,e) -> "var " ^ (fst f.cff_name) ^ s_opt_type_hint tabs t " : " ^ s_opt_expr tabs e " = "
 		| FProp ((get,_),(set,_),t,e) -> "var " ^ (fst f.cff_name) ^ "(" ^ get ^ "," ^ set ^ ")" ^ s_opt_type_hint tabs t " : " ^ s_opt_expr tabs e " = "

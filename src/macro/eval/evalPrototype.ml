@@ -173,7 +173,8 @@ let is_removable_field cf =
 	cf.cf_extern || Meta.has Meta.Generic cf.cf_meta
 
 let create_static_prototype ctx mt =
-	let key = path_hash (t_infos mt).mt_path in
+	let path = (t_infos mt).mt_path in
+	let key = path_hash path in
 	let com = ctx.curapi.MacroApi.get_com() in
 	let meta = Texpr.build_metadata com.Common.basic mt in
 	let o = match mt with
@@ -209,15 +210,7 @@ let create_static_prototype ctx mt =
 		let pctx = PrototypeBuilder.create ctx key None (PEnum en.e_names) meta in
 		let enum_field_value ef = match follow ef.ef_type with
 			| TFun(args,_) ->
-				let f = match args with
-					| [] -> Fun0 (fun () -> encode_enum_value key ef.ef_index [||] (Some ef.ef_pos))
-					| [_] -> Fun1 (fun a -> encode_enum_value key ef.ef_index [|a|] (Some ef.ef_pos))
-					| [_;_] -> Fun2 (fun a b -> encode_enum_value key ef.ef_index [|a;b|] (Some ef.ef_pos))
-					| [_;_;_] -> Fun3 (fun a b c -> encode_enum_value key ef.ef_index [|a;b;c|] (Some ef.ef_pos))
-					| [_;_;_;_] -> Fun4 (fun a b c d -> encode_enum_value key ef.ef_index [|a;b;c;d|] (Some ef.ef_pos))
-					| [_;_;_;_;_] -> Fun5 (fun a b c d e -> encode_enum_value key ef.ef_index [|a;b;c;d;e|] (Some ef.ef_pos))
-					| _ -> FunN (fun vl -> encode_enum_value key ef.ef_index (Array.of_list vl) (Some ef.ef_pos))
-				in
+				let f = (fun vl -> encode_enum_value key ef.ef_index (Array.of_list vl) (Some ef.ef_pos)) in
 				vstatic_function f
 			| _ -> encode_enum_value key ef.ef_index [||] (Some ef.ef_pos)
 		in
@@ -229,6 +222,21 @@ let create_static_prototype ctx mt =
 	| _ ->
 		assert false
 	in
+	let rec loop v name path = match path with
+		| [] ->
+			set_field v (hash_s name) (vprototype (fst (fst o)))
+		| s :: sl ->
+			let key = hash_s s in
+			let v2 = EvalField.field v key in
+			let v2 = match v2 with
+				| VNull -> encode_obj None []
+				| _ -> v2
+			in
+			set_field v key v2;
+			loop v2 name sl;
+	in
+	if ctx.debug.support_debugger then
+		loop ctx.toplevel (snd path) (fst path);
 	o
 
 let create_instance_prototype ctx c =

@@ -223,7 +223,7 @@ let rec wait ctx run env =
 			begin try
 				let file,line,column = parse_breakpoint_pattern pattern in
 				begin try
-					let breakpoint = add_breakpoint ctx file line column in
+					let breakpoint = add_breakpoint ctx file line column None in
 					output_breakpoint_set breakpoint;
 				with Not_found ->
 					output_error ("Could not find file " ^ file);
@@ -344,8 +344,8 @@ let rec wait ctx run env =
 			begin try
 				let e = parse_expr ctx e env.env_debug.expr.epos in
 				begin try
-					let name,v = expr_to_value ctx env e in
-					output_value name v
+					let v = expr_to_value ctx env e in
+					output_value (Ast.s_expr e) v
 				with Exit ->
 					output_error ("Don't know how to handle this expression: " ^ (Ast.s_expr e))
 				end
@@ -358,17 +358,8 @@ let rec wait ctx run env =
 			begin try
 				let expr,value = parse expr_s,parse value in
 				begin try
-					let _,value = expr_to_value ctx env value in
-					begin match fst expr with
-						(* TODO: support setting array elements and enum values *)
-						| EField(e1,s) ->
-							let _,v1 = expr_to_value ctx env e1 in
-							set_field v1 (hash_s s) value;
-						| EConst (Ident s) ->
-							set_variable ctx env.env_debug.scopes s value env;
-						| _ ->
-							raise Exit
-					end
+					let value = expr_to_value ctx env value in
+					write_expr ctx env expr value;
 				with Exit ->
 					output_error ("Don't know how to handle this expression")
 				end

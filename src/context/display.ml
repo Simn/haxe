@@ -40,15 +40,18 @@ let is_display_file file =
 let encloses_position p_target p =
 	p.pmin <= p_target.pmin && p.pmax >= p_target.pmax
 
+let really_encloses_position p_target p =
+	p.pmin <= p_target.pmin && p.pmax > p_target.pmax
+
 let is_display_position p =
 	encloses_position !Parser.resume_display p
 
 module ExprPreprocessing = struct
-	let find_enclosing com e =
+	let find_enclosing com dk e =
 		let display_pos = ref (!Parser.resume_display) in
-		let mk_null p = (EDisplay(((EConst(Ident "null")),p),false),p) in
+		let mk_null p = (EDisplay(((EConst(Ident "null")),p),dk),p) in
 		let encloses_display_pos p =
-			if encloses_position !display_pos p then begin
+			if really_encloses_position !display_pos p then begin
 				let p = !display_pos in
 				display_pos := { pfile = ""; pmin = -2; pmax = -2 };
 				Some p
@@ -69,7 +72,7 @@ module ExprPreprocessing = struct
 							if b || p.pmax <= p2.pmin then begin
 								(b,e :: el)
 							end else begin
-								let e_d = (EDisplay(mk_null p,false)),p in
+								let e_d = (EDisplay(mk_null p,dk)),p in
 								(true,e :: e_d :: el)
 							end
 						) (false,[]) el in
@@ -86,7 +89,7 @@ module ExprPreprocessing = struct
 		in
 		loop e
 
-	let find_before_pos com e =
+	let find_before_pos com dk e =
 		let display_pos = ref (!Parser.resume_display) in
 		let is_annotated p =
 			if p.pmin <= !display_pos.pmin && p.pmax >= !display_pos.pmax then begin
@@ -97,7 +100,7 @@ module ExprPreprocessing = struct
 		in
 		let loop e =
 			if is_annotated (pos e) then
-				(EDisplay(e,false),(pos e))
+				(EDisplay(e,dk),(pos e))
 			else
 				e
 		in
@@ -111,30 +114,30 @@ module ExprPreprocessing = struct
 		let loop e = if !found then e else match fst e with
 			| ECall _ | ENew _ when is_display_position (pos e) ->
 				found := true;
-				(EDisplay(e,true),(pos e))
+				(EDisplay(e,DKCall),(pos e))
 			| _ ->
 				e
 		in
 		let rec map e = match fst e with
-			| EDisplay(_,true) ->
+			| EDisplay(_,DKCall) ->
 				found := true;
 				e
-			| EDisplay(e1,false) -> map e1
+			| EDisplay(e1,_) -> map e1
 			| _ -> loop (Ast.map_expr map e)
 		in
 		map e
 
 
 	let process_expr com e = match com.display.dms_kind with
-		| DMToplevel -> find_enclosing com e
-		| DMPosition | DMUsage _ | DMType -> find_before_pos com e
+		| DMToplevel -> find_enclosing com DKToplevel e
+		| DMPosition | DMUsage _ | DMType -> find_before_pos com DKMarked e
 		| DMSignature -> find_display_call e
 		| _ -> e
 end
 
 module DisplayEmitter = struct
 	let display_module_type dm mt p = match dm.dms_kind with
-		| DMPosition -> raise (DisplayPosition [(t_infos mt).mt_pos]);
+		| DMPosition -> raise (DisplayPosition [(t_infos mt).mt_name_pos]);
 		| DMUsage _ ->
 			let ti = t_infos mt in
 			ti.mt_meta <- (Meta.Usage,[],ti.mt_pos) :: ti.mt_meta
@@ -170,16 +173,22 @@ module DisplayEmitter = struct
 		| _ -> ()
 
 	let display_field dm cf p = match dm.dms_kind with
-		| DMPosition -> raise (DisplayPosition [cf.cf_pos]);
+		| DMPosition -> raise (DisplayPosition [cf.cf_name_pos]);
 		| DMUsage _ -> cf.cf_meta <- (Meta.Usage,[],cf.cf_pos) :: cf.cf_meta;
-		| DMType -> raise (DisplayType (cf.cf_type,p,cf.cf_doc))
+		| DMType ->
+			let t = if Meta.has Meta.Impl cf.cf_meta then
+				(prepare_using_field cf).cf_type
+			else
+				cf.cf_type
+			in
+			raise (DisplayType (t,p,cf.cf_doc))
 		| _ -> ()
 
 	let maybe_display_field ctx p cf =
 		if is_display_position p then display_field ctx.com.display cf p
 
 	let display_enum_field dm ef p = match dm.dms_kind with
-		| DMPosition -> raise (DisplayPosition [p]);
+		| DMPosition -> raise (DisplayPosition [ef.ef_name_pos]);
 		| DMUsage _ -> ef.ef_meta <- (Meta.Usage,[],p) :: ef.ef_meta;
 		| DMType -> raise (DisplayType (ef.ef_type,p,ef.ef_doc))
 		| _ -> ()

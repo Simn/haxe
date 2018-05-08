@@ -463,6 +463,7 @@ and init ctx =
 	let classes = ref [([],"Std")] in
 try
 	let xml_out = ref None in
+	let json_out = ref None in
 	let swf_header = ref None in
 	let cmds = ref [] in
 	let config_macros = ref [] in
@@ -532,7 +533,7 @@ try
 		("Target",["--hl"],["-hl"],Arg.String (fun file ->
 			Initialize.set_platform com Hl file;
 		),"<file>","compile HL code as target file");
-		("Target",["-x";"--execute"],[], Arg.String (fun cl ->
+		("Target",[],["-x";"--execute"], Arg.String (fun cl ->
 			let cpath = Path.parse_type_path cl in
 			(match com.main_class with
 				| Some c -> if cpath <> c then raise (Arg.Bad "Multiple --main classes specified")
@@ -542,7 +543,7 @@ try
 			Initialize.set_platform com (!Globals.macro_platform) "";
 			interp := true;
 		),"<class>","interpret the program using internal macro system");
-		("Target",[],["--interp"], Arg.Unit (fun() ->
+		("Target",["--interp"],[], Arg.Unit (fun() ->
 			Common.define com Define.Interp;
 			Initialize.set_platform com (!Globals.macro_platform) "";
 			interp := true;
@@ -682,13 +683,21 @@ try
 		("Optimization",["--no-traces"],[], define Define.NoTraces, "","don't compile trace calls in the program");
 		("Batch",["--next"],[], Arg.Unit (fun() -> assert false), "","separate several haxe compilations");
 		("Batch",["--each"],[], Arg.Unit (fun() -> assert false), "","append preceding parameters to all haxe compilations separated by --next");
-		("Services",["--display"],[], Arg.String (fun file_pos ->
-			DisplayOutput.handle_display_argument com file_pos pre_compilation did_something;
+		("Services",["--display"],[], Arg.String (fun input ->
+			let input = String.trim input in
+			if String.length input > 0 && (input.[0] = '[' || input.[0] = '{') then begin
+				DisplayJson.parse_input com input
+			end else
+				DisplayOutput.handle_display_argument com input pre_compilation did_something;
 		),"","display code tips");
 		("Services",["--xml"],["-xml"],Arg.String (fun file ->
 			Parser.use_doc := true;
 			xml_out := Some file
 		),"<file>","generate XML types description");
+		("Services",["--json"],[],Arg.String (fun file ->
+			Parser.use_doc := true;
+			json_out := Some file
+		),"<file>","generate JSON types description");
 		("Services",["--gen-hx-classes"],[], Arg.Unit (fun() ->
 			force_typing := true;
 			pre_compilation := (fun() ->
@@ -797,8 +806,9 @@ try
 	DisplayOutput.process_display_file com classes;
 	let ext = Initialize.initialize_target ctx com classes in
 	(* if we are at the last compilation step, allow all packages accesses - in case of macros or opening another project file *)
-	if com.display.dms_display then begin
-		if not ctx.has_next then com.package_rules <- PMap.foldi (fun p r acc -> match r with Forbidden -> acc | _ -> PMap.add p r acc) com.package_rules PMap.empty;
+	if com.display.dms_display then begin match com.display.dms_kind with
+		| DMToplevel -> ()
+		| _ -> if not ctx.has_next then com.package_rules <- PMap.foldi (fun p r acc -> match r with Forbidden -> acc | _ -> PMap.add p r acc) com.package_rules PMap.empty;
 	end;
 	com.config <- get_config com; (* make sure to adapt all flags changes defined after platform *)
 	List.iter (fun f -> f()) (List.rev (!pre_compilation));
@@ -831,14 +841,22 @@ try
 		Filters.run com tctx main;
 		t();
 		if ctx.has_error then raise Abort;
-		(match !xml_out with
-		| None -> ()
-		| Some "hx" ->
-			Genxml.generate_hx com
-		| Some file ->
-			Common.log com ("Generating xml: " ^ file);
-			Path.mkdir_from_path file;
-			Genxml.generate com file);
+		begin match !xml_out with
+			| None -> ()
+			| Some "hx" ->
+				Genxml.generate_hx com
+			| Some file ->
+				Common.log com ("Generating xml: " ^ file);
+				Path.mkdir_from_path file;
+				Genxml.generate com file
+		end;
+		begin match !json_out with
+			| None -> ()
+			| Some file ->
+				Common.log com ("Generating json : " ^ file);
+				Path.mkdir_from_path file;
+				Genjson.generate com file
+		end;
 		if not !no_output then generate tctx ext !xml_out !interp !swf_header;
 	end;
 	Sys.catch_break false;
@@ -905,7 +923,7 @@ with
 		else
 			raise (DisplayOutput.Completion (DisplayOutput.print_signatures signatures))
 	| Display.DisplayPosition pl ->
-		raise (DisplayOutput.Completion (DisplayOutput.print_positions pl))
+		raise (DisplayOutput.Completion (DisplayOutput.print_positions ctx.com pl))
 	| Display.DisplayToplevel il ->
 		let il =
 			if !measure_times then begin

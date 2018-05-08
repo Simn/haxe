@@ -385,7 +385,7 @@ and encode_tparam = function
 	| TPExpr e -> encode_enum ITParam 1 [encode_expr e]
 
 and encode_access a =
-	let tag = match a with
+	let tag = match fst a with
 		| APublic -> 0
 		| APrivate -> 1
 		| AStatic -> 2
@@ -396,7 +396,7 @@ and encode_access a =
 		| AFinal -> 7
 		| AExtern -> 8
 	in
-	encode_enum IAccess tag []
+	encode_enum ~pos:(Some (pos a)) IAccess tag []
 
 and encode_meta_entry (m,ml,p) =
 	encode_obj OMetadataEntry [
@@ -468,6 +468,16 @@ and encode_fun f =
 		"ret", null encode_ctype f.f_type;
 		"expr", null encode_expr f.f_expr
 	]
+
+and encode_display_kind dk =
+	let tag = match dk with
+	| DKCall -> 0
+	| DKDot -> 1
+	| DKStructure -> 2
+	| DKToplevel -> 3
+	| DKMarked -> 4
+	in
+	encode_enum ~pos:None ICType tag []
 
 and encode_expr e =
 	let rec loop (e,p) =
@@ -547,8 +557,8 @@ and encode_expr e =
 				22, [loop e]
 			| ECast (e,t) ->
 				23, [loop e; null encode_ctype t]
-			| EDisplay (e,flag) ->
-				24, [loop e; vbool flag]
+			| EDisplay (e,dk) ->
+				24, [loop e; encode_display_kind dk]
 			| EDisplayNew t ->
 				25, [encode_path t]
 			| ETernary (econd,e1,e2) ->
@@ -688,17 +698,20 @@ and decode_fun v =
 	}
 
 and decode_access v =
-	match decode_enum v with
-	| 0, [] -> APublic
-	| 1, [] -> APrivate
-	| 2, [] -> AStatic
-	| 3, [] -> AOverride
-	| 4, [] -> ADynamic
-	| 5, [] -> AInline
-	| 6, [] -> AMacro
-	| 7, [] -> AFinal
-	| 8, [] -> AExtern
+	let (i,_),p = decode_enum_with_pos v in
+	let a = match i with
+	| 0 -> APublic
+	| 1 -> APrivate
+	| 2 -> AStatic
+	| 3 -> AOverride
+	| 4 -> ADynamic
+	| 5 -> AInline
+	| 6 -> AMacro
+	| 7 -> AFinal
+	| 8 -> AExtern
 	| _ -> raise Invalid_expr
+	in
+	a,p
 
 and decode_meta_entry v =
 	Meta.from_string (decode_string (field v "name")), decode_opt_array decode_expr (field v "params"), decode_pos (field v "pos")
@@ -744,6 +757,14 @@ and decode_ctype t =
 		CTNamed ((decode_string n,p), decode_ctype t)
 	| _ ->
 		raise Invalid_expr),p
+
+and decode_display_kind v = match fst (decode_enum v) with
+	| 0 -> DKCall
+	| 1 -> DKDot
+	| 2 -> DKStructure
+	| 3 -> DKToplevel
+	| 4 -> DKMarked
+	| _ -> raise Invalid_expr
 
 and decode_expr v =
 	let rec loop v =
@@ -817,8 +838,8 @@ and decode_expr v =
 			EThrow (loop e)
 		| 23, [e;t] ->
 			ECast (loop e,opt decode_ctype t)
-		| 24, [e;f] ->
-			EDisplay (loop e,decode_bool f)
+		| 24, [e;dk] ->
+			EDisplay (loop e,decode_display_kind dk)
 		| 25, [t] ->
 			EDisplayNew (decode_path t)
 		| 26, [e1;e2;e3] ->

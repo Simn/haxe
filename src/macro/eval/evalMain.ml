@@ -71,11 +71,8 @@ let create com api is_macro =
 					let s = Common.defined_value com Define.EvalDebugger in
 					if s = "1" then raise Exit;
 					let host,port = try ExtString.String.split s ":" with _ -> fail "Invalid host format, expected host:port" in
-					let host = try Unix.inet_addr_of_string host with exc -> fail (Printexc.to_string exc) in
 					let port = try int_of_string port with _ -> fail "Invalid port, expected int" in
-					let socket = try (Unix.socket Unix.PF_INET Unix.SOCK_STREAM) 0 with exc -> fail (Printexc.to_string exc) in
-					Unix.connect socket (Unix.ADDR_INET (host,port));
-					Some {addr = host; port = port; socket = Some socket}
+					Some (try Socket.create host port with exc -> fail (Printexc.to_string exc))
 				with _ ->
 					None
 			in
@@ -84,10 +81,11 @@ let create com api is_macro =
 				breakpoints = Hashtbl.create 0;
 				support_debugger = support_debugger;
 				debug_state = DbgStart;
-				breakpoint = EvalDebugMisc.make_breakpoint 0 0 BPDisabled BPAny;
+				breakpoint = EvalDebugMisc.make_breakpoint 0 0 BPDisabled BPAny None;
 				caught_types = Hashtbl.create 0;
 				environment_offset_delta = 0;
 				debug_socket = socket;
+				exception_mode = CatchUncaught;
 			} in
 			debug := Some debug';
 			debug'
@@ -95,7 +93,6 @@ let create com api is_macro =
 			debug
 	in
 	let detail_times = Common.defined com Define.EvalTimes in
-	let record_stack = debug.support_debugger || detail_times || Common.defined com Define.EvalStack in
 	let evals = DynArray.create () in
 	let eval = {
 		environments = DynArray.make 32;
@@ -106,7 +103,6 @@ let create com api is_macro =
 		ctx_id = !sid;
 		is_macro = is_macro;
 		debug = debug;
-		record_stack = record_stack;
 		detail_times = detail_times;
 		curapi = api;
 		builtins = builtins;
@@ -122,6 +118,12 @@ let create com api is_macro =
 		constructors = IntMap.empty;
 		get_object_prototype = get_object_prototype;
 		(* eval *)
+		toplevel = 	vobject {
+			ofields = [||];
+			oproto = fake_proto key_eval_toplevel;
+			oextra = IntMap.empty;
+			oremoved = IntMap.empty;
+		};
 		eval = eval;
 		exception_stack = [];
 	} in
@@ -339,15 +341,7 @@ let setup get_api =
 	let api = get_api (fun() -> (get_ctx()).curapi.get_com()) (fun() -> (get_ctx()).curapi) in
 	List.iter (fun (n,v) -> match v with
 		| VFunction(f,b) ->
-			let v = match f with
-				| Fun0 f -> VFunction (Fun0 (fun () -> try f () with Sys_error msg | Failure msg -> exc_string msg),b)
-				| Fun1 f -> VFunction (Fun1 (fun a -> try f a with Sys_error msg | Failure msg -> exc_string msg),b)
-				| Fun2 f -> VFunction (Fun2 (fun a b -> try f a b with Sys_error msg | Failure msg -> exc_string msg),b)
-				| Fun3 f -> VFunction (Fun3 (fun a b c -> try f a b c with Sys_error msg | Failure msg -> exc_string msg),b)
-				| Fun4 f -> VFunction (Fun4 (fun a b c d -> try f a b c d with Sys_error msg | Failure msg -> exc_string msg),b)
-				| Fun5 f -> VFunction (Fun5 (fun a b c d e -> try f a b c d e with Sys_error msg | Failure msg -> exc_string msg),b)
-				| FunN f -> VFunction (FunN (fun vl -> try f vl with Sys_error msg | Failure msg -> exc_string msg),b)
-			in
+			let v = VFunction ((fun vl -> try f vl with Sys_error msg | Failure msg -> exc_string msg),b) in
 			Hashtbl.replace EvalStdLib.macro_lib n v
 		| _ -> assert false
 	) api;

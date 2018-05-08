@@ -3,6 +3,7 @@ XXXX-XX-XX: 4.0.0-preview.4
 	New features:
 
 	all : allow `enum abstract` syntax instead of `@:enum abstract` (#4282)
+	all : support signature completion on incomplete structures (#5767)
 
 	General improvements and optimizations:
 
@@ -10,6 +11,7 @@ XXXX-XX-XX: 4.0.0-preview.4
 	all : metadata can now use `.`, e.g. `@:a.b`. This is represented as a string (#3959)
 	js : added externs for js.Date (#6855)
 	js : respect `-D source-map` flag to generate source maps in release builds
+	js : enums are now generated as objects instead of arrays (#6350)
 
 	Bugfixes:
 
