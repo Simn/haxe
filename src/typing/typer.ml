@@ -1485,6 +1485,12 @@ and type_vars ctx vl p =
 		let e = mk (TBlock (List.map (fun (v,e) -> (mk (TVar (v,e)) ctx.t.tvoid p)) vl)) ctx.t.tvoid p in
 		mk (TMeta((Meta.MergeBlock,[],p), e)) e.etype e.epos
 
+and unescape_string s p =
+	try
+		Ast.unescape s
+	with Invalid_escape_sequence(c,i) ->
+		 error (Lexer.error_msg (Lexer.Invalid_escape c)) p
+
 and format_string ctx s p =
 	let e = ref None in
 	let pmin = ref p.pmin in
@@ -1507,7 +1513,8 @@ and format_string ctx s p =
 	in
 	let add_sub start pos =
 		let len = pos - start in
-		if len > 0 || !e = None then add (EConst (String (String.sub s start len))) len
+		let s = unescape_string (String.sub s start len) { p with pmin = p.pmin + start; pmax = p.pmin + start } in
+		if len > 0 || !e = None then add (EConst (String s)) len
 	in
 	let warn_escape = Common.defined ctx.com Define.FormatWarning in
 	let warn pos len =
@@ -2336,6 +2343,7 @@ and type_call ctx e el (with_type:with_type) p =
 and type_expr ctx (e,p) (with_type:with_type) =
 	match e with
 	| EField ((EConst (String s),ps),"code") ->
+		let s = if Lexer.is_fmt_string ps then unescape_string s ps else s in
 		if UTF8.length s <> 1 then error "String must be a single UTF8 char" ps;
 		mk (TConst (TInt (Int32.of_int (UChar.code (UTF8.get s 0))))) ctx.t.tint p
 	| EField(_,n) when n.[0] = '$' ->

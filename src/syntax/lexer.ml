@@ -76,6 +76,10 @@ let buf = Buffer.create 100
 let error e pos =
 	raise (Error (e,{ pmin = pos; pmax = pos; pfile = !cur.lfile }))
 
+let unescape_string s pmin =
+	try Ast.unescape s
+	with Invalid_escape_sequence(c,i) -> error (Invalid_escape c) (pmin + i)
+
 let keywords =
 	let h = Hashtbl.create 3 in
 	List.iter (fun k -> Hashtbl.add h (s_keyword k) k)
@@ -354,13 +358,13 @@ let rec token lexbuf =
 		reset();
 		let pmin = lexeme_start lexbuf in
 		let pmax = (try string lexbuf with Exit -> error Unterminated_string pmin) in
-		let str = (try unescape (contents()) with Invalid_escape_sequence(c,i) -> error (Invalid_escape c) (pmin + i)) in
+		let str = unescape_string (contents()) pmin in
 		mk_tok (Const (String str)) pmin pmax;
 	| "'" ->
 		reset();
 		let pmin = lexeme_start lexbuf in
 		let pmax = (try string2 lexbuf with Exit -> error Unterminated_string pmin) in
-		let str = (try unescape (contents()) with Invalid_escape_sequence(c,i) -> error (Invalid_escape c) (pmin + i)) in
+		let str = contents() in
 		let t = mk_tok (Const (String str)) pmin pmax in
 		fast_add_fmt_string (snd t);
 		t

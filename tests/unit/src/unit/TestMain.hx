@@ -98,6 +98,7 @@ class TestMain {
 			#end
 			new TestMapComprehension(),
 			new TestMacro(),
+			new TestStringFormatting()
 			// #if ( (java || neko) && !macro && !interp)
 			// new TestThreads(),
 			// #end
