@@ -24,6 +24,10 @@ open Ast
 open Type
 open Typecore
 open DisplayTypes.DisplayMode
+open Display.DisplayException
+open DisplayTypes.CompletionKind
+open DisplayTypes.CompletionItemKind
+open DisplayTypes.CompletionResultKind
 open Common
 open Error
 
@@ -449,7 +453,15 @@ module Inheritance = struct
 		in
 		let fl = ExtList.List.filter_map (fun (is_extends,t) ->
 			try
-				let t = Typeload.load_instance ~allow_display:true ctx t false p in
+				let t = try
+					Typeload.load_instance ~allow_display:true ctx t false p
+				with DisplayException(DisplayFields(l,CRToplevel,p,b)) when not is_extends ->
+					let l = List.filter (function
+						| ITType(_,Interface,_) -> true
+						| _ -> false
+					) l in
+					raise_fields l CRToplevel p b
+				in
 				Some (check_herit t is_extends)
 			with Error(Module_not_found(([],name)),p) when ctx.com.display.dms_display ->
 				if Display.Diagnostics.is_diagnostics_run ctx then DisplayToplevel.handle_unresolved_identifier ctx name p true;

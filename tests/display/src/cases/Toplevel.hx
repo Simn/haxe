@@ -111,9 +111,10 @@ class Toplevel extends DisplayTestCase {
 	**/
 	function testTypeCompletionImplements() {
 		// TODO: this currently doesn't work if there's no token after implements
-		var typesCompletion = toplevel(pos(1));
-		eq(true, hasToplevel(typesCompletion, "type", "Array"));
-		eq(true, hasToplevel(typesCompletion, "package", "haxe"));
+		// NOTE: This test is invalid, we only show interfaces after `implements`
+		// var typesCompletion = toplevel(pos(1));
+		// eq(true, hasToplevel(typesCompletion, "type", "Array"));
+		// eq(true, hasToplevel(typesCompletion, "package", "haxe"));
 	}
 
 	/**
