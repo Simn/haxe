@@ -131,6 +131,15 @@ and generate_metadata ctx ml =
 	) ml in
 	jlist (generate_metadata_entry ctx) ml
 
+(* AST.ml structures *)
+
+let rec generate_ast_type_param ctx tp = jobject [
+	"name",jstring (fst tp.tp_name);
+	"params",jlist (generate_ast_type_param ctx) tp.tp_params;
+	"constraints",jtodo;
+	"metadata",generate_metadata ctx tp.tp_meta
+]
+
 (* type instance *)
 
 let rec generate_type ctx t =

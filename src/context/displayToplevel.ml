@@ -21,7 +21,7 @@ open Common
 open Type
 open Typecore
 open DisplayTypes.CompletionKind
-open DisplayTypes.CompletionItemKind
+open DisplayTypes
 
 let explore_class_paths ctx class_paths recusive f_pack f_module =
 	let rec loop dir pack =
@@ -190,27 +190,23 @@ let collect ctx only_types with_type =
 	let class_paths = ctx.com.class_path in
 	let class_paths = List.filter (fun s -> s <> "") class_paths in
 
-	let add_syntax_type path kind rm =
-		if not (module_exists path) then add (ITType(path,kind,rm))
-	in
-
-	let process_decls pack decls =
-		List.iter (fun (d,_) -> match d with
-			| EClass d when not (List.mem HPrivate d.d_flags) ->
-				let kind = if List.mem HInterface d.d_flags then Interface else Class in
-				add_syntax_type (pack,fst d.d_name) kind (RMOtherModule (pack,fst d.d_name)) (* TODO *)
-			| EEnum d when not (List.mem EPrivate d.d_flags) ->
-				add_syntax_type (pack,fst d.d_name) Enum (RMOtherModule (pack,fst d.d_name)) (* TODO *)
-			| EAbstract d when not (List.mem AbPrivate d.d_flags) ->
-				let kind = if Meta.has Meta.Enum d.d_meta then Enum else Class in
-				add_syntax_type (pack,fst d.d_name) kind (RMOtherModule (pack,fst d.d_name)) (* TODO *)
-			| ETypedef d when not (List.mem EPrivate d.d_flags) ->
-				let kind = match fst d.d_data with
-				| CTAnonymous _ -> Struct
-				| _ -> Interface
+	let process_decls pack name decls =
+		List.iter (fun (d,p) ->
+			begin try
+				let tname = match d with
+					| EClass d -> fst d.d_name
+					| EEnum d -> fst d.d_name
+					| ETypedef d -> fst d.d_name
+					| EAbstract d -> fst d.d_name
+					| _ -> raise Exit
 				in
-				add_syntax_type (pack,fst d.d_name) kind (RMOtherModule (pack,fst d.d_name)) (* TODO *)
-			| _ -> ()
+				if not (module_exists (pack,tname)) then begin
+					let rm = RMOtherModule(pack,name) in
+					add (ITType(CompletionModuleType.of_type_decl pack name (d,p),rm))
+				end
+			with Exit ->
+				()
+			end
 		) decls
 	in
 
@@ -219,7 +215,7 @@ let collect ctx only_types with_type =
 		explore_class_paths ctx class_paths true add_package (fun path ->
 			if not (module_exists path) then begin
 				let _,decls = TypeloadParse.parse_module ctx path Globals.null_pos in
-				process_decls (fst path) decls
+				process_decls (fst path) (snd path) decls
 			end
 		)
 	| Some cs ->
@@ -231,14 +227,16 @@ let collect ctx only_types with_type =
 				end
 			);
 		end;
-		CompilationServer.iter_files cs ctx.com (fun (_,(pack,decls)) -> process_decls pack decls)
+		CompilationServer.iter_files cs ctx.com (fun file (_,(pack,decls)) ->
+			(* TODO: Can we avoid the module name lookup on each request? It checks get_real_path... *)
+			process_decls pack (Path.module_name_of_file file) decls
+		)
 	end;
 
 	(* TODO: wildcard packages. How? *)
 
 	List.iter (fun (mt,rm) ->
-		let kind = of_module_type mt in
-		add (ITType((t_infos mt).mt_path,kind,rm))
+		add (ITType(CompletionModuleType.of_module_type mt,rm))
 	) !module_types;
 
 	Hashtbl.iter (fun pack _ ->
@@ -246,8 +244,11 @@ let collect ctx only_types with_type =
 	) packages;
 
 	(* type params *)
-	List.iter (fun (s,_) ->
-		add (ITType (([],s),TypeParameter,RMTypeParameter))
+	List.iter (fun (s,t) -> match follow t with
+		| TInst(c,_) ->
+			(* This is weird, might want to use something else for type parameters *)
+			add (ITType (CompletionModuleType.of_module_type (TClassDecl c),RMTypeParameter))
+		| _ -> assert false
 	) ctx.type_params;
 
 	let l = DynArray.to_list acc in

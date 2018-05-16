@@ -54,7 +54,8 @@ let print_fields fields =
 				| _ -> "var"
 			in
 			kind,ef.ef_name,s_type (print_context()) ef.ef_type,ef.ef_doc
-		| ITType(path,_,_) ->
+		| ITType(cm,_) ->
+			let path = DisplayTypes.CompletionModuleType.get_path cm in
 			"type",snd path,s_type_path path,None
 		| ITPackage s -> "package",s,"",None
 		| ITModule s -> "type",s,"",None
@@ -102,7 +103,8 @@ let print_toplevel il =
 			if check_ident cf.cf_name then Buffer.add_string b (Printf.sprintf "<i k=\"enumabstract\" t=\"%s\"%s>%s</i>\n" (s_type cf.cf_type) (s_doc cf.cf_doc) cf.cf_name);
 		| ITGlobal(mt,s,t) ->
 			if check_ident s then Buffer.add_string b (Printf.sprintf "<i k=\"global\" p=\"%s\" t=\"%s\">%s</i>\n" (s_type_path (t_infos mt).mt_path) (s_type t) s);
-		| ITType(path,_,rm) ->
+		| ITType(cm,rm) ->
+			let path = DisplayTypes.CompletionModuleType.get_path cm in
 			let import,name = match rm with
 				| RMOtherModule path ->
 					let label_path = if path = path then path else (fst path @ [snd path],snd path) in
@@ -409,7 +411,7 @@ module TypePathHandler = struct
 					[]
 				else
 					List.map (fun mt ->
-						ITType((t_infos mt).mt_path, DisplayTypes.CompletionItemKind.of_module_type mt,RMOtherModule m.m_path)
+						ITType(DisplayTypes.CompletionModuleType.of_module_type mt,RMOtherModule m.m_path)
 					) public_types
 			in
 			let make_field_doc cf =

@@ -26,7 +26,8 @@ open Typecore
 open DisplayTypes.DisplayMode
 open Display.DisplayException
 open DisplayTypes.CompletionKind
-open DisplayTypes.CompletionItemKind
+open DisplayTypes.CompletionModuleKind
+open DisplayTypes.CompletionModuleType
 open DisplayTypes.CompletionResultKind
 open Common
 open Error
@@ -457,7 +458,7 @@ module Inheritance = struct
 					Typeload.load_instance ~allow_display:true ctx t false p
 				with DisplayException(DisplayFields(l,CRToplevel,p,b)) when not is_extends ->
 					let l = List.filter (function
-						| ITType(_,Interface,_) -> true
+						| ITType({kind = Interface},_) -> true
 						| _ -> false
 					) l in
 					raise_fields l CRToplevel p b

@@ -71,74 +71,153 @@ module CompletionResultKind = struct
 		| CRMetadata
 end
 
-module CompletionItemKind = struct
+module CompletionModuleKind = struct
 	type t =
-		| Text
-		| Method
-		| Function
-		| Constructor
-		| Field
-		| Variable
 		| Class
 		| Interface
-		| Module
-		| Property
-		| Unit
-		| Value
 		| Enum
-		| Keyword
-		| Snippet
-		| Color
-		| File
-		| Reference
-		| Folder
-		| EnumMember
-		| Constant
+		| Abstract
+		| EnumAbstract
+		| TypeAlias
 		| Struct
-		| Event
-		| Operator
 		| TypeParameter
 
 	let to_int = function
-		| Text -> 1
-		| Method -> 2
-		| Function -> 3
-		| Constructor -> 4
-		| Field -> 5
-		| Variable -> 6
-		| Class -> 7
-		| Interface -> 8
-		| Module -> 9
-		| Property -> 10
-		| Unit -> 11
-		| Value -> 12
-		| Enum -> 13
-		| Keyword -> 14
-		| Snippet -> 15
-		| Color -> 16
-		| File -> 17
-		| Reference -> 18
-		| Folder -> 19
-		| EnumMember -> 20
-		| Constant -> 21
-		| Struct -> 22
-		| Event -> 23
-		| Operator -> 24
-		| TypeParameter -> 25
+		| Class -> 0
+		| Interface -> 1
+		| Enum -> 2
+		| Abstract -> 3
+		| EnumAbstract -> 4
+		| TypeAlias -> 5
+		| Struct -> 6
+		| TypeParameter -> 7
+end
 
-	let of_module_type = function
-		| TClassDecl c -> if c.cl_interface then Interface else Class
-		| TAbstractDecl a when (Meta.has Meta.Enum a.a_meta) -> Enum
-		| TTypeDecl td ->
-			begin match follow td.t_type with
-				| TAnon _ -> Struct
-				| _ -> Interface
-			end
-		| TEnumDecl _ -> Enum
-		| _ -> Class
+module CompletionModuleType = struct
+	open CompletionModuleKind
+
+	type t = {
+		pack : string list;
+		name : string;
+		module_name : string;
+		pos : pos;
+		is_private : bool;
+		params : Ast.type_param list;
+		meta: metadata;
+		doc : documentation;
+		is_extern : bool;
+		kind : CompletionModuleKind.t;
+	}
+
+	let of_type_decl pack module_name (td,p) = match td with
+		| EClass d -> {
+				pack = pack;
+				name = fst d.d_name;
+				module_name = module_name;
+				pos = p;
+				is_private = List.mem HPrivate d.d_flags;
+				params = d.d_params;
+				meta = d.d_meta;
+				doc = d.d_doc;
+				is_extern = List.mem HExtern d.d_flags;
+				kind = if List.mem HInterface d.d_flags then Interface else Class;
+			}
+		| EEnum d -> {
+				pack = pack;
+				name = fst d.d_name;
+				module_name = module_name;
+				pos = p;
+				is_private = List.mem EPrivate d.d_flags;
+				params = d.d_params;
+				meta = d.d_meta;
+				doc = d.d_doc;
+				is_extern = List.mem EExtern d.d_flags;
+				kind = Enum;
+			}
+		| ETypedef d -> {
+				pack = pack;
+				name = fst d.d_name;
+				module_name = module_name;
+				pos = p;
+				is_private = List.mem EPrivate d.d_flags;
+				params = d.d_params;
+				meta = d.d_meta;
+				doc = d.d_doc;
+				is_extern = List.mem EExtern d.d_flags;
+				kind = match fst d.d_data with CTAnonymous _ -> Struct | _ -> TypeAlias;
+			}
+		| EAbstract d -> {
+				pack = pack;
+				name = fst d.d_name;
+				module_name = module_name;
+				pos = p;
+				is_private = List.mem AbPrivate d.d_flags;
+				params = d.d_params;
+				meta = d.d_meta;
+				doc = d.d_doc;
+				is_extern = List.mem AbExtern d.d_flags;
+				kind = if Meta.has Meta.Enum d.d_meta then EnumAbstract else Abstract
+			}
+		| EImport _ | EUsing _ ->
+			raise Exit
+
+	let of_module_type mt =
+		let is_extern,kind = match mt with
+			| TClassDecl c ->
+				c.cl_extern,if c.cl_interface then Interface else Class
+			| TEnumDecl en ->
+				en.e_extern,Enum
+			| TTypeDecl td ->
+				false,(match follow td.t_type with TAnon _ -> Struct | _ -> TypeAlias)
+			| TAbstractDecl a ->
+				false,(if Meta.has Meta.Enum a.a_meta then EnumAbstract else Abstract)
+		in
+		let infos = t_infos mt in
+		let convert_type_param (s,t) = match follow t with
+			| TInst(c,_) -> {
+				tp_name = s,null_pos;
+				tp_params = [];
+				tp_constraints = []; (* TODO? *)
+				tp_meta = c.cl_meta
+			}
+			| _ ->
+				assert false
+		in
+		{
+			pack = fst infos.mt_path;
+			name = snd infos.mt_path;
+			module_name = snd infos.mt_module.m_path;
+			pos = infos.mt_pos;
+			is_private = infos.mt_private;
+			params = List.map convert_type_param infos.mt_params;
+			meta = infos.mt_meta;
+			doc = infos.mt_doc;
+			is_extern = is_extern;
+			kind = kind;
+		}
+
+	let get_path cm = (cm.pack,cm.name)
+
+	let to_json cm =
+		let ctx = Genjson.create_context () in
+		jobject [
+			"pack",jlist jstring cm.pack;
+			"name",jstring cm.name;
+			"module_name",jstring cm.module_name;
+			"pos",generate_pos ctx cm.pos;
+			"is_private",jbool cm.is_private;
+			"params",jlist (generate_ast_type_param ctx) cm.params;
+			"meta",generate_metadata ctx cm.meta;
+			"doc",jopt jstring cm.doc;
+			"is_extern",jbool cm.is_extern;
+			"kind",jint (to_int cm.kind);
+		]
+
 end
 
 module CompletionKind = struct
+	open CompletionModuleType
+
 	type resolution_mode =
 		| RMLocalModule
 		| RMImport
@@ -154,7 +233,7 @@ module CompletionKind = struct
 		| ITEnumField of tenum * tenum_field
 		| ITEnumAbstractField of tabstract * tclass_field
 		| ITGlobal of module_type * string * Type.t
-		| ITType of path * CompletionItemKind.t * resolution_mode
+		| ITType of CompletionModuleType.t * resolution_mode
 		| ITPackage of string
 		| ITModule of string
 		| ITLiteral of string * Type.t
@@ -172,7 +251,7 @@ module CompletionKind = struct
 			| TFun _ -> 1,ef.ef_name
 			| _ -> 0,ef.ef_name
 			end
-		| ITType((_,name),_,_) -> 2,name
+		| ITType(cm,_) -> 2,cm.name
 		| ITModule s -> 3,s
 		| ITPackage s -> 4,s
 		| ITMetadata(s,_) -> 5,s
@@ -186,7 +265,7 @@ module CompletionKind = struct
 		| ITClassMember cf | ITClassStatic cf | ITEnumAbstractField(_,cf) -> cf.cf_name
 		| ITEnumField(_,ef) -> ef.ef_name
 		| ITGlobal(_,s,_) -> s
-		| ITType((_,name),_,_) -> name
+		| ITType(cm,_) -> cm.name
 		| ITPackage s -> s
 		| ITModule s -> s
 		| ITLiteral(s,_) -> s
@@ -198,7 +277,7 @@ module CompletionKind = struct
 		| ITClassMember cf | ITClassStatic cf | ITEnumAbstractField(_,cf) -> cf.cf_type
 		| ITEnumField(_,ef) -> ef.ef_type
 		| ITGlobal(_,_,t) -> t
-		| ITType(_,_,_) -> t_dynamic
+		| ITType(_,_) -> t_dynamic
 		| ITPackage _ -> t_dynamic
 		| ITModule _ -> t_dynamic
 		| ITLiteral(_,t) -> t
@@ -217,10 +296,7 @@ module CompletionKind = struct
 				"name",jstring s;
 				"type",generate_type ctx t
 			]
-			| ITType(path,kind,rm) -> "Type",jobject [
-				"path",generate_path path;
-				"kind",jint (CompletionItemKind.to_int kind);
-			]
+			| ITType(kind,rm) -> "Type",CompletionModuleType.to_json kind
 			| ITPackage s -> "Package",jstring s
 			| ITModule s -> "Module",jstring s
 			| ITLiteral(s,_) -> "Literal",jstring s
