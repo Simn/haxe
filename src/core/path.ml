@@ -159,16 +159,22 @@ let make_valid_filename s =
 	let r = Str.regexp "[^A-Za-z0-9_\\-\\.,]" in
 	Str.global_substitute r (fun s -> "_") s
 
-let module_name_of_file s = match List.rev (Str.split path_regex (get_real_path s)) with
-	| s :: _ ->
-		let s = match List.rev (ExtString.String.nsplit s ".") with
-		| [s] -> s
-		| _ :: sl -> String.concat "." (List.rev sl)
-		| [] -> ""
-		in
-		String.capitalize s
-	| [] ->
-		assert false
+let lut = Hashtbl.create 0
+
+let module_name_of_file file =
+	try Hashtbl.find lut file
+	with Not_found ->
+		match List.rev (Str.split path_regex (get_real_path file)) with
+		| s :: _ ->
+			let s = match List.rev (ExtString.String.nsplit s ".") with
+			| [s] -> s
+			| _ :: sl -> String.concat "." (List.rev sl)
+			| [] -> ""
+			in
+			Hashtbl.add lut file s;
+			s
+		| [] ->
+			assert false
 
 let rec create_file bin ext acc = function
 	| [] -> assert false
