@@ -174,9 +174,16 @@ type context = {
 exception Abort of string * pos
 
 module CompilationServer = struct
+	type cached_file = {
+		c_time : float;
+		c_package : string list;
+		c_decls : type_decl list;
+		mutable c_module_name : string option;
+	}
+
 	type cache = {
 		c_haxelib : (string list, string list) Hashtbl.t;
-		c_files : ((string * string), float * Ast.package) Hashtbl.t;
+		c_files : ((string * string), cached_file) Hashtbl.t;
 		c_modules : (path * string, module_def) Hashtbl.t;
 		c_directories : (string, (string * float ref) list) Hashtbl.t;
 	}
@@ -225,8 +232,8 @@ module CompilationServer = struct
 		cs.initialized <- true
 
 	let get_context_files cs signs =
-		Hashtbl.fold (fun (file,sign) (_,data) acc ->
-			if (List.mem sign signs) then (file,data) :: acc
+		Hashtbl.fold (fun (file,sign) cfile acc ->
+			if (List.mem sign signs) then (file,cfile) :: acc
 			else acc
 		) cs.cache.c_files []
 
@@ -266,8 +273,8 @@ module CompilationServer = struct
 	let find_file cs key =
 		Hashtbl.find cs.cache.c_files key
 
-	let cache_file cs key value =
-		Hashtbl.replace cs.cache.c_files key value
+	let cache_file cs key time data =
+		Hashtbl.replace cs.cache.c_files key { c_time = time; c_package = fst data; c_decls = snd data; c_module_name = None }
 
 	let remove_file cs key =
 		Hashtbl.remove cs.cache.c_files key

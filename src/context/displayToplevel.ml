@@ -18,6 +18,7 @@
 *)
 open Ast
 open Common
+open Common.CompilationServer
 open Type
 open Typecore
 open DisplayTypes.CompletionKind
@@ -227,9 +228,16 @@ let collect ctx only_types with_type =
 				end
 			);
 		end;
-		CompilationServer.iter_files cs ctx.com (fun file (_,(pack,decls)) ->
-			(* TODO: Can we avoid the module name lookup on each request? It checks get_real_path... *)
-			process_decls pack (Path.module_name_of_file file) decls
+		CompilationServer.iter_files cs ctx.com (fun file cfile ->
+			let module_name = match cfile.c_module_name with
+			| None ->
+				let name = Path.module_name_of_file file in
+				cfile.c_module_name <- Some name;
+				name
+			| Some name ->
+				name
+			in
+			process_decls cfile.c_package module_name cfile.c_decls
 		)
 	end;
 

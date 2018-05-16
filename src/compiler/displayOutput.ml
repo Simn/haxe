@@ -1,5 +1,6 @@
 open Globals
 open Common
+open Common.CompilationServer
 open Timer
 open DisplayTypes.DisplayMode
 open DisplayTypes.CompletionKind
@@ -807,9 +808,9 @@ let process_global_display_mode com tctx = match com.display.dms_kind with
 			| None -> symbols
 			| Some cs ->
 				let l = CompilationServer.get_context_files cs ((Define.get_signature com.defines) :: (match com.get_macros() with None -> [] | Some com -> [Define.get_signature com.defines])) in
-				List.fold_left (fun acc (file,data) ->
+				List.fold_left (fun acc (file,cfile) ->
 					if (filter <> None || is_display_file file) then
-						(file,DocumentSymbols.collect_module_symbols data) :: acc
+						(file,DocumentSymbols.collect_module_symbols (cfile.c_package,cfile.c_decls)) :: acc
 					else
 						acc
 				) symbols l
