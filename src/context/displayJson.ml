@@ -51,7 +51,7 @@ let json_of_times root =
 
 let debug_context_sign = ref None
 
-let parse_input com input report_times did_something =
+let parse_input com input report_times pre_compilation did_something =
 	let send_string j = raise (DisplayOutput.Completion j) in
 	let send_json json = send_string (string_of_json json) in
 	let process () =
@@ -160,10 +160,12 @@ let parse_input com input report_times did_something =
 				enable_display DMSignature
 			(* server *)
 			| "server/readClassPaths" ->
-				let cs = CompilationServer.force() in
-				CompilationServer.set_initialized cs;
-				DisplayToplevel.read_class_paths com;
-				f_result (jstring "class paths read");
+				pre_compilation := (fun () ->
+					let cs = CompilationServer.force() in
+					CompilationServer.set_initialized cs;
+					DisplayToplevel.read_class_paths com;
+					f_result (jstring "class paths read");
+				) :: !pre_compilation
 			| "server/contexts" ->
 				let cs = CompilationServer.force() in
 				let l = List.map (fun (sign,index) -> jobject [
