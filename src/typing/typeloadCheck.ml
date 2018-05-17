@@ -23,12 +23,13 @@ open Globals
 open Ast
 open Type
 open Typecore
-open DisplayTypes.DisplayMode
 open Display.DisplayException
-open DisplayTypes.CompletionKind
-open DisplayTypes.CompletionModuleKind
-open DisplayTypes.CompletionModuleType
-open DisplayTypes.CompletionResultKind
+open DisplayTypes
+open DisplayMode
+open CompletionKind
+open CompletionModuleKind
+open CompletionModuleType
+open CompletionResultKind
 open Common
 open Error
 
@@ -457,9 +458,11 @@ module Inheritance = struct
 				let t = try
 					Typeload.load_instance ~allow_display:true ctx t false p
 				with DisplayException(DisplayFields(l,CRToplevel,p,b)) ->
+					(* We don't allow `implements` on interfaces. Just raise fields completion with no fields. *)
+					if not is_extends && c.cl_interface then raise_fields [] CRToplevel p false;
 					let l = List.filter (function
-						| ITType({kind = Interface},_) -> not is_extends || c.cl_interface
-						| ITType({kind = Class},_) -> is_extends && not c.cl_interface
+						| ITType({kind = Interface} as cm,_) -> (not is_extends || c.cl_interface) && CompletionModuleType.get_path cm <> c.cl_path
+						| ITType({kind = Class} as cm,_) -> is_extends && not c.cl_interface && CompletionModuleType.get_path cm <> c.cl_path
 						| _ -> false
 					) l in
 					raise_fields l CRToplevel p b

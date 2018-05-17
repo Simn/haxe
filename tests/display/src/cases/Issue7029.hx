@@ -2,26 +2,27 @@ package cases;
 
 class Issue7029 extends DisplayTestCase {
 	/**
-	class Main implements {-1-}
+	class C implements {-1-}
 
 	interface IFoo { }
 	**/
 	function test1() {
 		var typesCompletion = toplevel(pos(1));
 		eq(true, hasToplevel(typesCompletion, "type", "IFoo"));
-		eq(false, hasToplevel(typesCompletion, "type", "Main"));
+		eq(false, hasToplevel(typesCompletion, "type", "C"));
 	}
 
 	/**
-	class Main extends {-1-}
+	class C1 extends {-1-}
 
-	class C { }
+	class C2 { }
 	interface IFoo { }
 	**/
 	function test2() {
 		var typesCompletion = toplevel(pos(1));
-		eq(true, hasToplevel(typesCompletion, "type", "C"));
+		eq(true, hasToplevel(typesCompletion, "type", "C2"));
 		eq(false, hasToplevel(typesCompletion, "type", "IFoo"));
+		eq(false, hasToplevel(typesCompletion, "type", "C1"));
 	}
 
 	/**
@@ -32,7 +33,8 @@ class Issue7029 extends DisplayTestCase {
 	function test3() {
 		var typesCompletion = toplevel(pos(1));
 		eq(true, hasToplevel(typesCompletion, "type", "IFoo"));
-		eq(false, hasToplevel(typesCompletion, "type", "Main"));
+		eq(false, hasToplevel(typesCompletion, "type", "C"));
+		eq(false, hasToplevel(typesCompletion, "type", "IFoo2"));
 	}
 
 	/**
