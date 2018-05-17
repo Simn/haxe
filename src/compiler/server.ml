@@ -122,7 +122,8 @@ let rec wait_loop process_params verbose accept =
 			let sign = Define.get_signature com2.defines in
 			let ftime = file_time ffile in
 			let fkey = (ffile,sign) in
-			try
+			let t = Timer.timer ["server";"parser cache"] in
+			let data = try
 				let cfile = CompilationServer.find_file cs fkey in
 				if cfile.c_time <> ftime then raise Not_found;
 				cfile.c_package,cfile.c_decls
@@ -143,6 +144,9 @@ let rec wait_loop process_params verbose accept =
 				end in
 				if is_unusual then ServerMessage.parsed com2 "" (ffile,info);
 				data
+			in
+			t();
+			data
 	);
 	let check_module_shadowing com paths m =
 		List.iter (fun (path,_) ->
