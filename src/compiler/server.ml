@@ -446,8 +446,7 @@ let rec wait_loop process_params verbose accept =
 			ServerMessage.arguments data;
 			(try
 				Hashtbl.clear changed_directories;
-				Parser.display_mode := DMNone;
-				Parser.resume_display := null_pos;
+				Parser.reset_state();
 				return_partial_type := false;
 				measure_times := false;
 				close_times();
