@@ -103,7 +103,7 @@ class Toplevel extends DisplayTestCase {
 		// TODO: this currently doesn't work if there's no token after extends
 		var typesCompletion = toplevel(pos(1));
 		eq(true, hasToplevel(typesCompletion, "type", "Array"));
-		eq(true, hasToplevel(typesCompletion, "package", "haxe"));
+		// eq(true, hasToplevel(typesCompletion, "package", "haxe"));
 	}
 
 	/**

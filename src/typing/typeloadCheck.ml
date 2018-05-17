@@ -456,9 +456,10 @@ module Inheritance = struct
 			try
 				let t = try
 					Typeload.load_instance ~allow_display:true ctx t false p
-				with DisplayException(DisplayFields(l,CRToplevel,p,b)) when not is_extends ->
+				with DisplayException(DisplayFields(l,CRToplevel,p,b)) ->
 					let l = List.filter (function
-						| ITType({kind = Interface},_) -> true
+						| ITType({kind = Interface},_) -> not is_extends || c.cl_interface
+						| ITType({kind = Class},_) -> is_extends && not c.cl_interface
 						| _ -> false
 					) l in
 					raise_fields l CRToplevel p b
