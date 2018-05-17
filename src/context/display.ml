@@ -281,3 +281,13 @@ module DisplayEmitter = struct
 			) args
 		) meta
 end
+
+open ImportStatus
+
+let import_status_from_context ctx path =
+	try
+		let mt' = ctx.g.do_load_type_def ctx null_pos {tpackage = []; tname = snd path; tparams = []; tsub = None} in
+		if path = (t_infos mt').mt_path then Imported
+		else Shadowed
+	with _ ->
+		Unimported

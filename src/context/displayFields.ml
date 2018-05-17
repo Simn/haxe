@@ -26,7 +26,10 @@ open DisplayTypes.CompletionKind
 let get_submodule_fields ctx path =
 	let m = Hashtbl.find ctx.g.modules path in
 	let tl = List.filter (fun t -> path <> (t_infos t).mt_path && not (t_infos t).mt_private) m.m_types in
-	let tl = List.map (fun mt -> ITType(DisplayTypes.CompletionModuleType.of_module_type mt,RMOtherModule m.m_path)) tl in
+	let tl = List.map (fun mt ->
+		let is = Display.import_status_from_context ctx (t_infos mt).mt_path in
+		ITType(DisplayTypes.CompletionModuleType.of_module_type is mt,RMOtherModule m.m_path)
+	) tl in
 	tl
 
 let collect ctx e_ast e dk with_type p =

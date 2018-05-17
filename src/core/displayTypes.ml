@@ -93,6 +93,18 @@ module CompletionModuleKind = struct
 		| TypeParameter -> 7
 end
 
+module ImportStatus = struct
+	type t =
+		| Imported
+		| Unimported
+		| Shadowed
+
+	let to_int = function
+		| Imported -> 0
+		| Unimported -> 1
+		| Shadowed -> 2
+end
+
 module CompletionModuleType = struct
 	open CompletionModuleKind
 
@@ -107,9 +119,10 @@ module CompletionModuleType = struct
 		doc : documentation;
 		is_extern : bool;
 		kind : CompletionModuleKind.t;
+		import_status : ImportStatus.t;
 	}
 
-	let of_type_decl pack module_name (td,p) = match td with
+	let of_type_decl is pack module_name (td,p) = match td with
 		| EClass d -> {
 				pack = pack;
 				name = fst d.d_name;
@@ -121,6 +134,7 @@ module CompletionModuleType = struct
 				doc = d.d_doc;
 				is_extern = List.mem HExtern d.d_flags;
 				kind = if List.mem HInterface d.d_flags then Interface else Class;
+				import_status = is;
 			}
 		| EEnum d -> {
 				pack = pack;
@@ -133,6 +147,7 @@ module CompletionModuleType = struct
 				doc = d.d_doc;
 				is_extern = List.mem EExtern d.d_flags;
 				kind = Enum;
+				import_status = is;
 			}
 		| ETypedef d -> {
 				pack = pack;
@@ -144,7 +159,8 @@ module CompletionModuleType = struct
 				meta = d.d_meta;
 				doc = d.d_doc;
 				is_extern = List.mem EExtern d.d_flags;
-				kind = match fst d.d_data with CTAnonymous _ -> Struct | _ -> TypeAlias;
+				kind = (match fst d.d_data with CTAnonymous _ -> Struct | _ -> TypeAlias);
+				import_status = is;
 			}
 		| EAbstract d -> {
 				pack = pack;
@@ -156,12 +172,13 @@ module CompletionModuleType = struct
 				meta = d.d_meta;
 				doc = d.d_doc;
 				is_extern = List.mem AbExtern d.d_flags;
-				kind = if Meta.has Meta.Enum d.d_meta then EnumAbstract else Abstract
+				kind = if Meta.has Meta.Enum d.d_meta then EnumAbstract else Abstract;
+				import_status = is;
 			}
 		| EImport _ | EUsing _ ->
 			raise Exit
 
-	let of_module_type mt =
+	let of_module_type is mt =
 		let is_extern,kind = match mt with
 			| TClassDecl c ->
 				c.cl_extern,if c.cl_interface then Interface else Class
@@ -194,6 +211,7 @@ module CompletionModuleType = struct
 			doc = infos.mt_doc;
 			is_extern = is_extern;
 			kind = kind;
+			import_status = is;
 		}
 
 	let get_path cm = (cm.pack,cm.name)
@@ -211,6 +229,7 @@ module CompletionModuleType = struct
 			"doc",jopt jstring cm.doc;
 			"isExtern",jbool cm.is_extern;
 			"kind",jint (to_int cm.kind);
+			"importStatus",jint (ImportStatus.to_int cm.import_status);
 		]
 
 end

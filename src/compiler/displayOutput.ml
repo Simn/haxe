@@ -412,7 +412,8 @@ module TypePathHandler = struct
 					[]
 				else
 					List.map (fun mt ->
-						ITType(DisplayTypes.CompletionModuleType.of_module_type mt,RMOtherModule m.m_path)
+						let is = Display.import_status_from_context ctx (t_infos mt).mt_path in
+						ITType(DisplayTypes.CompletionModuleType.of_module_type is mt,RMOtherModule m.m_path)
 					) public_types
 			in
 			let make_field_doc cf =

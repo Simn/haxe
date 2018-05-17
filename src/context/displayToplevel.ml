@@ -211,7 +211,8 @@ let collect ctx only_types with_type =
 				in
 				if not (module_exists (pack,tname)) then begin
 					let rm = RMOtherModule(pack,name) in
-					add (ITType(CompletionModuleType.of_type_decl pack name (d,p),rm))
+					let is = Display.import_status_from_context ctx (pack,name) in
+					add (ITType(CompletionModuleType.of_type_decl is pack name (d,p),rm))
 				end
 			with Exit ->
 				()
@@ -248,7 +249,8 @@ let collect ctx only_types with_type =
 	(* TODO: wildcard packages. How? *)
 
 	List.iter (fun (mt,rm) ->
-		add (ITType(CompletionModuleType.of_module_type mt,rm))
+		let is = Display.import_status_from_context ctx (t_infos mt).mt_path in
+		add (ITType(CompletionModuleType.of_module_type is mt,rm))
 	) !module_types;
 
 	Hashtbl.iter (fun pack _ ->
@@ -259,7 +261,7 @@ let collect ctx only_types with_type =
 	List.iter (fun (s,t) -> match follow t with
 		| TInst(c,_) ->
 			(* This is weird, might want to use something else for type parameters *)
-			add (ITType (CompletionModuleType.of_module_type (TClassDecl c),RMTypeParameter))
+			add (ITType (CompletionModuleType.of_module_type ImportStatus.Imported (TClassDecl c),RMTypeParameter))
 		| _ -> assert false
 	) ctx.type_params;
 
