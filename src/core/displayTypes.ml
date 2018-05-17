@@ -205,11 +205,11 @@ module CompletionModuleType = struct
 			"name",jstring cm.name;
 			"module_name",jstring cm.module_name;
 			"pos",generate_pos ctx cm.pos;
-			"is_private",jbool cm.is_private;
+			"isPrivate",jbool cm.is_private;
 			"params",jlist (generate_ast_type_param ctx) cm.params;
 			"meta",generate_metadata ctx cm.meta;
 			"doc",jopt jstring cm.doc;
-			"is_extern",jbool cm.is_extern;
+			"isExtern",jbool cm.is_extern;
 			"kind",jint (to_int cm.kind);
 		]
 
