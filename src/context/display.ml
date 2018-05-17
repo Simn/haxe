@@ -563,13 +563,13 @@ module Diagnostics = struct
 				()
 		) com.types
 
-	let is_diagnostics_run ctx = match ctx.com.display.dms_kind with
+	let is_diagnostics_run p = match (!Parser.display_mode) with
 		| DMDiagnostics true -> true
-		| DMDiagnostics false -> ctx.is_display_file
+		| DMDiagnostics false -> is_display_file p.pfile
 		| _ -> false
 
 	let secure_generated_code ctx e =
-		if is_diagnostics_run ctx then mk (TMeta((Meta.Extern,[],e.epos),e)) e.etype e.epos else e
+		if is_diagnostics_run e.epos then mk (TMeta((Meta.Extern,[],e.epos),e)) e.etype e.epos else e
 end
 
 module ImportHandling = struct
@@ -623,7 +623,7 @@ module ImportHandling = struct
 			()
 
 	let maybe_mark_import_position ctx p =
-		if Diagnostics.is_diagnostics_run ctx then mark_import_position ctx.com p
+		if Diagnostics.is_diagnostics_run p then mark_import_position ctx.com p
 end
 
 module Statistics = struct

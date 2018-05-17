@@ -173,7 +173,7 @@ let merge_core_doc ctx c =
 		| _ -> ()
 
 let check_error ctx err p = match err with
-	| Module_not_found ([],name) when Display.Diagnostics.is_diagnostics_run ctx ->
+	| Module_not_found ([],name) when Display.Diagnostics.is_diagnostics_run p ->
 		DisplayToplevel.handle_unresolved_identifier ctx name p true
 	| _ ->
 		display_error ctx (error_msg err) p
