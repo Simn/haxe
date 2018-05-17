@@ -55,7 +55,7 @@ let rec load_type_def ctx p t =
 			List.find path_matches ctx.m.curmod.m_types
 		with Not_found ->
 			let t,pi = List.find (fun (t2,pi) -> path_matches t2) ctx.m.module_types in
-			Display.ImportHandling.mark_import_position ctx.com pi;
+			ImportHandling.mark_import_position ctx.com pi;
 			t
 	with
 		Not_found ->
@@ -83,7 +83,7 @@ let rec load_type_def ctx p t =
 					| (wp,pi) :: l ->
 						try
 							let t = load_type_def ctx p { t with tpackage = wp } in
-							Display.ImportHandling.mark_import_position ctx.com pi;
+							ImportHandling.mark_import_position ctx.com pi;
 							t
 						with
 							| Error (Module_not_found _,p2)
@@ -538,7 +538,7 @@ let load_type_hint ?(opt=false) ctx pcur t =
 			try
 				load_complex_type ctx true pcur (t,p)
 			with Error(Module_not_found(([],name)),p) as exc ->
-				if Display.Diagnostics.is_diagnostics_run p then DisplayToplevel.handle_unresolved_identifier ctx name p true;
+				if Diagnostics.is_diagnostics_run p then DisplayToplevel.handle_unresolved_identifier ctx name p true;
 				(* Default to Dynamic in display mode *)
 				if ctx.com.display.dms_display then t_dynamic else raise exc
 	in
@@ -724,8 +724,8 @@ let string_list_of_expr_path (e,p) =
 	with Exit -> error "Invalid path" p
 
 let handle_path_display ctx path p =
-	let open Display.ImportHandling in
-	match Display.ImportHandling.convert_import_to_something_usable !Parser.resume_display path,ctx.com.display.dms_kind with
+	let open ImportHandling in
+	match ImportHandling.convert_import_to_something_usable !Parser.resume_display path,ctx.com.display.dms_kind with
 		| (IDKPackage sl,_),_ ->
 			raise (Parser.TypePath(sl,None,true))
 		| (IDKModule(sl,s),_),DMDefinition ->

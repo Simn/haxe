@@ -555,7 +555,7 @@ let load_macro ctx display cpath f p =
 		) in
 		api.MacroApi.current_macro_module <- (fun() -> mloaded);
 		if not (Common.defined ctx.com Define.NoDeprecationWarnings) then
-			Display.DeprecationCheck.check_cf mctx.com meth p;
+			DeprecationCheck.check_cf mctx.com meth p;
 		let meth = (match follow meth.cf_type with TFun (args,ret) -> args,ret,cl,meth | _ -> error "Macro call should be a method" p) in
 		mctx.com.display <- DisplayTypes.DisplayMode.create DMNone;
 		if not ctx.in_macro then flush_macro_context mint ctx;

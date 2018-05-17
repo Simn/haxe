@@ -884,7 +884,7 @@ try
 		end;
 		DisplayOutput.process_global_display_mode com tctx;
 		if not (Common.defined com Define.NoDeprecationWarnings) then
-			Display.DeprecationCheck.run com;
+			DeprecationCheck.run com;
 		Filters.run com tctx main;
 		t();
 		if ctx.has_error then raise Abort;

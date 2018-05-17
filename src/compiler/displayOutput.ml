@@ -462,188 +462,6 @@ let print_signature tl display_arg =
 	] in
 	string_of_json jo
 
-module StatisticsPrinter = struct
-	open Statistics
-
-	let relation_to_string = function
-		| Implemented -> "implementers"
-		| Extended -> "subclasses"
-		| Overridden -> "overrides"
-		| Referenced -> "references"
-
-	let symbol_to_string = function
-		| SKClass _ -> "class type"
-		| SKInterface _ -> "interface type"
-		| SKEnum _ -> "enum type"
-		| SKTypedef _ -> "typedef"
-		| SKAbstract _ -> "abstract"
-		| SKField _ -> "class field"
-		| SKEnumField _ -> "enum field"
-		| SKVariable _ -> "variable"
-
-	let print_statistics (kinds,relations) =
-		let files = Hashtbl.create 0 in
-		Hashtbl.iter (fun p rl ->
-			let file = Path.get_real_path p.pfile in
-			try
-				Hashtbl.replace files file ((p,rl) :: Hashtbl.find files file)
-			with Not_found ->
-				Hashtbl.add files file [p,rl]
-		) relations;
-		let ja = Hashtbl.fold (fun file relations acc ->
-			let l = List.map (fun (p,rl) ->
-				let h = Hashtbl.create 0 in
-				List.iter (fun (r,p) ->
-					let s = relation_to_string r in
-					let jo = JObject [
-						"range",Genjson.generate_pos_as_range p;
-						"file",JString (Path.get_real_path p.pfile);
-					] in
-					try Hashtbl.replace h s (jo :: Hashtbl.find h s)
-					with Not_found -> Hashtbl.add h s [jo]
-				) rl;
-				let l = Hashtbl.fold (fun s js acc -> (s,JArray js) :: acc) h [] in
-				let l = ("range",Genjson.generate_pos_as_range p) :: l in
-				let l = try ("kind",JString (symbol_to_string (Hashtbl.find kinds p))) :: l with Not_found -> l in
-				JObject l
-			) relations in
-			(JObject [
-				"file",JString file;
-				"statistics",JArray l
-			]) :: acc
-		) files [] in
-		string_of_json (JArray ja)
-end
-
-module DiagnosticsPrinter = struct
-	open Diagnostics
-	open Diagnostics.DiagnosticsKind
-	open DisplayTypes
-
-	type t = DiagnosticsKind.t * pos
-
-	module UnresolvedIdentifierSuggestion = struct
-		type t =
-			| UISImport
-			| UISTypo
-
-		let to_int = function
-			| UISImport -> 0
-			| UISTypo -> 1
-	end
-
-	let print_diagnostics ctx global =
-		let com = ctx.com in
-		let diag = Hashtbl.create 0 in
-		let add dk p sev args =
-			let file = Path.get_real_path p.pfile in
-			let diag = try
-				Hashtbl.find diag file
-			with Not_found ->
-				let d = DynArray.create() in
-				Hashtbl.add diag file d;
-				d
-			in
-			DynArray.add diag (dk,p,sev,args)
-		in
-		let add dk p sev args =
-			if global || is_display_file p.pfile then add dk p sev args
-		in
-		let find_type i =
-			let types = ref [] in
-			Hashtbl.iter (fun _ m ->
-				List.iter (fun mt ->
-					let s_full_type_path (p,s) n = s_type_path (p,s) ^ if (s <> n) then "." ^ n else "" in
-					let tinfos = t_infos mt in
-					if snd tinfos.mt_path = i then
-						types := JObject [
-							"kind",JInt (UnresolvedIdentifierSuggestion.to_int UnresolvedIdentifierSuggestion.UISImport);
-							"name",JString (s_full_type_path m.m_path i)
-						] :: !types
-				) m.m_types;
-			) ctx.g.modules;
-			!types
-		in
-		List.iter (fun (s,p,suggestions) ->
-			let suggestions = List.map (fun (s,_) ->
-				JObject [
-					"kind",JInt (UnresolvedIdentifierSuggestion.to_int UnresolvedIdentifierSuggestion.UISTypo);
-					"name",JString s
-				]
-			) suggestions in
-			add DKUnresolvedIdentifier p DiagnosticsSeverity.Error (JArray (suggestions @ (find_type s)));
-		) com.display_information.unresolved_identifiers;
-		PMap.iter (fun p (r,_) ->
-			if not !r then add DKUnusedImport p DiagnosticsSeverity.Warning (JArray [])
-		) com.shared.shared_display_information.import_positions;
-		List.iter (fun (s,p,sev) ->
-			add DKCompilerError p sev (JString s)
-		) com.shared.shared_display_information.diagnostics_messages;
-		List.iter (fun (s,p,prange) ->
-			add DKRemovableCode p DiagnosticsSeverity.Warning (JObject ["description",JString s;"range",if prange = null_pos then JNull else Genjson.generate_pos_as_range prange])
-		) com.shared.shared_display_information.removable_code;
-		let jl = Hashtbl.fold (fun file diag acc ->
-			let jl = DynArray.fold_left (fun acc (dk,p,sev,jargs) ->
-				(JObject [
-					"kind",JInt (to_int dk);
-					"severity",JInt (DiagnosticsSeverity.to_int sev);
-					"range",Genjson.generate_pos_as_range p;
-					"args",jargs
-				]) :: acc
-			) [] diag in
-			(JObject [
-				"file",JString file;
-				"diagnostics",JArray jl
-			]) :: acc
-		) diag [] in
-		let js = JArray jl in
-		string_of_json js
-end
-
-module ModuleSymbolsPrinter = struct
-	open DisplayTypes.SymbolKind
-	open DisplayTypes.SymbolInformation
-
-	let print_module_symbols com symbols filter =
-		let regex = Option.map Str.regexp_case_fold filter in
-		let reported = Hashtbl.create 0 in
-		let add si =
-			if Hashtbl.mem reported si.pos then false
-			else begin
-				let b = match regex with
-					| None -> true
-					| Some regex -> (try ignore(Str.search_forward regex si.name 0); true with Not_found -> false)
-				in
-				Hashtbl.replace reported si.pos true;
-				b
-			end
-		in
-		let ja = List.fold_left (fun acc (file,l) ->
-			let jl = ExtList.List.filter_map (fun si ->
-				if not (add si) then
-					None
-				else begin
-					let l =
-						("name",JString si.name) ::
-						("kind",JInt (to_int si.kind)) ::
-						("range", Genjson.generate_pos_as_range si.pos) ::
-						(match si.container_name with None -> [] | Some s -> ["containerName",JString s])
-					in
-					Some (JObject l)
-				end
-			) (DynArray.to_list l) in
-			if jl = [] then
-				acc
-			else
-				(JObject [
-					"file",JString file;
-					"symbols",JArray jl
-				]) :: acc
-		) [] symbols in
-		let js = JArray ja in
-		string_of_json js
-end
-
 (* Mode processing *)
 
 exception Completion of string
@@ -797,10 +615,10 @@ let process_global_display_mode com tctx = match com.display.dms_kind with
 		raise_position usages
 	| DMDiagnostics global ->
 		Diagnostics.prepare com global;
-		raise_diagnostics (DiagnosticsPrinter.print_diagnostics tctx global)
+		raise_diagnostics (Diagnostics.Printer.print_diagnostics tctx global)
 	| DMStatistics ->
 		let stats = Statistics.collect_statistics tctx in
-		raise_statistics (StatisticsPrinter.print_statistics stats)
+		raise_statistics (Statistics.Printer.print_statistics stats)
 	| DMModuleSymbols filter ->
 		let symbols = com.shared.shared_display_information.document_symbols in
 		let symbols = match CompilationServer.get() with
@@ -814,7 +632,7 @@ let process_global_display_mode com tctx = match com.display.dms_kind with
 						acc
 				) symbols l
 		in
-		raise_module_symbols (ModuleSymbolsPrinter.print_module_symbols com symbols filter)
+		raise_module_symbols (DocumentSymbols.Printer.print_module_symbols com symbols filter)
 	| _ -> ()
 
 let find_doc t =

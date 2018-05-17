@@ -173,7 +173,7 @@ let merge_core_doc ctx c =
 		| _ -> ()
 
 let check_error ctx err p = match err with
-	| Module_not_found ([],name) when Display.Diagnostics.is_diagnostics_run p ->
+	| Module_not_found ([],name) when Diagnostics.is_diagnostics_run p ->
 		DisplayToplevel.handle_unresolved_identifier ctx name p true
 	| _ ->
 		display_error ctx (error_msg err) p
@@ -404,7 +404,7 @@ let rec type_ident_raise ctx i p mode =
 							let et = type_module_type ctx (TClassDecl c) None p in
 							let fa = FStatic(c,cf) in
 							let t = monomorphs cf.cf_params cf.cf_type in
-							Display.ImportHandling.maybe_mark_import_position ctx pt;
+							ImportHandling.maybe_mark_import_position ctx pt;
 							begin match cf.cf_kind with
 								| Var {v_read = AccInline} -> AKInline(et,cf,fa,t)
 								| _ -> AKExpr (mk (TField(et,fa)) t p)
@@ -425,7 +425,7 @@ let rec type_ident_raise ctx i p mode =
 						let et = type_module_type ctx t None p in
 						let monos = List.map (fun _ -> mk_mono()) e.e_params in
 						let monos2 = List.map (fun _ -> mk_mono()) ef.ef_params in
-						Display.ImportHandling.maybe_mark_import_position ctx pt;
+						ImportHandling.maybe_mark_import_position ctx pt;
 						wrap (mk (TField (et,FEnum (e,ef))) (enum_field_type ctx e ef monos monos2 p) p)
 					with
 						Not_found -> loop l
@@ -434,7 +434,7 @@ let rec type_ident_raise ctx i p mode =
 	with Not_found ->
 		(* lookup imported globals *)
 		let t, name, pi = PMap.find i ctx.m.module_globals in
-		Display.ImportHandling.maybe_mark_import_position ctx pi;
+		ImportHandling.maybe_mark_import_position ctx pi;
 		let e = type_module_type ctx t None p in
 		type_field ctx e name p mode
 
@@ -1274,7 +1274,7 @@ and handle_efield ctx e p mode =
 									List.find path_match ctx.m.curmod.m_types (* types in this modules *)
 								with Not_found ->
 									let t,p = List.find (fun (t,_) -> path_match t) ctx.m.module_types in (* imported types *)
-									Display.ImportHandling.maybe_mark_import_position ctx p;
+									ImportHandling.maybe_mark_import_position ctx p;
 									t
 							in
 							get_static true t
@@ -1829,7 +1829,7 @@ and type_new ctx path el with_type p =
 		error (s_type (print_context()) t ^ " cannot be constructed") p
 	end with Error(No_constructor _ as err,p) when ctx.com.display.dms_display ->
 		display_error ctx (error_msg err) p;
-		Display.Diagnostics.secure_generated_code ctx (mk (TConst TNull) t p)
+		Diagnostics.secure_generated_code ctx (mk (TConst TNull) t p)
 
 and type_try ctx e1 catches with_type p =
 	let e1 = type_expr ctx (Expr.ensure_block e1) with_type in
@@ -2291,7 +2291,7 @@ and type_call ctx e el (with_type:with_type) p =
 	| (EConst (Ident "$type"),_) , [e] ->
 		let e = type_expr ctx e Value in
 		ctx.com.warning (s_type (print_context()) e.etype) e.epos;
-		let e = Display.Diagnostics.secure_generated_code ctx e in
+		let e = Diagnostics.secure_generated_code ctx e in
 		e
 	| (EField(e,"match"),p), [epat] ->
 		let et = type_expr ctx e Value in

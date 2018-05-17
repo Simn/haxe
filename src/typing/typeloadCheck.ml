@@ -394,7 +394,7 @@ module Inheritance = struct
 						List.find path_matches ctx.m.curmod.m_types
 					with Not_found ->
 						let t,pi = List.find (fun (lt,_) -> path_matches lt) ctx.m.module_types in
-						Display.ImportHandling.mark_import_position ctx.com pi;
+						ImportHandling.mark_import_position ctx.com pi;
 						t
 					in
 					{ t with tpackage = fst (t_path lt) },p
@@ -469,7 +469,7 @@ module Inheritance = struct
 				in
 				Some (check_herit t is_extends)
 			with Error(Module_not_found(([],name)),p) when ctx.com.display.dms_display ->
-				if Display.Diagnostics.is_diagnostics_run p then DisplayToplevel.handle_unresolved_identifier ctx name p true;
+				if Diagnostics.is_diagnostics_run p then DisplayToplevel.handle_unresolved_identifier ctx name p true;
 				None
 		) herits in
 		fl
