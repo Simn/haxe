@@ -42,4 +42,48 @@ class Issue7029 extends DisplayTestCase {
 		eq(true, hasToplevel(typesCompletion, "type", "IFoo"));
 		eq(false, hasToplevel(typesCompletion, "type", "Main"));
 	}
+
+	/**
+	typedef T1 = { };
+	class C1 { }
+
+	typedef T2 = {
+		> {-1-}
+	}
+	**/
+	function test4() {
+		var typesCompletion = toplevel(pos(1));
+		eq(true, hasToplevel(typesCompletion, "type", "T1"));
+		eq(false, hasToplevel(typesCompletion, "type", "C1"));
+	}
+
+	/**
+	typedef T1 = { };
+	class C1 { }
+
+	typedef T2 = {
+		> T{-1-}
+	}
+	**/
+	function test5() {
+		var typesCompletion = toplevel(pos(1));
+		eq(true, hasToplevel(typesCompletion, "type", "T1"));
+		eq(false, hasToplevel(typesCompletion, "type", "C1"));
+	}
+
+	/**
+	typedef T1 = { };
+	typedef T2 = { };
+	class C1 { }
+
+	typedef T3 = {
+		> T1,
+		> {-1-}
+	}
+	**/
+	function test6() {
+		var typesCompletion = toplevel(pos(1));
+		eq(true, hasToplevel(typesCompletion, "type", "T2"));
+		eq(false, hasToplevel(typesCompletion, "type", "C1"));
+	}
 }

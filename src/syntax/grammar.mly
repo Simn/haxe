@@ -423,8 +423,21 @@ and parse_complex_type_maybe_named allow_named = parser
 		parse_complex_type_next t s
 
 and parse_structural_extension = parser
-	| [< '(Binop OpGt,_); t = parse_type_path; '(Comma,_); s >] ->
-		t
+	| [< '(Binop OpGt,p1); s >] ->
+		match s with parser
+		| [< t = parse_type_path >] ->
+			begin match s with parser
+				| [< '(Comma,_) >] -> t
+				| [< >] -> if do_resume() then t else serror()
+			end;
+		| [< >] ->
+			if would_skip_resume p1 s then begin
+				begin match s with parser
+					| [< '(Comma,_) >] -> ()
+					| [< >] -> ()
+				end;
+				{ tpackage = []; tname = ""; tparams = []; tsub = None },null_pos
+			end else raise Stream.Failure
 
 and parse_complex_type_inner allow_named = parser
 	| [< '(POpen,p1); t = parse_complex_type; '(PClose,p2) >] -> CTParent t,punion p1 p2

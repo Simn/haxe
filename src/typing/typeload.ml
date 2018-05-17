@@ -23,6 +23,10 @@ open Ast
 open Common
 open DisplayTypes.DisplayMode
 open DisplayTypes.CompletionResultKind
+open DisplayTypes.CompletionKind
+open DisplayTypes.CompletionModuleType
+open DisplayTypes.CompletionModuleKind
+open Display.DisplayException
 open Type
 open Typecore
 open Error
@@ -40,7 +44,7 @@ let type_function_params_rec = ref (fun _ _ _ _ -> assert false)
 let rec load_type_def ctx p t =
 	let no_pack = t.tpackage = [] in
 	let tname = (match t.tsub with None -> t.tname | Some n -> n) in
-	if tname = "" then Display.DisplayException.raise_fields (DisplayToplevel.collect ctx true NoValue) CRToplevel None false;
+	if tname = "" then raise_fields (DisplayToplevel.collect ctx true NoValue) CRToplevel None false;
 	try
 		if t.tsub <> None then raise Not_found;
 		let path_matches t2 =
@@ -117,7 +121,7 @@ let rec load_type_def ctx p t =
 let resolve_position_by_path ctx path p =
 	let mt = load_type_def ctx p path in
 	let p = (t_infos mt).mt_pos in
-	Display.DisplayException.raise_position [p]
+	raise_position [p]
 
 let check_param_constraints ctx types t pl c p =
 	match follow t with
@@ -166,7 +170,7 @@ let pselect p1 p2 =
 	if p1 = null_pos then p2 else p1
 
 (* build an instance from a full type *)
-let rec load_instance ?(allow_display=false) ctx (t,pn) allow_no_params p =
+let rec load_instance' ctx (t,pn) allow_no_params p =
 	let p = pselect pn p in
 	let t = try
 		if t.tpackage <> [] || t.tsub <> None then raise Not_found;
@@ -263,8 +267,16 @@ let rec load_instance ?(allow_display=false) ctx (t,pn) allow_no_params p =
 			f params
 		end
 	in
-	if allow_display then Display.DisplayEmitter.check_display_type ctx t pn;
 	t
+
+and load_instance ctx ?(allow_display=false) (t,pn) allow_no_params p =
+	try
+		let t = load_instance' ctx (t,pn) allow_no_params p in
+		if allow_display then Display.DisplayEmitter.check_display_type ctx t pn;
+		t
+	with Error (Module_not_found path,_) when (ctx.com.display.dms_kind = DMDefault) && Display.is_display_position pn ->
+		let s = s_type_path path in
+		raise_fields (DisplayToplevel.collect ctx false NoValue) CRToplevel (Some {pn with pmin = pn.pmax - String.length s;}) false
 
 (*
 	build an instance from a complex type
@@ -277,7 +289,7 @@ and load_complex_type ctx allow_display p (t,pn) =
 	| CTOptional _ -> error "Optional type not allowed here" p
 	| CTNamed _ -> error "Named type not allowed here" p
 	| CTExtend (tl,l) ->
-		(match load_complex_type ctx allow_display p (CTAnonymous l,p) with
+		begin match load_complex_type ctx allow_display p (CTAnonymous l,p) with
 		| TAnon a as ta ->
 			let is_redefined cf1 a2 =
 				try
@@ -312,7 +324,16 @@ and load_complex_type ctx allow_display p (t,pn) =
 				| _ ->
 					error "Can only extend structures" p
 			in
-			let il = List.map (fun (t,pn) -> load_instance ctx ~allow_display (t,pn) false p) tl in
+			let il = List.map (fun (t,pn) ->
+				try
+					load_instance ctx ~allow_display (t,pn) false p
+				with DisplayException(DisplayFields(l,CRToplevel,p,b)) ->
+					let l = List.filter (function
+						| ITType({kind = Struct},_) -> true
+						| _ -> false
+					) l in
+					raise_fields l CRToplevel p b
+			) tl in
 			let tr = ref None in
 			let t = TMono tr in
 			let r = exc_protect ctx (fun r ->
@@ -327,7 +348,8 @@ and load_complex_type ctx allow_display p (t,pn) =
 				t
 			) "constraint" in
 			TLazy r
-		| _ -> assert false)
+		| _ -> assert false
+		end
 	| CTAnonymous l ->
 		let rec loop acc f =
 			let n = fst f.cff_name in
