@@ -2,11 +2,7 @@ package cases;
 
 class Issue7029 extends DisplayTestCase {
 	/**
-	class Main implements {-1-} {
-		static public function main() {
-
-		}
-	}
+	class Main implements {-1-}
 
 	interface IFoo { }
 	**/
@@ -17,11 +13,7 @@ class Issue7029 extends DisplayTestCase {
 	}
 
 	/**
-	class Main extends {-1-} {
-		static public function main() {
-
-		}
-	}
+	class Main extends {-1-}
 
 	class C { }
 	interface IFoo { }

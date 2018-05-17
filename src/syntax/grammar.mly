@@ -38,6 +38,10 @@ let rec psep sep f = parser
 		v :: loop s
 	| [< >] -> []
 
+let expect_unless_resume f = parser
+	| [< _ = f >] -> ()
+	| [< >] -> if do_resume() then () else serror()
+
 let ident = parser
 	| [< '(Const (Ident i),p) >] -> i,p
 
@@ -61,6 +65,9 @@ let property_ident = parser
 	| [< '(Kwd Dynamic,p) >] -> "dynamic",p
 	| [< '(Kwd Default,p) >] -> "default",p
 	| [< '(Kwd Null,p) >] -> "null",p
+
+let bropen = parser
+	| [< '(BrOpen,_) >] -> ()
 
 let comma = parser
 	| [< '(Comma,_) >] -> ()
@@ -143,7 +150,9 @@ and parse_type_decl s =
 					d_data = l
 				}, punion p1 p2)
 			end
-		| [< n , p1 = parse_class_flags; name = type_name; tl = parse_constraint_params; hl = plist parse_class_herit; '(BrOpen,_); fl, p2 = parse_class_fields false p1 >] ->
+		| [< n , p1 = parse_class_flags; name = type_name; tl = parse_constraint_params; hl = plist parse_class_herit; >] ->
+			expect_unless_resume bropen s;
+			let fl, p2 = parse_class_fields false p1 s in
 			(EClass {
 				d_name = name;
 				d_doc = doc;
