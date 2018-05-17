@@ -284,10 +284,48 @@ end
 
 open ImportStatus
 
+(* Determines a path from [path] in the given [ctx]. This is a simplified
+   copy of load_type_def which doesn't load any modules. *)
+let rec path_from_name ctx path =
+	let no_pack = fst path = [] in
+	let tname = snd path in
+	try
+		let path_matches t2 =
+			let tp = t_path t2 in
+			tp = path || (no_pack && snd tp = tname)
+		in
+		let mt = try
+			List.find path_matches ctx.m.curmod.m_types
+		with Not_found ->
+			let t,_ = List.find (fun (t2,pi) -> path_matches t2) ctx.m.module_types in
+			t
+		in
+		(t_infos mt).mt_path
+	with Not_found -> try
+		(* lookup in wildcard imported packages *)
+		let rec loop l = match l with
+			| [] -> raise Not_found
+			| (wp,pi) :: l ->
+				try path_from_name ctx (wp,tname)
+				with Not_found -> loop l
+		in
+		if not no_pack then raise Not_found;
+		loop ctx.m.wildcard_packages
+	with Not_found ->
+		(* lookup in our own package - and its upper packages *)
+		let rec loop = function
+			| [] -> raise Not_found
+			| (_ :: lnext) as l ->
+				try path_from_name ctx (List.rev l,tname)
+				with Not_found -> loop lnext
+		in
+		if not no_pack then raise Not_found;
+		loop (List.rev (fst ctx.m.curmod.m_path))
+
 let import_status_from_context ctx path =
 	try
-		let mt' = ctx.g.do_load_type_def ctx null_pos {tpackage = []; tname = snd path; tparams = []; tsub = None} in
-		if path = (t_infos mt').mt_path then Imported
+		let path' = path_from_name ctx path in
+		if path = path' then Imported
 		else Shadowed
 	with _ ->
 		Unimported

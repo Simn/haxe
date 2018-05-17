@@ -162,10 +162,10 @@ let collect ctx only_types with_type =
 		end
 	end;
 
-	let module_types = ref [] in
+	let known_paths = ref [] in
 
 	let module_exists path =
-		List.exists (fun (mt2,_) -> (t_infos mt2).mt_path = path) !module_types
+		List.mem path !known_paths
 	in
 
 	let add_type rm mt =
@@ -178,7 +178,9 @@ let collect ctx only_types with_type =
 				| TClassDecl c | TAbstractDecl { a_impl = Some c } when Meta.has Meta.CoreApi c.cl_meta ->
 					!merge_core_doc_ref ctx c
 				| _ -> ());
-				module_types := (mt,rm) :: !module_types
+				let is = Display.import_status_from_context ctx (t_infos mt).mt_path in
+				add (ITType(CompletionModuleType.of_module_type is mt,rm));
+				known_paths := path :: !known_paths;
 			end
 	in
 
@@ -209,7 +211,9 @@ let collect ctx only_types with_type =
 					| EAbstract d -> fst d.d_name
 					| _ -> raise Exit
 				in
-				if not (module_exists (pack,tname)) then begin
+				let path = (pack,tname) in
+				if not (module_exists path) then begin
+					known_paths := path :: !known_paths;
 					let rm = RMOtherModule(pack,name) in
 					let is = Display.import_status_from_context ctx (pack,name) in
 					add (ITType(CompletionModuleType.of_type_decl is pack name (d,p),rm))
@@ -247,11 +251,6 @@ let collect ctx only_types with_type =
 	end;
 
 	(* TODO: wildcard packages. How? *)
-
-	List.iter (fun (mt,rm) ->
-		let is = Display.import_status_from_context ctx (t_infos mt).mt_path in
-		add (ITType(CompletionModuleType.of_module_type is mt,rm))
-	) !module_types;
 
 	Hashtbl.iter (fun pack _ ->
 		add (ITPackage pack)
