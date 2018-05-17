@@ -203,7 +203,7 @@ module CompletionModuleType = struct
 		jobject [
 			"pack",jlist jstring cm.pack;
 			"name",jstring cm.name;
-			"module_name",jstring cm.module_name;
+			"moduleName",jstring cm.module_name;
 			"pos",generate_pos ctx cm.pos;
 			"isPrivate",jbool cm.is_private;
 			"params",jlist (generate_ast_type_param ctx) cm.params;
