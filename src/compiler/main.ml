@@ -813,7 +813,9 @@ try
 		| _ -> if not ctx.has_next then com.package_rules <- PMap.foldi (fun p r acc -> match r with Forbidden -> acc | _ -> PMap.add p r acc) com.package_rules PMap.empty;
 	end;
 	com.config <- get_config com; (* make sure to adapt all flags changes defined after platform *)
+	let t = Timer.timer ["init"] in
 	List.iter (fun f -> f()) (List.rev (!pre_compilation));
+	t();
 	if !classes = [([],"Std")] && not !force_typing then begin
 		if !cmds = [] && not !did_something then raise (HelpMessage (usage_string basic_args_spec usage));
 	end else begin

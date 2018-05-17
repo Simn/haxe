@@ -24,7 +24,7 @@ open Typecore
 open DisplayTypes.CompletionKind
 open DisplayTypes
 
-let explore_class_paths com class_paths recusive f_pack f_module =
+let explore_class_paths com timer class_paths recusive f_pack f_module =
 	let rec loop dir pack =
 		try
 			let entries = Sys.readdir dir in
@@ -56,10 +56,12 @@ let explore_class_paths com class_paths recusive f_pack f_module =
 		with Sys_error _ ->
 			()
 	in
-	List.iter (fun dir -> loop dir []) class_paths
+	let t = Timer.timer (timer @ ["class path exploration"]) in
+	List.iter (fun dir -> loop dir []) class_paths;
+	t()
 
-let read_class_paths com =
-	explore_class_paths com com.class_path true (fun _ -> ()) (fun path ->
+let read_class_paths com timer =
+	explore_class_paths com timer com.class_path true (fun _ -> ()) (fun path ->
 		ignore(TypeloadParse.parse_module' com path Globals.null_pos)
 	)
 
@@ -219,7 +221,7 @@ let collect ctx only_types with_type =
 
 	begin match !CompilationServer.instance with
 	| None ->
-		explore_class_paths ctx.com class_paths true add_package (fun path ->
+		explore_class_paths ctx.com ["display";"toplevel"] class_paths true add_package (fun path ->
 			if not (module_exists path) then begin
 				let _,decls = TypeloadParse.parse_module ctx path Globals.null_pos in
 				process_decls (fst path) (snd path) decls
@@ -228,7 +230,7 @@ let collect ctx only_types with_type =
 	| Some cs ->
 		if not (CompilationServer.is_initialized cs) then begin
 			CompilationServer.set_initialized cs;
-			read_class_paths ctx.com;
+			read_class_paths ctx.com ["display";"toplevel"];
 		end;
 		CompilationServer.iter_files cs ctx.com (fun file cfile ->
 			let module_name = match cfile.c_module_name with

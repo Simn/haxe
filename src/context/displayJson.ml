@@ -163,7 +163,7 @@ let parse_input com input report_times pre_compilation did_something =
 				pre_compilation := (fun () ->
 					let cs = CompilationServer.force() in
 					CompilationServer.set_initialized cs;
-					DisplayToplevel.read_class_paths com;
+					DisplayToplevel.read_class_paths com ["init"];
 					f_result (jstring "class paths read");
 				) :: !pre_compilation
 			| "server/contexts" ->
