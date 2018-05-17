@@ -305,7 +305,7 @@ enum abstract JsonModuleTypeKind<T>(String) {
 typedef JsonModuleType<T> = {
 	var pack: Array<String>;
 	var name: String;
-	var module: String;
+	var moduleName: String;
 	var pos: JsonPos;
 	var isPrivate: Bool;
 	var params: JsonTypeParameters;
