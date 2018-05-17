@@ -706,15 +706,7 @@ let create_variable (ctx,cctx,fctx) c f t eo p =
 		| None ->
 			mk_mono()
 		| Some t ->
-			(* TODO is_lib: only load complex type if needed *)
-			let old = ctx.type_params in
-			if fctx.is_static then ctx.type_params <- (match cctx.abstract with
-				| Some a -> a.a_params
-				| _ -> []
-			);
-			let t = lazy_display_type ctx (fun () -> load_complex_type ctx true p t) in
-			if fctx.is_static then ctx.type_params <- old;
-			t
+			lazy_display_type ctx (fun () -> load_complex_type ctx true p t)
 	) in
 	let kind = if fctx.is_inline then
 		{ v_read = AccInline ; v_write = AccNever }
@@ -919,11 +911,7 @@ let create_method (ctx,cctx,fctx) c f fd p =
 	let parent = (if not fctx.is_static then get_parent c (fst f.cff_name) else None) in
 	let dynamic = List.mem_assoc ADynamic f.cff_access || (match parent with Some { cf_kind = Method MethDynamic } -> true | _ -> false) in
 	if fctx.is_inline && dynamic then error (fst f.cff_name ^ ": You can't have both 'inline' and 'dynamic'") p;
-	ctx.type_params <- (match cctx.abstract with
-		| Some a when fctx.is_abstract_member ->
-			params @ a.a_params
-		| _ ->
-			if fctx.is_static then params else params @ ctx.type_params);
+	ctx.type_params <- if fctx.is_static && not fctx.is_abstract_member then params else ctx.type_params @ params;
 	(* TODO is_lib: avoid forcing the return type to be typed *)
 	let ret = if fctx.field_kind = FKConstructor then ctx.t.tvoid else type_opt (ctx,cctx) p fd.f_type in
 	let rec loop args = match args with
@@ -1026,10 +1014,6 @@ let create_method (ctx,cctx,fctx) c f fd p =
 
 let create_property (ctx,cctx,fctx) c f (get,set,t,eo) p =
 	let name = fst f.cff_name in
-	(match cctx.abstract with
-	| Some a when fctx.is_abstract_member ->
-		ctx.type_params <- a.a_params;
-	| _ -> ());
 	(* TODO is_lib: lazify load_complex_type *)
 	let ret = (match t, eo with
 		| None, None -> error (name ^ ": Property must either define a type or a default value") p;
@@ -1176,6 +1160,10 @@ let init_field (ctx,cctx,fctx) f =
 	begin match fctx.override with
 		| Some _ -> (match c.cl_super with None -> error ("Invalid override on field '" ^ name ^ "': class has no super class") p | _ -> ());
 		| None -> ()
+	end;
+	begin match cctx.abstract with
+		| Some a when fctx.is_abstract_member -> ctx.type_params <- a.a_params;
+		| _ -> ()
 	end;
 	match f.cff_kind with
 	| FVar (t,e) ->
