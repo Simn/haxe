@@ -59,6 +59,7 @@ let explore_class_paths ctx class_paths recusive f_pack f_module =
 	List.iter (fun dir -> loop dir []) class_paths
 
 let collect ctx only_types with_type =
+	let t = Timer.timer ["display";"toplevel"] in
 	let acc = DynArray.create () in
 	let add x = DynArray.add acc x in
 
@@ -260,7 +261,7 @@ let collect ctx only_types with_type =
 	) ctx.type_params;
 
 	let l = DynArray.to_list acc in
-	match with_type with
+	let l = match with_type with
 		| WithType t ->
 			let rec comp t' =
 				if type_iseq t' t then 0 (* equal types - perfect *)
@@ -278,6 +279,9 @@ let collect ctx only_types with_type =
 			let l = List.sort (fun (_,i1) (_,i2) -> compare i1 i2) l in
 			List.map fst l
 		| _ -> l
+	in
+	t();
+	l
 
 let handle_unresolved_identifier ctx i p only_types =
 	let l = collect ctx only_types NoValue in

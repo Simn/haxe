@@ -61,6 +61,7 @@ let parse_input com input report_times did_something =
 				"result",json;
 			] in
 			let fl = if !report_times then begin
+				close_times();
 				let _,_,root = Timer.build_times_tree () in
 				begin match json_of_times root with
 				| None -> fl
