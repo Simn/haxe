@@ -159,6 +159,11 @@ let parse_input com input report_times did_something =
 				read_display_file (get_bool_param "wasAutoTriggered") true false;
 				enable_display DMSignature
 			(* server *)
+			| "server/readClassPaths" ->
+				let cs = CompilationServer.force() in
+				CompilationServer.set_initialized cs;
+				DisplayToplevel.read_class_paths com;
+				f_result (jstring "class paths read");
 			| "server/contexts" ->
 				let cs = CompilationServer.force() in
 				let l = List.map (fun (sign,index) -> jobject [

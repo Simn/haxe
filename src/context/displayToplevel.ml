@@ -24,7 +24,7 @@ open Typecore
 open DisplayTypes.CompletionKind
 open DisplayTypes
 
-let explore_class_paths ctx class_paths recusive f_pack f_module =
+let explore_class_paths com class_paths recusive f_pack f_module =
 	let rec loop dir pack =
 		try
 			let entries = Sys.readdir dir in
@@ -34,7 +34,7 @@ let explore_class_paths ctx class_paths recusive f_pack f_module =
 						()
 					| _ when Sys.is_directory (dir ^ file) && file.[0] >= 'a' && file.[0] <= 'z' ->
 						begin try
-							begin match PMap.find file ctx.com.package_rules with
+							begin match PMap.find file com.package_rules with
 								| Forbidden -> ()
 								| _ -> raise Not_found
 							end
@@ -57,6 +57,11 @@ let explore_class_paths ctx class_paths recusive f_pack f_module =
 			()
 	in
 	List.iter (fun dir -> loop dir []) class_paths
+
+let read_class_paths com =
+	explore_class_paths com com.class_path true (fun _ -> ()) (fun path ->
+		ignore(TypeloadParse.parse_module' com path Globals.null_pos)
+	)
 
 let collect ctx only_types with_type =
 	let t = Timer.timer ["display";"toplevel"] in
@@ -214,7 +219,7 @@ let collect ctx only_types with_type =
 
 	begin match !CompilationServer.instance with
 	| None ->
-		explore_class_paths ctx class_paths true add_package (fun path ->
+		explore_class_paths ctx.com class_paths true add_package (fun path ->
 			if not (module_exists path) then begin
 				let _,decls = TypeloadParse.parse_module ctx path Globals.null_pos in
 				process_decls (fst path) (snd path) decls
@@ -223,11 +228,7 @@ let collect ctx only_types with_type =
 	| Some cs ->
 		if not (CompilationServer.is_initialized cs) then begin
 			CompilationServer.set_initialized cs;
-			explore_class_paths ctx class_paths true (fun _ -> ()) (fun path ->
-				if not (module_exists path) then begin
-					ignore(TypeloadParse.parse_module ctx path Globals.null_pos)
-				end
-			);
+			read_class_paths ctx.com;
 		end;
 		CompilationServer.iter_files cs ctx.com (fun file cfile ->
 			let module_name = match cfile.c_module_name with
