@@ -276,6 +276,17 @@ let patch_class ctx c fields =
 		in
 		List.rev (loop [] fields)
 
+let lazy_display_type ctx f =
+	if ctx.is_display_file then begin
+		let r = exc_protect ctx (fun r ->
+			let t = f () in
+			r := lazy_processing (fun () -> t);
+			t
+		) "" in
+		TLazy r
+	end else
+		f ()
+
 let build_enum_abstract ctx c a fields p =
 	List.iter (fun field ->
 		match field.cff_kind with
@@ -701,7 +712,7 @@ let create_variable (ctx,cctx,fctx) c f t eo p =
 				| Some a -> a.a_params
 				| _ -> []
 			);
-			let t = load_complex_type ctx true p t in
+			let t = lazy_display_type ctx (fun () -> load_complex_type ctx true p t) in
 			if fctx.is_static then ctx.type_params <- old;
 			t
 	) in
@@ -1023,7 +1034,7 @@ let create_property (ctx,cctx,fctx) c f (get,set,t,eo) p =
 	let ret = (match t, eo with
 		| None, None -> error (name ^ ": Property must either define a type or a default value") p;
 		| None, _ -> mk_mono()
-		| Some t, _ -> load_complex_type ctx true p t
+		| Some t, _ -> lazy_display_type ctx (fun () -> load_complex_type ctx true p t)
 	) in
 	let t_get,t_set = match cctx.abstract with
 		| Some a when fctx.is_abstract_member ->
