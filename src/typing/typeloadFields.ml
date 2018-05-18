@@ -277,14 +277,14 @@ let patch_class ctx c fields =
 		List.rev (loop [] fields)
 
 let lazy_display_type ctx f =
-	if ctx.is_display_file then begin
+	(* if ctx.is_display_file then begin
 		let r = exc_protect ctx (fun r ->
 			let t = f () in
 			r := lazy_processing (fun () -> t);
 			t
 		) "" in
 		TLazy r
-	end else
+	end else *)
 		f ()
 
 let build_enum_abstract ctx c a fields p =
