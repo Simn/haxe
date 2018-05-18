@@ -309,6 +309,7 @@ let unify_field_call ctx fa el args ret p inline =
 		| FStatic(c,cf) -> c,[],cf,true
 		| _ -> assert false
 	in
+	let cs = c.cl_structure() in
 	if cf.cf_params = [] then error "Function has no type parameters and cannot be generic" p;
 	let monos = List.map (fun _ -> mk_mono()) cf.cf_params in
 	let map_monos t = apply_params cf.cf_params monos t in
@@ -348,11 +349,11 @@ let unify_field_call ctx fa el args ret p inline =
 		in
 		let cf2 = try
 			let cf2 = if stat then
-				let cf2 = PMap.find name c.cl_statics in
+				let cf2 = PMap.find name cs.cl_statics in
 				unify_existing_field cf2.cf_type cf2.cf_pos;
 				cf2
 			else
-				let cf2 = PMap.find name c.cl_fields in
+				let cf2 = PMap.find name cs.cl_fields in
 				unify_existing_field cf2.cf_type cf2.cf_pos;
 				cf2
 			in
@@ -360,12 +361,12 @@ let unify_field_call ctx fa el args ret p inline =
 		with Not_found ->
 			let cf2 = mk_field name (map_monos cf.cf_type) cf.cf_pos cf.cf_name_pos in
 			if stat then begin
-				c.cl_statics <- PMap.add name cf2 c.cl_statics;
-				c.cl_ordered_statics <- cf2 :: c.cl_ordered_statics
+				cs.cl_statics <- PMap.add name cf2 cs.cl_statics;
+				cs.cl_ordered_statics <- cf2 :: cs.cl_ordered_statics
 			end else begin
 				if List.memq cf c.cl_overrides then c.cl_overrides <- cf2 :: c.cl_overrides;
-				c.cl_fields <- PMap.add name cf2 c.cl_fields;
-				c.cl_ordered_fields <- cf2 :: c.cl_ordered_fields
+				cs.cl_fields <- PMap.add name cf2 cs.cl_fields;
+				cs.cl_ordered_fields <- cf2 :: cs.cl_ordered_fields
 			end;
 			ignore(follow cf.cf_type);
 			let rec check e = match e.eexpr with
@@ -468,12 +469,13 @@ let rec acc_get ctx g p =
 						c.cl_module.m_types <- (TClassDecl c2) :: c.cl_module.m_types;
 						c2
 				in
+				let c2s = c2.cl_structure() in
 				let cf = try
-					PMap.find f.cf_name c2.cl_statics
+					PMap.find f.cf_name c2s.cl_statics
 				with Not_found ->
 					let cf = {f with cf_kind = Method MethNormal} in
-					c2.cl_statics <- PMap.add cf.cf_name cf c2.cl_statics;
-					c2.cl_ordered_statics <- cf :: c2.cl_ordered_statics;
+					c2s.cl_statics <- PMap.add cf.cf_name cf c2s.cl_statics;
+					c2s.cl_ordered_statics <- cf :: c2s.cl_ordered_statics;
 					cf
 				in
 				let e_t = type_module_type ctx (TClassDecl c2) None p in
@@ -560,7 +562,7 @@ let rec build_call ctx acc el (with_type:with_type) p =
 			(match follow ethis.etype with
 			| TInst (c,_) ->
 				let rec loop c =
-					if PMap.mem cf.cf_name c.cl_fields then
+					if PMap.mem cf.cf_name (c.cl_structure()).cl_fields then
 						let eparam,f = push_this ctx ethis in
 						ethis_f := f;
 						let e = match ctx.g.do_macro ctx MExpr c.cl_path cf.cf_name (eparam :: el) p with

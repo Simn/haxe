@@ -60,7 +60,7 @@ let run_on_expr com e =
 		| TNew(c,_,el) ->
 			List.iter expr el;
 			check_class com c e.epos;
-			(match c.cl_constructor with None -> () | Some cf -> check_cf com cf e.epos)
+			(match (c.cl_structure()).cl_constructor with None -> () | Some cf -> check_cf com cf e.epos)
 		| TTypeExpr(mt) | TCast(_,Some mt) ->
 			check_module_type com mt e.epos
 		| TMeta((Meta.Deprecated,_,_) as meta,e1) ->
@@ -77,10 +77,11 @@ let run com =
 	List.iter (fun t -> match t with
 		| TClassDecl c ->
 			curclass := c;
-			(match c.cl_constructor with None -> () | Some cf -> run_on_field com cf);
+			let cs = c.cl_structure() in
+			(match cs.cl_constructor with None -> () | Some cf -> run_on_field com cf);
 			(match c.cl_init with None -> () | Some e -> run_on_expr com e);
-			List.iter (run_on_field com) c.cl_ordered_statics;
-			List.iter (run_on_field com) c.cl_ordered_fields;
+			List.iter (run_on_field com) cs.cl_ordered_statics;
+			List.iter (run_on_field com) cs.cl_ordered_fields;
 		| _ ->
 			()
 	) com.types

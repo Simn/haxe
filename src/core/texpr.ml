@@ -211,13 +211,13 @@ let foldmap f acc e =
 (* Collection of functions that return expressions *)
 module Builder = struct
 	let make_static_this c p =
-		let ta = TAnon { a_fields = c.cl_statics; a_status = ref (Statics c) } in
+		let ta = TAnon { a_fields = (c.cl_structure()).cl_statics; a_status = ref (Statics c) } in
 		mk (TTypeExpr (TClassDecl c)) ta p
 
 	let make_typeexpr mt pos =
 		let t =
 			match mt with
-			| TClassDecl c -> TAnon { a_fields = c.cl_statics; a_status = ref (Statics c) }
+			| TClassDecl c -> TAnon { a_fields = (c.cl_structure()).cl_statics; a_status = ref (Statics c) }
 			| TEnumDecl e -> TAnon { a_fields = PMap.empty; a_status = ref (EnumStatics e) }
 			| TAbstractDecl a -> TAnon { a_fields = PMap.empty; a_status = ref (AbstractStatics a) }
 			| _ -> assert false
@@ -352,8 +352,9 @@ let for_remap basic v e1 e2 p =
 let build_metadata api t =
 	let p, meta, fields, statics = (match t with
 		| TClassDecl c ->
-			let fields = List.map (fun f -> f.cf_name,f.cf_meta) (c.cl_ordered_fields @ (match c.cl_constructor with None -> [] | Some f -> [{ f with cf_name = "_" }])) in
-			let statics =  List.map (fun f -> f.cf_name,f.cf_meta) c.cl_ordered_statics in
+			let cs = c.cl_structure() in
+			let fields = List.map (fun f -> f.cf_name,f.cf_meta) (cs.cl_ordered_fields @ (match cs.cl_constructor with None -> [] | Some f -> [{ f with cf_name = "_" }])) in
+			let statics =  List.map (fun f -> f.cf_name,f.cf_meta) cs.cl_ordered_statics in
 			(c.cl_pos, ["",c.cl_meta],fields,statics)
 		| TEnumDecl e ->
 			(e.e_pos, ["",e.e_meta],List.map (fun n -> n, (PMap.find n e.e_constrs).ef_meta) e.e_names, [])

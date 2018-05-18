@@ -251,7 +251,7 @@ let rec build_generic ctx c p tl =
 		List.iter (fun cf -> match cf.cf_kind with
 			| Method MethMacro when not ctx.in_macro -> ()
 			| _ -> error "A generic class can't have static fields" cf.cf_pos
-		) c.cl_ordered_statics;
+		) (c.cl_structure()).cl_ordered_statics;
 		cg.cl_super <- (match c.cl_super with
 			| None -> None
 			| Some (cs,pl) ->
@@ -269,7 +269,9 @@ let rec build_generic ctx c p tl =
 		cg.cl_meta <- (Meta.NoDoc,[],null_pos) :: cg.cl_meta;
 		if has_meta Meta.Keep c.cl_meta then cg.cl_meta <- (Meta.Keep,[],null_pos) :: cg.cl_meta;
 		cg.cl_interface <- c.cl_interface;
-		cg.cl_constructor <- (match cg.cl_constructor, c.cl_constructor, c.cl_super with
+		let cgs = cg.cl_structure() in
+		let cs = c.cl_structure() in
+		cgs.cl_constructor <- (match cgs.cl_constructor, cs.cl_constructor, c.cl_super with
 			| _, Some cf, _ -> Some (build_field cf)
 			| Some ctor, _, _ -> Some ctor
 			| None, None, None -> None
@@ -280,13 +282,13 @@ let rec build_generic ctx c p tl =
 			| TInst (i,tl) -> i, tl
 			| _ -> assert false)
 		) c.cl_implements;
-		cg.cl_ordered_fields <- List.map (fun f ->
+		cgs.cl_ordered_fields <- List.map (fun f ->
 			let f = build_field f in
-			cg.cl_fields <- PMap.add f.cf_name f cg.cl_fields;
+			cgs.cl_fields <- PMap.add f.cf_name f cgs.cl_fields;
 			f
-		) c.cl_ordered_fields;
+		) cs.cl_ordered_fields;
 		cg.cl_overrides <- List.map (fun f ->
-			try PMap.find f.cf_name cg.cl_fields with Not_found -> assert false
+			try PMap.find f.cf_name cgs.cl_fields with Not_found -> assert false
 		) c.cl_overrides;
 		(* In rare cases the class name can become too long, so let's shorten it (issue #3090). *)
 		if String.length (snd cg.cl_path) > 254 then begin

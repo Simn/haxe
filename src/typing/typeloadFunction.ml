@@ -198,8 +198,13 @@ let type_function ctx args ret fmode f do_display p =
 	Std.finally save (type_function ctx args ret fmode f do_display) p
 
 let add_constructor ctx c force_constructor p =
-	match c.cl_constructor, c.cl_super with
-	| None, Some ({ cl_constructor = Some cfsup } as csup,cparams) when not c.cl_extern ->
+	let super = match c.cl_super with
+		| Some(c,params) -> Some(c,(c.cl_structure()),params)
+		| None -> None
+	in
+	let cs = c.cl_structure() in
+	match cs.cl_constructor, super with
+	| None, Some (csup,{ cl_constructor = Some cfsup },cparams) when not c.cl_extern ->
 		let cf = {
 			cfsup with
 			cf_pos = p;
@@ -255,7 +260,7 @@ let add_constructor ctx c force_constructor p =
 			t
 		) "add_constructor" in
 		cf.cf_type <- TLazy r;
-		c.cl_constructor <- Some cf;
+		cs.cl_constructor <- Some cf;
 	| None,_ when force_constructor ->
 		let constr = mk (TFunction {
 			tf_args = [];
@@ -267,7 +272,7 @@ let add_constructor ctx c force_constructor p =
 		cf.cf_type <- constr.etype;
 		cf.cf_meta <- [Meta.CompilerGenerated,[],null_pos];
 		cf.cf_kind <- Method MethNormal;
-		c.cl_constructor <- Some cf;
+		cs.cl_constructor <- Some cf;
 	| _ ->
 		(* nothing to do *)
 		()

@@ -115,9 +115,10 @@ let prepare_field com cf = match cf.cf_expr with
 let prepare com global =
 	List.iter (function
 		| TClassDecl c when global || is_display_file c.cl_pos.pfile ->
-			List.iter (prepare_field com) c.cl_ordered_fields;
-			List.iter (prepare_field com) c.cl_ordered_statics;
-			(match c.cl_constructor with None -> () | Some cf -> prepare_field com cf);
+			let cs = c.cl_structure() in
+			List.iter (prepare_field com) cs.cl_ordered_fields;
+			List.iter (prepare_field com) cs.cl_ordered_statics;
+			(match cs.cl_constructor with None -> () | Some cf -> prepare_field com cf);
 		| _ ->
 			()
 	) com.types

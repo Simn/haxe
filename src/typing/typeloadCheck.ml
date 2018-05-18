@@ -197,7 +197,7 @@ let check_overriding ctx c f =
 
 let class_field_no_interf c i =
 	try
-		let f = PMap.find i c.cl_fields in
+		let f = PMap.find i (c.cl_structure()).cl_fields in
 		f.cf_type , f
 	with Not_found ->
 		match c.cl_super with
@@ -346,7 +346,7 @@ module Inheritance = struct
 					display_error ctx msg p
 				| Not_found -> ()
 		in
-		PMap.iter check_field intf.cl_fields;
+		PMap.iter check_field (intf.cl_structure()).cl_fields;
 		List.iter (fun (i2,p2) ->
 			check_interface ctx c i2 (List.map (apply_params intf.cl_params params) p2)
 		) intf.cl_implements
@@ -482,7 +482,7 @@ let check_final_vars ctx e =
 			Hashtbl.add final_vars cf.cf_name cf
 		| _ ->
 			()
-	) ctx.curclass.cl_ordered_fields;
+	) (ctx.curclass.cl_structure()).cl_ordered_fields;
 	if Hashtbl.length final_vars > 0 then begin
 		let rec find_inits e = match e.eexpr with
 			| TBinop(OpAssign,{eexpr = TField({eexpr = TConst TThis},fa)},e2) ->

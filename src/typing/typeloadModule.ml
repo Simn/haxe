@@ -401,7 +401,7 @@ let init_module_type ctx context_init do_init (decl,p) =
 				match resolve_typedef t with
 				| TClassDecl c ->
 					ignore(c.cl_build());
-					ignore(PMap.find s c.cl_statics);
+					ignore(PMap.find s (c.cl_structure()).cl_statics);
 					ctx.m.module_globals <- PMap.add name (TClassDecl c,s,p) ctx.m.module_globals
 				| TEnumDecl e ->
 					ignore(PMap.find s e.e_constrs);
@@ -457,7 +457,7 @@ let init_module_type ctx context_init do_init (decl,p) =
 					| TClassDecl c
 					| TAbstractDecl {a_impl = Some c} ->
 						ignore(c.cl_build());
-						PMap.iter (fun _ cf -> if not (has_meta Meta.NoImportGlobal cf.cf_meta) then ctx.m.module_globals <- PMap.add cf.cf_name (TClassDecl c,cf.cf_name,p) ctx.m.module_globals) c.cl_statics
+						PMap.iter (fun _ cf -> if not (has_meta Meta.NoImportGlobal cf.cf_meta) then ctx.m.module_globals <- PMap.add cf.cf_name (TClassDecl c,cf.cf_name,p) ctx.m.module_globals) (c.cl_structure()).cl_statics
 					| TEnumDecl e ->
 						PMap.iter (fun _ c -> if not (has_meta Meta.NoImportGlobal c.ef_meta) then ctx.m.module_globals <- PMap.add c.ef_name (TEnumDecl e,c.ef_name,p) ctx.m.module_globals) e.e_constrs
 					| _ ->
@@ -558,9 +558,10 @@ let init_module_type ctx context_init do_init (decl,p) =
 					if metas <> [] then cf.cf_meta <- metas @ cf.cf_meta;
 					List.iter run_field cf.cf_overloads
 				in
-				List.iter run_field c.cl_ordered_statics;
-				List.iter run_field c.cl_ordered_fields;
-				match c.cl_constructor with
+				let cs = c.cl_structure() in
+				List.iter run_field cs.cl_ordered_statics;
+				List.iter run_field cs.cl_ordered_fields;
+				match cs.cl_constructor with
 					| Some f -> run_field f
 					| _ -> ()
 			);

@@ -710,9 +710,11 @@ let init_core_api ctx c =
 			if f.cf_public && not (Meta.has Meta.Hack f.cf_meta) && not (PMap.mem f.cf_name fcore) && not (List.memq f c.cl_overrides) then error ("Public field " ^ i ^ " is not part of core type") p;
 		) fl;
 	in
-	check_fields ccore.cl_fields c.cl_fields;
-	check_fields ccore.cl_statics c.cl_statics;
-	(match ccore.cl_constructor, c.cl_constructor with
+	let ccores = ccore.cl_structure() in
+	let cs = c.cl_structure() in
+	check_fields ccores.cl_fields cs.cl_fields;
+	check_fields ccores.cl_statics cs.cl_statics;
+	(match ccores.cl_constructor, cs.cl_constructor with
 	| None, None -> ()
 	| Some { cf_public = false }, _ -> ()
 	| Some f, Some f2 -> compare_fields f f2
@@ -746,7 +748,7 @@ let handle_path_display ctx path p =
 			List.iter (fun t -> match t with
 				| TClassDecl c when snd c.cl_path = st ->
 					ignore(c.cl_build());
-					let cf = PMap.find sf c.cl_statics in
+					let cf = PMap.find sf (c.cl_structure()).cl_statics in
 					Display.DisplayEmitter.display_field ctx (Some c) cf p
 				| _ ->
 					()

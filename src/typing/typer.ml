@@ -111,7 +111,7 @@ let maybe_type_against_enum ctx f with_type iscall p =
 				| TAbstract ({a_impl = Some c} as a,_) when has_meta Meta.Enum a.a_meta ->
 					let fields = ExtList.List.filter_map (fun cf ->
 						if Meta.has Meta.Enum cf.cf_meta then Some cf.cf_name else None
-					) c.cl_ordered_statics in
+					) (c.cl_structure()).cl_ordered_statics in
 					false,a.a_path,fields,TAbstractDecl a
 				| TAbstract (a,pl) when not (Meta.has Meta.CoreType a.a_meta) ->
 					begin match get_abstract_froms a pl with
@@ -166,9 +166,11 @@ let merge_core_doc ctx c =
 	let maybe_merge cf_map cf =
 		if cf.cf_doc = None then try cf.cf_doc <- (PMap.find cf.cf_name cf_map).cf_doc with Not_found -> ()
 	in
-	List.iter (maybe_merge c_core.cl_fields) c.cl_ordered_fields;
-	List.iter (maybe_merge c_core.cl_statics) c.cl_ordered_statics;
-	match c.cl_constructor,c_core.cl_constructor with
+	let cs = c.cl_structure() in
+	let c_cores = c_core.cl_structure() in
+	List.iter (maybe_merge c_cores.cl_fields) cs.cl_ordered_fields;
+	List.iter (maybe_merge c_cores.cl_statics) cs.cl_ordered_statics;
+	match cs.cl_constructor,c_cores.cl_constructor with
 		| Some ({cf_doc = None} as cf),Some cf2 -> cf.cf_doc <- cf2.cf_doc
 		| _ -> ()
 
@@ -357,7 +359,7 @@ let rec type_ident_raise ctx i p mode =
 						let c = mk_class ctx.m.curmod (["local"],v.v_name) e.epos null_pos in
 						let cf = { (mk_field v.v_name v.v_type e.epos null_pos) with cf_params = params; cf_expr = Some e; cf_kind = Method MethInline } in
 						c.cl_extern <- true;
-						c.cl_fields <- PMap.add cf.cf_name cf PMap.empty;
+						(c.cl_structure()).cl_fields <- PMap.add cf.cf_name cf PMap.empty;
 						AKInline (mk (TConst TNull) (TInst (c,[])) p, cf, FInstance(c,[],cf), t)
 				end
 			| _ ->
@@ -377,7 +379,7 @@ let rec type_ident_raise ctx i p mode =
 		| _ -> assert false)
 	with Not_found -> try
 		(* static variable lookup *)
-		let f = PMap.find i ctx.curclass.cl_statics in
+		let f = PMap.find i (ctx.curclass.cl_structure()).cl_statics in
 		if Meta.has Meta.Impl f.cf_meta && not (Meta.has Meta.Impl ctx.curfield.cf_meta) && not (Meta.has Meta.Enum f.cf_meta) then
 			error (Printf.sprintf "Cannot access non-static field %s from static method" f.cf_name) p;
 		let e = type_type ctx ctx.curclass.cl_path p in
@@ -397,7 +399,7 @@ let rec type_ident_raise ctx i p mode =
 				match t with
 				| TAbstractDecl ({a_impl = Some c} as a) when Meta.has Meta.Enum a.a_meta ->
 					begin try
-						let cf = PMap.find i c.cl_statics in
+						let cf = PMap.find i (c.cl_structure()).cl_statics in
 						if not (Meta.has Meta.Enum cf.cf_meta) then
 							loop l
 						else begin
@@ -693,7 +695,7 @@ and type_binop2 ctx op (e1 : texpr) (e2 : Ast.expr) is_assign_op wt p =
 	let tstring = ctx.t.tstring in
 	let to_string e =
 		let rec loop t = match classify t with
-			| KAbstract ({a_impl = Some c},_) when PMap.mem "toString" c.cl_statics ->
+			| KAbstract ({a_impl = Some c},_) when PMap.mem "toString" (c.cl_structure()).cl_statics ->
 				call_to_string ctx e
 			| KInt | KFloat | KString -> e
 			| KUnk | KDyn | KParam _ | KOther ->
@@ -1138,7 +1140,7 @@ and type_ident ctx i p mode =
 				let t = mk_mono() in
 				AKExpr ((mk (TIdent i)) t p)
 		end else begin
-			if ctx.curfun = FunStatic && PMap.mem i ctx.curclass.cl_fields then error ("Cannot access " ^ i ^ " in static function") p;
+			if ctx.curfun = FunStatic && PMap.mem i (ctx.curclass.cl_structure()).cl_fields then error ("Cannot access " ^ i ^ " in static function") p;
 			begin try
 				let t = List.find (fun (i2,_) -> i2 = i) ctx.type_params in
 				let c = match follow (snd t) with TInst(c,_) -> c | _ -> assert false in
@@ -1763,26 +1765,31 @@ and type_new ctx path el with_type p =
 	with Generic.Generic_Exception _ ->
 		(* Try to infer generic parameters from the argument list (issue #2044) *)
 		match resolve_typedef (Typeload.load_type_def ctx p (fst path)) with
-		| TClassDecl ({cl_constructor = Some cf} as c) ->
-			let monos = List.map (fun _ -> mk_mono()) c.cl_params in
-			let ct, f = get_constructor ctx c monos p in
-			ignore (unify_constructor_call c monos f ct);
-			begin try
-				let t = Generic.build_generic ctx c p monos in
-				let map = apply_params c.cl_params monos in
-				check_constraints ctx (s_type_path c.cl_path) c.cl_params monos map true p;
-				t
-			with Generic.Generic_Exception _ as exc ->
-				(* If we have an expected type, just use that (issue #3804) *)
-				begin match with_type with
-					| WithType t ->
-						begin match follow t with
-							| TMono _ -> raise exc
-							| t -> t
-						end
-					| _ ->
-						raise exc
+		| TClassDecl c ->
+			begin match (c.cl_structure()).cl_constructor with
+			| Some cf ->
+				let monos = List.map (fun _ -> mk_mono()) c.cl_params in
+				let ct, f = get_constructor ctx c monos p in
+				ignore (unify_constructor_call c monos f ct);
+				begin try
+					let t = Generic.build_generic ctx c p monos in
+					let map = apply_params c.cl_params monos in
+					check_constraints ctx (s_type_path c.cl_path) c.cl_params monos map true p;
+					t
+				with Generic.Generic_Exception _ as exc ->
+					(* If we have an expected type, just use that (issue #3804) *)
+					begin match with_type with
+						| WithType t ->
+							begin match follow t with
+								| TMono _ -> raise exc
+								| t -> t
+							end
+						| _ ->
+							raise exc
+					end
 				end
+			| None ->
+				error ((s_type_path c.cl_path) ^ " cannot be constructed") p
 			end
 		| mt ->
 			error ((s_type_path (t_infos mt).mt_path) ^ " cannot be constructed") p
@@ -1818,7 +1825,7 @@ and type_new ctx path el with_type p =
 		mk (TNew (c,params,el)) t p
 	| TAbstract({a_impl = Some c} as a,tl) when not (Meta.has Meta.MultiType a.a_meta) ->
 		let el,cf,ct = build_constructor_call c tl in
-		let ta = TAnon { a_fields = c.cl_statics; a_status = ref (Statics c) } in
+		let ta = TAnon { a_fields = (c.cl_structure()).cl_statics; a_status = ref (Statics c) } in
 		let e = mk (TTypeExpr (TClassDecl c)) ta p in
 		let e = mk (TField (e,(FStatic (c,cf)))) ct p in
 		make_call ctx e el t p
@@ -1957,7 +1964,7 @@ and type_map_declaration ctx e1 el with_type p =
 		| _ -> assert false
 	in
 	let tmap = TAbstract(a,[tkey;tval]) in
-	let cf = PMap.find "set" c.cl_statics in
+	let cf = PMap.find "set" (c.cl_structure()).cl_statics in
 	let v = gen_local ctx tmap p in
 	let ev = mk (TLocal v) tmap p in
 	let ec = type_module_type ctx (TClassDecl c) None p in
@@ -2218,7 +2225,7 @@ and type_meta ctx m e1 with_type p =
 		| (Meta.ToString,_,_) ->
 			let e = e() in
 			(match follow e.etype with
-				| TAbstract({a_impl = Some c},_) when PMap.mem "toString" c.cl_statics -> call_to_string ctx e
+				| TAbstract({a_impl = Some c},_) when PMap.mem "toString" (c.cl_structure()).cl_statics -> call_to_string ctx e
 				| _ -> e)
 		| (Meta.This,_,_) ->
 			let e = match ctx.this_stack with
@@ -2272,7 +2279,7 @@ and type_call ctx e el (with_type:with_type) p =
 			let e = type_expr ctx e Value in
 			let infos = type_expr ctx infos Value in
 			let e = match follow e.etype with
-				| TAbstract({a_impl = Some c},_) when PMap.mem "toString" c.cl_statics ->
+				| TAbstract({a_impl = Some c},_) when PMap.mem "toString" (c.cl_structure()).cl_statics ->
 					call_to_string ctx e
 				| _ ->
 					e

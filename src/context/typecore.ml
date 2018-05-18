@@ -165,7 +165,7 @@ let s_with_type = function
 	| WithType t -> "WithType " ^ (s_type (print_context()) t)
 
 let make_static_this c p =
-	let ta = TAnon { a_fields = c.cl_statics; a_status = ref (Statics c) } in
+	let ta = TAnon { a_fields = (c.cl_structure()).cl_statics; a_status = ref (Statics c) } in
 	mk (TTypeExpr (TClassDecl c)) ta p
 
 let make_static_field_access c cf t p =
@@ -379,12 +379,13 @@ let rec can_access ctx ?(in_overload=false) c cf stat =
 			|| (
 				(* if our common ancestor declare/override the field, then we can access it *)
 				let allowed f = is_parent c ctx.curclass || (List.exists (has Meta.Allow c f) !cur_paths) in
+				let cs = c.cl_structure() in
 				if is_constr
-				then (match c.cl_constructor with
+				then (match cs.cl_constructor with
 					| Some cf -> if allowed cf then true else raise Not_found
 					| _ -> false
 				)
-				else try allowed (PMap.find cf.cf_name (if stat then c.cl_statics else c.cl_fields)) with Not_found -> false
+				else try allowed (PMap.find cf.cf_name (if stat then cs.cl_statics else cs.cl_fields)) with Not_found -> false
 			)
 			|| (match c.cl_super with
 			| Some (csup,_) -> loop csup

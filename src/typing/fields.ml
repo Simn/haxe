@@ -102,7 +102,7 @@ let fast_enum_field e ef p =
 let get_constructor ctx c params p =
 	match c.cl_kind with
 	| KAbstractImpl a ->
-		let f = (try PMap.find "_new" c.cl_statics with Not_found -> raise_error (No_constructor (TAbstractDecl a)) p) in
+		let f = (try PMap.find "_new" (c.cl_structure()).cl_statics with Not_found -> raise_error (No_constructor (TAbstractDecl a)) p) in
 		let ct = field_type ctx c params f p in
 		apply_params a.a_params params ct, f
 	| _ ->
@@ -199,7 +199,7 @@ let field_access ctx mode f fmode t e p =
 				let this = get_this ctx p in
 				if mode = MSet then begin
 					let c,a = match ctx.curclass with {cl_kind = KAbstractImpl a} as c -> c,a | _ -> assert false in
-					let f = PMap.find m c.cl_statics in
+					let f = PMap.find m (c.cl_structure()).cl_statics in
 					(* we don't have access to the type parameters here, right? *)
 					(* let t = apply_params a.a_params pl (field_type ctx c [] f p) in *)
 					let t = (field_type ctx c [] f p) in
@@ -242,7 +242,7 @@ let rec using_field ctx mode e i p =
 		raise Not_found
 	| (c,pc) :: l ->
 		try
-			let cf = PMap.find i c.cl_statics in
+			let cf = PMap.find i (c.cl_structure()).cl_statics in
 			if Meta.has Meta.NoUsing cf.cf_meta || not (can_access ctx c cf true) || (Meta.has Meta.Impl cf.cf_meta) then raise Not_found;
 			let monos = List.map (fun _ -> mk_mono()) cf.cf_params in
 			let map = apply_params cf.cf_params monos in
@@ -326,8 +326,8 @@ let rec type_field ?(resume=false) ctx e i p mode =
 			match c.cl_dynamic with
 			| Some t ->
 				let t = apply_params c.cl_params params t in
-				if (mode = MGet || mode = MCall) && PMap.mem "resolve" c.cl_fields then begin
-					let f = PMap.find "resolve" c.cl_fields in
+				if (mode = MGet || mode = MCall) && PMap.mem "resolve" (c.cl_structure()).cl_fields then begin
+					let f = PMap.find "resolve" (c.cl_structure()).cl_fields in
 					begin match f.cf_kind with
 						| Method MethMacro -> display_error ctx "The macro accessor is not allowed for field resolve" f.cf_pos
 						| _ -> ()
@@ -380,7 +380,7 @@ let rec type_field ?(resume=false) ctx e i p mode =
 					let rec loop tl = match tl with
 						| t :: tl ->
 							begin match follow t with
-								| TAbstract({a_impl = Some c},tl) when PMap.mem i c.cl_statics ->
+								| TAbstract({a_impl = Some c},tl) when PMap.mem i (c.cl_structure()).cl_statics ->
 									let e = mk_cast e t p in
 									type_field ctx e i p mode;
 								| _ ->
@@ -394,7 +394,7 @@ let rec type_field ?(resume=false) ctx e i p mode =
 					raise Not_found
 			end
 		with Not_found ->
-			if PMap.mem i c.cl_statics then error ("Cannot access static field " ^ i ^ " from a class instance") p;
+			if PMap.mem i (c.cl_structure()).cl_statics then error ("Cannot access static field " ^ i ^ " from a class instance") p;
 			no_field())
 	| TDynamic t ->
 		(try
@@ -461,7 +461,7 @@ let rec type_field ?(resume=false) ctx e i p mode =
 		let static_abstract_access_through_instance = ref false in
 		(try
 			let c = (match a.a_impl with None -> raise Not_found | Some c -> c) in
-			let f = PMap.find i c.cl_statics in
+			let f = PMap.find i (c.cl_structure()).cl_statics in
 			if not (can_access ctx c f true) && not ctx.untyped then display_error ctx ("Cannot access private field " ^ i) p;
 			let field_type f =
 				if not (Meta.has Meta.Impl f.cf_meta) then begin
@@ -476,13 +476,13 @@ let rec type_field ?(resume=false) ctx e i p mode =
 			(match mode, f.cf_kind with
 			| (MGet | MCall), Var {v_read = AccCall } ->
 				(* getter call *)
-				let f = PMap.find ("get_" ^ f.cf_name) c.cl_statics in
+				let f = PMap.find ("get_" ^ f.cf_name) (c.cl_structure()).cl_statics in
 				let t = field_type f in
 				let r = match follow t with TFun(_,r) -> r | _ -> raise Not_found in
 				let ef = field_expr f t in
 				AKExpr(make_call ctx ef [e] r p)
 			| MSet, Var {v_write = AccCall } ->
-				let f = PMap.find ("set_" ^ f.cf_name) c.cl_statics in
+				let f = PMap.find ("set_" ^ f.cf_name) (c.cl_structure()).cl_statics in
 				let t = field_type f in
 				let ef = field_expr f t in
 				AKUsing (ef,c,f,e)

@@ -19,7 +19,7 @@ let get_main ctx types =
 			error ("Invalid -main : " ^ s_type_path cl ^ " is not a class") null_pos
 		| TClassDecl c ->
 			try
-				let f = PMap.find "main" c.cl_statics in
+				let f = PMap.find "main" (c.cl_structure()).cl_statics in
 				let t = Type.field_type f in
 				(match follow t with
 				| TFun ([],r) -> FStatic (c,f), t, r
@@ -33,7 +33,7 @@ let get_main ctx types =
 		let main = (try
 			let et = List.find (fun t -> t_path t = (["haxe"],"EntryPoint")) types in
 			let ec = (match et with TClassDecl c -> c | _ -> assert false) in
-			let ef = PMap.find "run" ec.cl_statics in
+			let ef = PMap.find "run" (ec.cl_structure()).cl_statics in
 			let p = null_pos in
 			let et = mk (TTypeExpr et) (TAnon { a_fields = PMap.empty; a_status = ref (Statics ec) }) p in
 			let call = mk (TCall (mk (TField (et,FStatic (ec,ef))) ef.cf_type p,[])) ctx.t.tvoid p in
@@ -126,7 +126,7 @@ let sort_types com modules =
 					()
 				else begin
 					statics := PMap.add (c.cl_path,"new") () !statics;
-					(match c.cl_constructor with
+					(match (c.cl_structure()).cl_constructor with
 					| Some { cf_expr = Some e } -> walk_expr p e
 					| _ -> ());
 					match c.cl_super with
@@ -154,7 +154,7 @@ let sort_types com modules =
 				match e.eexpr with
 				| TFunction _ -> ()
 				| _ -> walk_expr p e
-		) c.cl_statics
+		) (c.cl_structure()).cl_statics
 
 	in
 	let sorted_modules = List.sort (fun m1 m2 -> compare m1.m_path m2.m_path) (Hashtbl.fold (fun _ m acc -> m :: acc) modules []) in

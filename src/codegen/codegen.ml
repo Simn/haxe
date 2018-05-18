@@ -33,7 +33,7 @@ let rec has_properties c =
 		| Var { v_write = AccCall } -> true
 		| _ when Meta.has Meta.Accessor f.cf_meta -> true
 		| _ -> false
-	) c.cl_ordered_fields || (match c.cl_super with Some (c,_) -> has_properties c | _ -> false)
+	) (c.cl_structure()).cl_ordered_fields || (match c.cl_super with Some (c,_) -> has_properties c | _ -> false)
 
 let get_properties fields =
 	List.fold_left (fun acc f ->
@@ -50,7 +50,8 @@ let get_properties fields =
 
 let add_property_field com c =
 	let p = c.cl_pos in
-	let props = get_properties (c.cl_ordered_statics @ c.cl_ordered_fields) in
+	let cs = c.cl_structure() in
+	let props = get_properties (cs.cl_ordered_statics @ cs.cl_ordered_fields) in
 	match props with
 	| [] -> ()
 	| _ ->
@@ -62,8 +63,8 @@ let add_property_field com c =
 		let e = mk (TObjectDecl values) t p in
 		let cf = mk_field "__properties__" t p null_pos in
 		cf.cf_expr <- Some e;
-		c.cl_statics <- PMap.add cf.cf_name cf c.cl_statics;
-		c.cl_ordered_statics <- cf :: c.cl_ordered_statics
+		cs.cl_statics <- PMap.add cf.cf_name cf cs.cl_statics;
+		cs.cl_ordered_statics <- cf :: cs.cl_ordered_statics
 
 let escape_res_name name allow_dirs =
 	ExtString.String.replace_chars (fun chr ->
@@ -109,9 +110,10 @@ let update_cache_dependencies t =
 	in
 	match t with
 		| TClassDecl c ->
-			List.iter (check_field c.cl_module) c.cl_ordered_statics;
-			List.iter (check_field c.cl_module) c.cl_ordered_fields;
-			(match c.cl_constructor with None -> () | Some cf -> check_field c.cl_module cf);
+			let cs = c.cl_structure() in
+			List.iter (check_field c.cl_module) cs.cl_ordered_statics;
+			List.iter (check_field c.cl_module) cs.cl_ordered_fields;
+			(match cs.cl_constructor with None -> () | Some cf -> check_field c.cl_module cf);
 		| _ ->
 			()
 
@@ -146,7 +148,7 @@ let rec find_field com c f =
 		in
 		loop c.cl_implements
 	with Not_found ->
-		let f = PMap.find f.cf_name c.cl_fields in
+		let f = PMap.find f.cf_name (c.cl_structure()).cl_fields in
 		(match f.cf_kind with Var { v_read = AccRequire _ } -> raise Not_found | _ -> ());
 		f
 
@@ -204,16 +206,17 @@ let fix_override com c f fd =
 let fix_overrides com t =
 	match t with
 	| TClassDecl c ->
+		let cs = c.cl_structure() in
 		(* overrides can be removed from interfaces *)
 		if c.cl_interface then
-			c.cl_ordered_fields <- List.filter (fun f ->
+			cs.cl_ordered_fields <- List.filter (fun f ->
 				try
 					if find_field com c f == f then raise Not_found;
-					c.cl_fields <- PMap.remove f.cf_name c.cl_fields;
+					cs.cl_fields <- PMap.remove f.cf_name cs.cl_fields;
 					false;
 				with Not_found ->
 					true
-			) c.cl_ordered_fields;
+			) cs.cl_ordered_fields;
 		List.iter (fun f ->
 			match f.cf_expr, f.cf_kind with
 			| Some { eexpr = TFunction fd }, Method (MethNormal | MethInline) ->
@@ -222,7 +225,7 @@ let fix_overrides com t =
 				fix_override com c f None
 			| _ ->
 				()
-		) c.cl_ordered_fields
+		) cs.cl_ordered_fields
 	| _ ->
 		()
 
@@ -233,12 +236,13 @@ let fix_overrides com t =
 let fix_abstract_inheritance com t =
 	match t with
 	| TClassDecl c when c.cl_interface ->
-		c.cl_ordered_fields <- List.filter (fun f ->
+		let cs = c.cl_structure() in
+		cs.cl_ordered_fields <- List.filter (fun f ->
 			let b = try (find_field com c f) == f
 			with Not_found -> false in
-			if not b then c.cl_fields <- PMap.remove f.cf_name c.cl_fields;
+			if not b then cs.cl_fields <- PMap.remove f.cf_name cs.cl_fields;
 			b;
-		) c.cl_ordered_fields
+		) cs.cl_ordered_fields
 	| _ -> ()
 
 (* -------------------------------------------------------------------------- *)
@@ -342,11 +346,12 @@ module Dump = struct
 				(match c.cl_dynamic with None -> () | Some t -> print " implements Dynamic<%s>" (s_type t));
 				(match c.cl_array_access with None -> () | Some t -> print " implements ArrayAccess<%s>" (s_type t));
 				print " {\n";
-				(match c.cl_constructor with
+				let cs = c.cl_structure() in
+				(match cs.cl_constructor with
 				| None -> ()
 				| Some f -> print_field false f);
-				List.iter (print_field false) c.cl_ordered_fields;
-				List.iter (print_field true) c.cl_ordered_statics;
+				List.iter (print_field false) cs.cl_ordered_fields;
+				List.iter (print_field true) cs.cl_ordered_statics;
 				(match c.cl_init with
 				| None -> ()
 				| Some e ->
@@ -442,7 +447,7 @@ let default_cast ?(vtmp="$t") com e texpr t p =
 	let std = (try List.find (fun t -> t_path t = ([],"Std")) com.types with Not_found -> assert false) in
 	let fis = (try
 			let c = (match std with TClassDecl c -> c | _ -> assert false) in
-			FStatic (c, PMap.find "is" c.cl_statics)
+			FStatic (c, PMap.find "is" (c.cl_structure()).cl_statics)
 		with Not_found ->
 			assert false
 	) in

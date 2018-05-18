@@ -82,7 +82,7 @@ let collect ctx only_types with_type =
 			let rec loop c =
 				List.iter (fun cf ->
 					if not (Meta.has Meta.NoCompletion cf.cf_meta) then add (ITClassMember cf)
-				) c.cl_ordered_fields;
+				) (c.cl_structure()).cl_ordered_fields;
 				match c.cl_super with
 					| None ->
 						()
@@ -96,7 +96,7 @@ let collect ctx only_types with_type =
 		(* statics *)
 		List.iter (fun cf ->
 			if not (Meta.has Meta.NoCompletion cf.cf_meta) then add (ITClassStatic cf)
-		) ctx.curclass.cl_ordered_statics;
+		) (ctx.curclass.cl_structure()).cl_ordered_statics;
 
 		(* enum constructors *)
 		let seen_paths = Hashtbl.create 0 in
@@ -108,7 +108,7 @@ let collect ctx only_types with_type =
 				mark_processed a.a_path;
 				List.iter (fun cf ->
 					if (Meta.has Meta.Enum cf.cf_meta) && not (Meta.has Meta.NoCompletion cf.cf_meta) then add (ITEnumAbstractField(a,cf));
-				) c.cl_ordered_statics
+				) (c.cl_structure()).cl_ordered_statics
 			| TTypeDecl t ->
 				begin match follow t.t_type with
 					| TEnum (e,_) -> enum_ctors (TEnumDecl e)
@@ -135,9 +135,9 @@ let collect ctx only_types with_type =
 		PMap.iter (fun _ (mt,s,_) ->
 			try
 				let t = match resolve_typedef mt with
-					| TClassDecl c -> (PMap.find s c.cl_statics).cf_type
+					| TClassDecl c -> (PMap.find s (c.cl_structure()).cl_statics).cf_type
 					| TEnumDecl en -> (PMap.find s en.e_constrs).ef_type
-					| TAbstractDecl {a_impl = Some c} -> (PMap.find s c.cl_statics).cf_type
+					| TAbstractDecl {a_impl = Some c} -> (PMap.find s (c.cl_structure()).cl_statics).cf_type
 					| _ -> raise Not_found
 				in
 				add (ITGlobal(mt,s,t))

@@ -326,14 +326,15 @@ let generate_class ctx c =
 			"params",generate_types ctx tl;
 		]
 	in
+	let cs = c.cl_structure() in
 	[
 		"kind",generate_class_kind c.cl_kind;
 		"isInterface",jbool c.cl_interface;
 		"superClass",jopt generate_class_relation c.cl_super;
 		"interfaces",jlist generate_class_relation c.cl_implements;
-		"fields",jlist (generate_class_field ctx) c.cl_ordered_fields;
-		"statics",jlist (generate_class_field ctx) c.cl_ordered_statics;
-		"constructor",jopt (generate_class_field ctx) c.cl_constructor;
+		"fields",jlist (generate_class_field ctx) cs.cl_ordered_fields;
+		"statics",jlist (generate_class_field ctx) cs.cl_ordered_statics;
+		"constructor",jopt (generate_class_field ctx) cs.cl_constructor;
 		"init",jopt (generate_texpr ctx) c.cl_init;
 		"overrides",jlist (classfield_ref ctx) c.cl_overrides;
 		"isExtern",jbool c.cl_extern;

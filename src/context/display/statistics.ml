@@ -45,7 +45,7 @@ let collect_statistics ctx =
 			let rec loop c = match c.cl_super with
 				| Some (c,_) ->
 					begin try
-						let cf' = PMap.find cf.cf_name c.cl_fields in
+						let cf' = PMap.find cf.cf_name (c.cl_structure()).cl_fields in
 						add_relation cf'.cf_name_pos (Overridden,cf.cf_pos)
 					with Not_found ->
 						loop c
@@ -56,7 +56,7 @@ let collect_statistics ctx =
 			loop c
 		) c.cl_overrides
 	in
-	let rec find_real_constructor c = match c.cl_constructor,c.cl_super with
+	let rec find_real_constructor c = match (c.cl_structure()).cl_constructor,c.cl_super with
 		(* The pos comparison might be a bit weak, not sure... *)
 		| Some cf,_ when not (Meta.has Meta.CompilerGenerated cf.cf_meta) && c.cl_pos <> cf.cf_pos -> cf
 		| _,Some(c,_) -> find_real_constructor c
@@ -150,9 +150,10 @@ let collect_statistics ctx =
 				let _ = follow cf.cf_type in
 				match cf.cf_expr with None -> () | Some e -> collect_references c e
 			in
-			Option.may field c.cl_constructor;
-			List.iter field c.cl_ordered_fields;
-			List.iter field c.cl_ordered_statics;
+			let cs = c.cl_structure() in
+			Option.may field cs.cl_constructor;
+			List.iter field cs.cl_ordered_fields;
+			List.iter field cs.cl_ordered_statics;
 		| TEnumDecl en ->
 			check_module en.e_module;
 			declare (SKEnum en) en.e_name_pos;

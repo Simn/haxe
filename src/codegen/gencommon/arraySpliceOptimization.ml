@@ -14,7 +14,7 @@ let init com =
 			let el = List.map (fun e ->
 				match e.eexpr with
 				| TCall ({ eexpr = TField (eobj, FInstance ({ cl_path = [],"Array" } as cl, params, { cf_name = "splice" })) } as e_splice, args) ->
-					let f_spliceVoid = PMap.find "spliceVoid" cl.cl_fields in
+					let f_spliceVoid = PMap.find "spliceVoid" (cl.cl_structure()).cl_fields in
 					let e_spliceVoid = { e_splice with
 						eexpr = TField (eobj, FInstance (cl, params, f_spliceVoid));
 						etype = f_spliceVoid.cf_type;

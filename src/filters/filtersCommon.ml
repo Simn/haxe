@@ -56,9 +56,10 @@ let run_expression_filters ctx filters t =
 			| _ -> ());
 			List.iter process_field f.cf_overloads
 		in
-		List.iter process_field c.cl_ordered_fields;
-		List.iter process_field c.cl_ordered_statics;
-		(match c.cl_constructor with
+		let cs = c.cl_structure() in
+		List.iter process_field cs.cl_ordered_fields;
+		List.iter process_field cs.cl_ordered_statics;
+		(match cs.cl_constructor with
 		| None -> ()
 		| Some f -> process_field f);
 		(match c.cl_init with

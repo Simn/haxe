@@ -497,10 +497,15 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 		| TCall({eexpr = TConst TSuper; etype = t},el) ->
 			had_side_effect := true;
 			begin match follow t with
-			| TInst({ cl_constructor = Some ({cf_kind = Method MethInline; cf_expr = Some ({eexpr = TFunction tf})} as cf)} as c,_) ->
-				begin match type_inline_ctor ctx c cf tf ethis el po with
-				| Some e -> map term e
-				| None -> error "Could not inline super constructor call" po
+			| TInst(c,_) ->
+				begin match (c.cl_structure()).cl_constructor with
+				| Some ({cf_kind = Method MethInline; cf_expr = Some ({eexpr = TFunction tf})} as cf) ->
+					begin match type_inline_ctor ctx c cf tf ethis el po with
+					| Some e -> map term e
+					| None -> error "Could not inline super constructor call" po
+					end
+				| _ ->
+					error "Cannot inline function containing super" po
 				end
 			| _ -> error "Cannot inline function containing super" po
 			end
@@ -677,7 +682,7 @@ and type_inline_ctor ctx c cf tf ethis el po =
 				let eassign = mk (TBinop(OpAssign,lhs,e)) cf.cf_type e.epos in
 				eassign :: acc
 			| _ -> acc
-		) [] c.cl_ordered_fields in
+		) [] (c.cl_structure()).cl_ordered_fields in
 		List.rev el
 	in
 	let tf =
@@ -1067,16 +1072,21 @@ let inline_constructors ctx e =
 					| [] ->
 						()
 					end
-				| TNew({ cl_constructor = Some ({cf_kind = Method MethInline; cf_expr = Some ({eexpr = TFunction tf})} as cf)} as c,tl,pl) when type_iseq v.v_type e1.etype ->
-					begin match type_inline_ctor ctx c cf tf (mk (TLocal v) (TInst (c,tl)) e1.epos) pl e1.epos with
-					| Some e ->
-						let e' = match el_init with
-							| [] -> e
-							| _ -> mk (TBlock (List.rev (e :: el_init))) e.etype e.epos
-						in
-						add v e' (IKCtor(cf,is_extern_ctor c cf));
-						find_locals e
-					| None ->
+				| TNew(c,tl,pl)  when type_iseq v.v_type e1.etype ->
+					begin match (c.cl_structure()).cl_constructor with
+					| Some ({cf_kind = Method MethInline; cf_expr = Some ({eexpr = TFunction tf})} as cf) ->
+						begin match type_inline_ctor ctx c cf tf (mk (TLocal v) (TInst (c,tl)) e1.epos) pl e1.epos with
+						| Some e ->
+							let e' = match el_init with
+								| [] -> e
+								| _ -> mk (TBlock (List.rev (e :: el_init))) e.etype e.epos
+							in
+							add v e' (IKCtor(cf,is_extern_ctor c cf));
+							find_locals e
+						| None ->
+							()
+						end
+					| _ ->
 						()
 					end
 				| TObjectDecl fl when fl <> [] ->
@@ -1224,9 +1234,14 @@ let inline_constructors ctx e =
 			in
 			let el = block [] el in
 			mk (TBlock (List.rev el)) e.etype e.epos
-		| TNew({ cl_constructor = Some ({cf_kind = Method MethInline; cf_expr = Some ({eexpr = TFunction _})} as cf)} as c,_,_) when is_extern_ctor c cf ->
-			display_error ctx "Extern constructor could not be inlined" e.epos;
-			Type.map_expr loop e
+		| TNew(c,_,_) ->
+			begin match (c.cl_structure()).cl_constructor with
+			| Some ({cf_kind = Method MethInline; cf_expr = Some ({eexpr = TFunction _})} as cf) when is_extern_ctor c cf ->
+				display_error ctx "Extern constructor could not be inlined" e.epos;
+				Type.map_expr loop e
+			| _ ->
+				Type.map_expr loop e
+			end
 		| _ ->
 			Type.map_expr loop e
 	in

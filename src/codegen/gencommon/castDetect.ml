@@ -535,7 +535,7 @@ let is_static_overload c name =
 	| None -> false
 	| Some (sup,_) ->
 		let rec loop c =
-			(PMap.mem name c.cl_statics) || (match c.cl_super with
+			(PMap.mem name (c.cl_structure()).cl_statics) || (match c.cl_super with
 				| None -> false
 				| Some (sup,_) -> loop sup)
 		in
@@ -583,7 +583,7 @@ let select_overload gen applied_f overloads types params =
 	| _ -> assert false
 
 let rec cur_ctor c tl =
-	match c.cl_constructor with
+	match (c.cl_structure()).cl_constructor with
 	| Some ctor ->
 		ctor, c, tl
 	| None ->

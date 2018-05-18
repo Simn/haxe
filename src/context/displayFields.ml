@@ -77,7 +77,7 @@ let collect ctx e_ast e dk with_type p =
 					| None -> m
 					| Some (csup,cparams) -> merge m (loop csup cparams)
 				) in
-				let m = merge ~cond:(fun f -> should_access c f false) c.cl_fields m in
+				let m = merge ~cond:(fun f -> should_access c f false) (c.cl_structure()).cl_fields m in
 				let m = (match c.cl_kind with
 					| KTypeParameter pl -> List.fold_left (fun acc t' -> merge acc (get_fields (t :: seen) t')) m pl
 					| _ -> m
@@ -110,7 +110,7 @@ let collect ctx e_ast e dk with_type p =
 					PMap.add f.cf_name { f with cf_public = true; cf_type = opt_type t } acc
 				end else
 					acc
-			) c.cl_statics fields
+			) (c.cl_structure()).cl_statics fields
 		| TAnon a when PMap.is_empty a.a_fields ->
 			begin match with_type with
 			| WithType t' -> get_fields (t :: seen) t'
@@ -121,7 +121,7 @@ let collect ctx e_ast e dk with_type p =
 			| Statics c ->
 				if Meta.has Meta.CoreApi c.cl_meta then merge_core_doc ctx c;
 				let is_abstract_impl = match c.cl_kind with KAbstractImpl _ -> true | _ -> false in
-				let pm = match c.cl_constructor with None -> PMap.empty | Some cf -> PMap.add "new" cf PMap.empty in
+				let pm = match (c.cl_structure()).cl_constructor with None -> PMap.empty | Some cf -> PMap.add "new" cf PMap.empty in
 				PMap.fold (fun f acc ->
 					if should_access c f true && (not is_abstract_impl || not (Meta.has Meta.Impl f.cf_meta) || Meta.has Meta.Enum f.cf_meta) then
 						PMap.add f.cf_name { f with cf_public = true; cf_type = opt_type f.cf_type } acc else acc
@@ -169,7 +169,7 @@ let collect ctx e_ast e dk with_type p =
 						end
 					with Error (Unify _,_) -> ())
 				| _ -> ()
-			) c.cl_ordered_statics;
+			) (c.cl_structure()).cl_ordered_statics;
 			!acc
 	in
 	let use_methods = match follow e.etype with TMono _ -> PMap.empty | _ -> loop (loop PMap.empty ctx.g.global_using) ctx.m.module_using in

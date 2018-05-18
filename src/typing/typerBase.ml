@@ -31,9 +31,11 @@ let merge_core_doc ctx c =
 	let maybe_merge cf_map cf =
 		if cf.cf_doc = None then try cf.cf_doc <- (PMap.find cf.cf_name cf_map).cf_doc with Not_found -> ()
 	in
-	List.iter (maybe_merge c_core.cl_fields) c.cl_ordered_fields;
-	List.iter (maybe_merge c_core.cl_statics) c.cl_ordered_statics;
-	match c.cl_constructor,c_core.cl_constructor with
+	let cs = c.cl_structure() in
+	let c_cores = c_core.cl_structure() in
+	List.iter (maybe_merge c_cores.cl_fields) cs.cl_ordered_fields;
+	List.iter (maybe_merge c_cores.cl_statics) cs.cl_ordered_statics;
+	match cs.cl_constructor,c_cores.cl_constructor with
 		| Some ({cf_doc = None} as cf),Some cf2 -> cf.cf_doc <- cf2.cf_doc
 		| _ -> ()
 

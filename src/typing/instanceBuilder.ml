@@ -14,7 +14,7 @@ let get_macro_path ctx e args p =
 	let path = match e with
 		| (EConst(Ident i)),_ ->
 			let path = try
-				if not (PMap.mem i ctx.curclass.cl_statics) then raise Not_found;
+				if not (PMap.mem i (ctx.curclass.cl_structure()).cl_statics) then raise Not_found;
 				ctx.curclass.cl_path
 			with Not_found -> try
 				(t_infos (let path,_,_ = PMap.find i ctx.m.module_globals in path)).mt_path

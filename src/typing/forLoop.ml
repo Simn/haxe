@@ -142,11 +142,11 @@ let rec optimize_for_loop ctx (i,pi) e1 e2 p =
 	| _ , TInst({ cl_path = [],"Array" },[pt])
 	| _ , TInst({ cl_path = ["flash"],"Vector" },[pt]) ->
 		gen_int_iter pt get_next_array_element get_array_length
-	| _ , TInst({ cl_array_access = Some pt } as c,pl) when (try match follow (PMap.find "length" c.cl_fields).cf_type with TAbstract ({ a_path = [],"Int" },[]) -> true | _ -> false with Not_found -> false) && not (PMap.mem "iterator" c.cl_fields) ->
+	| _ , TInst({ cl_array_access = Some pt } as c,pl) when (try match follow (PMap.find "length" (c.cl_structure()).cl_fields).cf_type with TAbstract ({ a_path = [],"Int" },[]) -> true | _ -> false with Not_found -> false) && not (PMap.mem "iterator" (c.cl_structure()).cl_fields) ->
 		gen_int_iter (apply_params c.cl_params pl pt) get_next_array_element get_array_length
 	| _, TAbstract({a_impl = Some c} as a,tl) ->
 		begin try
-			let cf_length = PMap.find "get_length" c.cl_statics in
+			let cf_length = PMap.find "get_length" (c.cl_structure()).cl_statics in
 			let get_length e p =
 				make_static_call ctx c cf_length (apply_params a.a_params tl) [e] ctx.com.basic.tint p
 			in
@@ -179,7 +179,7 @@ let rec optimize_for_loop ctx (i,pi) e1 e2 p =
 			None
 		end
 	| _ , TInst ({ cl_kind = KGenericInstance ({ cl_path = ["haxe";"ds"],"GenericStack" },[t]) } as c,[]) ->
-		let tcell = (try (PMap.find "head" c.cl_fields).cf_type with Not_found -> assert false) in
+		let tcell = (try (PMap.find "head" (c.cl_structure()).cl_fields).cf_type with Not_found -> assert false) in
 		let i = add_local ctx i t p in
 		let cell = gen_local ctx tcell p in
 		let cexpr = mk (TLocal cell) tcell p in
