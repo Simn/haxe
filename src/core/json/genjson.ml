@@ -298,7 +298,7 @@ let generate_module_type_fields ctx inf =
 	[
 		"pack",jlist jstring (fst inf.mt_path);
 		"name",jstring (snd inf.mt_path);
-		"module",jstring (snd inf.mt_module.m_path);
+		"moduleName",jstring (snd inf.mt_module.m_path);
 		"pos",generate_pos ctx inf.mt_pos;
 		"isPrivate",jbool inf.mt_private;
 		"params",jlist (generate_type_parameter ctx) inf.mt_params;
