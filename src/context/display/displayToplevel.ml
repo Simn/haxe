@@ -114,7 +114,7 @@ let collect ctx only_types with_type =
 
 	let add item name = add_item cctx item name in
 
-	let add_type rm mt =
+	let add_type mt =
 		match mt with
 		| TClassDecl {cl_kind = KAbstractImpl _} -> ()
 		| _ ->
@@ -124,8 +124,8 @@ let collect ctx only_types with_type =
 				| TClassDecl c | TAbstractDecl { a_impl = Some c } when Meta.has Meta.CoreApi c.cl_meta ->
 					!merge_core_doc_ref ctx c
 				| _ -> ());
-				let is = get_import_status cctx true path in
-				add (ITType(CompletionModuleType.of_module_type is mt,rm)) (snd path);
+                let is = get_import_status cctx true path in
+				add (ITType(CompletionModuleType.of_module_type mt,is)) (snd path);
 				add_path cctx path;
 			end
 	in
@@ -143,9 +143,8 @@ let collect ctx only_types with_type =
 				let path = (pack,tname) in
 				if not (path_exists cctx path) then begin
 					add_path cctx path;
-					let rm = RMOtherModule(pack,name) in
 					let is = get_import_status cctx false path in
-					add (ITType(CompletionModuleType.of_type_decl is pack name (d,p),rm)) tname
+					add (ITType(CompletionModuleType.of_type_decl pack name (d,p),is)) tname
 				end
 			with Exit ->
 				()
@@ -262,15 +261,15 @@ let collect ctx only_types with_type =
 	List.iter (fun (s,t) -> match follow t with
 		| TInst(c,_) ->
 			(* This is weird, might want to use something else for type parameters *)
-			add (ITType (CompletionModuleType.of_module_type ImportStatus.Imported (TClassDecl c),RMTypeParameter)) s
+			add (ITType (CompletionModuleType.of_module_type (TClassDecl c),ImportStatus.Imported)) s
 		| _ -> assert false
 	) ctx.type_params;
 
 	(* module types *)
-	List.iter (add_type RMLocalModule) ctx.m.curmod.m_types;
+	List.iter add_type ctx.m.curmod.m_types;
 
 	(* module imports *)
-	List.iter (add_type RMImport) (List.rev_map fst ctx.m.module_types); (* reverse! *)
+	List.iter add_type (List.rev_map fst ctx.m.module_types); (* reverse! *)
 
 	(* types from files *)
 	begin match !CompilationServer.instance with

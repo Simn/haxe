@@ -56,11 +56,10 @@ module CompletionModuleType = struct
 		doc : documentation;
 		is_extern : bool;
 		kind : CompletionModuleKind.t;
-		import_status : ImportStatus.t;
 		has_constructor : not_bool;
 	}
 
-	let of_type_decl is pack module_name (td,p) = match td with
+	let of_type_decl pack module_name (td,p) = match td with
 		| EClass d ->
 			let ctor = if (List.exists (fun cff -> fst cff.cff_name = "new") d.d_data) then Yes
 				else if (List.exists (function HExtends _ -> true | _ -> false) d.d_flags) then Maybe
@@ -77,7 +76,6 @@ module CompletionModuleType = struct
 				doc = d.d_doc;
 				is_extern = List.mem HExtern d.d_flags;
 				kind = if List.mem HInterface d.d_flags then Interface else Class;
-				import_status = is;
 				has_constructor = ctor;
 			}
 		| EEnum d -> {
@@ -91,7 +89,6 @@ module CompletionModuleType = struct
 				doc = d.d_doc;
 				is_extern = List.mem EExtern d.d_flags;
 				kind = Enum;
-				import_status = is;
 				has_constructor = No;
 			}
 		| ETypedef d ->
@@ -107,7 +104,6 @@ module CompletionModuleType = struct
 				doc = d.d_doc;
 				is_extern = List.mem EExtern d.d_flags;
 				kind = kind;
-				import_status = is;
 				has_constructor = if kind = Struct then No else Maybe;
 			}
 		| EAbstract d -> {
@@ -121,13 +117,12 @@ module CompletionModuleType = struct
 				doc = d.d_doc;
 				is_extern = List.mem AbExtern d.d_flags;
 				kind = if Meta.has Meta.Enum d.d_meta then EnumAbstract else Abstract;
-				import_status = is;
 				has_constructor = if (List.exists (fun cff -> fst cff.cff_name = "new") d.d_data) then Yes else No;
 			}
 		| EImport _ | EUsing _ ->
 			raise Exit
 
-	let of_module_type is mt =
+	let of_module_type mt =
 		let is_extern,kind,has_ctor = match mt with
 			| TClassDecl c ->
 				c.cl_extern,(if c.cl_interface then Interface else Class),has_constructor c
@@ -164,20 +159,19 @@ module CompletionModuleType = struct
 			doc = infos.mt_doc;
 			is_extern = is_extern;
 			kind = kind;
-			import_status = is;
 			has_constructor = if has_ctor then Yes else No;
 		}
 
 	let get_path cm = (cm.pack,cm.name)
 
-	let to_json ctx cm =
+	let to_json ctx cm is =
 		let fields =
 			("pack",jlist jstring cm.pack) ::
 			("name",jstring cm.name) ::
 			("moduleName",jstring cm.module_name) ::
 			("isPrivate",jbool cm.is_private) ::
 			("kind",jint (to_int cm.kind)) ::
-			("importStatus",jint (ImportStatus.to_int cm.import_status)) ::
+			("importStatus",jint (ImportStatus.to_int is)) ::
 			(match ctx.generation_mode with
 			| GMFull | GMWithoutDoc ->
 				("pos",generate_pos ctx cm.pos) ::
@@ -195,20 +189,12 @@ end
 
 open CompletionModuleType
 
-type resolution_mode =
-	| RMLocalModule
-	| RMImport
-	| RMUsing
-	| RMTypeParameter
-	| RMClassPath
-	| RMOtherModule of path
-
 type t =
 	| ITLocal of tvar
 	| ITClassField of tclass_field * class_field_scope
 	| ITEnumField of tenum * tenum_field
 	| ITEnumAbstractField of tabstract * tclass_field
-	| ITType of CompletionModuleType.t * resolution_mode
+	| ITType of CompletionModuleType.t * ImportStatus.t
 	| ITPackage of string
 	| ITModule of string
 	| ITLiteral of string * Type.t
@@ -292,7 +278,7 @@ let to_json ctx ck =
 		| ITClassField(cf,cfs) -> "ClassField",generate_class_field ctx cfs cf
 		| ITEnumField(_,ef) -> "EnumField",generate_enum_field ctx ef
 		| ITEnumAbstractField(_,cf) -> "EnumAbstractField",generate_class_field ctx CFSMember cf
-		| ITType(kind,rm) -> "Type",CompletionModuleType.to_json ctx kind
+		| ITType(kind,is) -> "Type",CompletionModuleType.to_json ctx kind is
 		| ITPackage s -> "Package",jstring s
 		| ITModule s -> "Module",jstring s
 		| ITLiteral(s,t) -> "Literal",jobject [

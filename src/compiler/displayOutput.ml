@@ -10,6 +10,7 @@ open DisplayException
 open Type
 open Display
 open DisplayTypes
+open CompletionModuleType
 open Typecore
 open Genjson
 
@@ -105,15 +106,9 @@ let print_toplevel il =
 			if check_ident ef.ef_name then Buffer.add_string b (Printf.sprintf "<i k=\"enum\" t=\"%s\"%s>%s</i>\n" (s_type ef.ef_type) (s_doc ef.ef_doc) ef.ef_name);
 		| ITEnumAbstractField(a,cf) ->
 			if check_ident cf.cf_name then Buffer.add_string b (Printf.sprintf "<i k=\"enumabstract\" t=\"%s\"%s>%s</i>\n" (s_type cf.cf_type) (s_doc cf.cf_doc) cf.cf_name);
-		| ITType(cm,rm) ->
+		| ITType(cm,_) ->
 			let path = CompletionItem.CompletionModuleType.get_path cm in
-			let import,name = match rm with
-				| RMOtherModule path ->
-					let label_path = if path = path then path else (fst path @ [snd path],snd path) in
-					Printf.sprintf " import=\"%s\"" (s_type_path path),s_type_path label_path
-				| _ -> "",(snd path)
-			in
-			Buffer.add_string b (Printf.sprintf "<i k=\"type\" p=\"%s\"%s%s>%s</i>\n" (s_type_path path) import ("") name);
+			Buffer.add_string b (Printf.sprintf "<i k=\"type\" p=\"%s\"%s>%s</i>\n" (s_type_path path) ("") cm.name);
 		| ITPackage s ->
 			Buffer.add_string b (Printf.sprintf "<i k=\"package\">%s</i>\n" s)
 		| ITLiteral(s,_) ->
@@ -413,7 +408,7 @@ module TypePathHandler = struct
 					[]
 				else
 					List.map (fun mt ->
-						ITType(CompletionItem.CompletionModuleType.of_module_type ImportStatus.Imported mt,RMOtherModule m.m_path)
+						ITType(CompletionItem.CompletionModuleType.of_module_type mt,ImportStatus.Imported)
 					) public_types
 			in
 			let make_field_doc cf =
