@@ -22,6 +22,7 @@ open Common.CompilationServer
 open Type
 open Typecore
 open CompletionItem
+open ClassFieldOrigin
 open DisplayTypes
 open Genjson
 
@@ -169,7 +170,7 @@ let collect ctx only_types with_type =
 				List.iter (fun cf ->
 					if not (Meta.has Meta.NoCompletion cf.cf_meta) && not (List.mem cf.cf_name !seen) then begin
 						seen := cf.cf_name :: !seen;
-						add (ITClassField(cf,CFSStatic)) cf.cf_name
+						add (ITClassField(cf,CFSMember,(if c == ctx.curclass then Self (TClassDecl c) else Parent (TClassDecl c)))) cf.cf_name
 					end;
 				) c.cl_ordered_fields;
 				match c.cl_super with
@@ -184,7 +185,7 @@ let collect ctx only_types with_type =
 
 		(* statics *)
 		List.iter (fun cf ->
-			if not (Meta.has Meta.NoCompletion cf.cf_meta) then add (ITClassField(cf,CFSStatic)) cf.cf_name
+			if not (Meta.has Meta.NoCompletion cf.cf_meta) then add (ITClassField(cf,CFSStatic,Self (TClassDecl ctx.curclass))) cf.cf_name
 		) ctx.curclass.cl_ordered_statics;
 
 		(* enum constructors *)
@@ -222,9 +223,9 @@ let collect ctx only_types with_type =
 		PMap.iter (fun _ (mt,s,_) ->
 			try
 				match resolve_typedef mt with
-					| TClassDecl c -> add (ITClassField ((PMap.find s c.cl_statics,CFSStatic))) s
+					| TClassDecl c -> add (ITClassField ((PMap.find s c.cl_statics,CFSStatic,TODO))) s
 					| TEnumDecl en -> add (ITEnumField (en,(PMap.find s en.e_constrs))) s
-					| TAbstractDecl {a_impl = Some c} -> add (ITClassField(PMap.find s c.cl_statics,CFSStatic)) s
+					| TAbstractDecl {a_impl = Some c} -> add (ITClassField(PMap.find s c.cl_statics,CFSStatic,TODO)) s
 					| _ -> raise Not_found
 			with Not_found ->
 				()

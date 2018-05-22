@@ -6,6 +6,7 @@ open CompletionResultKind
 open CompletionItem
 open CompletionModuleKind
 open CompletionModuleType
+open ClassFieldOrigin
 open DisplayException
 open Common
 open Type
@@ -239,11 +240,11 @@ let handle_structure_display ctx e fields =
 	| EObjectDecl fl ->
 		let fields = PMap.foldi (fun k cf acc ->
 			if Expr.field_mem_assoc k fl then acc
-			else (CompletionItem.ITClassField(cf,CFSMember)) :: acc
+			else (CompletionItem.ITClassField(cf,CFSMember,Self (TClassDecl null_class))) :: acc
 		) fields [] in
 		raise_fields fields CRStructureField None false
 	| EBlock [] ->
-		let fields = PMap.foldi (fun _ cf acc -> CompletionItem.ITClassField(cf,CFSMember) :: acc) fields [] in
+		let fields = PMap.foldi (fun _ cf acc -> CompletionItem.ITClassField(cf,CFSMember,Self (TClassDecl null_class)) :: acc) fields [] in
 		raise_fields fields CRStructureField None false
 	| _ ->
 		error "Expected object expression" p

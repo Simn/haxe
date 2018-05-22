@@ -184,14 +184,34 @@ module CompletionModuleType = struct
 			)
 		in
 		jobject fields
+end
 
+module ClassFieldOrigin = struct
+	type t =
+		| Self of module_type
+		| Parent of module_type
+		| StaticExtension of module_type
+		| BuiltIn
+		| TODO
+
+	let to_json ctx cfo =
+		let i,args = match cfo with
+		| Self mt -> 0,if ctx.generation_mode = GMMinimum then None else Some (generate_module_type ctx mt)
+		| Parent mt -> 1,if ctx.generation_mode = GMMinimum then None else Some (generate_module_type ctx mt)
+		| StaticExtension mt -> 2,if ctx.generation_mode = GMMinimum then None else Some (generate_module_type ctx mt)
+		| BuiltIn -> 3,None
+		| TODO -> 4,None
+		in
+		jobject (
+			("kind",jint i) :: (match args with None -> [] | Some arg -> ["args",arg])
+		)
 end
 
 open CompletionModuleType
 
 type t =
 	| ITLocal of tvar
-	| ITClassField of tclass_field * class_field_scope
+	| ITClassField of tclass_field * class_field_scope * ClassFieldOrigin.t
 	| ITEnumField of tenum * tenum_field
 	| ITEnumAbstractField of tabstract * tclass_field
 	| ITType of CompletionModuleType.t * ImportStatus.t
@@ -229,7 +249,7 @@ let get_sort_index = function
 	| ITKeyword _ -> 0
 
 let legacy_sort = function
-	| ITClassField(cf,_) | ITEnumAbstractField(_,cf) ->
+	| ITClassField(cf,_,_) | ITEnumAbstractField(_,cf) ->
 		begin match cf.cf_kind with
 		| Var _ -> 0,cf.cf_name
 		| Method _ -> 1,cf.cf_name
@@ -250,7 +270,7 @@ let legacy_sort = function
 
 let get_name = function
 	| ITLocal v -> v.v_name
-	| ITClassField(cf,_) | ITEnumAbstractField(_,cf) -> cf.cf_name
+	| ITClassField(cf,_,_) | ITEnumAbstractField(_,cf) -> cf.cf_name
 	| ITEnumField(_,ef) -> ef.ef_name
 	| ITType(cm,_) -> cm.name
 	| ITPackage s -> s
@@ -262,7 +282,7 @@ let get_name = function
 
 let get_type = function
 	| ITLocal v -> v.v_type
-	| ITClassField(cf,_) | ITEnumAbstractField(_,cf) -> cf.cf_type
+	| ITClassField(cf,_,_) | ITEnumAbstractField(_,cf) -> cf.cf_type
 	| ITEnumField(_,ef) -> ef.ef_type
 	| ITType(_,_) -> t_dynamic
 	| ITPackage _ -> t_dynamic
@@ -275,7 +295,10 @@ let get_type = function
 let to_json ctx ck =
 	let kind,data = match ck with
 		| ITLocal v -> "Local",generate_tvar ctx v
-		| ITClassField(cf,cfs) -> "ClassField",generate_class_field ctx cfs cf
+		| ITClassField(cf,cfs,cfo) -> "ClassField",jobject [
+			"field",generate_class_field ctx cfs cf;
+			"origin",ClassFieldOrigin.to_json ctx cfo;
+		]
 		| ITEnumField(_,ef) -> "EnumField",generate_enum_field ctx ef
 		| ITEnumAbstractField(_,cf) -> "EnumAbstractField",generate_class_field ctx CFSMember cf
 		| ITType(kind,is) -> "Type",CompletionModuleType.to_json ctx kind is

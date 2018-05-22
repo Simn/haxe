@@ -22,6 +22,7 @@ open Error
 open Typecore
 open Type
 open CompletionItem
+open ClassFieldOrigin
 
 let get_submodule_fields ctx path =
 	let m = Hashtbl.find ctx.g.modules path in
@@ -187,7 +188,7 @@ let collect ctx e_ast e dk with_type p =
 	let get_field acc f =
 		List.fold_left (fun acc f ->
 			if not f.cf_public then acc
-			else (ITClassField(f,CFSMember)) :: acc
+			else (ITClassField(f,CFSMember,Self (TClassDecl null_class))) :: acc
 		) acc (f :: f.cf_overloads)
 	in
 	let fields = List.fold_left get_field [] fields in
