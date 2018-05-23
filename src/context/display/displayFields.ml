@@ -151,7 +151,12 @@ let collect ctx e_ast e dk with_type p =
 			(* Anons only have their own fields. *)
 			PMap.foldi (fun name cf acc ->
 				if is_new_item acc name then begin
-					let origin = AnonymousStructure an in
+					let origin = match !(an.a_status) with
+						| Statics c -> Self (TClassDecl c)
+						| EnumStatics en -> Self (TEnumDecl en)
+						| AbstractStatics a -> Self (TAbstractDecl a)
+						| _ -> AnonymousStructure an
+					in
 					PMap.add name (ITClassField (CompletionClassField.make cf CFSMember origin true)) acc
 				end else
 					acc
