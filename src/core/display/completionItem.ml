@@ -202,7 +202,7 @@ module ClassFieldOrigin = struct
 		| StaticExtension mt -> 2,if ctx.generation_mode = GMMinimum then None else Some (generate_module_type ctx mt)
 		| StaticImport mt -> 3,if ctx.generation_mode = GMMinimum then None else Some (generate_module_type ctx mt)
 		| AnonymousStructure an -> 4,if ctx.generation_mode = GMMinimum then None else Some (generate_anon ctx an)
-		| BuiltIn -> 3,None
+		| BuiltIn -> 5,None
 		in
 		jobject (
 			("kind",jint i) :: (match args with None -> [] | Some arg -> ["args",arg])
