@@ -78,12 +78,14 @@ module CollectionContext = struct
 	open ImportStatus
 
 	type t = {
+		ctx   : typer;
 		items : CompletionItem.t DynArray.t;
 		names : (string,CompletionItem.t) Hashtbl.t;
 		paths : (Globals.path,bool) Hashtbl.t;
 	}
 
-	let create () = {
+	let create ctx = {
+		ctx = ctx;
 		items = DynArray.create ();
 		names = Hashtbl.create 0;
 		paths = Hashtbl.create 0;
@@ -91,7 +93,9 @@ module CollectionContext = struct
 
 	let add_item ctx item name =
 		DynArray.add ctx.items item;
-		Hashtbl.replace ctx.names name item
+		match name with
+		| None -> ()
+		| Some name -> Hashtbl.replace ctx.names name item
 
 	let get_import_status ctx is_import path =
 		try
@@ -99,7 +103,10 @@ module CollectionContext = struct
 			(* TODO: do we have to check if we get the same thing? *)
 			Shadowed
 		with Not_found ->
-			if is_import || (fst path = []) then Imported else Unimported
+			let check_wildcard () =
+				List.exists (fun (sl,_) -> (sl,snd path) = path) ctx.ctx.m.wildcard_packages
+			in
+			if is_import || (fst path = []) || check_wildcard () then Imported else Unimported
 
 	let is_qualified ctx name =
 		not (Hashtbl.mem ctx.names name)
@@ -112,7 +119,7 @@ open CollectionContext
 
 let collect ctx only_types with_type =
 	let t = Timer.timer ["display";"toplevel"] in
-	let cctx = CollectionContext.create () in
+	let cctx = CollectionContext.create ctx in
 	let packages = Hashtbl.create 0 in
 	let add_package s = Hashtbl.replace packages s true in
 
@@ -129,7 +136,7 @@ let collect ctx only_types with_type =
 					!merge_core_doc_ref ctx c
 				| _ -> ());
                 let is = get_import_status cctx true path in
-				add (ITType(CompletionModuleType.of_module_type mt,is)) (snd path);
+				add (ITType(CompletionModuleType.of_module_type mt,is)) (Some (snd path));
 				add_path cctx path;
 			end
 	in
@@ -148,7 +155,7 @@ let collect ctx only_types with_type =
 				if not (path_exists cctx path) && not is_private then begin
 					add_path cctx path;
 					let is = get_import_status cctx false path in
-					add (ITType(CompletionModuleType.of_type_decl pack name (d,p),is)) tname
+					add (ITType(CompletionModuleType.of_type_decl pack name (d,p),is)) None
 				end
 			with Exit ->
 				()
@@ -163,12 +170,12 @@ let collect ctx only_types with_type =
 		(* locals *)
 		PMap.iter (fun _ v ->
 			if not (is_gen_local v) then
-				add (ITLocal v) v.v_name
+				add (ITLocal v) (Some v.v_name)
 		) ctx.locals;
 
 		let add_field cf scope origin =
 			let is_qualified = is_qualified cctx cf.cf_name in
-			add (ITClassField(CompletionClassField.make cf scope origin is_qualified)) cf.cf_name
+			add (ITClassField(CompletionClassField.make cf scope origin is_qualified)) (Some cf.cf_name)
 		in
 		(* member vars *)
 		if ctx.curfun <> FunStatic then begin
@@ -193,7 +200,7 @@ let collect ctx only_types with_type =
 				add_path cctx a.a_path;
 				List.iter (fun cf ->
 					let ccf = CompletionClassField.make cf CFSMember (Self (TClassDecl c)) true in
-					if (Meta.has Meta.Enum cf.cf_meta) && not (Meta.has Meta.NoCompletion cf.cf_meta) then add (ITEnumAbstractField(a,ccf)) cf.cf_name;
+					if (Meta.has Meta.Enum cf.cf_meta) && not (Meta.has Meta.NoCompletion cf.cf_meta) then add (ITEnumAbstractField(a,ccf)) (Some cf.cf_name);
 				) c.cl_ordered_statics
 			| TTypeDecl t ->
 				begin match follow t.t_type with
@@ -205,7 +212,7 @@ let collect ctx only_types with_type =
 				let origin = Self (TEnumDecl e) in
 				PMap.iter (fun _ ef ->
 					let is_qualified = is_qualified cctx ef.ef_name in
-					add (ITEnumField(CompletionEnumField.make ef origin is_qualified)) ef.ef_name
+					add (ITEnumField(CompletionEnumField.make ef origin is_qualified)) (Some ef.ef_name)
 				) e.e_constrs;
 			| _ ->
 				()
@@ -228,7 +235,7 @@ let collect ctx only_types with_type =
 					let cf = PMap.find s c.cl_statics in
 					let cf = if name = cf.cf_name then cf else {cf with cf_name = name} in
 					let origin = StaticImport (TClassDecl c) in
-					add (ITClassField (CompletionClassField.make cf CFSStatic origin is_qualified)) name
+					add (ITClassField (CompletionClassField.make cf CFSStatic origin is_qualified)) (Some name)
 				in
 				match resolve_typedef mt with
 					| TClassDecl c -> class_import c;
@@ -236,7 +243,7 @@ let collect ctx only_types with_type =
 						let ef = PMap.find s en.e_constrs in
 						let ef = if name = ef.ef_name then ef else {ef with ef_name = name} in
 						let origin = StaticImport (TEnumDecl en) in
-						add (ITEnumField (CompletionEnumField.make ef origin is_qualified)) s
+						add (ITEnumField (CompletionEnumField.make ef origin is_qualified)) (Some s)
 					| TAbstractDecl {a_impl = Some c} -> class_import c;
 					| _ -> raise Not_found
 			with Not_found ->
@@ -244,15 +251,15 @@ let collect ctx only_types with_type =
 		) ctx.m.module_globals;
 
 		(* literals *)
-		add (ITLiteral("null",t_dynamic)) "null";
-		add (ITLiteral("true",ctx.com.basic.tbool)) "true";
-		add (ITLiteral("false",ctx.com.basic.tbool)) "false";
+		add (ITLiteral("null",t_dynamic)) (Some "null");
+		add (ITLiteral("true",ctx.com.basic.tbool)) (Some "true");
+		add (ITLiteral("false",ctx.com.basic.tbool)) (Some "false");
 		begin match ctx.curfun with
 			| FunMember | FunConstructor | FunMemberClassLocal ->
 				let t = TInst(ctx.curclass,List.map snd ctx.curclass.cl_params) in
-				add (ITLiteral("this",t)) "this";
+				add (ITLiteral("this",t)) (Some "this");
 				begin match ctx.curclass.cl_super with
-					| Some(c,tl) -> add (ITLiteral("super",TInst(c,tl))) "super"
+					| Some(c,tl) -> add (ITLiteral("super",TInst(c,tl))) (Some "super")
 					| None -> ()
 				end
 			| _ ->
@@ -264,17 +271,17 @@ let collect ctx only_types with_type =
 			Function; Var; If; Else; While; Do; For; Break; Return; Continue; Switch;
 			Try; New; Throw; Untyped; Cast;
 		] in
-		List.iter (fun kwd -> add(ITKeyword(kwd)) (s_keyword kwd)) kwds;
+		List.iter (fun kwd -> add(ITKeyword(kwd)) (Some (s_keyword kwd))) kwds;
 
 		(* builtins *)
-		add (ITLiteral("trace", TFun(["value",false,t_dynamic],ctx.com.basic.tvoid))) "trace"
+		add (ITLiteral("trace", TFun(["value",false,t_dynamic],ctx.com.basic.tvoid))) (Some "trace")
 	end;
 
 	(* type params *)
 	List.iter (fun (s,t) -> match follow t with
 		| TInst(c,_) ->
 			(* This is weird, might want to use something else for type parameters *)
-			add (ITType (CompletionModuleType.of_module_type (TClassDecl c),ImportStatus.Imported)) s
+			add (ITType (CompletionModuleType.of_module_type (TClassDecl c),ImportStatus.Imported)) (Some s)
 		| _ -> assert false
 	) ctx.type_params;
 
@@ -319,7 +326,7 @@ let collect ctx only_types with_type =
 	end;
 
 	Hashtbl.iter (fun pack _ ->
-		add (ITPackage pack) pack
+		add (ITPackage pack) (Some pack)
 	) packages;
 
 	(* sorting *)
