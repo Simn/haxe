@@ -228,17 +228,22 @@ let collect ctx only_types with_type =
 		end;
 
 		(* imported globals *)
-		PMap.iter (fun _ (mt,s,_) ->
+		PMap.iter (fun name (mt,s,_) ->
 			try
-				let is_qualified = is_qualified cctx s in
+				let is_qualified = is_qualified cctx name in
+				let class_import c =
+					let cf = PMap.find s c.cl_statics in
+					let cf = if name = cf.cf_name then cf else {cf with cf_name = name} in
+					let origin = StaticImport (TClassDecl c) in
+					add (ITClassField (CompletionClassField.make cf CFSStatic origin is_qualified)) name
+				in
 				match resolve_typedef mt with
-					| TClassDecl c ->
-						let origin = StaticImport (TClassDecl c) in
-						add (ITClassField (CompletionClassField.make (PMap.find s c.cl_statics) CFSStatic origin is_qualified)) s
-					| TEnumDecl en -> add (ITEnumField (en,(PMap.find s en.e_constrs))) s
-					| TAbstractDecl {a_impl = Some c} ->
-						let origin = StaticImport (TClassDecl c) in
-						add (ITClassField (CompletionClassField.make (PMap.find s c.cl_statics) CFSStatic origin is_qualified)) s
+					| TClassDecl c -> class_import c;
+					| TEnumDecl en ->
+						let ef = PMap.find s en.e_constrs in
+						let ef = if name = ef.ef_name then ef else {ef with ef_name = name} in
+						add (ITEnumField (en,ef)) s
+					| TAbstractDecl {a_impl = Some c} -> class_import c;
 					| _ -> raise Not_found
 			with Not_found ->
 				()
