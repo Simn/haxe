@@ -134,15 +134,15 @@ let collect ctx only_types with_type =
 	let process_decls pack name decls =
 		let run () = List.iter (fun (d,p) ->
 			begin try
-				let tname = match d with
-					| EClass d -> fst d.d_name
-					| EEnum d -> fst d.d_name
-					| ETypedef d -> fst d.d_name
-					| EAbstract d -> fst d.d_name
+				let tname,is_private = match d with
+					| EClass d -> fst d.d_name,List.mem HPrivate d.d_flags
+					| EEnum d -> fst d.d_name,List.mem EPrivate d.d_flags
+					| ETypedef d -> fst d.d_name,List.mem EPrivate d.d_flags
+					| EAbstract d -> fst d.d_name,List.mem AbPrivate d.d_flags
 					| _ -> raise Exit
 				in
 				let path = (pack,tname) in
-				if not (path_exists cctx path) then begin
+				if not (path_exists cctx path) && not is_private then begin
 					add_path cctx path;
 					let is = get_import_status cctx false path in
 					add (ITType(CompletionModuleType.of_type_decl pack name (d,p),is)) tname
