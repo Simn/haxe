@@ -166,33 +166,24 @@ let collect ctx only_types with_type =
 				add (ITLocal v) v.v_name
 		) ctx.locals;
 
+		let add_field cf scope origin =
+			let is_qualified = is_qualified cctx cf.cf_name in
+			add (ITClassField(CompletionClassField.make cf scope origin is_qualified)) cf.cf_name
+		in
 		(* member vars *)
 		if ctx.curfun <> FunStatic then begin
-			let seen = ref [] in
-			let rec loop c =
-				List.iter (fun cf ->
-					if not (Meta.has Meta.NoCompletion cf.cf_meta) && not (List.mem cf.cf_name !seen) then begin
-						seen := cf.cf_name :: !seen;
-						let origin = if c == ctx.curclass then Self (TClassDecl c) else Parent (TClassDecl c) in
-						let is_qualified = is_qualified cctx cf.cf_name in
-						add (ITClassField(CompletionClassField.make cf CFSMember origin is_qualified)) cf.cf_name
-					end;
-				) c.cl_ordered_fields;
-				match c.cl_super with
-					| None ->
-						()
-					| Some (csup,tl) ->
-						loop csup; (* TODO: type parameters *)
-			in
-			loop ctx.curclass;
+			let all_fields = Type.TClass.get_all_fields ctx.curclass (List.map snd ctx.curclass.cl_params) in
+			PMap.iter (fun _ (c,cf) ->
+				let origin = if c == ctx.curclass then Self (TClassDecl c) else Parent (TClassDecl c) in
+				if not (Meta.has Meta.NoCompletion cf.cf_meta) then add_field cf CFSMember origin
+			) all_fields;
 			(* TODO: local using? *)
 		end;
 
 		(* statics *)
 		List.iter (fun cf ->
 			let origin = Self (TClassDecl ctx.curclass) in
-			let is_qualified = is_qualified cctx cf.cf_name in
-			if not (Meta.has Meta.NoCompletion cf.cf_meta) then add (ITClassField(CompletionClassField.make cf CFSStatic origin is_qualified)) cf.cf_name
+			if not (Meta.has Meta.NoCompletion cf.cf_meta) then add_field cf CFSStatic origin
 		) ctx.curclass.cl_ordered_statics;
 
 		(* enum constructors *)
