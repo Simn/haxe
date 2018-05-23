@@ -96,7 +96,7 @@ let cache_module cs key value =
 	Hashtbl.replace cs.cache.c_modules key value
 
 let taint_modules cs file =
-	Hashtbl.iter (fun _ m -> if m.m_extra.m_file = file then (print_endline m.m_extra.m_file;m.m_extra.m_dirty <- Some m)) cs.cache.c_modules
+	Hashtbl.iter (fun _ m -> if m.m_extra.m_file = file then m.m_extra.m_dirty <- Some m) cs.cache.c_modules
 
 let iter_modules cs com f =
 	let sign = Define.get_signature com.defines in
