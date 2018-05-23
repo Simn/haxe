@@ -96,12 +96,7 @@ let cache_module cs key value =
 	Hashtbl.replace cs.cache.c_modules key value
 
 let taint_modules cs file =
-	Hashtbl.iter (fun _ m -> if m.m_extra.m_file = file then m.m_extra.m_dirty <- Some m) cs.cache.c_modules
-
-let remove_modules_by_file cs file =
-	let l = Hashtbl.fold (fun k m acc -> if m.m_extra.m_file = file then k :: acc else acc) cs.cache.c_modules [] in
-	List.iter (Hashtbl.remove cs.cache.c_modules) l;
-	l
+	Hashtbl.iter (fun _ m -> if m.m_extra.m_file = file then (print_endline m.m_extra.m_file;m.m_extra.m_dirty <- Some m)) cs.cache.c_modules
 
 let iter_modules cs com f =
 	let sign = Define.get_signature com.defines in

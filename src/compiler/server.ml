@@ -283,7 +283,10 @@ let rec wait_loop process_params verbose accept =
 					let _, mctx = MacroContext.get_macro_context ctx p in
 					check_module_shadowing mctx.Typecore.com (get_changed_directories mctx) m
 			in
-			let has_policy policy = List.mem policy m.m_extra.m_check_policy in
+			let has_policy policy = List.mem policy m.m_extra.m_check_policy || match policy with
+				| NoCheckShadowing | NoCheckFileTimeModification when !ServerConfig.do_not_check_modules -> true
+				| _ -> false
+			in
 			let check_file () =
 				if file_time m.m_extra.m_file <> m.m_extra.m_time then begin
 					if has_policy CheckFileContentModification && not (content_changed m m.m_extra.m_file) then begin
@@ -360,13 +363,13 @@ let rec wait_loop process_params verbose accept =
 		try
 			let m = CompilationServer.find_module cs (mpath,sign) in
 			let tcheck = Timer.timer ["server";"module cache";"check"] in
-			if not !ServerConfig.do_not_check_modules then begin match check m with
+			begin match check m with
 			| None -> ()
 			| Some m' ->
 				ServerMessage.skipping_dep com2 "" (m,m');
 				tcheck();
 				raise Not_found;
-			end else if m.m_extra.m_file = (!Parser.resume_display).pfile then raise Not_found;
+			end;
 			tcheck();
 			let tadd = Timer.timer ["server";"module cache";"add modules"] in
 			add_modules "" m m;

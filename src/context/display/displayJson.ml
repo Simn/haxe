@@ -218,8 +218,8 @@ let parse_input com input report_times pre_compilation did_something =
 			| "server/invalidate" ->
 				let file = get_string_param "file" in
 				let file = Path.unique_full_path file in
-				let l = CompilationServer.remove_modules_by_file cs file in
-				f_result (jstring (Printf.sprintf "removed %i modules" (List.length l)));
+				CompilationServer.taint_modules cs file;
+				f_result jnull
 			| "server/configure" ->
 				let l = ref (List.map (fun j ->
 					let fl = get_object "print param" j in
