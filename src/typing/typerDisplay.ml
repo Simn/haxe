@@ -40,12 +40,17 @@ let completion_item_of_expr ctx e =
 		| TField(e1,FAnon cf) ->
 			begin match follow e1.etype with
 				| TAnon an -> of_field e (AnonymousStructure an) cf CFSMember
-				| _ -> ITUnknown e
+				| _ -> ITExpression e
 			end
 		| TTypeExpr mt -> ITType(CompletionModuleType.of_module_type mt,ImportStatus.Imported) (* TODO *)
 		| TConst(ct) -> ITLiteral(s_const ct,e.etype)
+		| TObjectDecl _ ->
+			begin match follow e.etype with
+				| TAnon an -> ITAnonymous an
+				| _ -> ITExpression e
+			end
 		| TParenthesis e1 | TMeta(_,e1) | TCast(e1,_) -> loop e1
-		| _ -> ITUnknown e
+		| _ -> ITExpression e
 	in
 	loop e
 

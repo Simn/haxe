@@ -255,7 +255,8 @@ type t =
 	| ITTimer of string * string
 	| ITMetadata of string * documentation
 	| ITKeyword of keyword
-	| ITUnknown of texpr
+	| ITAnonymous of tanon
+	| ITExpression of texpr
 
 let get_index = function
 	| ITLocal _ -> 0
@@ -269,7 +270,8 @@ let get_index = function
 	| ITTimer _ -> 8
 	| ITMetadata _ -> 9
 	| ITKeyword _ -> 10
-	| ITUnknown _ -> 11
+	| ITAnonymous _ -> 11
+	| ITExpression _ -> 12
 
 let get_sort_index = function
 	| ITLocal _ -> 0
@@ -283,7 +285,8 @@ let get_sort_index = function
 	| ITTimer _ -> 0
 	| ITMetadata _ -> 0
 	| ITKeyword _ -> 0
-	| ITUnknown _ -> 0
+	| ITAnonymous _ -> 0
+	| ITExpression _ -> 0
 
 let legacy_sort = function
 	| ITClassField(cf) | ITEnumAbstractField(_,cf) ->
@@ -305,7 +308,8 @@ let legacy_sort = function
 	| ITLocal v -> 7,v.v_name
 	| ITLiteral(s,_) -> 9,s
 	| ITKeyword kwd -> 10,s_keyword kwd
-	| ITUnknown _ -> 11,""
+	| ITAnonymous _ -> 11,""
+	| ITExpression _ -> 12,""
 
 let get_name = function
 	| ITLocal v -> v.v_name
@@ -318,7 +322,8 @@ let get_name = function
 	| ITTimer(s,_) -> s
 	| ITMetadata(s,_) -> s
 	| ITKeyword kwd -> s_keyword kwd
-	| ITUnknown _ -> ""
+	| ITAnonymous _ -> ""
+	| ITExpression _ -> ""
 
 let get_type = function
 	| ITLocal v -> v.v_type
@@ -331,7 +336,8 @@ let get_type = function
 	| ITTimer(_,_) -> t_dynamic
 	| ITMetadata(_,_) -> t_dynamic
 	| ITKeyword _ -> t_dynamic
-	| ITUnknown _ -> t_dynamic
+	| ITAnonymous an -> TAnon an
+	| ITExpression _ -> t_dynamic
 
 let to_json ctx ck =
 	let kind,data = match ck with
@@ -373,6 +379,7 @@ let to_json ctx ck =
 		| ITKeyword kwd ->"Keyword",jobject [
 			"name",jstring (s_keyword kwd)
 		]
-		| ITUnknown _ -> "Unknown",jnull
+		| ITAnonymous an -> "AnonymousStructure",generate_anon ctx an
+		| ITExpression e -> "Expression",generate_texpr ctx e
 	in
 	generate_adt ctx None kind (Some data)
