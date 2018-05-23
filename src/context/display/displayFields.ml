@@ -121,7 +121,7 @@ let collect ctx e_ast e dk with_type p =
 		| TAbstract({a_impl = Some c} as a,tl) ->
 			(* Abstracts should show all their @:impl fields minus the constructor. *)
 			let items = List.fold_left (fun acc cf ->
-				if Meta.has Meta.Impl cf.cf_meta && cf.cf_name <> "_new" && should_access c cf false && is_new_item acc cf.cf_name then begin
+				if Meta.has Meta.Impl cf.cf_meta && should_access c cf false && is_new_item acc cf.cf_name then begin
 					let origin = Self(TAbstractDecl a) in
 					let cf = prepare_using_field cf in
 					let cf = if tl = [] then cf else {cf with cf_type = apply_params a.a_params tl cf.cf_type} in
