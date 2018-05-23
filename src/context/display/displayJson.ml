@@ -215,8 +215,13 @@ let parse_input com input report_times pre_compilation did_something =
 				let path = Path.parse_path (get_string_param "path") in
 				let m = try CompilationServer.find_module cs (path,sign) with Not_found -> f_error [jstring "No such module"] in
 				f_result (generate_module () m)
+			| "server/invalidate" ->
+				let file = get_string_param "file" in
+				let file = Path.unique_full_path file in
+				let l = CompilationServer.remove_modules_by_file cs file in
+				f_result (jstring (Printf.sprintf "removed %i modules" (List.length l)));
 			| "server/configure" ->
-				let l = List.map (fun j ->
+				let l = ref (List.map (fun j ->
 					let fl = get_object "print param" j in
 					let name = get_string_field "print param" "name" fl in
 					let value = get_bool_field "print param" "value" fl in
@@ -225,8 +230,14 @@ let parse_input com input report_times pre_compilation did_something =
 						jstring (Printf.sprintf "Printing %s %s" name (if value then "enabled" else "disabled"))
 					with Not_found ->
 						f_error [jstring ("Invalid print parame name: " ^ name)]
-				) (get_array_param "print") in
-				f_result (jarray l)
+				) (get_opt_param (fun () -> (get_array_param "print")) [])) in
+				get_opt_param (fun () ->
+					let b = get_bool_param "noModuleChecks" in
+					ServerConfig.do_not_check_modules := b;
+					l := jstring ("Module checks " ^ (if b then "disabled" else "enabled")) :: !l;
+					()
+				) ();
+				f_result (jarray !l)
 			| _ -> raise_method_not_found id name
 		in
 		f();

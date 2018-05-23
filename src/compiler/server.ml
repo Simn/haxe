@@ -360,13 +360,13 @@ let rec wait_loop process_params verbose accept =
 		try
 			let m = CompilationServer.find_module cs (mpath,sign) in
 			let tcheck = Timer.timer ["server";"module cache";"check"] in
-			begin match check m with
+			if not !ServerConfig.do_not_check_modules then begin match check m with
 			| None -> ()
 			| Some m' ->
 				ServerMessage.skipping_dep com2 "" (m,m');
 				tcheck();
 				raise Not_found;
-			end;
+			end else if m.m_extra.m_file = (!Parser.resume_display).pfile then raise Not_found;
 			tcheck();
 			let tadd = Timer.timer ["server";"module cache";"add modules"] in
 			add_modules "" m m;
