@@ -314,7 +314,12 @@ let get_type = function
 let to_json ctx ck =
 	let kind,data = match ck with
 		| ITLocal v -> "Local",generate_tvar ctx v
-		| ITClassField(cf) -> "ClassField",jobject [
+		| ITClassField(cf) | ITEnumAbstractField(_,cf) ->
+			let name = match ck with
+				| ITClassField _ -> "ClassField"
+				| _ ->  "EnumAbstractField"
+			in
+			name,jobject [
 			"field",generate_class_field ctx cf.scope cf.field;
 			"origin",ClassFieldOrigin.to_json ctx cf.origin;
 			"resolution",jobject [
@@ -322,7 +327,6 @@ let to_json ctx ck =
 			]
 		]
 		| ITEnumField(_,ef) -> "EnumField",generate_enum_field ctx ef
-		| ITEnumAbstractField(_,cf) -> "EnumAbstractField",generate_class_field ctx CFSMember cf.field
 		| ITType(kind,is) -> "Type",CompletionModuleType.to_json ctx kind is
 		| ITPackage s -> "Package",jstring s
 		| ITModule s -> "Module",jstring s
