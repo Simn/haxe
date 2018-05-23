@@ -1,7 +1,7 @@
 open Globals
 open Ast
 open Common
-open Common.CompilationServer
+open CompilationServer
 open Timer
 open DisplayTypes.DisplayMode
 open DisplayTypes.CompletionResultKind

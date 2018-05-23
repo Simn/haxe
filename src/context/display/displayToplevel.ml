@@ -18,7 +18,7 @@
 *)
 open Ast
 open Common
-open Common.CompilationServer
+open CompilationServer
 open Type
 open Typecore
 open CompletionItem
