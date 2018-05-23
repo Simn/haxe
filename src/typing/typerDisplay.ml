@@ -16,6 +16,39 @@ open Fields
 open Calls
 open Error
 
+let completion_item_of_expr ctx e =
+	let retype e s t =
+		try
+			let e' = type_expr ctx (EConst(Ident s),null_pos) (WithType t) in
+			Texpr.equal e e'
+		with _ ->
+			false
+	in
+	let of_field e origin cf scope =
+		let is_qualified = retype e cf.cf_name cf.cf_type in
+		ITClassField (CompletionClassField.make cf scope origin is_qualified)
+	in
+	let of_enum_field e origin ef =
+		let is_qualified = retype e ef.ef_name ef.ef_type in
+		ITEnumField (CompletionEnumField.make ef origin is_qualified)
+	in
+	let rec loop e = match e.eexpr with
+		| TLocal v -> ITLocal v
+		| TField(_,FStatic(c,cf)) -> of_field e (Self (TClassDecl c)) cf CFSStatic
+		| TField(_,(FInstance(c,_,cf) | FClosure(Some(c,_),cf))) -> of_field e (Self (TClassDecl c)) cf CFSMember
+		| TField(_,FEnum(en,ef)) -> of_enum_field e (Self (TEnumDecl en)) ef
+		| TField(e1,FAnon cf) ->
+			begin match follow e1.etype with
+				| TAnon an -> of_field e (AnonymousStructure an) cf CFSMember
+				| _ -> ITUnknown e
+			end
+		| TTypeExpr mt -> ITType(CompletionModuleType.of_module_type mt,ImportStatus.Imported) (* TODO *)
+		| TConst(ct) -> ITLiteral(s_const ct,e.etype)
+		| TParenthesis e1 | TMeta(_,e1) | TCast(e1,_) -> loop e1
+		| _ -> ITUnknown e
+	in
+	loop e
+
 let rec handle_signature_display ctx e_ast with_type =
 	ctx.in_display <- true;
 	let p = pos e_ast in
@@ -226,13 +259,15 @@ and display_expr ctx e_ast e dk with_type p =
 		begin match fst e_ast,e.eexpr with
 			| EField(e1,s),TField(e2,_) ->
 				let fields = DisplayFields.collect ctx e1 e2 dk with_type p in
-				raise_fields fields CRField (Some {e.epos with pmin = e.epos.pmax - String.length s;}) false
+				let item = completion_item_of_expr ctx e2 in
+				raise_fields fields (CRField item) (Some {e.epos with pmin = e.epos.pmax - String.length s;}) false
 			| _ ->
 				raise_fields (DisplayToplevel.collect ctx false with_type) CRToplevel None (match with_type with WithType _ -> true | _ -> false)
 		end
 	| DMDefault | DMNone | DMModuleSymbols _ | DMDiagnostics _ | DMStatistics ->
 		let fields = DisplayFields.collect ctx e_ast e dk with_type p in
-		raise_fields fields CRField None false
+		let item = completion_item_of_expr ctx e in
+		raise_fields fields (CRField item) None false
 
 let handle_structure_display ctx e an =
 	let p = pos e in
@@ -283,7 +318,8 @@ let handle_display ctx e_ast dk with_type =
 		else raise_fields (DisplayToplevel.collect ctx false with_type) CRToplevel (Some {p with pmin = p.pmax - String.length n;}) (match with_type with WithType _ -> true | _ -> false)
 	| Error (Type_not_found (path,_),_) as err ->
 		begin try
-			raise_fields (DisplayFields.get_submodule_fields ctx path) CRField None false
+			let s = s_type_path path in
+			raise_fields (DisplayFields.get_submodule_fields ctx path) (CRField (ITModule s)) None false
 		with Not_found ->
 			raise err
 		end

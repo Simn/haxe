@@ -65,7 +65,7 @@ end
 
 module CompletionResultKind = struct
 	type t =
-		| CRField
+		| CRField of CompletionItem.t
 		| CRStructureField
 		| CRToplevel
 		| CRMetadata
@@ -79,6 +79,28 @@ module CompletionResultKind = struct
 		| CRPattern
 		| CROverride
 		| CRTypeRelation
+
+	let to_json ctx kind =
+		let i,args = match kind with
+			| CRField item -> 0,Some (CompletionItem.to_json ctx item)
+			| CRStructureField -> 1,None
+			| CRToplevel -> 2,None
+			| CRMetadata -> 3,None
+			| CRTypeHint -> 4,None
+			| CRExtends -> 5,None
+			| CRImplements -> 6,None
+			| CRStructExtension -> 7,None
+			| CRImport -> 8,None
+			| CRUsing -> 9,None
+			| CRNew -> 10,None
+			| CRPattern -> 11,None
+			| CROverride -> 12,None
+			| CRTypeRelation -> 13,None
+		in
+		jobject (
+			("kind",jint i) :: (match args with None -> [] | Some arg -> ["args",arg])
+		)
+
 end
 
 module DisplayMode = struct

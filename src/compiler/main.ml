@@ -978,7 +978,7 @@ with
 			| CRPattern
 			| CRTypeRelation ->
 				DisplayOutput.print_toplevel fields
-			| CRField
+			| CRField _
 			| CRStructureField
 			| CRMetadata
 			| CROverride ->
@@ -1012,7 +1012,8 @@ with
 			begin match ctx.com.json_out with
 			| Some (f,_) ->
 				let ctx = DisplayJson.create_json_context() in
-				f (DisplayException.to_json ctx (DisplayFields(fields,CRField,None,false)))
+				let kind = CRField (CompletionItem.ITModule (String.concat "." p)) in
+				f (DisplayException.to_json ctx (DisplayFields(fields,kind,None,false)))
 			| _ -> raise (DisplayOutput.Completion (DisplayOutput.print_fields fields))
 			end
 		end
