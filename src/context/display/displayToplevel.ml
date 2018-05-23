@@ -326,7 +326,7 @@ let collect ctx only_types with_type =
 	end;
 
 	Hashtbl.iter (fun pack _ ->
-		add (ITPackage pack) (Some pack)
+		add (ITPackage(pack,[])) (Some pack)
 	) packages;
 
 	(* sorting *)

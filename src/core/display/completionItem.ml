@@ -239,6 +239,16 @@ module CompletionEnumField = struct
 	}
 end
 
+module PackageContentKind = struct
+	type t =
+		| PCKModule
+		| PCKPackage
+
+	let to_int = function
+		| PCKModule -> 0
+		| PCKPackage -> 1
+end
+
 open CompletionModuleType
 open CompletionClassField
 open CompletionEnumField
@@ -249,7 +259,7 @@ type t =
 	| ITEnumField of CompletionEnumField.t
 	| ITEnumAbstractField of tabstract * CompletionClassField.t
 	| ITType of CompletionModuleType.t * ImportStatus.t
-	| ITPackage of string
+	| ITPackage of string * (string * PackageContentKind.t) list
 	| ITModule of string
 	| ITLiteral of string * Type.t
 	| ITTimer of string * string
@@ -302,7 +312,7 @@ let legacy_sort = function
 		end
 	| ITType(cm,_) -> 2,cm.name
 	| ITModule s -> 3,s
-	| ITPackage s -> 4,s
+	| ITPackage(s,_) -> 4,s
 	| ITMetadata(s,_) -> 5,s
 	| ITTimer(s,_) -> 6,s
 	| ITLocal v -> 7,v.v_name
@@ -316,7 +326,7 @@ let get_name = function
 	| ITClassField(cf) | ITEnumAbstractField(_,cf) -> cf.field.cf_name
 	| ITEnumField ef -> ef.efield.ef_name
 	| ITType(cm,_) -> cm.name
-	| ITPackage s -> s
+	| ITPackage(s,_) -> s
 	| ITModule s -> s
 	| ITLiteral(s,_) -> s
 	| ITTimer(s,_) -> s
@@ -362,7 +372,15 @@ let to_json ctx ck =
 			]
 		]
 		| ITType(kind,is) -> "Type",CompletionModuleType.to_json ctx kind is
-		| ITPackage s -> "Package",jstring s
+		| ITPackage(s,contents) ->
+			let generate_package_content (name,kind) = jobject [
+				"name",jstring name;
+				"kind",jint (PackageContentKind.to_int kind);
+			] in
+			"Package",jobject [
+				"name",jstring s;
+				"contents",jlist generate_package_content contents;
+			]
 		| ITModule s -> "Module",jstring s
 		| ITLiteral(s,t) -> "Literal",jobject [
 			"name",jstring s;

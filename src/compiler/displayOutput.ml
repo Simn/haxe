@@ -66,7 +66,7 @@ let print_fields fields =
 		| ITType(cm,_) ->
 			let path = CompletionItem.CompletionModuleType.get_path cm in
 			"type",snd path,s_type_path path,None
-		| ITPackage s -> "package",s,"",None
+		| ITPackage(s,_) -> "package",s,"",None
 		| ITModule s -> "type",s,"",None
 		| ITMetadata(s,doc) -> "metadata",s,"",doc
 		| ITTimer(name,value) -> "timer",name,"",Some value
@@ -116,7 +116,7 @@ let print_toplevel il =
 		| ITType(cm,_) ->
 			let path = CompletionItem.CompletionModuleType.get_path cm in
 			Buffer.add_string b (Printf.sprintf "<i k=\"type\" p=\"%s\"%s>%s</i>\n" (s_type_path path) ("") cm.name);
-		| ITPackage s ->
+		| ITPackage(s,_) ->
 			Buffer.add_string b (Printf.sprintf "<i k=\"package\">%s</i>\n" s)
 		| ITLiteral(s,_) ->
 			Buffer.add_string b (Printf.sprintf "<i k=\"literal\">%s</i>\n" s)
@@ -371,7 +371,7 @@ module TypePathHandler = struct
 		if packs = [] && modules = [] then
 			(abort ("No classes found in " ^ String.concat "." p) null_pos)
 		else
-			let packs = List.map (fun n -> ITPackage n) packs in
+			let packs = List.map (fun n -> ITPackage(n,[])) packs in
 			let modules = List.map (fun n -> ITModule n) modules in
 			Some (packs @ modules)
 
