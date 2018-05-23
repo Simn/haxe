@@ -2769,7 +2769,7 @@ module TClass = struct
 	let get_all_super_fields c =
 		let rec loop acc c tl =
 			let maybe_add acc cf = match cf.cf_kind with
-				| Method MethNormal when not (PMap.mem cf.cf_name acc) -> PMap.add cf.cf_name cf acc
+				| Method MethNormal when not (PMap.mem cf.cf_name acc) -> PMap.add cf.cf_name (c,cf) acc
 				| _ -> acc
 			in
 			let acc = List.fold_left maybe_add acc c.cl_ordered_fields in

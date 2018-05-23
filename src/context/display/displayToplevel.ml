@@ -101,6 +101,9 @@ module CollectionContext = struct
 		with Not_found ->
 			if is_import || (fst path = []) then Imported else Unimported
 
+	let is_qualified ctx name =
+		not (Hashtbl.mem ctx.names name)
+
 	let path_exists ctx path = Hashtbl.mem ctx.paths path
 	let add_path ctx path = Hashtbl.add ctx.paths path true
 end
@@ -170,7 +173,9 @@ let collect ctx only_types with_type =
 				List.iter (fun cf ->
 					if not (Meta.has Meta.NoCompletion cf.cf_meta) && not (List.mem cf.cf_name !seen) then begin
 						seen := cf.cf_name :: !seen;
-						add (ITClassField(cf,CFSMember,(if c == ctx.curclass then Self (TClassDecl c) else Parent (TClassDecl c)))) cf.cf_name
+						let origin = if c == ctx.curclass then Self (TClassDecl c) else Parent (TClassDecl c) in
+						let is_qualified = is_qualified cctx cf.cf_name in
+						add (ITClassField(CompletionClassField.make cf CFSMember origin is_qualified)) cf.cf_name
 					end;
 				) c.cl_ordered_fields;
 				match c.cl_super with
@@ -185,7 +190,9 @@ let collect ctx only_types with_type =
 
 		(* statics *)
 		List.iter (fun cf ->
-			if not (Meta.has Meta.NoCompletion cf.cf_meta) then add (ITClassField(cf,CFSStatic,Self (TClassDecl ctx.curclass))) cf.cf_name
+			let origin = Self (TClassDecl ctx.curclass) in
+			let is_qualified = is_qualified cctx cf.cf_name in
+			if not (Meta.has Meta.NoCompletion cf.cf_meta) then add (ITClassField(CompletionClassField.make cf CFSStatic origin is_qualified)) cf.cf_name
 		) ctx.curclass.cl_ordered_statics;
 
 		(* enum constructors *)
@@ -194,7 +201,8 @@ let collect ctx only_types with_type =
 			| TAbstractDecl ({a_impl = Some c} as a) when Meta.has Meta.Enum a.a_meta && not (path_exists cctx a.a_path) ->
 				add_path cctx a.a_path;
 				List.iter (fun cf ->
-					if (Meta.has Meta.Enum cf.cf_meta) && not (Meta.has Meta.NoCompletion cf.cf_meta) then add (ITEnumAbstractField(a,cf)) cf.cf_name;
+					let ccf = CompletionClassField.make cf CFSMember (Self (TClassDecl c)) true in
+					if (Meta.has Meta.Enum cf.cf_meta) && not (Meta.has Meta.NoCompletion cf.cf_meta) then add (ITEnumAbstractField(a,ccf)) cf.cf_name;
 				) c.cl_ordered_statics
 			| TTypeDecl t ->
 				begin match follow t.t_type with
@@ -222,10 +230,15 @@ let collect ctx only_types with_type =
 		(* imported globals *)
 		PMap.iter (fun _ (mt,s,_) ->
 			try
+				let is_qualified = is_qualified cctx s in
 				match resolve_typedef mt with
-					| TClassDecl c -> add (ITClassField ((PMap.find s c.cl_statics,CFSStatic,TODO))) s
+					| TClassDecl c ->
+						let origin = StaticImport (TClassDecl c) in
+						add (ITClassField (CompletionClassField.make (PMap.find s c.cl_statics) CFSStatic origin is_qualified)) s
 					| TEnumDecl en -> add (ITEnumField (en,(PMap.find s en.e_constrs))) s
-					| TAbstractDecl {a_impl = Some c} -> add (ITClassField(PMap.find s c.cl_statics,CFSStatic,TODO)) s
+					| TAbstractDecl {a_impl = Some c} ->
+						let origin = StaticImport (TClassDecl c) in
+						add (ITClassField (CompletionClassField.make (PMap.find s c.cl_statics) CFSStatic origin is_qualified)) s
 					| _ -> raise Not_found
 			with Not_found ->
 				()

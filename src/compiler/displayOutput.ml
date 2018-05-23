@@ -6,6 +6,7 @@ open Timer
 open DisplayTypes.DisplayMode
 open DisplayTypes.CompletionResultKind
 open CompletionItem
+open CompletionClassField
 open ClassFieldOrigin
 open DisplayException
 open Type
@@ -48,7 +49,7 @@ let print_fields fields =
 	let b = Buffer.create 0 in
 	Buffer.add_string b "<list>\n";
 	let convert k = match k with
-		| ITClassField(cf,_,_) | ITEnumAbstractField(_,cf) ->
+		| ITClassField({field = cf}) | ITEnumAbstractField(_,{field = cf}) ->
 			let kind = match cf.cf_kind with
 				| Method _ -> "method"
 				| Var _ -> "var"
@@ -99,13 +100,14 @@ let print_toplevel il =
 	List.iter (fun id -> match id with
 		| ITLocal v ->
 			if check_ident v.v_name then Buffer.add_string b (Printf.sprintf "<i k=\"local\" t=\"%s\">%s</i>\n" (s_type v.v_type) v.v_name);
-		| ITClassField(cf,CFSMember,_) ->
+		| ITClassField({field = cf;scope = CFSMember}) ->
 			if check_ident cf.cf_name then Buffer.add_string b (Printf.sprintf "<i k=\"member\" t=\"%s\"%s>%s</i>\n" (s_type cf.cf_type) (s_doc cf.cf_doc) cf.cf_name);
-		| ITClassField(cf,(CFSStatic | CFSConstructor),_) ->
+		| ITClassField({field = cf;scope = (CFSStatic | CFSConstructor)}) ->
 			if check_ident cf.cf_name then Buffer.add_string b (Printf.sprintf "<i k=\"static\" t=\"%s\"%s>%s</i>\n" (s_type cf.cf_type) (s_doc cf.cf_doc) cf.cf_name);
 		| ITEnumField(en,ef) ->
 			if check_ident ef.ef_name then Buffer.add_string b (Printf.sprintf "<i k=\"enum\" t=\"%s\"%s>%s</i>\n" (s_type ef.ef_type) (s_doc ef.ef_doc) ef.ef_name);
 		| ITEnumAbstractField(a,cf) ->
+			let cf = cf.field in
 			if check_ident cf.cf_name then Buffer.add_string b (Printf.sprintf "<i k=\"enumabstract\" t=\"%s\"%s>%s</i>\n" (s_type cf.cf_type) (s_doc cf.cf_doc) cf.cf_name);
 		| ITType(cm,_) ->
 			let path = CompletionItem.CompletionModuleType.get_path cm in
@@ -413,7 +415,7 @@ module TypePathHandler = struct
 					) public_types
 			in
 			let make_field_doc cf =
-				ITClassField(cf,CFSStatic,Self (TClassDecl null_class))
+				ITClassField (CompletionClassField.make cf CFSStatic (Self (TClassDecl null_class)) true)
 			in
 			let fields = match !statics with
 				| None -> types

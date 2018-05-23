@@ -234,17 +234,17 @@ and display_expr ctx e_ast e dk with_type p =
 		let fields = DisplayFields.collect ctx e_ast e dk with_type p in
 		raise_fields fields CRField None false
 
-let handle_structure_display ctx e fields =
+let handle_structure_display ctx e an =
 	let p = pos e in
 	match fst e with
 	| EObjectDecl fl ->
 		let fields = PMap.foldi (fun k cf acc ->
 			if Expr.field_mem_assoc k fl then acc
-			else (CompletionItem.ITClassField(cf,CFSMember,Self (TClassDecl null_class))) :: acc
-		) fields [] in
+			else (ITClassField(CompletionClassField.make cf CFSMember (AnonymousStructure an) true)) :: acc
+		) an.a_fields [] in
 		raise_fields fields CRStructureField None false
 	| EBlock [] ->
-		let fields = PMap.foldi (fun _ cf acc -> CompletionItem.ITClassField(cf,CFSMember,Self (TClassDecl null_class)) :: acc) fields [] in
+		let fields = PMap.foldi (fun _ cf acc -> ITClassField(CompletionClassField.make cf CFSMember (AnonymousStructure an) true) :: acc) an.a_fields [] in
 		raise_fields fields CRStructureField None false
 	| _ ->
 		error "Expected object expression" p
@@ -340,7 +340,7 @@ let handle_edisplay ctx e dk with_type =
 		begin match with_type with
 			| WithType t ->
 				begin match follow t with
-					| TAnon an -> handle_structure_display ctx e an.a_fields
+					| TAnon an -> handle_structure_display ctx e an
 					| _ -> handle_display ctx e dk with_type
 				end
 			| _ ->
