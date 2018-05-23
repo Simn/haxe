@@ -1122,13 +1122,8 @@ and expr = parser
 		| [< '(Const (Int i),p); e = expr_next (EConst (Int i),p) >] -> e
 		| [< '(Const (Float f),p); e = expr_next (EConst (Float f),p) >] -> e
 		| [< >] -> serror()) */*)
-	| [< '(Kwd For,p); '(POpen,_); it = expr; '(PClose,_); s >] ->
-		(try
-			let e = secure_expr s in
-			(EFor (it,e),punion p (pos e))
-		with
-			Display e -> display (EFor (it,e),punion p (pos e)))
-	| [< '(Kwd If,p); '(POpen,_); cond = expr; '(PClose,_); e1 = expr; s >] ->
+	| [< '(Kwd For,p); '(POpen,_); it = secure_expr; '(PClose,_); e = secure_expr >] -> (EFor (it,e),punion p (pos e))
+	| [< '(Kwd If,p); '(POpen,_); cond = secure_expr; '(PClose,_); e1 = secure_expr; s >] ->
 		let e2 = (match s with parser
 			| [< '(Kwd Else,_); e2 = expr; s >] -> Some e2
 			| [< >] ->
@@ -1144,17 +1139,12 @@ and expr = parser
 	| [< '(Kwd Return,p); e = popt toplevel_expr >] -> (EReturn e, match e with None -> p | Some e -> punion p (pos e))
 	| [< '(Kwd Break,p) >] -> (EBreak,p)
 	| [< '(Kwd Continue,p) >] -> (EContinue,p)
-	| [< '(Kwd While,p1); '(POpen,_); cond = expr; '(PClose,_); s >] ->
-		(try
-			let e = secure_expr s in
-			(EWhile (cond,e,NormalWhile),punion p1 (pos e))
-		with
-			Display e -> display (EWhile (cond,e,NormalWhile),punion p1 (pos e)))
-	| [< '(Kwd Do,p1); e = expr; '(Kwd While,_); '(POpen,_); cond = expr; '(PClose,_); s >] -> (EWhile (cond,e,DoWhile),punion p1 (pos e))
-	| [< '(Kwd Switch,p1); e = expr; '(BrOpen,_); cases , def = parse_switch_cases e []; '(BrClose,p2); s >] -> (ESwitch (e,cases,def),punion p1 p2)
-	| [< '(Kwd Try,p1); e = expr; cl,p2 = parse_catches e [] (pos e) >] -> (ETry (e,cl),punion p1 p2)
+	| [< '(Kwd While,p1); '(POpen,_); cond = secure_expr; '(PClose,_); e = secure_expr >] -> (EWhile (cond,e,NormalWhile),punion p1 (pos e))
+	| [< '(Kwd Do,p1); e = secure_expr; '(Kwd While,_); '(POpen,_); cond = secure_expr; '(PClose,_); s >] -> (EWhile (cond,e,DoWhile),punion p1 (pos e))
+	| [< '(Kwd Switch,p1); e = secure_expr; '(BrOpen,_); cases , def = parse_switch_cases e []; '(BrClose,p2); s >] -> (ESwitch (e,cases,def),punion p1 p2)
+	| [< '(Kwd Try,p1); e = secure_expr; cl,p2 = parse_catches e [] (pos e) >] -> (ETry (e,cl),punion p1 p2)
 	| [< '(IntInterval i,p1); e2 = expr >] -> make_binop OpInterval (EConst (Int i),p1) e2
-	| [< '(Kwd Untyped,p1); e = expr >] -> (EUntyped e,punion p1 (pos e))
+	| [< '(Kwd Untyped,p1); e = secure_expr >] -> (EUntyped e,punion p1 (pos e))
 	| [< '(Dollar v,p); s >] -> expr_next (EConst (Ident ("$"^v)),p) s
 
 and expr_next e1 s =
@@ -1201,12 +1191,7 @@ and expr_next' e1 = parser
 			make_binop OpGte e1 (secure_expr s)
 		| [< e2 = secure_expr >] ->
 			make_binop OpGt e1 e2)
-	| [< '(Binop op,_); s >] ->
-		(try
-			let e2 = secure_expr s in
-			make_binop op e1 e2
-		with Display e2 ->
-			raise (Display (make_binop op e1 e2)))
+	| [< '(Binop op,_); e2 = secure_expr >] -> make_binop op e1 e2
 	| [< '(Unop op,p) when is_postfix e1 op; s >] ->
 		expr_next (EUnop (op,Postfix,e1), punion (pos e1) p) s
 	| [< '(Question,_); e2 = expr; '(DblDot,_); e3 = expr >] ->
@@ -1254,12 +1239,7 @@ and parse_switch_cases eswitch cases = parser
 and parse_catch etry = parser
 	| [< '(Kwd Catch,p); '(POpen,_); name, pn = dollar_ident; s >] ->
 		match s with parser
-		| [< t,pt = parse_type_hint; '(PClose,_); s >] ->
-			(try
-				let e = secure_expr s in
-				((name,pn),(t,pt),e,punion p (pos e)),(pos e)
-			with
-				Display e -> display (ETry (etry,[(name,pn),(t,pt),e,(pos e)]),punion (pos etry) (pos e)))
+		| [< t,pt = parse_type_hint; '(PClose,_); e = secure_expr >] -> ((name,pn),(t,pt),e,punion p (pos e)),(pos e)
 		| [< '(_,p) >] -> error Missing_type p
 
 and parse_catches etry catches pmax = parser
@@ -1307,17 +1287,22 @@ and parse_call_params f p1 s =
 		| [< >] -> parse_next_param [] p1
 	end
 
+(* Parses an expression and catches Display exceptions. *)
 and toplevel_expr s =
 	try
 		expr s
 	with
 		Display e -> e
 
+(* Tries to parse a toplevel expression and defaults to a null expression when in display mode.
+   This function always accepts in display mode and should only be used for expected expressions,
+   not accepted ones! *)
 and secure_expr s =
 	match s with parser
 	| [< e = toplevel_expr >] -> e
 	| [< >] -> if do_resume() then mk_null_expr (punion_next (pos (last_token s)) s) else serror()
 
+(* Like secure_expr, but with a custom fail function *)
 and expr_or_fail fail s =
 	match s with parser
 	| [< e = expr >] -> e
