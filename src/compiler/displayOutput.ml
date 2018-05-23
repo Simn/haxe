@@ -7,6 +7,7 @@ open DisplayTypes.DisplayMode
 open DisplayTypes.CompletionResultKind
 open CompletionItem
 open CompletionClassField
+open CompletionEnumField
 open ClassFieldOrigin
 open DisplayException
 open Type
@@ -55,7 +56,8 @@ let print_fields fields =
 				| Var _ -> "var"
 			in
 			kind,cf.cf_name,s_type (print_context()) cf.cf_type,cf.cf_doc
-		| ITEnumField(en,ef) ->
+		| ITEnumField ef ->
+			let ef = ef.efield in
 			let kind = match follow ef.ef_type with
 				| TFun _ -> "method"
 				| _ -> "var"
@@ -104,7 +106,8 @@ let print_toplevel il =
 			if check_ident cf.cf_name then Buffer.add_string b (Printf.sprintf "<i k=\"member\" t=\"%s\"%s>%s</i>\n" (s_type cf.cf_type) (s_doc cf.cf_doc) cf.cf_name);
 		| ITClassField({field = cf;scope = (CFSStatic | CFSConstructor)}) ->
 			if check_ident cf.cf_name then Buffer.add_string b (Printf.sprintf "<i k=\"static\" t=\"%s\"%s>%s</i>\n" (s_type cf.cf_type) (s_doc cf.cf_doc) cf.cf_name);
-		| ITEnumField(en,ef) ->
+		| ITEnumField ef ->
+			let ef = ef.efield in
 			if check_ident ef.ef_name then Buffer.add_string b (Printf.sprintf "<i k=\"enum\" t=\"%s\"%s>%s</i>\n" (s_type ef.ef_type) (s_doc ef.ef_doc) ef.ef_name);
 		| ITEnumAbstractField(a,cf) ->
 			let cf = cf.field in
@@ -423,7 +426,7 @@ module TypePathHandler = struct
 			in
 			let fields = match !enum_statics with
 				| None -> fields
-				| Some en -> PMap.fold (fun ef acc -> ITEnumField(en,ef) :: acc) en.e_constrs fields
+				| Some en -> PMap.fold (fun ef acc -> ITEnumField(CompletionEnumField.make ef (Self (TEnumDecl en)) true) :: acc) en.e_constrs fields
 			in
 			Some fields
 		with _ ->

@@ -225,13 +225,28 @@ module CompletionClassField = struct
 	}
 end
 
+module CompletionEnumField = struct
+	type t = {
+		efield : tenum_field;
+		eorigin : ClassFieldOrigin.t;
+		eis_qualified : bool;
+	}
+
+	let make ef origin is_qualified = {
+		efield = ef;
+		eorigin = origin;
+		eis_qualified = is_qualified;
+	}
+end
+
 open CompletionModuleType
 open CompletionClassField
+open CompletionEnumField
 
 type t =
 	| ITLocal of tvar
 	| ITClassField of CompletionClassField.t
-	| ITEnumField of tenum * tenum_field
+	| ITEnumField of CompletionEnumField.t
 	| ITEnumAbstractField of tabstract * CompletionClassField.t
 	| ITType of CompletionModuleType.t * ImportStatus.t
 	| ITPackage of string
@@ -257,7 +272,7 @@ let get_index = function
 let get_sort_index = function
 	| ITLocal _ -> 0
 	| ITClassField _ -> 0
-	| ITEnumField(_,ef) -> ef.ef_index
+	| ITEnumField ef -> ef.efield.ef_index
 	| ITEnumAbstractField _ -> 0
 	| ITType _ -> 0
 	| ITPackage _ -> 0
@@ -273,7 +288,8 @@ let legacy_sort = function
 		| Var _ -> 0,cf.field.cf_name
 		| Method _ -> 1,cf.field.cf_name
 		end
-	| ITEnumField(_,ef) ->
+	| ITEnumField ef ->
+		let ef = ef.efield in
 		begin match follow ef.ef_type with
 		| TFun _ -> 1,ef.ef_name
 		| _ -> 0,ef.ef_name
@@ -290,7 +306,7 @@ let legacy_sort = function
 let get_name = function
 	| ITLocal v -> v.v_name
 	| ITClassField(cf) | ITEnumAbstractField(_,cf) -> cf.field.cf_name
-	| ITEnumField(_,ef) -> ef.ef_name
+	| ITEnumField ef -> ef.efield.ef_name
 	| ITType(cm,_) -> cm.name
 	| ITPackage s -> s
 	| ITModule s -> s
@@ -302,7 +318,7 @@ let get_name = function
 let get_type = function
 	| ITLocal v -> v.v_type
 	| ITClassField(cf) | ITEnumAbstractField(_,cf) -> cf.field.cf_type
-	| ITEnumField(_,ef) -> ef.ef_type
+	| ITEnumField ef -> ef.efield.ef_type
 	| ITType(_,_) -> t_dynamic
 	| ITPackage _ -> t_dynamic
 	| ITModule _ -> t_dynamic
@@ -326,7 +342,13 @@ let to_json ctx ck =
 				"isQualified",jbool cf.is_qualified;
 			]
 		]
-		| ITEnumField(_,ef) -> "EnumField",generate_enum_field ctx ef
+		| ITEnumField ef -> "EnumField",jobject [
+			"field",generate_enum_field ctx ef.efield;
+			"origin",ClassFieldOrigin.to_json ctx ef.eorigin;
+			"resolution",jobject [
+				"isQualified",jbool ef.eis_qualified;
+			]
+		]
 		| ITType(kind,is) -> "Type",CompletionModuleType.to_json ctx kind is
 		| ITPackage s -> "Package",jstring s
 		| ITModule s -> "Module",jstring s

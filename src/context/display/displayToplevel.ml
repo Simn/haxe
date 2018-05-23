@@ -202,8 +202,10 @@ let collect ctx only_types with_type =
 				end
 			| TEnumDecl e when not (path_exists cctx e.e_path) ->
 				add_path cctx e.e_path;
+				let origin = Self (TEnumDecl e) in
 				PMap.iter (fun _ ef ->
-					add (ITEnumField(e,ef)) ef.ef_name
+					let is_qualified = is_qualified cctx ef.ef_name in
+					add (ITEnumField(CompletionEnumField.make ef origin is_qualified)) ef.ef_name
 				) e.e_constrs;
 			| _ ->
 				()
@@ -233,7 +235,8 @@ let collect ctx only_types with_type =
 					| TEnumDecl en ->
 						let ef = PMap.find s en.e_constrs in
 						let ef = if name = ef.ef_name then ef else {ef with ef_name = name} in
-						add (ITEnumField (en,ef)) s
+						let origin = StaticImport (TEnumDecl en) in
+						add (ITEnumField (CompletionEnumField.make ef origin is_qualified)) s
 					| TAbstractDecl {a_impl = Some c} -> class_import c;
 					| _ -> raise Not_found
 			with Not_found ->
