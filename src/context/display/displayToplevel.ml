@@ -173,25 +173,40 @@ let collect ctx only_types with_type =
 				add (ITLocal v) (Some v.v_name)
 		) ctx.locals;
 
-		let add_field cf scope origin =
+		let add_field scope origin cf =
 			let is_qualified = is_qualified cctx cf.cf_name in
 			add (ITClassField(CompletionClassField.make cf scope origin is_qualified)) (Some cf.cf_name)
 		in
-		(* member vars *)
+		let maybe_add_field scope origin cf =
+			if not (Meta.has Meta.NoCompletion cf.cf_meta) then add_field scope origin cf
+		in
+		(* member fields *)
 		if ctx.curfun <> FunStatic then begin
 			let all_fields = Type.TClass.get_all_fields ctx.curclass (List.map snd ctx.curclass.cl_params) in
 			PMap.iter (fun _ (c,cf) ->
 				let origin = if c == ctx.curclass then Self (TClassDecl c) else Parent (TClassDecl c) in
-				if not (Meta.has Meta.NoCompletion cf.cf_meta) then add_field cf CFSMember origin
+				maybe_add_field CFSMember origin cf
 			) all_fields;
 			(* TODO: local using? *)
 		end;
 
 		(* statics *)
-		List.iter (fun cf ->
-			let origin = Self (TClassDecl ctx.curclass) in
-			if not (Meta.has Meta.NoCompletion cf.cf_meta) then add_field cf CFSStatic origin
-		) ctx.curclass.cl_ordered_statics;
+		begin match ctx.curclass.cl_kind with
+		| KAbstractImpl ({a_impl = Some c} as a) ->
+			let origin = Self (TAbstractDecl a) in
+			List.iter (fun cf ->
+				if Meta.has Meta.Impl cf.cf_meta then begin
+					if ctx.curfun = FunStatic then ()
+					else begin
+						let cf = prepare_using_field cf in
+						maybe_add_field CFSMember origin cf
+					end
+				end else
+					maybe_add_field CFSStatic origin cf
+			) c.cl_ordered_statics
+		| _ ->
+			List.iter (maybe_add_field CFSStatic (Self (TClassDecl ctx.curclass))) ctx.curclass.cl_ordered_statics
+		end;
 
 		(* enum constructors *)
 		let rec enum_ctors t =

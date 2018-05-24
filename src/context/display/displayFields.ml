@@ -99,6 +99,7 @@ let collect ctx e_ast e dk with_type p =
 			| "get_" | "set_" -> false
 			| _ -> can_access ctx c cf stat
 		end else
+			(not stat || not (Meta.has Meta.Impl cf.cf_meta)) &&
 			can_access ctx c cf stat
 	in
 	let rec loop items t =
@@ -151,13 +152,19 @@ let collect ctx e_ast e dk with_type p =
 			(* Anons only have their own fields. *)
 			PMap.foldi (fun name cf acc ->
 				if is_new_item acc name then begin
-					let origin = match !(an.a_status) with
-						| Statics c -> Self (TClassDecl c)
-						| EnumStatics en -> Self (TEnumDecl en)
-						| AbstractStatics a -> Self (TAbstractDecl a)
-						| _ -> AnonymousStructure an
+					let origin,check = match !(an.a_status) with
+						| Statics c -> Self (TClassDecl c),should_access c cf true
+						| EnumStatics en -> Self (TEnumDecl en),true
+						| AbstractStatics a ->
+							let check = match a.a_impl with
+								| None -> true
+								| Some c -> should_access c cf true
+							in
+							Self (TAbstractDecl a),check
+						| _ -> AnonymousStructure an,true
 					in
-					PMap.add name (ITClassField (CompletionClassField.make cf CFSMember origin true)) acc
+					if check then PMap.add name (ITClassField (CompletionClassField.make cf CFSMember origin true)) acc
+					else acc
 				end else
 					acc
 			) an.a_fields items
