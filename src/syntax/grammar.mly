@@ -254,23 +254,23 @@ and parse_import s p1 =
 	(EImport (path,mode),punion p1 p2)
 
 and parse_using s p1 =
-	let rec loop acc =
+	let rec loop pn acc =
 		match s with parser
 		| [< '(Dot,p) >] ->
-			check_resume p (fun () -> type_path (List.map fst acc) false (punion p1 p)) (fun () -> ());
+			check_resume p (fun () -> type_path (List.map fst acc) true (punion pn p)) (fun () -> ());
 			begin match s with parser
 			| [< '(Const (Ident k),p) >] ->
-				loop ((k,p) :: acc)
+				loop pn ((k,p) :: acc)
 			| [< '(Kwd Macro,p) >] ->
-				loop (("macro",p) :: acc)
+				loop pn (("macro",p) :: acc)
 			| [< '(Kwd Extern,p) >] ->
-				loop (("extern",p) :: acc)
+				loop pn (("extern",p) :: acc)
 			end
 		| [< '(Semicolon,p2) >] ->
 			p2,List.rev acc
 	in
 	let p2, path = (match s with parser
-		| [< '(Const (Ident name),p) >] -> loop [name,p]
+		| [< '(Const (Ident name),p) >] -> loop p [name,p]
 		| [< >] -> if would_skip_resume p1 s then p1, [] else serror()
 	) in
 	(EUsing path,punion p1 p2)
