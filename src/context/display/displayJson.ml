@@ -105,10 +105,10 @@ let parse_input com input report_times pre_compilation did_something =
 			| JBool b -> b
 			| _ -> raise_haxe_json_error id (BadType(desc,"Bool"))
 		in
-		let get_array desc j = match j with
+		(* let get_array desc j = match j with
 			| JArray a -> a
 			| _ -> raise_haxe_json_error id (BadType(desc,"Array"))
-		in
+		in *)
 		let get_object desc j = match j with
 			| JObject o -> o
 			| _ -> raise_haxe_json_error id (BadType(desc,"Object"))

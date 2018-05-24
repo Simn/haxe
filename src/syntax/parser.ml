@@ -151,6 +151,8 @@ let would_skip_resume p1 s =
 	| _ ->
 		false
 
+let cut_pos_at_display p = { p with pmax = !resume_display.pmax }
+
 let is_dollar_ident e = match fst e with
 	| EConst (Ident n) when n.[0] = '$' ->
 		true

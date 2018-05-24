@@ -319,15 +319,16 @@ let handle_display ctx e_ast dk with_type =
 	| (_,p),_ -> try
 		type_expr ctx e_ast with_type
 	with Error (Unknown_ident n,_) ->
-		if dk = DKDot then raise (Parser.TypePath ([n],None,false))
-		else raise_fields (DisplayToplevel.collect ctx false with_type) CRToplevel (Some {p with pmin = p.pmax - String.length n;}) (match with_type with WithType _ -> true | _ -> false)
-	| Error (Type_not_found (path,_),_) as err ->
-		begin try
+        if dk = DKDot && ctx.com.json_out = None then raise (Parser.TypePath ([n],None,false))
+		else raise_fields (DisplayToplevel.collect ctx false with_type) CRToplevel (Some (Parser.cut_pos_at_display p)) (match with_type with WithType _ -> true | _ -> false)
+	| Error ((Type_not_found (path,_) | Module_not_found path),_) as err ->
+		if ctx.com.json_out = None then	begin try
 			let s = s_type_path path in
 			raise_fields (DisplayFields.get_submodule_fields ctx path) (CRField((ITModule s),p)) None false
 		with Not_found ->
 			raise err
-		end
+		end else
+			raise_fields (DisplayToplevel.collect ctx false with_type) CRToplevel (Some (Parser.cut_pos_at_display p)) (match with_type with WithType _ -> true | _ -> false)
 	| DisplayException(DisplayFields(l,CRTypeHint,p,b)) when (match fst e_ast with ENew _ -> true | _ -> false) ->
 		let timer = Timer.timer ["display";"toplevel";"filter ctors"] in
 		ctx.pass <- PBuildClass;
