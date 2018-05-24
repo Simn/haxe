@@ -257,7 +257,7 @@ and parse_using s p1 =
 	let rec loop pn acc =
 		match s with parser
 		| [< '(Dot,p) >] ->
-			check_resume p (fun () -> type_path (List.map fst acc) true (punion pn p)) (fun () -> ());
+			check_resume p (fun () -> type_path (List.map fst acc) false (punion pn p)) (fun () -> ());
 			begin match s with parser
 			| [< '(Const (Ident k),p) >] ->
 				loop pn ((k,p) :: acc)

@@ -955,7 +955,7 @@ with
 			f (DisplayException.to_json ctx de)
 		| _ -> assert false
 		end
-	| Parser.TypePath (_,_,true,p) when ctx.com.json_out <> None ->
+	| Parser.TypePath (_,_,_,p) when ctx.com.json_out <> None ->
 		begin match com.json_out with
 		| Some (f,_) ->
 			let tctx = Typer.create ctx.com in
