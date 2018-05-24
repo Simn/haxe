@@ -335,6 +335,7 @@ let collect ctx only_types with_type =
 			| Some name ->
 				name
 			in
+			add_package (String.concat "." cfile.c_package);
 			Hashtbl.replace ctx.com.module_to_file (cfile.c_package,module_name) file;
 			process_decls cfile.c_package module_name cfile.c_decls
 		)
