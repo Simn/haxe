@@ -265,14 +265,14 @@ and display_expr ctx e_ast e dk with_type p =
 			| EField(e1,s),TField(e2,_) ->
 				let fields = DisplayFields.collect ctx e1 e2 dk with_type p in
 				let item = completion_item_of_expr ctx e2 in
-				raise_fields fields (CRField item) (Some {e.epos with pmin = e.epos.pmax - String.length s;}) false
+				raise_fields fields (CRField(item,e2.epos)) (Some {e.epos with pmin = e.epos.pmax - String.length s;}) false
 			| _ ->
 				raise_fields (DisplayToplevel.collect ctx false with_type) CRToplevel None (match with_type with WithType _ -> true | _ -> false)
 		end
 	| DMDefault | DMNone | DMModuleSymbols _ | DMDiagnostics _ | DMStatistics ->
 		let fields = DisplayFields.collect ctx e_ast e dk with_type p in
 		let item = completion_item_of_expr ctx e in
-		raise_fields fields (CRField item) None false
+		raise_fields fields (CRField(item,e.epos)) None false
 
 let handle_structure_display ctx e an =
 	let p = pos e in
@@ -324,7 +324,7 @@ let handle_display ctx e_ast dk with_type =
 	| Error (Type_not_found (path,_),_) as err ->
 		begin try
 			let s = s_type_path path in
-			raise_fields (DisplayFields.get_submodule_fields ctx path) (CRField (ITModule s)) None false
+			raise_fields (DisplayFields.get_submodule_fields ctx path) (CRField((ITModule s),p)) None false
 		with Not_found ->
 			raise err
 		end

@@ -1012,7 +1012,7 @@ with
 			begin match ctx.com.json_out with
 			| Some (f,_) ->
 				let ctx = DisplayJson.create_json_context() in
-				let kind = CRField (CompletionItem.ITModule (String.concat "." p)) in
+				let kind = CRField ((CompletionItem.ITModule((String.concat "." p)),null_pos)) in
 				f (DisplayException.to_json ctx (DisplayFields(fields,kind,None,false)))
 			| _ -> raise (DisplayOutput.Completion (DisplayOutput.print_fields fields))
 			end

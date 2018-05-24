@@ -65,7 +65,7 @@ end
 
 module CompletionResultKind = struct
 	type t =
-		| CRField of CompletionItem.t
+		| CRField of CompletionItem.t * pos
 		| CRStructureField
 		| CRToplevel
 		| CRMetadata
@@ -82,7 +82,10 @@ module CompletionResultKind = struct
 
 	let to_json ctx kind =
 		let i,args = match kind with
-			| CRField item -> 0,Some (CompletionItem.to_json ctx item)
+			| CRField(item,p) -> 0,Some (jobject [
+				"item",CompletionItem.to_json ctx item;
+				"range",generate_pos_as_range p;
+			])
 			| CRStructureField -> 1,None
 			| CRToplevel -> 2,None
 			| CRMetadata -> 3,None
