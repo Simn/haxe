@@ -9,6 +9,6 @@ class Issue7060 extends DisplayTestCase {
 	}
 	**/
 	function test() {
-		eq("Enum<ValueType>", type(pos(1)));
+		eq("ValueType", type(pos(1)));
 	}
 }

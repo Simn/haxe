@@ -6,7 +6,7 @@ class Issue7046 extends DisplayTestCase {
 	using Ar{-2-}ray;
 	**/
 	function test() {
-		eq("Class<Array>", type(pos(1)));
-		eq("Class<Array>", type(pos(2)));
+		eq("Array<Array.T>", type(pos(1)));
+		eq("Array<Array.T>", type(pos(2)));
 	}
 }

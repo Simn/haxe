@@ -26,19 +26,17 @@ let completion_item_of_expr ctx e =
 	in
 	let of_field e origin cf scope =
 		let is_qualified = retype e cf.cf_name e.etype in
-		let cf = {cf with cf_type = DisplayEmitter.patch_type ctx e.etype} in
-		ITClassField (CompletionClassField.make cf scope origin is_qualified)
+		ITClassField (CompletionClassField.make cf scope origin is_qualified),e.etype
 	in
 	let of_enum_field e origin ef =
 		let is_qualified = retype e ef.ef_name e.etype in
-		let ef = {ef with ef_type = DisplayEmitter.patch_type ctx e.etype} in
-		ITEnumField (CompletionEnumField.make ef origin is_qualified)
+		ITEnumField (CompletionEnumField.make ef origin is_qualified),e.etype
 	in
 	let itexpr e =
-		ITExpression {e with etype = DisplayEmitter.patch_type ctx e.etype}
+		ITExpression e,DisplayEmitter.patch_type ctx e.etype
 	in
 	let rec loop e = match e.eexpr with
-		| TLocal v | TVar(v,_) -> ITLocal {v with v_type = DisplayEmitter.patch_type ctx v.v_type}
+		| TLocal v | TVar(v,_) -> ITLocal v,DisplayEmitter.patch_type ctx v.v_type
 		| TField(_,FStatic(c,cf)) -> of_field e (Self (TClassDecl c)) cf CFSStatic
 		| TField(_,(FInstance(c,_,cf) | FClosure(Some(c,_),cf))) -> of_field e (Self (TClassDecl c)) cf CFSMember
 		| TField(_,FEnum(en,ef)) -> of_enum_field e (Self (TEnumDecl en)) ef
@@ -47,11 +45,11 @@ let completion_item_of_expr ctx e =
 				| TAnon an -> of_field e (AnonymousStructure an) cf CFSMember
 				| _ -> itexpr e
 			end
-		| TTypeExpr mt -> ITType(CompletionModuleType.of_module_type mt,ImportStatus.Imported) (* TODO *)
-		| TConst(ct) -> ITLiteral(s_const ct,e.etype)
+		| TTypeExpr mt -> ITType(CompletionModuleType.of_module_type mt,ImportStatus.Imported),e.etype (* TODO *)
+		| TConst(ct) -> ITLiteral(s_const ct,e.etype),e.etype
 		| TObjectDecl _ ->
 			begin match follow e.etype with
-				| TAnon an -> ITAnonymous an
+				| TAnon an -> ITAnonymous an,e.etype
 				| _ -> itexpr e
 			end
 		| TNew(c,tl,_) ->
@@ -78,8 +76,7 @@ let completion_item_of_expr ctx e =
 					| TFun(args,_) -> TFun(args,TInst(c,tl))
 					| _ -> t
 				in
-				let t = DisplayEmitter.patch_type ctx t in
-				ITClassField (CompletionClassField.make {cf with cf_type = t} CFSConstructor (Self (TClassDecl c)) true)
+				ITClassField (CompletionClassField.make {cf with cf_type = t} CFSConstructor (Self (TClassDecl c)) true),DisplayEmitter.patch_type ctx t
 			(* end *)
 		| TCall({eexpr = TConst TSuper; etype = t} as e1,_) ->
 			itexpr e1 (* TODO *)
@@ -182,7 +179,8 @@ and display_expr ctx e_ast e dk with_type p =
 	| DMSignature ->
 		handle_signature_display ctx e_ast with_type
 	| DMHover ->
-		raise_hover (completion_item_of_expr ctx e) e.epos
+		let item,t = completion_item_of_expr ctx e in
+		raise_hover item (Some t) e.epos
 	| DMUsage _ ->
 		let rec loop e = match e.eexpr with
 		| TField(_,FEnum(_,ef)) ->
@@ -256,14 +254,14 @@ and display_expr ctx e_ast e dk with_type p =
 		begin match fst e_ast,e.eexpr with
 			| EField(e1,s),TField(e2,_) ->
 				let fields = DisplayFields.collect ctx e1 e2 dk with_type p in
-				let item = completion_item_of_expr ctx e2 in
+				let item,_ = completion_item_of_expr ctx e2 in
 				raise_fields fields (CRField(item,e2.epos)) (Some {e.epos with pmin = e.epos.pmax - String.length s;}) false
 			| _ ->
 				raise_fields (DisplayToplevel.collect ctx false with_type) CRToplevel None (match with_type with WithType _ -> true | _ -> false)
 		end
 	| DMDefault | DMNone | DMModuleSymbols _ | DMDiagnostics _ | DMStatistics ->
 		let fields = DisplayFields.collect ctx e_ast e dk with_type p in
-		let item = completion_item_of_expr ctx e in
+		let item,_ = completion_item_of_expr ctx e in
 		raise_fields fields (CRField(item,e.epos)) None false
 
 let handle_structure_display ctx e an =
@@ -294,7 +292,8 @@ let handle_display ctx e_ast dk with_type =
 		| DMSignature ->
 			raise_signatures [((arg,mono),doc)] 0 0
 		| _ ->
-			raise_hover (ITExpression (mk (TIdent "trace") (TFun(arg,mono)) (pos e_ast))) (pos e_ast);
+			let t = TFun(arg,mono) in
+			raise_hover (ITExpression (mk (TIdent "trace") t (pos e_ast))) (Some t) (pos e_ast);
 		end
 	| (EConst (Ident "trace"),_),_ ->
 		let doc = Some "Print given arguments" in
@@ -304,7 +303,8 @@ let handle_display ctx e_ast dk with_type =
 		| DMSignature ->
 			raise_signatures [((arg,ret),doc)] 0 0
 		| _ ->
-			raise_hover (ITExpression (mk (TIdent "trace") (TFun(arg,ret)) (pos e_ast))) (pos e_ast);
+			let t = TFun(arg,ret) in
+			raise_hover (ITExpression (mk (TIdent "trace") t (pos e_ast))) (Some t) (pos e_ast);
 		end
 	| (EConst (Ident "_"),p),WithType t ->
 		mk (TConst TNull) t p (* This is "probably" a bind skip, let's just use the expected type *)
