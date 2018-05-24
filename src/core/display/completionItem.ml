@@ -339,7 +339,7 @@ let get_type = function
 	| ITLocal v -> v.v_type
 	| ITClassField(cf) | ITEnumAbstractField(_,cf) -> cf.field.cf_type
 	| ITEnumField ef -> ef.efield.ef_type
-	| ITType(_,_) -> t_dynamic
+	| ITType(_,_) -> t_dynamic (* TODO: might want a type here, not sure *)
 	| ITPackage _ -> t_dynamic
 	| ITModule _ -> t_dynamic
 	| ITLiteral(_,t) -> t
@@ -347,7 +347,7 @@ let get_type = function
 	| ITMetadata(_,_) -> t_dynamic
 	| ITKeyword _ -> t_dynamic
 	| ITAnonymous an -> TAnon an
-	| ITExpression _ -> t_dynamic
+	| ITExpression e -> e.etype
 
 let to_json ctx ck =
 	let kind,data = match ck with
