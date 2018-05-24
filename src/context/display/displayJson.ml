@@ -116,13 +116,13 @@ let parse_input com input report_times pre_compilation did_something =
 		let get_string_field desc name fl = get_string desc (get_field desc fl name) in
 		let get_int_field desc name fl = get_int desc (get_field desc fl name) in
 		let get_bool_field desc name fl = get_bool desc (get_field desc fl name) in
-		let get_array_field desc name fl = get_array desc (get_field desc fl name) in
-		(* let get_object_field desc name fl = get_object desc (get_field desc fl name) in *)
+		(* let get_array_field desc name fl = get_array desc (get_field desc fl name) in *)
+		let get_object_field desc name fl = get_object desc (get_field desc fl name) in
 		let get_string_param name = get_string_field "params" name params in
 		let get_int_param name = get_int_field "params" name params in
 		let get_bool_param name = get_bool_field "params" name params in
-		let get_array_param name = get_array_field "params" name params in
-		(* let get_object_param name = get_object_field "params" name params in *)
+		(* let get_array_param name = get_array_field "params" name params in *)
+		let get_object_param name = get_object_field "params" name params in
 		let get_opt_param f def = try f() with JsonRpc_error _ -> def in
 		let enable_display mode =
 			com.display <- create mode;
@@ -221,16 +221,14 @@ let parse_input com input report_times pre_compilation did_something =
 				CompilationServer.taint_modules cs file;
 				f_result jnull
 			| "server/configure" ->
-				let l = ref (List.map (fun j ->
-					let fl = get_object "print param" j in
-					let name = get_string_field "print param" "name" fl in
-					let value = get_bool_field "print param" "value" fl in
+				let l = ref (List.map (fun (name,value) ->
+					let value = get_bool "value" value in
 					try
 						ServerMessage.set_by_name name value;
 						jstring (Printf.sprintf "Printing %s %s" name (if value then "enabled" else "disabled"))
 					with Not_found ->
 						f_error [jstring ("Invalid print parame name: " ^ name)]
-				) (get_opt_param (fun () -> (get_array_param "print")) [])) in
+				) (get_opt_param (fun () -> (get_object_param "print")) [])) in
 				get_opt_param (fun () ->
 					let b = get_bool_param "noModuleChecks" in
 					ServerConfig.do_not_check_modules := b;
