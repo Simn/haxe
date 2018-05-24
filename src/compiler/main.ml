@@ -961,7 +961,7 @@ with
 			let tctx = Typer.create ctx.com in
 			let fields = DisplayToplevel.collect tctx true Typecore.NoValue in
 			let jctx = Genjson.create_context Genjson.GMMinimum in
-			f (DisplayException.fields_to_json jctx fields CRToplevel (Some (Parser.cut_pos_at_display p)) false)
+			f (DisplayException.fields_to_json jctx fields CRImport (Some (Parser.cut_pos_at_display p)) false)
 		| _ -> assert false
 		end
 	| DisplayException(DisplayPackage pack) ->
