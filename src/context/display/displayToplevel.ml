@@ -352,7 +352,9 @@ let collect ctx only_types with_type =
 	let l = DynArray.to_list cctx.items in
 	let l = match with_type with
 		| WithType t ->
-			let rec comp t' =
+			let rec comp t' = match t' with
+				| None -> 9
+				| Some t' ->
 				if type_iseq t' t then 0 (* equal types - perfect *)
 				else if t' == t_dynamic then 5 (* dynamic isn't good, but better than incompatible *)
 				else try Type.unify t' t; 1 (* assignable - great *)

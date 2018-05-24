@@ -11,7 +11,7 @@ type kind =
 	| ModuleSymbols of string
 	| Metadata of string
 	| DisplaySignatures of (tsignature * documentation) list * int * int
-	| DisplayHover of t option * pos * string option
+	| DisplayHover of CompletionItem.t * pos
 	| DisplayPosition of pos list
 	| DisplayFields of CompletionItem.t list * CompletionResultKind.t * pos option (* insert pos *) * bool (* sorted? *)
 	| DisplayPackage of string list
@@ -23,7 +23,7 @@ let raise_statistics s = raise (DisplayException(Statistics s))
 let raise_module_symbols s = raise (DisplayException(ModuleSymbols s))
 let raise_metadata s = raise (DisplayException(Metadata s))
 let raise_signatures l isig iarg = raise (DisplayException(DisplaySignatures(l,isig,iarg)))
-let raise_hover t p so = raise (DisplayException(DisplayHover(t,p,so)))
+let raise_hover item p = raise (DisplayException(DisplayHover(item,p)))
 let raise_position pl = raise (DisplayException(DisplayPosition pl))
 let raise_fields ckl cr po b = raise (DisplayException(DisplayFields(ckl,cr,po,b)))
 let raise_package sl = raise (DisplayException(DisplayPackage sl))
@@ -60,11 +60,12 @@ let to_json ctx de =
 			"activeParameter",jint iarg;
 			"signatures",jlist fsig sigs;
 		]
-	| DisplayHover(t,p,doc) ->
+	| DisplayHover(item,p) ->
 		jobject [
-			"documentation",jopt jstring doc;
+			"documentation",jopt jstring (CompletionItem.get_documentation item);
 			"range",generate_pos_as_range p;
-			"type",jopt (generate_type ctx) t;
+			"type",jopt (generate_type ctx) (CompletionItem.get_type item);
+			"item",CompletionItem.to_json ctx item;
 		]
 	| DisplayPosition pl ->
 		jarray (List.map generate_pos_as_location pl)

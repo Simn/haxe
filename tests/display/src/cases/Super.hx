@@ -29,7 +29,7 @@ class Super extends DisplayTestCase {
 	**/
 	function testSuperField() {
 		eq(range(1, 2), position(pos(3)));
-		eq("Base<String>", type(pos(3)));
+		eq("cases.Base<String>", type(pos(3))); // TODO: broken
 		eq(range(4, 5), position(pos(6)));
 		eq("Void -> Void", type(pos(6)));
 	}

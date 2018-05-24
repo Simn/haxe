@@ -45,6 +45,10 @@ module CompletionModuleType = struct
 		| No
 		| Maybe
 
+	type module_type_source =
+		| Syntax of type_def (* TODO: do we really want to keep this? *)
+		| Typed of module_type
+
 	type t = {
 		pack : string list;
 		name : string;
@@ -57,6 +61,7 @@ module CompletionModuleType = struct
 		is_extern : bool;
 		kind : CompletionModuleKind.t;
 		has_constructor : not_bool;
+		source : module_type_source;
 	}
 
 	let of_type_decl pack module_name (td,p) = match td with
@@ -77,6 +82,7 @@ module CompletionModuleType = struct
 				is_extern = List.mem HExtern d.d_flags;
 				kind = if List.mem HInterface d.d_flags then Interface else Class;
 				has_constructor = ctor;
+				source = Syntax td;
 			}
 		| EEnum d -> {
 				pack = pack;
@@ -90,6 +96,7 @@ module CompletionModuleType = struct
 				is_extern = List.mem EExtern d.d_flags;
 				kind = Enum;
 				has_constructor = No;
+				source = Syntax td;
 			}
 		| ETypedef d ->
 			let kind = match fst d.d_data with CTAnonymous _ -> Struct | _ -> TypeAlias in
@@ -105,6 +112,7 @@ module CompletionModuleType = struct
 				is_extern = List.mem EExtern d.d_flags;
 				kind = kind;
 				has_constructor = if kind = Struct then No else Maybe;
+				source = Syntax td;
 			}
 		| EAbstract d -> {
 				pack = pack;
@@ -118,6 +126,7 @@ module CompletionModuleType = struct
 				is_extern = List.mem AbExtern d.d_flags;
 				kind = if Meta.has Meta.Enum d.d_meta then EnumAbstract else Abstract;
 				has_constructor = if (List.exists (fun cff -> fst cff.cff_name = "new") d.d_data) then Yes else No;
+				source = Syntax td;
 			}
 		| EImport _ | EUsing _ ->
 			raise Exit
@@ -160,6 +169,7 @@ module CompletionModuleType = struct
 			is_extern = is_extern;
 			kind = kind;
 			has_constructor = if has_ctor then Yes else No;
+			source = Typed mt;
 		}
 
 	let get_path cm = (cm.pack,cm.name)
@@ -194,6 +204,7 @@ module ClassFieldOrigin = struct
 		| StaticExtension of module_type
 		| AnonymousStructure of tanon
 		| BuiltIn
+		| Unknown
 
 	let to_json ctx cfo =
 		let i,args = match cfo with
@@ -203,6 +214,7 @@ module ClassFieldOrigin = struct
 		| StaticExtension mt -> 3,if ctx.generation_mode = GMMinimum then None else Some (generate_module_type ctx mt)
 		| AnonymousStructure an -> 4,if ctx.generation_mode = GMMinimum then None else Some (generate_anon ctx an)
 		| BuiltIn -> 5,None
+		| Unknown -> 6,None
 		in
 		jobject (
 			("kind",jint i) :: (match args with None -> [] | Some arg -> ["args",arg])
@@ -336,18 +348,32 @@ let get_name = function
 	| ITExpression _ -> ""
 
 let get_type = function
-	| ITLocal v -> v.v_type
-	| ITClassField(cf) | ITEnumAbstractField(_,cf) -> cf.field.cf_type
-	| ITEnumField ef -> ef.efield.ef_type
-	| ITType(_,_) -> t_dynamic (* TODO: might want a type here, not sure *)
-	| ITPackage _ -> t_dynamic
-	| ITModule _ -> t_dynamic
-	| ITLiteral(_,t) -> t
-	| ITTimer(_,_) -> t_dynamic
-	| ITMetadata(_,_) -> t_dynamic
-	| ITKeyword _ -> t_dynamic
-	| ITAnonymous an -> TAnon an
-	| ITExpression e -> e.etype
+	| ITLocal v -> Some v.v_type
+	| ITClassField(cf) | ITEnumAbstractField(_,cf) -> Some cf.field.cf_type
+	| ITEnumField ef -> Some ef.efield.ef_type
+	| ITType({source = Typed mt},_) ->
+		let t = match mt with
+			| TClassDecl c -> TType(class_module_type c,[])
+			| TEnumDecl en -> TType(enum_module_type en.e_module en.e_path null_pos,[])
+			| TAbstractDecl a -> TType(abstract_module_type a (List.map snd a.a_params),[])
+			| TTypeDecl td -> TType(td,List.map snd td.t_params)
+		in
+		Some t
+	| ITType _ -> None
+	| ITPackage _ -> None
+	| ITModule _ -> None
+	| ITLiteral(_,t) -> Some t
+	| ITTimer(_,_) -> None
+	| ITMetadata(_,_) -> None
+	| ITKeyword _ -> None
+	| ITAnonymous an -> Some (TAnon an)
+	| ITExpression e -> Some e.etype
+
+let get_documentation = function
+	| ITClassField cf | ITEnumAbstractField(_,cf) -> cf.field.cf_doc
+	| ITEnumField ef -> ef.efield.ef_doc
+	| ITType(mt,_) -> mt.doc
+	| _ -> None
 
 let to_json ctx ck =
 	let kind,data = match ck with

@@ -30,14 +30,14 @@ let patch_type ctx t =
 let display_module_type ctx mt p = match ctx.com.display.dms_kind with
 	| DMDefinition -> raise_position [(t_infos mt).mt_name_pos];
 	| DMUsage _ -> reference_position := (t_infos mt).mt_name_pos
-	| DMHover -> raise_hover (Some (patch_type ctx (type_of_module_type mt))) p (t_infos mt).mt_doc
+	| DMHover -> raise_hover (ITType(CompletionModuleType.of_module_type mt,ImportStatus.Imported)) p (* TODO: import status? *)
 	| _ -> ()
 
 let rec display_type ctx t p =
 	let dm = ctx.com.display in
 	match dm.dms_kind with
 	| DMHover ->
-		raise_hover (Some (patch_type ctx t)) p None
+		raise_hover (ITExpression (mk (TConst TNull) (patch_type ctx t) p)) p
 	| _ ->
 		try display_module_type ctx (module_type_of_type t) p
 		with Exit -> match follow t,follow !t_dynamic_def with
@@ -62,32 +62,33 @@ let check_display_type ctx t p =
 let display_variable ctx v p = match ctx.com.display.dms_kind with
 	| DMDefinition -> raise_position [v.v_pos]
 	| DMUsage _ -> reference_position := v.v_pos
-	| DMHover -> raise_hover (Some (patch_type ctx v.v_type)) p None
+	| DMHover -> raise_hover (ITLocal {v with v_type = patch_type ctx v.v_type}) p
 	| _ -> ()
 
-let display_field ctx c cf p = match ctx.com.display.dms_kind with
+let display_field ctx origin scope cf p = match ctx.com.display.dms_kind with
 	| DMDefinition -> raise_position [cf.cf_name_pos]
 	| DMUsage _ -> reference_position := cf.cf_name_pos
 	| DMHover ->
-		let t = if Meta.has Meta.Impl cf.cf_meta then
-			(prepare_using_field cf).cf_type
+		let cf = if Meta.has Meta.Impl cf.cf_meta then
+			prepare_using_field cf
 		else
-			cf.cf_type
+			cf
 		in
-		let t = match c,follow t with
-			| Some c,TFun(tl,_) when cf.cf_name = "new" -> TFun(tl,TInst(c,List.map snd c.cl_params))
-			| _ -> t
-		in
-		raise_hover (Some (patch_type ctx t)) p cf.cf_doc
+        let cf = match origin,scope,follow cf.cf_type with
+            | Self (TClassDecl c),CFSConstructor,TFun(tl,_) -> {cf with cf_type = TFun(tl,TInst(c,List.map snd c.cl_params))}
+            | _ -> cf
+        in
+		let cf = {cf with cf_type = patch_type ctx cf.cf_type} in
+		raise_hover (ITClassField (CompletionClassField.make cf scope origin true)) p
 	| _ -> ()
 
-let maybe_display_field ctx c cf p =
-	if is_display_position p then display_field ctx c cf p
+let maybe_display_field ctx origin scope cf p =
+	if is_display_position p then display_field ctx origin scope cf p
 
-let display_enum_field ctx ef p = match ctx.com.display.dms_kind with
+let display_enum_field ctx en ef p = match ctx.com.display.dms_kind with
 	| DMDefinition -> raise_position [ef.ef_name_pos]
 	| DMUsage _ -> reference_position := ef.ef_name_pos
-	| DMHover -> raise_hover (Some (patch_type ctx ef.ef_type)) p ef.ef_doc
+	| DMHover -> raise_hover (ITEnumField(CompletionEnumField.make {ef with ef_type = patch_type ctx ef.ef_type} (Self (TEnumDecl en)) true)) p
 	| _ -> ()
 
 let display_meta com meta p = match com.display.dms_kind with
@@ -101,7 +102,7 @@ let display_meta com meta p = match com.display.dms_kind with
 				if com.json_out = None then
 					raise_metadata ("<metadata>" ^ s ^ "</metadata>")
 				else
-					raise_hover None null_pos (Some s)
+					raise_hover (ITMetadata (Meta.to_string meta,Some s)) p
 		end
 	| DMDefault ->
 		let all,_ = Meta.get_documentation_list() in
@@ -129,7 +130,7 @@ let check_field_modifiers ctx c cf override display_modifier =
 			begin match c.cl_super with
 			| Some(c,tl) ->
 				let _,_,cf = raw_class_field (fun cf -> cf.cf_type) c tl cf.cf_name in
-				display_field ctx (Some c) cf p
+				display_field ctx (Parent(TClassDecl c)) CFSMember cf p
 			| _ ->
 				()
 			end

@@ -25,32 +25,66 @@ let completion_item_of_expr ctx e =
 			false
 	in
 	let of_field e origin cf scope =
-		let is_qualified = retype e cf.cf_name cf.cf_type in
+		let is_qualified = retype e cf.cf_name e.etype in
+		let cf = {cf with cf_type = DisplayEmitter.patch_type ctx e.etype} in
 		ITClassField (CompletionClassField.make cf scope origin is_qualified)
 	in
 	let of_enum_field e origin ef =
-		let is_qualified = retype e ef.ef_name ef.ef_type in
+		let is_qualified = retype e ef.ef_name e.etype in
+		let ef = {ef with ef_type = DisplayEmitter.patch_type ctx e.etype} in
 		ITEnumField (CompletionEnumField.make ef origin is_qualified)
 	in
+	let itexpr e =
+		ITExpression {e with etype = DisplayEmitter.patch_type ctx e.etype}
+	in
 	let rec loop e = match e.eexpr with
-		| TLocal v -> ITLocal v
+		| TLocal v | TVar(v,_) -> ITLocal {v with v_type = DisplayEmitter.patch_type ctx v.v_type}
 		| TField(_,FStatic(c,cf)) -> of_field e (Self (TClassDecl c)) cf CFSStatic
 		| TField(_,(FInstance(c,_,cf) | FClosure(Some(c,_),cf))) -> of_field e (Self (TClassDecl c)) cf CFSMember
 		| TField(_,FEnum(en,ef)) -> of_enum_field e (Self (TEnumDecl en)) ef
 		| TField(e1,FAnon cf) ->
 			begin match follow e1.etype with
 				| TAnon an -> of_field e (AnonymousStructure an) cf CFSMember
-				| _ -> ITExpression e
+				| _ -> itexpr e
 			end
 		| TTypeExpr mt -> ITType(CompletionModuleType.of_module_type mt,ImportStatus.Imported) (* TODO *)
 		| TConst(ct) -> ITLiteral(s_const ct,e.etype)
 		| TObjectDecl _ ->
 			begin match follow e.etype with
 				| TAnon an -> ITAnonymous an
-				| _ -> ITExpression e
+				| _ -> itexpr e
 			end
+		| TNew(c,tl,_) ->
+			(* begin match fst e_ast with
+			| EConst (Regexp (r,opt)) ->
+				let present,absent = List.partition (String.contains opt) ['g';'i';'m';'s';'u'] in
+				let doc flag desc = Printf.sprintf "* %s: %s" (String.make 1 flag) desc in
+				let f c = match c with
+					| 'g' -> doc c "global split and replace"
+					| 'i' -> doc c "case insensitive matching"
+					| 'm' -> doc c "multiline matching"
+					| 's' -> doc c "dot also match newlines"
+					| 'u' -> doc c "use UTF-8 matching"
+					| _ -> assert false
+				in
+				let present = List.map f present in
+				let present = match present with [] -> [] | _ -> "\n\nActive flags:\n\n" :: present in
+				let absent = List.map f absent in
+				let absent = match absent with [] -> [] | _ -> "\n\nInactive flags:\n\n" :: absent in
+				(TInst(c,tl)),Some ("Regular expression\n\n" ^ (String.concat "\n" (present @ absent)))
+			| _ -> *)
+				let t,cf = get_constructor ctx c tl e.epos in
+				let t = match follow t with
+					| TFun(args,_) -> TFun(args,TInst(c,tl))
+					| _ -> t
+				in
+				let t = DisplayEmitter.patch_type ctx t in
+				ITClassField (CompletionClassField.make {cf with cf_type = t} CFSConstructor (Self (TClassDecl c)) true)
+			(* end *)
+		| TCall({eexpr = TConst TSuper; etype = t} as e1,_) ->
+			itexpr e1 (* TODO *)
 		| TParenthesis e1 | TMeta(_,e1) | TCast(e1,_) -> loop e1
-		| _ -> ITExpression e
+		| _ -> itexpr e
 	in
 	loop e
 
@@ -148,49 +182,7 @@ and display_expr ctx e_ast e dk with_type p =
 	| DMSignature ->
 		handle_signature_display ctx e_ast with_type
 	| DMHover ->
-		let rec loop e = match e.eexpr with
-			| TVar(v,_) -> v.v_type,None
-			| TCall({eexpr = TConst TSuper; etype = t},_) -> t,None
-			| TNew({cl_kind = KAbstractImpl a},tl,_) -> TType(abstract_module_type a tl,[]),None
-			| TNew(c,tl,_) ->
-				begin match fst e_ast with
-				| EConst (Regexp (r,opt)) ->
-					let present,absent = List.partition (String.contains opt) ['g';'i';'m';'s';'u'] in
-					let doc flag desc = Printf.sprintf "* %s: %s" (String.make 1 flag) desc in
-					let f c = match c with
-						| 'g' -> doc c "global split and replace"
-						| 'i' -> doc c "case insensitive matching"
-						| 'm' -> doc c "multiline matching"
-						| 's' -> doc c "dot also match newlines"
-						| 'u' -> doc c "use UTF-8 matching"
-						| _ -> assert false
-					in
-					let present = List.map f present in
-					let present = match present with [] -> [] | _ -> "\n\nActive flags:\n\n" :: present in
-					let absent = List.map f absent in
-					let absent = match absent with [] -> [] | _ -> "\n\nInactive flags:\n\n" :: absent in
-					(TInst(c,tl)),Some ("Regular expression\n\n" ^ (String.concat "\n" (present @ absent)))
-				| _ ->
-					let t,cf = get_constructor ctx c tl p in
-					let t = match follow t with
-						| TFun(args,_) -> TFun(args,TInst(c,tl))
-						| _ -> t
-					in
-					if Meta.has Meta.CoreApi c.cl_meta then merge_core_doc ctx c;
-					t,cf.cf_doc
-				end
-			| TTypeExpr (TClassDecl {cl_kind = KAbstractImpl a}) -> TType(abstract_module_type a (List.map snd a.a_params),[]),None
-			| TField(e1,FDynamic "bind") when (match follow e1.etype with TFun _ -> true | _ -> false) -> e1.etype,None
-			| TReturn (Some e1) -> loop e1 (* No point in letting the internal Dynamic surface (issue #5655) *)
-			| TField(_,(FStatic(c,cf) | FInstance(c,_,cf) | FClosure(Some(c,_),cf))) ->
-				if Meta.has Meta.CoreApi c.cl_meta then merge_core_doc ctx c;
-				e.etype,cf.cf_doc
-			| TField(_,FEnum(_,ef)) ->
-				e.etype,ef.ef_doc
-			| _ -> e.etype,None
-		in
-		let t,doc = loop e in
-		raise_hover (Some (DisplayEmitter.patch_type ctx t)) p doc
+		raise_hover (completion_item_of_expr ctx e) e.epos
 	| DMUsage _ ->
 		let rec loop e = match e.eexpr with
 		| TField(_,FEnum(_,ef)) ->
@@ -302,7 +294,7 @@ let handle_display ctx e_ast dk with_type =
 		| DMSignature ->
 			raise_signatures [((arg,mono),doc)] 0 0
 		| _ ->
-			raise_hover (Some (TFun(arg,mono))) (pos e_ast) doc
+			raise_hover (ITExpression (mk (TIdent "trace") (TFun(arg,mono)) (pos e_ast))) (pos e_ast);
 		end
 	| (EConst (Ident "trace"),_),_ ->
 		let doc = Some "Print given arguments" in
@@ -312,7 +304,7 @@ let handle_display ctx e_ast dk with_type =
 		| DMSignature ->
 			raise_signatures [((arg,ret),doc)] 0 0
 		| _ ->
-			raise_hover (Some (TFun(arg,ret))) (pos e_ast) doc
+			raise_hover (ITExpression (mk (TIdent "trace") (TFun(arg,ret)) (pos e_ast))) (pos e_ast);
 		end
 	| (EConst (Ident "_"),p),WithType t ->
 		mk (TConst TNull) t p (* This is "probably" a bind skip, let's just use the expected type *)

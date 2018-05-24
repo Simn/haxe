@@ -994,9 +994,13 @@ with
 				DisplayOutput.print_fields fields
 		in
 		raise (DisplayOutput.Completion s)
-	| DisplayException(DisplayHover (Some t,p,doc)) ->
-		let doc = match doc with Some _ -> doc | None -> DisplayOutput.find_doc t in
-		raise (DisplayOutput.Completion (DisplayOutput.print_type t p doc))
+	| DisplayException(DisplayHover(item,p)) as exc ->
+		begin match CompletionItem.get_type item with
+		| None -> raise exc
+		| Some t ->
+			let doc = CompletionItem.get_documentation item in
+			raise (DisplayOutput.Completion (DisplayOutput.print_type t p doc))
+		end
 	| DisplayException(DisplaySignatures(signatures,_,display_arg)) ->
 		if ctx.com.display.dms_kind = DMSignature then
 			raise (DisplayOutput.Completion (DisplayOutput.print_signature signatures display_arg))
