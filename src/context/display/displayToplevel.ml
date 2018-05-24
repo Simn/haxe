@@ -41,7 +41,7 @@ let explore_class_paths com timer class_paths recusive f_pack f_module =
 								| _ -> raise Not_found
 							end
 						with Not_found ->
-							f_pack file;
+							f_pack (List.rev pack,file);
 							if recusive then loop (dir ^ file ^ "/") (file :: pack)
 						end
 					| _ ->
@@ -121,7 +121,7 @@ let collect ctx only_types with_type =
 	let t = Timer.timer ["display";"toplevel"] in
 	let cctx = CollectionContext.create ctx in
 	let packages = Hashtbl.create 0 in
-	let add_package s = Hashtbl.replace packages s true in
+	let add_package path = Hashtbl.replace packages path true in
 
 	let add item name = add_item cctx item name in
 
@@ -335,14 +335,17 @@ let collect ctx only_types with_type =
 			| Some name ->
 				name
 			in
-			add_package (String.concat "." cfile.c_package);
+			begin match List.rev cfile.c_package with
+				| [] -> ()
+				| s :: sl -> add_package (List.rev sl,s)
+			end;
 			Hashtbl.replace ctx.com.module_to_file (cfile.c_package,module_name) file;
 			process_decls cfile.c_package module_name cfile.c_decls
 		)
 	end;
 
-	Hashtbl.iter (fun pack _ ->
-		add (ITPackage(pack,[])) (Some pack)
+	Hashtbl.iter (fun path _ ->
+		add (ITPackage(path,[])) (Some (snd path))
 	) packages;
 
 	(* sorting *)
