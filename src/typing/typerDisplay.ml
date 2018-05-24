@@ -26,11 +26,11 @@ let completion_item_of_expr ctx e =
 	in
 	let of_field e origin cf scope =
 		let is_qualified = retype e cf.cf_name e.etype in
-		ITClassField (CompletionClassField.make cf scope origin is_qualified),e.etype
+		ITClassField (CompletionClassField.make cf scope origin is_qualified),DisplayEmitter.patch_type ctx e.etype
 	in
 	let of_enum_field e origin ef =
 		let is_qualified = retype e ef.ef_name e.etype in
-		ITEnumField (CompletionEnumField.make ef origin is_qualified),e.etype
+		ITEnumField (CompletionEnumField.make ef origin is_qualified),DisplayEmitter.patch_type ctx e.etype
 	in
 	let itexpr e =
 		ITExpression e,DisplayEmitter.patch_type ctx e.etype
