@@ -319,7 +319,7 @@ let handle_display ctx e_ast dk with_type =
 	| (_,p),_ -> try
 		type_expr ctx e_ast with_type
 	with Error (Unknown_ident n,_) ->
-        if dk = DKDot && ctx.com.json_out = None then raise (Parser.TypePath ([n],None,false))
+        if dk = DKDot && ctx.com.json_out = None then raise (Parser.TypePath ([n],None,false,p))
 		else raise_fields (DisplayToplevel.collect ctx false with_type) CRToplevel (Some (Parser.cut_pos_at_display p)) (match with_type with WithType _ -> true | _ -> false)
 	| Error ((Type_not_found (path,_) | Module_not_found path),_) as err ->
 		if ctx.com.json_out = None then	begin try

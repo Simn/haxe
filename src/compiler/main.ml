@@ -955,6 +955,15 @@ with
 			f (DisplayException.to_json ctx de)
 		| _ -> assert false
 		end
+	| Parser.TypePath (_,_,true,p) when ctx.com.json_out <> None ->
+		begin match com.json_out with
+		| Some (f,_) ->
+			let tctx = Typer.create ctx.com in
+			let fields = DisplayToplevel.collect tctx true Typecore.NoValue in
+			let jctx = Genjson.create_context Genjson.GMMinimum in
+			f (DisplayException.fields_to_json jctx fields CRToplevel (Some (Parser.cut_pos_at_display p)) false)
+		| _ -> assert false
+		end
 	| DisplayException(DisplayPackage pack) ->
 		raise (DisplayOutput.Completion (String.concat "." pack))
 	| DisplayException(DisplayFields(fields,cr,_,_)) ->
@@ -995,7 +1004,7 @@ with
 			raise (DisplayOutput.Completion (DisplayOutput.print_signatures signatures))
 	| DisplayException(DisplayPosition pl) ->
 		raise (DisplayOutput.Completion (DisplayOutput.print_positions pl))
-	| Parser.TypePath (p,c,is_import) ->
+	| Parser.TypePath (p,c,is_import,_) ->
 		let fields =
 			try begin match c with
 				| None ->

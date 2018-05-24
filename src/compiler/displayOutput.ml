@@ -476,7 +476,7 @@ let unquote v =
 let handle_display_argument com file_pos pre_compilation did_something =
 	match file_pos with
 	| "classes" ->
-		pre_compilation := (fun() -> raise (Parser.TypePath (["."],None,true))) :: !pre_compilation;
+		pre_compilation := (fun() -> raise (Parser.TypePath (["."],None,true,null_pos))) :: !pre_compilation;
 	| "keywords" ->
 		raise (Completion (print_keywords ()))
 	| "memory" ->

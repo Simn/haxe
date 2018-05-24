@@ -111,17 +111,17 @@ and parse_type_decls pack acc s =
 		| [< v = parse_type_decl; l = parse_type_decls pack (v :: acc) >] -> l
 		| [< >] -> List.rev acc
 	with
-	| TypePath ([],Some (name,false),b) ->
+	| TypePath ([],Some (name,false),b,p) ->
 		(* resolve imports *)
 		List.iter (fun d ->
 			match fst d with
 			| EImport (t,_) ->
 				(match List.rev t with
-				| (n,_) :: path when n = name && List.for_all (fun (i,_) -> is_lower_ident i) path -> raise (TypePath (List.map fst (List.rev path),Some (name,false),b))
+				| (n,_) :: path when n = name && List.for_all (fun (i,_) -> is_lower_ident i) path -> raise (TypePath (List.map fst (List.rev path),Some (name,false),b,p))
 				| _ -> ())
 			| _ -> ()
 		) acc;
-		raise (TypePath (pack,Some(name,true),b))
+		raise (TypePath (pack,Some(name,true),b,p))
 	| Stream.Error _ when do_resume() ->
 		ignore(resume false false s);
 		parse_type_decls pack acc s
@@ -220,20 +220,20 @@ and parse_class doc meta cflags need_name s =
 		}, punion p1 p2)
 
 and parse_import s p1 =
-	let rec loop acc =
+	let rec loop pn acc =
 		match s with parser
 		| [< '(Dot,p) >] ->
 			let resume() =
-				type_path (List.map fst acc) true
+				type_path (List.map fst acc) true (punion pn p)
 			in
 			check_resume p resume (fun () -> ());
 			(match s with parser
 			| [< '(Const (Ident k),p) >] ->
-				loop ((k,p) :: acc)
+				loop pn ((k,p) :: acc)
 			| [< '(Kwd Macro,p) >] ->
-				loop (("macro",p) :: acc)
+				loop pn (("macro",p) :: acc)
 			| [< '(Kwd Extern,p) >] ->
-				loop (("extern",p) :: acc)
+				loop pn (("extern",p) :: acc)
 			| [< '(Binop OpMult,_); '(Semicolon,p2) >] ->
 				p2, List.rev acc, IAll
 			| [< >] ->
@@ -248,7 +248,7 @@ and parse_import s p1 =
 			serror()
 	in
 	let p2, path, mode = (match s with parser
-		| [< '(Const (Ident name),p) >] -> loop [name,p]
+		| [< '(Const (Ident name),p) >] -> loop p [name,p]
 		| [< >] -> if would_skip_resume p1 s then p1, [], INormal else serror()
 	) in
 	(EImport (path,mode),punion p1 p2)
@@ -257,7 +257,7 @@ and parse_using s p1 =
 	let rec loop acc =
 		match s with parser
 		| [< '(Dot,p) >] ->
-			check_resume p (fun () -> type_path (List.map fst acc) false) (fun () -> ());
+			check_resume p (fun () -> type_path (List.map fst acc) false (punion p1 p)) (fun () -> ());
 			begin match s with parser
 			| [< '(Const (Ident k),p) >] ->
 				loop ((k,p) :: acc)
@@ -377,7 +377,7 @@ and parse_meta_argument_expr s =
 	with Display e -> match fst e with
 		| EDisplay(e,_) ->
 			begin try
-				type_path (string_list_of_expr_path_raise e) false
+				type_path (string_list_of_expr_path_raise e) false (pos e)
 			with Exit ->
 				e
 			end
@@ -520,7 +520,7 @@ and parse_type_path2 p0 pack name p1 s =
 		(match s with parser
 		| [< '(Dot,p) >] ->
 			check_resume p
-				(fun () -> raise (TypePath (List.rev (name :: pack),None,false)))
+				(fun () -> raise (TypePath (List.rev (name :: pack),None,false,punion (match p0 with None -> p1 | Some p0 -> p0) p)))
 				(fun () -> parse_type_path1 (match p0 with None -> Some p1 | Some _ -> p0) (name :: pack) s)
 		| [< '(Semicolon,_) >] ->
 			error (Custom "Type name should start with an uppercase letter") p1
@@ -529,7 +529,7 @@ and parse_type_path2 p0 pack name p1 s =
 		let sub,p2 = (match s with parser
 			| [< '(Dot,p); s >] ->
 				(check_resume p
-					(fun () -> raise (TypePath (List.rev pack,Some (name,false),false)))
+					(fun () -> raise (TypePath (List.rev pack,Some (name,false),false,punion (match p0 with None -> p1 | Some p0 -> p0) p)))
 					(fun () -> match s with parser
 					| [< '(Const (Ident name),p2) when not (is_lower_ident name) >] -> Some name,p2
 					| [< >] -> serror()))
