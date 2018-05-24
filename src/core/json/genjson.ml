@@ -292,7 +292,7 @@ and generate_class_field ctx cfs cf =
 		"expr",jopt (generate_texpr ctx) cf.cf_expr;
 		"pos",generate_pos ctx cf.cf_pos;
 		"doc",generate_doc ctx cf.cf_doc;
-		"overloads",jlist (classfield_ref ctx) cf.cf_overloads;
+		"overloads",jlist (generate_class_field ctx cfs) cf.cf_overloads;
 		"scope",jint (Obj.magic cfs);
 	]
 
