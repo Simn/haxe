@@ -380,6 +380,7 @@ let collect ctx only_types with_type =
 	l
 
 let handle_unresolved_identifier ctx i p only_types =
+	print_endline ("handle " ^ i);
 	let l = collect ctx only_types NoValue in
 	let cl = List.map (fun it ->
 		let s = CompletionItem.get_name it in
@@ -388,4 +389,5 @@ let handle_unresolved_identifier ctx i p only_types =
 	) l in
 	let cl = List.sort (fun (_,c1) (_,c2) -> compare c1 c2) cl in
 	let cl = StringError.filter_similar (fun (s,_,_) r -> r <= (min (String.length s) (String.length i)) / 3) cl in
+	List.iter (fun (s,_,_) -> print_endline s) cl;
 	ctx.com.display_information.unresolved_identifiers <- (i,p,cl) :: ctx.com.display_information.unresolved_identifiers
