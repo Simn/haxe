@@ -70,7 +70,9 @@ let print_fields fields =
 		| ITModule s -> "type",s,"",None
 		| ITMetadata(s,doc) -> "metadata",s,"",doc
 		| ITTimer(name,value) -> "timer",name,"",Some value
-		| ITLiteral(s,t) -> "literal",s,s_type (print_context()) t,None
+		| ITLiteral s ->
+			let t = Option.default t_dynamic k.ci_type in
+			"literal",s,s_type (print_context()) t,None
 		| ITLocal v -> "local",v.v_name,s_type (print_context()) v.v_type,None
 		| ITKeyword kwd -> "keyword",Ast.s_keyword kwd,"",None
 		| ITExpression _ | ITAnonymous _ -> assert false
@@ -118,7 +120,7 @@ let print_toplevel il =
 			Buffer.add_string b (Printf.sprintf "<i k=\"type\" p=\"%s\"%s>%s</i>\n" (s_type_path path) ("") cm.name);
 		| ITPackage(path,_) ->
 			Buffer.add_string b (Printf.sprintf "<i k=\"package\">%s</i>\n" (snd path))
-		| ITLiteral(s,_) ->
+		| ITLiteral s ->
 			Buffer.add_string b (Printf.sprintf "<i k=\"literal\">%s</i>\n" s)
 		| ITTimer(s,_) ->
 			Buffer.add_string b (Printf.sprintf "<i k=\"timer\">%s</i>\n" s)

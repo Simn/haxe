@@ -180,7 +180,7 @@ and display_expr ctx e_ast e dk with_type p =
 		handle_signature_display ctx e_ast with_type
 	| DMHover ->
 		let item = completion_item_of_expr ctx e in
-		raise_hover item item.ci_type e.epos
+		raise_hover item e.epos
 	| DMUsage _ ->
 		let rec loop e = match e.eexpr with
 		| TField(_,FEnum(_,ef)) ->
@@ -295,7 +295,7 @@ let handle_display ctx e_ast dk with_type =
 			raise_signatures [((arg,mono),doc)] 0 0
 		| _ ->
 			let t = TFun(arg,mono) in
-			raise_hover (make_ci_expr (mk (TIdent "trace") t (pos e_ast))) (Some t) (pos e_ast);
+			raise_hover (make_ci_expr (mk (TIdent "trace") t (pos e_ast))) (pos e_ast);
 		end
 	| (EConst (Ident "trace"),_),_ ->
 		let doc = Some "Print given arguments" in
@@ -306,7 +306,7 @@ let handle_display ctx e_ast dk with_type =
 			raise_signatures [((arg,ret),doc)] 0 0
 		| _ ->
 			let t = TFun(arg,ret) in
-			raise_hover (make_ci_expr (mk (TIdent "trace") t (pos e_ast))) (Some t) (pos e_ast);
+			raise_hover (make_ci_expr (mk (TIdent "trace") t (pos e_ast))) (pos e_ast);
 		end
 	| (EConst (Ident "_"),p),WithType t ->
 		mk (TConst TNull) t p (* This is "probably" a bind skip, let's just use the expected type *)

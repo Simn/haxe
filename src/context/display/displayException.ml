@@ -8,7 +8,6 @@ open Genjson
 type hover_result = {
 	hitem : CompletionItem.t;
 	hpos : pos;
-	htype : Type.t option;
 }
 
 type kind =
@@ -29,7 +28,7 @@ let raise_statistics s = raise (DisplayException(Statistics s))
 let raise_module_symbols s = raise (DisplayException(ModuleSymbols s))
 let raise_metadata s = raise (DisplayException(Metadata s))
 let raise_signatures l isig iarg = raise (DisplayException(DisplaySignatures(l,isig,iarg)))
-let raise_hover item t p = raise (DisplayException(DisplayHover({hitem = item;htype = t;hpos = p})))
+let raise_hover item p = raise (DisplayException(DisplayHover({hitem = item;hpos = p})))
 let raise_position pl = raise (DisplayException(DisplayPosition pl))
 let raise_fields ckl cr po b = raise (DisplayException(DisplayFields(ckl,cr,po,b)))
 let raise_package sl = raise (DisplayException(DisplayPackage sl))
@@ -70,7 +69,7 @@ let to_json ctx de =
 		jobject [
 			"documentation",jopt jstring (CompletionItem.get_documentation hover.hitem);
 			"range",generate_pos_as_range hover.hpos;
-			"type",jopt (generate_type ctx) hover.htype;
+			"type",jopt (generate_type ctx) hover.hitem.ci_type; (* TODO: remove *)
 			"item",CompletionItem.to_json ctx hover.hitem;
 		]
 	| DisplayPosition pl ->

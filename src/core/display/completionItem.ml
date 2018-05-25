@@ -273,7 +273,7 @@ type t_kind =
 	| ITType of CompletionModuleType.t * ImportStatus.t
 	| ITPackage of path * (string * PackageContentKind.t) list
 	| ITModule of string
-	| ITLiteral of string * Type.t
+	| ITLiteral of string
 	| ITTimer of string * string
 	| ITMetadata of string * documentation
 	| ITKeyword of keyword
@@ -297,7 +297,7 @@ let make_ci_enum_field cef t = make (ITEnumField cef) (Some t)
 let make_ci_type mt import_status t = make (ITType(mt,import_status)) t
 let make_ci_package path l = make (ITPackage(path,l)) None
 let make_ci_module s = make (ITModule s) None
-let make_ci_literal lit t = make (ITLiteral(lit,t)) (Some t)
+let make_ci_literal lit t = make (ITLiteral lit) (Some t)
 let make_ci_timer name value = make (ITTimer(name,value)) None
 let make_ci_metadata s doc = make (ITMetadata(s,doc)) None
 let make_ci_keyword kwd = make (ITKeyword kwd) None
@@ -352,7 +352,7 @@ let legacy_sort item = match item.ci_kind with
 	| ITMetadata(s,_) -> 5,s
 	| ITTimer(s,_) -> 6,s
 	| ITLocal v -> 7,v.v_name
-	| ITLiteral(s,_) -> 9,s
+	| ITLiteral s -> 9,s
 	| ITKeyword kwd -> 10,s_keyword kwd
 	| ITAnonymous _ -> 11,""
 	| ITExpression _ -> 12,""
@@ -364,34 +364,14 @@ let get_name item = match item.ci_kind with
 	| ITType(cm,_) -> cm.name
 	| ITPackage(path,_) -> snd path
 	| ITModule s -> s
-	| ITLiteral(s,_) -> s
+	| ITLiteral s -> s
 	| ITTimer(s,_) -> s
 	| ITMetadata(s,_) -> s
 	| ITKeyword kwd -> s_keyword kwd
 	| ITAnonymous _ -> ""
 	| ITExpression _ -> ""
 
-let get_type item = match item.ci_kind with
-	| ITLocal v -> Some v.v_type
-	| ITClassField(cf) | ITEnumAbstractField(_,cf) -> Some cf.field.cf_type
-	| ITEnumField ef -> Some ef.efield.ef_type
-	| ITType({source = Typed mt},_) ->
-		let t = match mt with
-			| TClassDecl c -> TType(class_module_type c,[])
-			| TEnumDecl en -> TType(enum_module_type en.e_module en.e_path null_pos,[])
-			| TAbstractDecl a -> TType(abstract_module_type a (List.map snd a.a_params),[])
-			| TTypeDecl td -> TType(td,List.map snd td.t_params)
-		in
-		Some t
-	| ITType _ -> None
-	| ITPackage _ -> None
-	| ITModule _ -> None
-	| ITLiteral(_,t) -> Some t
-	| ITTimer(_,_) -> None
-	| ITMetadata(_,_) -> None
-	| ITKeyword _ -> None
-	| ITAnonymous an -> Some (TAnon an)
-	| ITExpression e -> Some e.etype
+let get_type item = item.ci_type
 
 let get_documentation item = match item.ci_kind with
 	| ITClassField cf | ITEnumAbstractField(_,cf) -> cf.field.cf_doc
@@ -432,9 +412,9 @@ let to_json ctx item =
 				"contents",jlist generate_package_content contents;
 			]
 		| ITModule s -> "Module",jstring s
-		| ITLiteral(s,t) -> "Literal",jobject [
+		| ITLiteral s -> "Literal",jobject [
 			"name",jstring s;
-			"type",generate_type ctx t;
+			"type",jopt (generate_type ctx) item.ci_type; (* TODO: remove *)
 		]
 		| ITTimer(s,value) -> "Timer",jobject [
 			"name",jstring s;
