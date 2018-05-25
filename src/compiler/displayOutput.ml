@@ -403,7 +403,7 @@ module TypePathHandler = struct
 				if is_import && is_module_type then begin match t with
 					| TClassDecl c ->
 						ignore(c.cl_build());
-						statics := Some c.cl_ordered_statics
+						statics := Some c
 					| TEnumDecl en ->
 						enum_statics := Some en
 					| _ -> ()
@@ -418,12 +418,12 @@ module TypePathHandler = struct
 						ITType(CompletionItem.CompletionModuleType.of_module_type mt,ImportStatus.Imported)
 					) public_types
 			in
-			let make_field_doc cf =
-				ITClassField (CompletionClassField.make cf CFSStatic (Self (TClassDecl null_class)) true)
+			let make_field_doc c cf =
+				ITClassField (CompletionClassField.make cf CFSStatic (Self (TClassDecl c)) true)
 			in
 			let fields = match !statics with
 				| None -> types
-				| Some cfl -> types @ (List.map make_field_doc (List.filter (fun cf -> cf.cf_public) cfl))
+				| Some c -> types @ (List.map (make_field_doc c) (List.filter (fun cf -> cf.cf_public) c.cl_ordered_statics))
 			in
 			let fields = match !enum_statics with
 				| None -> fields
