@@ -179,8 +179,8 @@ module Printer = struct
 			if global || is_display_file p.pfile then add dk p sev args
 		in
 		List.iter (fun (s,p,suggestions) ->
-			let suggestions = ExtList.List.filter_map (fun (s,it,r) ->
-				match it with
+			let suggestions = ExtList.List.filter_map (fun (s,item,r) ->
+				match item.ci_kind with
 				| ITType(t,_) when r = 0 ->
 					let path = if t.module_name = t.name then (t.pack,t.name) else (t.pack @ [t.module_name],t.name) in
 					Some (JObject [

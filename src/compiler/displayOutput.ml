@@ -49,7 +49,7 @@ let print_keywords () =
 let print_fields fields =
 	let b = Buffer.create 0 in
 	Buffer.add_string b "<list>\n";
-	let convert k = match k with
+	let convert k = match k.ci_kind with
 		| ITClassField({field = cf}) | ITEnumAbstractField(_,{field = cf}) ->
 			let kind = match cf.cf_kind with
 				| Method _ -> "method"
@@ -100,7 +100,7 @@ let print_toplevel il =
 			true
 		end
 	in
-	List.iter (fun id -> match id with
+	List.iter (fun id -> match id.ci_kind with
 		| ITLocal v ->
 			if check_ident v.v_name then Buffer.add_string b (Printf.sprintf "<i k=\"local\" t=\"%s\">%s</i>\n" (s_type v.v_type) v.v_name);
 		| ITClassField({field = cf;scope = CFSMember}) ->
@@ -371,8 +371,8 @@ module TypePathHandler = struct
 		if packs = [] && modules = [] then
 			(abort ("No classes found in " ^ String.concat "." p) null_pos)
 		else
-			let packs = List.map (fun n -> ITPackage((p,n),[])) packs in
-			let modules = List.map (fun n -> ITModule n) modules in
+			let packs = List.map (fun n -> make_ci_package (p,n) []) packs in
+			let modules = List.map (fun n -> make_ci_module n) modules in
 			Some (packs @ modules)
 
 	(** raise field completion listing module sub-types and static fields *)
@@ -415,11 +415,11 @@ module TypePathHandler = struct
 					[]
 				else
 					List.map (fun mt ->
-						ITType(CompletionItem.CompletionModuleType.of_module_type mt,ImportStatus.Imported)
+						make_ci_type (CompletionItem.CompletionModuleType.of_module_type mt) ImportStatus.Imported None
 					) public_types
 			in
 			let make_field_doc c cf =
-				ITClassField (CompletionClassField.make cf CFSStatic (Self (TClassDecl c)) true)
+				make_ci_class_field (CompletionClassField.make cf CFSStatic (Self (TClassDecl c)) true) cf.cf_type
 			in
 			let fields = match !statics with
 				| None -> types
@@ -427,7 +427,9 @@ module TypePathHandler = struct
 			in
 			let fields = match !enum_statics with
 				| None -> fields
-				| Some en -> PMap.fold (fun ef acc -> ITEnumField(CompletionEnumField.make ef (Self (TEnumDecl en)) true) :: acc) en.e_constrs fields
+				| Some en -> PMap.fold (fun ef acc ->
+					make_ci_enum_field (CompletionEnumField.make ef (Self (TEnumDecl en)) true) ef.ef_type :: acc
+				) en.e_constrs fields
 			in
 			Some fields
 		with _ ->
@@ -660,11 +662,11 @@ let handle_syntax_completion com kind p = match com.json_out with
 	| Some(f,_) ->
 		match kind with
 		| Parser.SCClassRelation ->
-			let l = [ITKeyword Extends;ITKeyword Implements] in
+			let l = [make_ci_keyword Extends;make_ci_keyword Implements] in
 			let ctx = Genjson.create_context GMFull in
 			f(fields_to_json ctx l CRTypeRelation None false)
 		| Parser.SCInterfaceRelation ->
-			let l = [ITKeyword Extends] in
+			let l = [make_ci_keyword Extends] in
 			let ctx = Genjson.create_context GMFull in
 			f(fields_to_json ctx l CRTypeRelation None false)
 		| Parser.SCComment ->

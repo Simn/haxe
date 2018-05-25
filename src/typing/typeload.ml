@@ -376,7 +376,7 @@ and load_complex_type ctx allow_display p (t,pn) =
 				try
 					load_instance ctx ~allow_display (t,pn) false p
 				with DisplayException(DisplayFields(l,CRTypeHint,p,b)) ->
-					let l = List.filter (function
+					let l = List.filter (fun item -> match item.ci_kind with
 						| ITType({kind = Struct},_) -> true
 						| _ -> false
 					) l in

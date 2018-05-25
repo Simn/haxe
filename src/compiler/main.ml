@@ -970,7 +970,7 @@ with
 		let fields = if !measure_times then begin
 			Timer.close_times();
 			(List.map (fun (name,value) ->
-				CompletionItem.ITTimer("@TIME " ^ name,value)
+				CompletionItem.make_ci_timer ("@TIME " ^ name) value
 			) (DisplayOutput.get_timer_fields !start_time)) @ fields
 		end else
 			fields
@@ -1022,7 +1022,7 @@ with
 			| Some (f,_) ->
 				let ctx = DisplayJson.create_json_context false in
 				let pos = Parser.cut_pos_at_display pos in
-				let kind = CRField ((CompletionItem.ITModule((String.concat "." p)),pos)) in
+				let kind = CRField ((CompletionItem.make_ci_module (String.concat "." p),pos)) in
 				f (DisplayException.fields_to_json ctx fields kind None false);
 			| _ -> raise (DisplayOutput.Completion (DisplayOutput.print_fields fields))
 			end

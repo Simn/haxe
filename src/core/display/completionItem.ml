@@ -265,7 +265,7 @@ open CompletionModuleType
 open CompletionClassField
 open CompletionEnumField
 
-type t =
+type t_kind =
 	| ITLocal of tvar
 	| ITClassField of CompletionClassField.t
 	| ITEnumField of CompletionEnumField.t
@@ -280,7 +280,31 @@ type t =
 	| ITAnonymous of tanon
 	| ITExpression of texpr
 
-let get_index = function
+type t = {
+	ci_kind : t_kind;
+	ci_type : Type.t option;
+}
+
+let make kind t = {
+	ci_kind = kind;
+	ci_type = t;
+}
+
+let make_ci_local v t = make (ITLocal v) (Some t)
+let make_ci_class_field ccf t = make (ITClassField ccf) (Some t)
+let make_ci_enum_abstract_field a ccf t = make (ITEnumAbstractField(a,ccf)) (Some t)
+let make_ci_enum_field cef t = make (ITEnumField cef) (Some t)
+let make_ci_type mt import_status t = make (ITType(mt,import_status)) t
+let make_ci_package path l = make (ITPackage(path,l)) None
+let make_ci_module s = make (ITModule s) None
+let make_ci_literal lit t = make (ITLiteral(lit,t)) (Some t)
+let make_ci_timer name value = make (ITTimer(name,value)) None
+let make_ci_metadata s doc = make (ITMetadata(s,doc)) None
+let make_ci_keyword kwd = make (ITKeyword kwd) None
+let make_ci_anon an t = make (ITAnonymous an) (Some t)
+let make_ci_expr e = make (ITExpression e) (Some e.etype)
+
+let get_index item = match item.ci_kind with
 	| ITLocal _ -> 0
 	| ITClassField _ -> 1
 	| ITEnumField _ -> 2
@@ -295,7 +319,7 @@ let get_index = function
 	| ITAnonymous _ -> 11
 	| ITExpression _ -> 12
 
-let get_sort_index = function
+let get_sort_index item = match item.ci_kind with
 	| ITLocal _ -> 0
 	| ITClassField _ -> 0
 	| ITEnumField ef -> ef.efield.ef_index
@@ -310,7 +334,7 @@ let get_sort_index = function
 	| ITAnonymous _ -> 0
 	| ITExpression _ -> 0
 
-let legacy_sort = function
+let legacy_sort item = match item.ci_kind with
 	| ITClassField(cf) | ITEnumAbstractField(_,cf) ->
 		begin match cf.field.cf_kind with
 		| Var _ -> 0,cf.field.cf_name
@@ -333,7 +357,7 @@ let legacy_sort = function
 	| ITAnonymous _ -> 11,""
 	| ITExpression _ -> 12,""
 
-let get_name = function
+let get_name item = match item.ci_kind with
 	| ITLocal v -> v.v_name
 	| ITClassField(cf) | ITEnumAbstractField(_,cf) -> cf.field.cf_name
 	| ITEnumField ef -> ef.efield.ef_name
@@ -347,7 +371,7 @@ let get_name = function
 	| ITAnonymous _ -> ""
 	| ITExpression _ -> ""
 
-let get_type = function
+let get_type item = match item.ci_kind with
 	| ITLocal v -> Some v.v_type
 	| ITClassField(cf) | ITEnumAbstractField(_,cf) -> Some cf.field.cf_type
 	| ITEnumField ef -> Some ef.efield.ef_type
@@ -369,17 +393,17 @@ let get_type = function
 	| ITAnonymous an -> Some (TAnon an)
 	| ITExpression e -> Some e.etype
 
-let get_documentation = function
+let get_documentation item = match item.ci_kind with
 	| ITClassField cf | ITEnumAbstractField(_,cf) -> cf.field.cf_doc
 	| ITEnumField ef -> ef.efield.ef_doc
 	| ITType(mt,_) -> mt.doc
 	| _ -> None
 
-let to_json ctx ck =
-	let kind,data = match ck with
+let to_json ctx item =
+	let kind,data = match item.ci_kind with
 		| ITLocal v -> "Local",generate_tvar ctx v
 		| ITClassField(cf) | ITEnumAbstractField(_,cf) ->
-			let name = match ck with
+			let name = match item.ci_kind with
 				| ITClassField _ -> "ClassField"
 				| _ ->  "EnumAbstractField"
 			in
@@ -426,4 +450,8 @@ let to_json ctx ck =
 		| ITAnonymous an -> "AnonymousStructure",generate_anon ctx an
 		| ITExpression e -> "Expression",generate_texpr ctx e
 	in
-	generate_adt ctx None kind (Some data)
+	jobject [
+		"kind",jstring kind;
+		"args",data;
+		"type",jopt (generate_type ctx) item.ci_type;
+	]
