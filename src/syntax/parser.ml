@@ -142,7 +142,7 @@ let set_resume p =
 	resume_display := { p with pfile = Path.unique_full_path p.pfile }
 
 let encloses_resume p =
-	do_resume() && p.pmin < !resume_display.pmin && p.pmax >= !resume_display.pmax
+	do_resume() && is_resuming_file p.pfile && p.pmin < !resume_display.pmin && p.pmax >= !resume_display.pmax
 
 let would_skip_resume p1 s =
 	match Stream.npeek 1 s with

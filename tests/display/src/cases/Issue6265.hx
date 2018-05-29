@@ -9,8 +9,8 @@ class Issue6265 extends DisplayTestCase {
 	}
 	**/
 	function test() {
-		eq("value : Dynamic -> Void", type(pos(1)));
-		eq("value : Dynamic -> Void", type(pos(2)));
+		eq("arguments : haxe.extern.Rest<Dynamic> -> Void", type(pos(1)));
+		eq("arguments : haxe.extern.Rest<Dynamic> -> Void", type(pos(2)));
 		eq("Void", type(pos(3)));
 		eq("String", type(pos(4)));
 		eq("String", type(pos(5)));

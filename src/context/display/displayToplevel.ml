@@ -303,9 +303,6 @@ let collect ctx epos with_type =
 			Try; New; Throw; Untyped; Cast;
 		] in
 		List.iter (fun kwd -> add(make_ci_keyword kwd) (Some (s_keyword kwd))) kwds;
-
-		(* builtins *)
-		add (make_ci_literal "trace" (TFun(["value",false,t_dynamic],ctx.com.basic.tvoid))) (Some "trace")
 	end;
 
 	(* type params *)

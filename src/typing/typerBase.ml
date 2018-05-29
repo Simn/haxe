@@ -63,6 +63,19 @@ let mk_infos ctx p params =
 			(("methodName",null_pos,NoQuotes), (EConst (String ctx.curfield.cf_name),p)) :: params
 	) ,p)
 
+let mk_tinfos ctx p params =
+	let open Texpr.Builder in
+	let file = if ctx.in_macro then p.pfile else if Common.defined ctx.com Define.AbsolutePath then Path.get_full_path p.pfile else relative_path ctx p.pfile in
+	mk (TObjectDecl (
+		(("fileName",null_pos,NoQuotes), (make_string ctx.t file p)) ::
+		(("lineNumber",null_pos,NoQuotes), (make_int ctx.t (Lexer.get_error_line p) p)) ::
+		(("className",null_pos,NoQuotes), (make_string ctx.t (s_type_path ctx.curclass.cl_path) p)) ::
+		if ctx.curfield.cf_name = "" then
+			params
+		else
+			(("methodName",null_pos,NoQuotes), (make_string ctx.t ctx.curfield.cf_name p)) :: params
+	)) t_dynamic p
+
 let rec is_pos_infos = function
 	| TMono r ->
 		(match !r with

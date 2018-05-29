@@ -2253,29 +2253,29 @@ and type_call ctx e el (with_type:with_type) p =
 	let def () =
 		let e = maybe_type_against_enum ctx (fun () -> type_access ctx (fst e) (snd e) MCall) with_type true p in
 		let e = build_call ctx e el with_type p in
-		e
+		match e.eexpr with
+		| TCall({eexpr = TField(_,FStatic({cl_path = (["haxe"],"Globals")},{cf_name = "trace"}))},e :: el) ->
+			let params = match el with
+				| [] -> []
+				| _ -> [("customParams",null_pos,NoQuotes),Texpr.Builder.make_array_decl ctx.t el t_dynamic p]
+			in
+			let infos = mk_tinfos ctx p params in
+			if (platform ctx.com Js || platform ctx.com Python) && el = [] && has_dce ctx.com then begin
+				let e_trace = mk (TIdent "`trace") t_dynamic p in
+				mk (TCall (e_trace,[e;infos])) ctx.t.tvoid p
+			end else begin
+				match Typeload.load_type_def ctx p {tpackage = ["haxe"];tname = "Log";tsub = None;tparams = []} with
+				| TClassDecl c ->
+					ignore (c.cl_build());
+					let cf = PMap.find "trace" c.cl_statics in
+					make_static_call ctx c cf (fun t -> t) [e;infos] ctx.t.tvoid p
+				| _ ->
+					assert false
+			end
+		| _ ->
+			e
 	in
 	match e, el with
-	| (EConst (Ident "trace"),p) , e :: el ->
-		if Common.defined ctx.com Define.NoTraces then
-			null ctx.t.tvoid p
-		else
-		let mk_to_string_meta e = EMeta((Meta.ToString,[],null_pos),e),pos e in
-		let params = (match el with [] -> [] | _ -> [("customParams",null_pos,NoQuotes),(EArrayDecl (List.map mk_to_string_meta el) , p)]) in
-		let infos = mk_infos ctx p params in
-		if (platform ctx.com Js || platform ctx.com Python) && el = [] && has_dce ctx.com then
-			let e = type_expr ctx e Value in
-			let infos = type_expr ctx infos Value in
-			let e = match follow e.etype with
-				| TAbstract({a_impl = Some c},_) when PMap.mem "toString" c.cl_statics ->
-					call_to_string ctx e
-				| _ ->
-					e
-			in
-			let e_trace = mk (TIdent "`trace") t_dynamic p in
-			mk (TCall (e_trace,[e;infos])) ctx.t.tvoid p
-		else
-			type_expr ctx (ECall ((EField ((EField ((EConst (Ident "haxe"),p),"Log"),p),"trace"),p),[mk_to_string_meta e;infos]),p) NoValue
 	| (EField ((EConst (Ident "super"),_),_),_), _ ->
 		def()
 	| (EField (e,"bind"),p), args ->
@@ -2472,6 +2472,7 @@ let rec create com =
 			hook_generate = [];
 			get_build_infos = (fun() -> None);
 			std = null_module;
+			global_import = [];
 			global_using = [];
 			do_inherit = MagicTypes.on_inherit;
 			do_create = create;
@@ -2550,6 +2551,7 @@ let rec create com =
 		| TEnumDecl _ | TClassDecl _ | TTypeDecl _ ->
 			()
 	) ctx.g.std.m_types;
+	ctx.g.global_import <- (EImport(["haxe",null_pos;"Globals",null_pos],IAll),null_pos) :: ctx.g.global_import;
 	let m = TypeloadModule.load_module ctx ([],"String") null_pos in
 	(match m.m_types with
 	| [TClassDecl c] -> ctx.t.tstring <- TInst (c,[])

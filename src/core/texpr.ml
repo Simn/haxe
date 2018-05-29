@@ -278,6 +278,9 @@ module Builder = struct
 
 	let index basic e index t p =
 		mk (TArray (e,mk (TConst (TInt (Int32.of_int index))) basic.tint p)) t p
+
+	let make_array_decl basic el t p =
+		mk (TArrayDecl el) (basic.tarray t) p
 end
 
 let set_default basic a c p =

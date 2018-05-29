@@ -902,7 +902,7 @@ let handle_import_hx ctx m decls p =
 		add_module ctx m_import p;
 		m_import
 	in
-	List.fold_left (fun acc path ->
+	let decls = List.fold_left (fun acc path ->
 		let decls = try
 			let r = Hashtbl.find ctx.com.parser_cache path in
 			let mimport = Hashtbl.find ctx.g.modules ([],path) in
@@ -922,7 +922,8 @@ let handle_import_hx ctx m decls p =
 			end
 		in
 		decls @ acc
-	) decls candidates
+	) decls candidates in
+	ctx.g.global_import @ decls
 
 (*
 	Creates a new module and types [tdecls] into it.

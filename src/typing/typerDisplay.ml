@@ -168,12 +168,7 @@ let rec handle_signature_display ctx e_ast with_type =
 	in
 	match fst e_ast with
 		| ECall(e1,el) ->
-			let def () = try
-				type_expr ctx e1 Value
-			with Error (Unknown_ident "trace",_) ->
-				let e = expr_of_type_path (["haxe";"Log"],"trace") p in
-				type_expr ctx e Value
-			in
+			let def () = type_expr ctx e1 Value in
 			let e1 = match e1 with
 				| (EField (e,"bind"),p) ->
 					let e = type_expr ctx e Value in
@@ -333,18 +328,7 @@ let handle_display ctx e_ast dk with_type =
 			raise_signatures [((arg,mono),doc)] 0 0
 		| _ ->
 			let t = TFun(arg,mono) in
-			raise_hover (make_ci_expr (mk (TIdent "trace") t (pos e_ast))) (pos e_ast);
-		end
-	| (EConst (Ident "trace"),_),_ ->
-		let doc = Some "Print given arguments" in
-		let arg = ["value",false,t_dynamic] in
-		let ret = ctx.com.basic.tvoid in
-		begin match ctx.com.display.dms_kind with
-		| DMSignature ->
-			raise_signatures [((arg,ret),doc)] 0 0
-		| _ ->
-			let t = TFun(arg,ret) in
-			raise_hover (make_ci_expr (mk (TIdent "trace") t (pos e_ast))) (pos e_ast);
+			raise_hover (make_ci_expr (mk (TIdent "$type") t (pos e_ast))) (pos e_ast);
 		end
 	| (EConst (Ident "_"),p),WithType t ->
 		mk (TConst TNull) t p (* This is "probably" a bind skip, let's just use the expected type *)
