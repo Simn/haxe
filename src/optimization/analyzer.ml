@@ -188,8 +188,8 @@ module type DataFlowApi = sig
 	val equals : t -> t -> bool                                   (* The equality function *)
 	val bottom : t                                                (* The bottom element of the lattice *)
 	val top : t                                                   (* The top element of the lattice *)
-	val get_cell : int -> t                                       (* Lattice cell getter *)
-	val set_cell : int -> t -> unit                               (* Lattice cell setter *)
+	val get_cell : tvar -> t                                      (* Lattice cell getter *)
+	val set_cell : tvar -> t -> unit                              (* Lattice cell setter *)
 	val init : analyzer_context -> unit                           (* The initialization function which is called at the start *)
 	val commit : analyzer_context -> unit                         (* The commit function which is called at the end *)
 	val conditional : bool                                        (* Whether or not conditional branches are checked *)
@@ -239,8 +239,8 @@ module DataFlow (M : DataFlowApi) = struct
 					M.bottom;
 		in
 		let set_lattice_cell v e =
-			let e' = M.get_cell v.v_id in
-			M.set_cell v.v_id e;
+			let e' = M.get_cell v in
+			M.set_cell v e;
 			if not (M.equals e e') then
 				List.iter (fun edge -> add_ssa_edge edge) (get_ssa_edges_from g v);
 		in
@@ -353,13 +353,17 @@ module ConstPropagation = DataFlow(struct
 		| EnumValue of int * t list
 		| ModuleType of module_type * Type.t
 
+	type tvar_info +=
+		| Cell of t
+
 	let conditional = true
 	let flag = FlagExecutable
 
-	let lattice = Hashtbl.create 0
+	let get_cell v = match v.v_info with
+		| Cell t -> t
+		| _ -> Top
 
-	let get_cell i = try Hashtbl.find lattice i with Not_found -> Top
-	let set_cell i ct = Hashtbl.replace lattice i ct
+	let set_cell v ct = v.v_info <- Cell ct
 
 	let top = Top
 	let bottom = Bottom
@@ -396,7 +400,7 @@ module ConstPropagation = DataFlow(struct
 				if (follow v.v_type) == t_dynamic || v.v_capture then
 					Bottom
 				else
-					get_cell v.v_id
+					get_cell v
 			| TBinop(OpAssign,_,e2) ->
 				eval bb e2
 			| TBinop(op,e1,e2) ->
@@ -471,7 +475,7 @@ module ConstPropagation = DataFlow(struct
 			Bottom
 
 	let init ctx =
-		Hashtbl.clear lattice
+		()
 
 	let commit ctx =
 		let inline e i = match get_cell i with
@@ -489,20 +493,20 @@ module ConstPropagation = DataFlow(struct
 		let rec commit e = match e.eexpr with
 			| TLocal v when not (is_special_var v) ->
 				begin try
-					inline e v.v_id
+					inline e v
 				with Not_found ->
 					e
 				end
 			| TBinop((OpAssign | OpAssignOp _ as op),({eexpr = TLocal v} as e1),e2) ->
 				let e2 = try
 					if (has_side_effect e2) then raise Not_found;
-					inline e2 v.v_id
+					inline e2 v
 				with Not_found ->
 					commit e2
 				in
 				{e with eexpr = TBinop(op,e1,e2)}
 			| TVar(v,Some e1) when not (has_side_effect e1) ->
-				let e1 = try inline e1 v.v_id with Not_found -> commit e1 in
+				let e1 = try inline e1 v with Not_found -> commit e1 in
 				{e with eexpr = TVar(v,Some e1)}
 			| _ ->
 				Type.map_expr commit e
@@ -527,6 +531,12 @@ module CopyPropagation = DataFlow(struct
 		| Bottom
 		| Local of tvar
 
+	type tvar_info +=
+		| Cell of t
+
+	let conditional = true
+	let flag = FlagExecutable
+
 	let to_string = function
 		| Top -> "Top"
 		| Bottom -> "Bottom"
@@ -534,10 +544,12 @@ module CopyPropagation = DataFlow(struct
 
 	let conditional = false
 	let flag = FlagCopyPropagation
-	let lattice = Hashtbl.create 0
 
-	let get_cell i = try Hashtbl.find lattice i with Not_found -> Top
-	let set_cell i ct = Hashtbl.replace lattice i ct
+	let get_cell v = match v.v_info with
+		| Cell t -> t
+		| _ -> Top
+
+	let set_cell v ct = v.v_info <- Cell ct
 
 	let top = Top
 	let bottom = Bottom
@@ -560,15 +572,15 @@ module CopyPropagation = DataFlow(struct
 		loop e
 
 	let init ctx =
-		Hashtbl.clear lattice
+		()
 
 	let commit ctx =
 		let rec commit bb e = match e.eexpr with
 			| TLocal v when not v.v_capture ->
 				begin try
-					let lat = get_cell v.v_id in
+					let lat = get_cell v in
 					let leave () =
-						Hashtbl.remove lattice v.v_id;
+						v.v_info <- Cell Bottom;
 						raise Not_found
 					in
 					let v' = match lat with Local v -> v | _ -> leave() in

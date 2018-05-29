@@ -51,6 +51,10 @@ type module_check_policy =
 	| NoCheckDependencies
 	| NoCheckShadowing
 
+type tvar_info = ..
+
+type tvar_info +=
+	| NoInfo
 
 type t =
 	| TMono of t option ref
@@ -93,6 +97,7 @@ and tvar = {
 	mutable v_extra : tvar_extra;
 	mutable v_meta : metadata;
 	v_pos : pos;
+	mutable v_info : tvar_info;
 }
 
 and tfunc = {
@@ -406,7 +411,7 @@ end
 
 let alloc_var =
 	let uid = ref 0 in
-	(fun n t p -> incr uid; { v_name = n; v_type = t; v_id = !uid; v_capture = false; v_extra = None; v_meta = []; v_pos = p })
+	(fun n t p -> incr uid; { v_name = n; v_type = t; v_id = !uid; v_capture = false; v_extra = None; v_meta = []; v_pos = p; v_info = NoInfo })
 
 let alloc_mid =
 	let mid = ref 0 in
