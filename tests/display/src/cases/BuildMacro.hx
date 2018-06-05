@@ -16,19 +16,19 @@ class BuildMacro extends DisplayTestCase {
 	#end
 	class Main {
 		function te{-1-}st({-5-}na{-2-}me{-6-}:MySt{-3-}ring):MyStr{-4-}ing {
-			return {-9-}name{-10-};
+			return {-9-}nam{-10-}e{-11-};
 		}
 
 		static function main() { }
 	}
 	**/
 	function test1() {
-		eq("cases.MyString", type(pos(2)));
-		eq("cases.MyString", type(pos(3)));
-		eq("cases.MyString", type(pos(4)));
+		eq("MyString", type(pos(2)));
+		eq("MyString", type(pos(3)));
+		eq("MyString", type(pos(4)));
 		eq(range(7, 8), position(pos(3)));
 		eq(range(7, 8), position(pos(4)));
 		eq(range(5, 6), position(pos(2)));
-		arrayEq([range(9, 10)], usage(pos(10)));
+		arrayEq([range(9, 11)], usage(pos(10)));
 	}
 }

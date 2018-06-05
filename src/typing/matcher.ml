@@ -23,6 +23,7 @@ open Type
 open Common
 open Texpr.Builder
 open Error
+open DisplayTypes
 
 exception Internal_match_failure
 
@@ -184,13 +185,14 @@ module Pattern = struct
 				v
 			| _ ->
 				let v = alloc_var name t p in
+				v.v_meta <- (TVarOrigin.encode_in_meta TVarOrigin.TVOPatternVariable) :: v.v_meta;
 				pctx.current_locals <- PMap.add name (v,p) pctx.current_locals;
 				ctx.locals <- PMap.add name v ctx.locals;
 				v
 		in
 		let con_enum en ef p =
-			Display.DeprecationCheck.check_enum pctx.ctx.com en p;
-			Display.DeprecationCheck.check_ef pctx.ctx.com ef p;
+			DeprecationCheck.check_enum pctx.ctx.com en p;
+			DeprecationCheck.check_ef pctx.ctx.com ef p;
 			ConEnum(en,ef)
 		in
 		let check_expr e =
@@ -464,7 +466,7 @@ module Pattern = struct
 				PatExtractor(v,e1,pat)
 			| EDisplay(e,dk) ->
 				let pat = loop e in
-				ignore(TyperDisplay.handle_edisplay ctx e dk (WithType t));
+				ignore(TyperDisplay.handle_edisplay ctx e (if toplevel then DKPattern else dk) (WithType t));
 				pat
 			| _ ->
 				fail()
@@ -536,7 +538,7 @@ module Case = struct
 		ctx.ret <- old_ret;
 		List.iter (fun (v,t) -> v.v_type <- t) old_types;
 		save();
-		if ctx.is_display_file && Display.is_display_position p then begin match eo,eo_ast with
+		if ctx.is_display_file && DisplayPosition.encloses_display_position p then begin match eo,eo_ast with
 			| Some e,Some e_ast -> ignore(TyperDisplay.display_expr ctx e_ast e DKMarked with_type p)
 			| None,None -> ignore(TyperDisplay.display_expr ctx (EBlock [],p) (mk (TBlock []) ctx.t.tvoid p) DKMarked with_type p)
 			| _ -> assert false

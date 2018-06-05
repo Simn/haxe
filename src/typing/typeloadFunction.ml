@@ -23,7 +23,8 @@ open Globals
 open Ast
 open Type
 open Typecore
-open Common.DisplayMode
+open DisplayTypes.DisplayMode
+open DisplayException
 open Common
 open Error
 
@@ -61,7 +62,7 @@ let type_function_arg_value ctx t c do_display =
 				| TConst c -> Some c
 				| TCast(e,None) -> loop e
 				| _ ->
-					if not ctx.com.display.dms_display || ctx.com.display.dms_inline && ctx.com.display.dms_error_policy = EPCollect then
+					if ctx.com.display.dms_kind = DMNone || ctx.com.display.dms_inline && ctx.com.display.dms_error_policy = EPCollect then
 						display_error ctx "Parameter default value should be constant" p;
 					None
 			in
@@ -81,12 +82,12 @@ let save_function_state ctx =
 
 let type_function ctx args ret fmode f do_display p =
 	let fargs = List.map2 (fun (n,c,t) ((_,pn),_,m,_,_) ->
-		if n.[0] = '$' then error "Function argument names starting with a dollar are not allowed" p;
+		if starts_with n '$' then error "Function argument names starting with a dollar are not allowed" p;
 		let c = type_function_arg_value ctx t c do_display in
-		let v,c = add_local ctx n t pn, c in
-		v.v_meta <- m;
-		if do_display && Display.is_display_position pn then
-			Display.DisplayEmitter.display_variable ctx.com.display v pn;
+		let v,c = add_local_with_origin ctx n t pn (TVarOrigin.TVOArgument), c in
+		v.v_meta <- v.v_meta @ m;
+		if do_display && DisplayPosition.encloses_display_position pn then
+			DisplayEmitter.display_variable ctx v pn;
 		if n = "this" then v.v_meta <- (Meta.This,[],null_pos) :: v.v_meta;
 		v,c
 	) args f.f_args in
@@ -108,15 +109,18 @@ let type_function ctx args ret fmode f do_display p =
 	let e = if not do_display then
 		type_expr ctx e NoValue
 	else begin
-		let e = Display.ExprPreprocessing.process_expr ctx.com e in
+		let is_display_debug = Meta.has (Meta.Custom ":debug.display") ctx.curfield.cf_meta in
+		if is_display_debug then print_endline ("before processing:\n" ^ (Expr.dump_with_pos e));
+		let e = if !Parser.had_resume then e else Display.ExprPreprocessing.process_expr ctx.com e in
+		if is_display_debug then print_endline ("after processing:\n" ^ (Expr.dump_with_pos e));
 		try
-			if Common.defined ctx.com Define.NoCOpt then raise Exit;
-			type_expr ctx (Optimizer.optimize_completion_expr e) NoValue
-		with
-		| Parser.TypePath (_,None,_) | Exit ->
+			if Common.defined ctx.com Define.NoCOpt || not !Parser.had_resume then raise Exit;
+			let e = Optimizer.optimize_completion_expr e f.f_args in
+			if is_display_debug then print_endline ("after optimizing:\n" ^ (Expr.dump_with_pos e));
 			type_expr ctx e NoValue
-		| Display.DisplayType (t,_,_) when (match follow t with TMono _ -> true | _ -> false) ->
-			type_expr ctx (if ctx.com.display.dms_kind = DMToplevel then Display.ExprPreprocessing.find_enclosing ctx.com DKToplevel e else e) NoValue
+		with
+		| Parser.TypePath (_,None,_,_) | Exit ->
+			type_expr ctx e NoValue
 	end in
 	let e = match e.eexpr with
 		| TMeta((Meta.MergeBlock,_,_), ({eexpr = TBlock el} as e1)) -> e1

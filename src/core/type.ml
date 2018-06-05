@@ -20,8 +20,6 @@
 open Ast
 open Globals
 
-type path = string list * string
-
 type field_kind =
 	| Var of var_kind
 	| Method of method_kind
@@ -310,9 +308,15 @@ and module_def = {
 	m_extra : module_def_extra;
 }
 
+and module_def_display = {
+	mutable m_inline_calls : (pos * pos) list; (* calls whatever is at pos1 from pos2 *)
+	mutable m_type_hints : (pos * t) list;
+}
+
 and module_def_extra = {
 	m_file : string;
 	m_sign : string;
+	m_display : module_def_display;
 	mutable m_check_policy : module_check_policy list;
 	mutable m_time : float;
 	mutable m_dirty : module_def option;
@@ -348,6 +352,55 @@ type basic_types = {
 	mutable tstring : t;
 	mutable tarray : t -> t;
 }
+
+type class_field_scope =
+	| CFSStatic
+	| CFSMember
+	| CFSConstructor
+
+module TVarOrigin = struct
+	type t =
+		| TVOLocalVariable
+		| TVOArgument
+		| TVOForVariable
+		| TVOPatternVariable
+		| TVOCatchVariable
+		| TVOLocalFunction
+
+	let to_int = function
+		| TVOLocalVariable -> 0
+		| TVOArgument -> 1
+		| TVOForVariable -> 2
+		| TVOPatternVariable -> 3
+		| TVOCatchVariable -> 4
+		| TVOLocalFunction -> 5
+
+	let to_string = function
+		| TVOArgument -> "Argument"
+		| TVOLocalVariable -> "LocalVariable"
+		| TVOPatternVariable -> "PatternVariable"
+		| TVOLocalFunction -> "LocalFunction"
+		| TVOForVariable -> "ForVariable"
+		| TVOCatchVariable -> "CatchVariable"
+
+	let from_string = function
+		| "Argument" -> TVOArgument
+		| "LocalVariable" -> TVOLocalVariable
+		| "PatternVariable" -> TVOPatternVariable
+		| "LocalFunction" -> TVOLocalFunction
+		| "ForVariable" -> TVOForVariable
+		| "CatchVariable" -> TVOCatchVariable
+		| _ -> raise Not_found
+
+	let encode_in_meta tvo =
+		let name = to_string tvo in
+		(Meta.TVarOrigin,[(EConst(Ident name),null_pos)],null_pos)
+
+	let decode_from_meta meta =
+		match Meta.get Meta.TVarOrigin meta with
+		| _,[(EConst(Ident s),_)],_ -> from_string s
+		| _ -> raise Not_found
+end
 
 (* ======= General utility ======= *)
 
@@ -419,6 +472,10 @@ let module_extra file sign time kind policy =
 	{
 		m_file = file;
 		m_sign = sign;
+		m_display = {
+			m_inline_calls = [];
+			m_type_hints = [];
+		};
 		m_dirty = None;
 		m_added = 0;
 		m_mark = 0;
@@ -908,6 +965,12 @@ let rec get_constructor build_type c =
 		let t, c = get_constructor build_type csup in
 		apply_params csup.cl_params cparams t, c
 
+let has_constructor c =
+	try
+		ignore(get_constructor (fun cf -> cf.cf_type) c);
+		true
+	with Not_found -> false
+
 (* ======= Printing ======= *)
 
 let print_context() = ref []
@@ -1052,6 +1115,14 @@ let s_const = function
 	| TThis -> "this"
 	| TSuper -> "super"
 
+let s_field_access s_type fa = match fa with
+	| FStatic (c,f) -> "static(" ^ s_type_path c.cl_path ^ "." ^ f.cf_name ^ ")"
+	| FInstance (c,_,f) -> "inst(" ^ s_type_path c.cl_path ^ "." ^ f.cf_name ^ " : " ^ s_type f.cf_type ^ ")"
+	| FClosure (c,f) -> "closure(" ^ (match c with None -> f.cf_name | Some (c,_) -> s_type_path c.cl_path ^ "." ^ f.cf_name)  ^ ")"
+	| FAnon f -> "anon(" ^ f.cf_name ^ ")"
+	| FEnum (en,f) -> "enum(" ^ s_type_path en.e_path ^ "." ^ f.ef_name ^ ")"
+	| FDynamic f -> "dynamic(" ^ f ^ ")"
+
 let rec s_expr s_type e =
 	let sprintf = Printf.sprintf in
 	let slist f l = String.concat "," (List.map f l) in
@@ -1071,14 +1142,7 @@ let rec s_expr s_type e =
 	| TEnumParameter (e1,_,i) ->
 		sprintf "%s[%i]" (loop e1) i
 	| TField (e,f) ->
-		let fstr = (match f with
-			| FStatic (c,f) -> "static(" ^ s_type_path c.cl_path ^ "." ^ f.cf_name ^ ")"
-			| FInstance (c,_,f) -> "inst(" ^ s_type_path c.cl_path ^ "." ^ f.cf_name ^ " : " ^ s_type f.cf_type ^ ")"
-			| FClosure (c,f) -> "closure(" ^ (match c with None -> f.cf_name | Some (c,_) -> s_type_path c.cl_path ^ "." ^ f.cf_name)  ^ ")"
-			| FAnon f -> "anon(" ^ f.cf_name ^ ")"
-			| FEnum (en,f) -> "enum(" ^ s_type_path en.e_path ^ "." ^ f.ef_name ^ ")"
-			| FDynamic f -> "dynamic(" ^ f ^ ")"
-		) in
+		let fstr = s_field_access s_type f in
 		sprintf "%s.%s" (loop e) fstr
 	| TTypeExpr m ->
 		sprintf "TypeExpr %s" (s_type_path (t_path m))
@@ -1695,6 +1759,19 @@ let rec_stack stack value fcheck frun ferror =
 				stack := List.tl !stack;
 				raise e
 	end
+
+let rec_stack_default stack value fcheck frun def =
+	if not (List.exists fcheck !stack) then begin
+		try
+			stack := value :: !stack;
+			let v = frun() in
+			stack := List.tl !stack;
+			v
+		with
+			| e ->
+				stack := List.tl !stack;
+				raise e
+	end	else def
 
 let rec_stack_bool stack value fcheck frun =
 	if (List.exists fcheck !stack) then false else begin
@@ -2732,3 +2809,34 @@ let abstract_module_type a tl = {
 	t_params = [];
 	t_meta = no_meta;
 }
+
+module TClass = struct
+	let get_member_fields' self_too c0 tl =
+		let rec loop acc c tl =
+			let apply = apply_params c.cl_params tl in
+			let maybe_add acc cf =
+				if not (PMap.mem cf.cf_name acc) then begin
+					let cf = if tl = [] then cf else {cf with cf_type = apply cf.cf_type} in
+					PMap.add cf.cf_name (c,cf) acc
+				end else acc
+			in
+			let acc = if self_too || c != c0 then List.fold_left maybe_add acc c.cl_ordered_fields else acc in
+			match c.cl_super with
+			| Some(c,tl) -> loop acc c (List.map apply tl)
+			| None -> acc
+		in
+		loop PMap.empty c0 tl
+
+	let get_all_super_fields c =
+		get_member_fields' false c (List.map snd c.cl_params)
+
+	let get_all_fields c tl =
+		get_member_fields' true c tl
+end
+
+let s_class_path c =
+	let path = match c.cl_kind with
+		| KAbstractImpl a -> a.a_path
+		| _ -> c.cl_path
+	in
+	s_type_path path

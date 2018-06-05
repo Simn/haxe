@@ -21,7 +21,13 @@
 
 open Ast
 open Common
-open Common.DisplayMode
+open DisplayTypes.DisplayMode
+open DisplayTypes.CompletionResultKind
+open CompletionItem
+open CompletionModuleType
+open CompletionModuleKind
+open ClassFieldOrigin
+open DisplayException
 open Type
 open Typecore
 open Error
@@ -31,92 +37,139 @@ let build_count = ref 0
 
 let type_function_params_rec = ref (fun _ _ _ _ -> assert false)
 
+let check_field_access ctx cff =
+	let display_access = ref None in
+	let rec loop p0 acc l =
+		let check_display p1 =
+			let pmid = {p0 with pmin = p0.pmax; pmax = p1.pmin} in
+			if DisplayPosition.encloses_display_position pmid then match acc with
+			| access :: _ -> display_access := Some access;
+			| [] -> ()
+		in
+		match l with
+		| [] ->
+			(* This is a bit dodgy. Ideally we would use the position of the `function` keyword, but we don't have that...
+			   Using the name means this is going to complete within the `function` keyword too. Not sure what we
+			   can do about it. *)
+			check_display (pos (cff.cff_name))
+		| (access,p1) :: l ->
+			check_display p1;
+			try
+				let _,p2 = List.find (fun (access',_) -> access = access') acc in
+				if p1 <> null_pos && p2 <> null_pos then begin
+					display_error ctx (Printf.sprintf "Duplicate access modifier %s" (Ast.s_access access)) p1;
+					display_error ctx "Previously defined here" p2;
+				end;
+				loop p1 acc l
+			with Not_found -> match access with
+				| APublic | APrivate ->
+					begin try
+						let _,p2 = List.find (fun (access',_) -> match access' with APublic | APrivate -> true | _ -> false) acc in
+						display_error ctx (Printf.sprintf "Conflicting access modifier %s" (Ast.s_access access)) p1;
+						display_error ctx "Conflicts with this" p2;
+						loop p1 acc l
+					with Not_found ->
+						loop p1 ((access,p1) :: acc) l
+					end
+				| _ ->
+					loop p1 ((access,p1) :: acc) l
+	in
+	let pmin = {cff.cff_pos with pmax = cff.cff_pos.pmin} in
+	loop pmin [] cff.cff_access;
+	!display_access
+
+let find_type_in_module m tname =
+	List.find (fun mt ->
+		let infos = t_infos mt in
+		not infos.mt_private && snd infos.mt_path = tname
+	) m.m_types
+
+(* raises Method_not_found or Type_not_found *)
+let load_type_raise ctx mpath tname p =
+	let m = ctx.g.do_load_module ctx mpath p in
+	try
+		find_type_in_module m tname
+	with Not_found ->
+		raise_error (Type_not_found(mpath,tname)) p
+
+(* raises Not_found *)
+let load_type ctx mpath tname p = try
+	load_type_raise ctx mpath tname p
+with Error((Module_not_found _ | Type_not_found _),p2) when p = p2 ->
+	raise Not_found
+
 (** since load_type_def and load_instance are used in PASS2, they should not access the structure of a type **)
 
 (*
 	load a type or a subtype definition
 *)
-let rec load_type_def ctx p t =
+let load_type_def ctx p t =
 	let no_pack = t.tpackage = [] in
+	if t = Parser.magic_type_path then raise_fields (DisplayToplevel.collect ctx None NoValue) CRTypeHint None;
+	(* The type name is the module name or the module sub-type name *)
 	let tname = (match t.tsub with None -> t.tname | Some n -> n) in
-	if tname = "" then raise (Display.DisplayToplevel (DisplayToplevel.collect ctx true));
 	try
+		(* If there's a sub-type, there's no reason to look in our module or its imports *)
 		if t.tsub <> None then raise Not_found;
 		let path_matches t2 =
 			let tp = t_path t2 in
 			tp = (t.tpackage,tname) || (no_pack && snd tp = tname)
 		in
 		try
+			(* Check the types in our own module *)
 			List.find path_matches ctx.m.curmod.m_types
 		with Not_found ->
+			(* Check the local imports *)
 			let t,pi = List.find (fun (t2,pi) -> path_matches t2) ctx.m.module_types in
-			Display.ImportHandling.mark_import_position ctx.com pi;
+			ImportHandling.mark_import_position ctx.com pi;
 			t
 	with
-		Not_found ->
-			let next() =
-				let t, m = (try
-					t, ctx.g.do_load_module ctx (t.tpackage,t.tname) p
-				with Error (Module_not_found _,p2) as e when p == p2 ->
-					match t.tpackage with
-					| "std" :: l ->
-						let t = { t with tpackage = l } in
-						t, ctx.g.do_load_module ctx (t.tpackage,t.tname) p
-					| _ -> raise e
-				) in
-				let tpath = (t.tpackage,tname) in
-				try
-					List.find (fun t -> not (t_infos t).mt_private && t_path t = tpath) m.m_types
-				with
-					Not_found -> raise (Error (Type_not_found (m.m_path,tname),p))
+	| Not_found when no_pack ->
+		(* Unqualified *)
+		begin try
+			let rec loop l = match l with
+				| [] ->
+					raise Exit
+				| (pack,ppack) :: l ->
+					begin try
+						let mt = load_type ctx (pack,t.tname) tname p in
+						ImportHandling.mark_import_position ctx.com ppack;
+						mt
+					with Not_found ->
+						loop l
+					end
 			in
-			(* lookup in wildcard imported packages *)
-			try
-				if not no_pack then raise Exit;
-				let rec loop l = match l with
-					| [] -> raise Exit
-					| (wp,pi) :: l ->
-						try
-							let t = load_type_def ctx p { t with tpackage = wp } in
-							Display.ImportHandling.mark_import_position ctx.com pi;
-							t
-						with
-							| Error (Module_not_found _,p2)
-							| Error (Type_not_found _,p2) when p == p2 -> loop l
-				in
-				loop ctx.m.wildcard_packages
-			with Exit ->
-			(* lookup in our own package - and its upper packages *)
-			let rec loop = function
-				| [] -> raise Exit
-				| (_ :: lnext) as l ->
-					try
-						load_type_def ctx p { t with tpackage = List.rev l }
-					with
-						| Error (Module_not_found _,p2)
-						| Error (Type_not_found _,p2) when p == p2 -> loop lnext
+			(* Check wildcard packages by using their package *)
+			loop ctx.m.wildcard_packages
+		with Exit ->
+			let rec loop l = match l with
+				| [] ->
+					load_type_raise ctx ([],t.tname) tname p
+				| _ :: sl as l ->
+					(try load_type ctx (List.rev l,t.tname) tname p with Not_found -> loop sl)
 			in
-			try
-				if not no_pack then raise Exit;
-				(match fst ctx.m.curmod.m_path with
-				| [] -> raise Exit
-				| x :: _ ->
-					(* this can occur due to haxe remoting : a module can be
-						already defined in the "js" package and is not allowed
-						to access the js classes *)
-					try
-						(match PMap.find x ctx.com.package_rules with
-						| Forbidden -> raise Exit
-						| _ -> ())
-					with Not_found -> ());
-				loop (List.rev (fst ctx.m.curmod.m_path));
-			with
-				Exit -> next()
+			(* Check our current module's path and its parent paths *)
+			loop (List.rev (fst ctx.m.curmod.m_path))
+		end
+	| Not_found ->
+		(* Qualified *)
+		try
+			(* Try loading the fully qualified module *)
+			load_type_raise ctx (t.tpackage,t.tname) tname p
+		with Error((Module_not_found _ | Type_not_found _),_) as exc -> match t.tpackage with
+		| "std" :: l ->
+			load_type_raise ctx (l,t.tname) tname p
+		| _ ->
+			raise exc
+
+(* let load_type_def ctx p t =
+	let timer = Timer.timer ["typing";"load_type_def"] in
+	Std.finally timer (load_type_def ctx p) t *)
 
 let resolve_position_by_path ctx path p =
 	let mt = load_type_def ctx p path in
 	let p = (t_infos mt).mt_pos in
-	raise (Display.DisplayPosition [p])
+	raise_position [p]
 
 let check_param_constraints ctx types t pl c p =
 	match follow t with
@@ -165,7 +218,7 @@ let pselect p1 p2 =
 	if p1 = null_pos then p2 else p1
 
 (* build an instance from a full type *)
-let rec load_instance ?(allow_display=false) ctx (t,pn) allow_no_params p =
+let rec load_instance' ctx (t,pn) allow_no_params p =
 	let p = pselect pn p in
 	let t = try
 		if t.tpackage <> [] || t.tsub <> None then raise Not_found;
@@ -255,6 +308,8 @@ let rec load_instance ?(allow_display=false) ctx (t,pn) allow_no_params p =
 				| t :: tl,[] ->
 					if is_rest then
 						t :: loop tl [] true
+					else if ctx.com.display.dms_error_policy = EPIgnore then
+						[]
 					else
 						error ("Too many parameters for " ^ s_type_path path) p
 			in
@@ -262,8 +317,16 @@ let rec load_instance ?(allow_display=false) ctx (t,pn) allow_no_params p =
 			f params
 		end
 	in
-	if allow_display then Display.DisplayEmitter.check_display_type ctx t pn;
 	t
+
+and load_instance ctx ?(allow_display=false) (t,pn) allow_no_params p =
+	try
+		let t = load_instance' ctx (t,pn) allow_no_params p in
+		if allow_display then DisplayEmitter.check_display_type ctx t pn;
+		t
+	with Error (Module_not_found path,_) when (ctx.com.display.dms_kind = DMDefault) && DisplayPosition.encloses_display_position pn ->
+		let s = s_type_path path in
+		raise_fields (DisplayToplevel.collect ctx None NoValue) CRTypeHint (Some {pn with pmin = pn.pmax - String.length s;});
 
 (*
 	build an instance from a complex type
@@ -276,7 +339,7 @@ and load_complex_type ctx allow_display p (t,pn) =
 	| CTOptional _ -> error "Optional type not allowed here" p
 	| CTNamed _ -> error "Named type not allowed here" p
 	| CTExtend (tl,l) ->
-		(match load_complex_type ctx allow_display p (CTAnonymous l,p) with
+		begin match load_complex_type ctx allow_display p (CTAnonymous l,p) with
 		| TAnon a as ta ->
 			let is_redefined cf1 a2 =
 				try
@@ -311,7 +374,16 @@ and load_complex_type ctx allow_display p (t,pn) =
 				| _ ->
 					error "Can only extend structures" p
 			in
-			let il = List.map (fun (t,pn) -> load_instance ctx ~allow_display (t,pn) false p) tl in
+			let il = List.map (fun (t,pn) ->
+				try
+					load_instance ctx ~allow_display (t,pn) false p
+				with DisplayException(DisplayFields(l,CRTypeHint,p)) ->
+					let l = List.filter (fun item -> match item.ci_kind with
+						| ITType({kind = Struct},_) -> true
+						| _ -> false
+					) l in
+					raise_fields l CRStructExtension p
+			) tl in
 			let tr = ref None in
 			let t = TMono tr in
 			let r = exc_protect ctx (fun r ->
@@ -326,7 +398,8 @@ and load_complex_type ctx allow_display p (t,pn) =
 				t
 			) "constraint" in
 			TLazy r
-		| _ -> assert false)
+		| _ -> assert false
+		end
 	| CTAnonymous l ->
 		let rec loop acc f =
 			let n = fst f.cff_name in
@@ -345,10 +418,13 @@ and load_complex_type ctx allow_display p (t,pn) =
 			let dyn = ref false in
 			let params = ref [] in
 			let final = ref false in
+			ignore(check_field_access ctx f); (* TODO: do we want to do anything with this? *)
 			List.iter (fun a ->
 				match fst a with
 				| APublic -> ()
-				| APrivate -> pub := false;
+				| APrivate ->
+					ctx.com.warning "private structure fields are deprecated" (pos a);
+					pub := false;
 				| ADynamic when (match f.cff_kind with FFun _ -> true | _ -> false) -> dyn := true
 				| AFinal -> final := true
 				| AStatic | AOverride | AInline | ADynamic | AMacro | AExtern as a -> error ("Invalid access " ^ Ast.s_access a) p
@@ -401,8 +477,8 @@ and load_complex_type ctx allow_display p (t,pn) =
 			} in
 			init_meta_overloads ctx None cf;
 			if ctx.is_display_file then begin
-				Display.DisplayEmitter.check_display_metadata ctx cf.cf_meta;
-				Display.DisplayEmitter.maybe_display_field ctx (cf.cf_name_pos) cf;
+				DisplayEmitter.check_display_metadata ctx cf.cf_meta;
+				DisplayEmitter.maybe_display_field ctx Unknown CFSMember cf cf.cf_name_pos;
 			end;
 			PMap.add n cf acc
 		in
@@ -515,9 +591,13 @@ let load_type_hint ?(opt=false) ctx pcur t =
 			try
 				load_complex_type ctx true pcur (t,p)
 			with Error(Module_not_found(([],name)),p) as exc ->
-				if Display.Diagnostics.is_diagnostics_run ctx then DisplayToplevel.handle_unresolved_identifier ctx name p true;
-				(* Default to Dynamic in display mode *)
-				if ctx.com.display.dms_display then t_dynamic else raise exc
+				if Diagnostics.is_diagnostics_run p then begin
+					delay ctx PForce (fun () -> DisplayToplevel.handle_unresolved_identifier ctx name p true);
+					t_dynamic
+				end else if ctx.com.display.dms_display then begin
+					DisplayEmitter.check_display_type ctx (mk_mono()) p;
+					t_dynamic
+				end	else raise exc
 	in
 	if opt then ctx.t.tnull t else t
 
@@ -566,8 +646,8 @@ let rec type_type_param ?(enum_constructor=false) ctx path get_params p tp =
 	c.cl_meta <- tp.Ast.tp_meta;
 	if enum_constructor then c.cl_meta <- (Meta.EnumConstructorParam,[],null_pos) :: c.cl_meta;
 	let t = TInst (c,List.map snd c.cl_params) in
-	if ctx.is_display_file && Display.is_display_position (pos tp.tp_name) then
-		Display.DisplayEmitter.display_type ctx.com.display t (pos tp.tp_name);
+	if ctx.is_display_file && DisplayPosition.encloses_display_position (pos tp.tp_name) then
+		DisplayEmitter.display_type ctx t (pos tp.tp_name);
 	match tp.tp_constraints with
 	| [] ->
 		n, t
@@ -701,30 +781,66 @@ let string_list_of_expr_path (e,p) =
 	with Exit -> error "Invalid path" p
 
 let handle_path_display ctx path p =
-	let open Display.ImportHandling in
-	match Display.ImportHandling.convert_import_to_something_usable !Parser.resume_display path,ctx.com.display.dms_kind with
-		| (IDKPackage sl,_),_ ->
-			raise (Parser.TypePath(sl,None,true))
-		| (IDKModule(sl,s),_),DMPosition ->
+	let open ImportHandling in
+	let class_field c name =
+		ignore(c.cl_build());
+		let cf = PMap.find name c.cl_statics in
+		let origin = match c.cl_kind with
+			| KAbstractImpl a -> Self (TAbstractDecl a)
+			| _ -> Self (TClassDecl c)
+		in
+		DisplayEmitter.display_field ctx origin CFSStatic cf p
+	in
+	match ImportHandling.convert_import_to_something_usable !DisplayPosition.display_position path,ctx.com.display.dms_kind with
+		| (IDKPackage [_],p),DMDefault ->
+			let fields = DisplayToplevel.collect ctx None Typecore.NoValue in
+			raise_fields fields CRImport (Some p)
+		| (IDKPackage sl,p),DMDefault ->
+			let sl = match List.rev sl with
+				| s :: sl -> List.rev sl
+				| [] -> assert false
+			in
+			raise (Parser.TypePath(sl,None,true,p))
+		| (IDKPackage _,_),_ ->
+			() (* ? *)
+		| (IDKModule(sl,s),_),DMDefinition ->
 			(* We assume that we want to go to the module file, not a specific type
 			   which might not even exist anyway. *)
 			let mt = ctx.g.do_load_module ctx (sl,s) p in
 			let p = { pfile = mt.m_extra.m_file; pmin = 0; pmax = 0} in
-			raise (Display.DisplayPosition [p])
-		| (IDKModule(sl,s),_),_ ->
-			(* TODO: wait till nadako requests @type display for these, then implement it somehow *)
-			raise (Parser.TypePath(sl,Some(s,false),true))
-		| (IDKSubType(sl,sm,st),p),DMPosition ->
+			DisplayException.raise_position [p]
+		| (IDKModule(sl,s),_),DMHover ->
+			let m = ctx.g.do_load_module ctx (sl,s) p in
+			begin try
+				let mt = List.find (fun mt -> snd (t_infos mt).mt_path = s) m.m_types in
+				DisplayEmitter.display_module_type ctx mt p;
+			with Not_found ->
+				()
+			end
+		| (IDKSubType(sl,sm,st),p),DMHover ->
+			(* TODO: remove code duplication once load_type_def change is in *)
+			let m = ctx.g.do_load_module ctx (sl,sm) p in
+			begin try
+				let mt = List.find (fun mt -> snd (t_infos mt).mt_path = st) m.m_types in
+				DisplayEmitter.display_module_type ctx mt p;
+			with Not_found ->
+				()
+			end
+		| (IDKModule(sl,s),p),_ ->
+			raise (Parser.TypePath(sl,None,true,p))
+		| (IDKSubType(sl,sm,st),p),DMDefinition ->
 			resolve_position_by_path ctx { tpackage = sl; tname = sm; tparams = []; tsub = Some st} p
-		| (IDKSubType(sl,sm,st),_),_ ->
-			raise (Parser.TypePath(sl @ [sm],Some(st,false),true))
+		| (IDKSubType(sl,sm,st),p),_ ->
+			raise (Parser.TypePath(sl,Some(sm,false),true,p))
+		| ((IDKSubTypeField(sl,sm,st,sf) | IDKModuleField(sl,(sm as st),sf)),p),DMDefault ->
+			raise (Parser.TypePath(sl @ [sm],Some(st,false),true,p));
 		| ((IDKSubTypeField(sl,sm,st,sf) | IDKModuleField(sl,(sm as st),sf)),p),_ ->
 			let m = ctx.g.do_load_module ctx (sl,sm) p in
 			List.iter (fun t -> match t with
 				| TClassDecl c when snd c.cl_path = st ->
-					ignore(c.cl_build());
-					let cf = PMap.find sf c.cl_statics in
-					Display.DisplayEmitter.display_field ctx.com.display cf p
+					class_field c sf
+				| TAbstractDecl {a_impl = Some c; a_path = (_,st')} when st' = st ->
+					class_field c sf
 				| _ ->
 					()
 			) m.m_types;

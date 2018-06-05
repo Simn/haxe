@@ -22,6 +22,7 @@ open Ast
 open Common
 open Type
 open Error
+open DisplayTypes
 
 type with_type =
 	| NoValue
@@ -86,6 +87,7 @@ type typer_globals = {
 	do_create : Common.context -> typer;
 	do_macro : typer -> macro_mode -> path -> string -> expr list -> pos -> expr option;
 	do_load_module : typer -> path -> pos -> module_def;
+	do_load_type_def : typer -> pos -> type_path -> module_type;
 	do_optimize : typer -> texpr -> texpr;
 	do_build_instance : typer -> module_type -> pos -> ((string * t) list * path * (t list -> t));
 	do_format_string : typer -> string -> pos -> Ast.expr;
@@ -215,6 +217,11 @@ let add_local ctx n t p =
 			()
 	end;
 	ctx.locals <- PMap.add n v ctx.locals;
+	v
+
+let add_local_with_origin ctx n t p origin =
+	let v = add_local ctx n t p in
+	if ctx.com.display.DisplayMode.dms_kind <> DisplayMode.DMNone then v.v_meta <- (TVarOrigin.encode_in_meta origin) :: v.v_meta;
 	v
 
 let gen_local_prefix = "`"

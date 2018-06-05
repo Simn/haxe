@@ -238,6 +238,13 @@ let inline_default_config cf t =
 	let tparams = fst tparams @ cf.cf_params in
 	tparams <> [], apply_params tparams tmonos
 
+let inline_metadata e meta =
+	let inline_meta e meta = match meta with
+		| (Meta.Deprecated | Meta.Pure),_,_ -> mk (TMeta(meta,e)) e.etype e.epos
+		| _ -> e
+	in
+	List.fold_left inline_meta e meta
+
 let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=false) force =
 	(* perform some specific optimization before we inline the call since it's not possible to detect at final optimization time *)
 	try
@@ -587,6 +594,8 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 	if !cancel_inlining then
 		None
 	else
+		let md = ctx.curclass.cl_module.m_extra.m_display in
+		md.m_inline_calls <- (cf.cf_name_pos,{p with pmax = p.pmin + String.length cf.cf_name}) :: md.m_inline_calls;
 		let wrap e =
 			(* we can't mute the type of the expression because it is not correct to do so *)
 			let etype = if has_params then map_type e.etype else e.etype in
@@ -617,12 +626,8 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 				let el_v = List.map (fun (v,eo) -> mk (TVar (v,eo)) ctx.t.tvoid e.epos) vl in
 				mk (TBlock (el_v @ [e])) tret e.epos
 		) in
-		let inline_meta e meta = match meta with
-			| (Meta.Deprecated | Meta.Pure),_,_ -> mk (TMeta(meta,e)) e.etype e.epos
-			| _ -> e
-		in
-		let e = List.fold_left inline_meta e cf.cf_meta in
-		let e = Display.Diagnostics.secure_generated_code ctx e in
+		let e = inline_metadata e cf.cf_meta in
+		let e = Diagnostics.secure_generated_code ctx e in
 		if Meta.has (Meta.Custom ":inlineDebug") ctx.meta then begin
 			let se t = s_expr_pretty true t true (s_type (print_context())) in
 			print_endline (Printf.sprintf "Inline %s:\n\tArgs: %s\n\tExpr: %s\n\tResult: %s"
@@ -905,6 +910,8 @@ let reduce_control_flow ctx e = match e.eexpr with
 	| _ ->
 		e
 
+let inline_stack = ref []
+
 let rec reduce_loop ctx e =
 	let e = Type.map_expr (reduce_loop ctx) e in
 	sanitize_expr ctx.com (match e.eexpr with
@@ -922,10 +929,11 @@ let rec reduce_loop ctx e =
 				begin match cf.cf_expr with
 				| Some {eexpr = TFunction tf} ->
 					let rt = (match follow e1.etype with TFun (_,rt) -> rt | _ -> assert false) in
-					let inl = (try type_inline ctx cf tf ef el rt None e.epos ~self_calling_closure:true false with Error (Custom _,_) -> None) in
+					let inl = (try type_inline ctx cf tf ef el rt None e.epos false with Error (Custom _,_) -> None) in
 					(match inl with
 					| None -> reduce_expr ctx e
-					| Some e -> reduce_loop ctx e)
+					| Some e ->
+						rec_stack_default inline_stack cf (fun cf' -> cf' == cf) (fun () -> reduce_loop ctx e) e)
 				| _ ->
 					reduce_expr ctx e
 				end
@@ -1236,7 +1244,7 @@ type compl_locals = {
 	mutable r : (string, (complex_type option * (int * Ast.expr * compl_locals) option)) PMap.t;
 }
 
-let optimize_completion_expr e =
+let optimize_completion_expr e args =
 	let iid = ref 0 in
 	let typing_side_effect = ref false in
 	let locals : compl_locals = { r = PMap.empty } in
@@ -1250,6 +1258,10 @@ let optimize_completion_expr e =
 	let decl n t e =
 		typing_side_effect := true;
 		locals.r <- PMap.add n (t,(match e with Some e when maybe_typed e -> incr iid; Some (!iid,e,{ r = locals.r }) | _ -> None)) locals.r
+	in
+	let rec hunt_idents e = match fst e with
+		| EConst (Ident i) -> decl i None None
+		| _ -> Ast.iter_expr hunt_idents e
 	in
 	let e0 = e in
 	let rec loop e =
@@ -1284,7 +1296,7 @@ let optimize_completion_expr e =
 			let el = List.fold_left (fun acc e ->
 				typing_side_effect := false;
 				let e = loop e in
-				if !typing_side_effect || Display.is_display_position (pos e) then begin told := true; e :: acc end else acc
+				if !typing_side_effect || DisplayPosition.encloses_display_position (pos e) then begin told := true; e :: acc end else acc
 			) [] el in
 			old();
 			typing_side_effect := !told;
@@ -1314,6 +1326,22 @@ let optimize_completion_expr e =
 		| EReturn _ ->
 			typing_side_effect := true;
 			map e
+		| ESwitch (e1,cases,def) when DisplayPosition.encloses_display_position p ->
+			let e1 = loop e1 in
+			hunt_idents e1;
+			(* Prune all cases that aren't our display case *)
+			let cases = List.filter (fun (_,_,_,p) -> DisplayPosition.encloses_display_position p) cases in
+			(* Don't throw away the switch subject when we optimize in a case expression because we might need it *)
+			let cases = List.map (fun (el,eg,eo,p) ->
+				List.iter hunt_idents el;
+				el,eg,(try Option.map loop eo with Return e -> Some e),p
+			) cases in
+			let def = match def with
+				| None -> None
+				| Some (None,p) -> Some (None,p)
+				| Some (Some e,p) -> Some (Some (loop e),p)
+			in
+			(ESwitch (e1,cases,def),p)
 		| ESwitch (e,cases,def) ->
 			let e = loop e in
 			let cases = List.map (fun (el,eg,eo,p) -> match eo with
@@ -1322,16 +1350,7 @@ let optimize_completion_expr e =
 				| Some e ->
 					let el = List.map loop el in
 					let old = save() in
-					List.iter (fun e ->
-						match fst e with
-						| ECall (_,pl) ->
-							List.iter (fun p ->
-								match fst p with
-								| EConst (Ident i) -> decl i None None (* sadly *)
-								| _ -> ()
-							) pl
-						| _ -> ()
-					) el;
+					List.iter hunt_idents el;
 					let e = loop e in
 					old();
 					el, eg, Some e, p
@@ -1352,6 +1371,18 @@ let optimize_completion_expr e =
 				(n,pn), (t,pt), e, p
 			) cl in
 			(ETry (et,cl),p)
+		| ECheckType(e1,th) ->
+			typing_side_effect := true;
+			let e1 = loop e1 in
+			(ECheckType(e1,th),p)
+		| EMeta(m,e1) ->
+			begin try
+				let e1 = loop e1 in
+				(EMeta(m,e1),(pos e))
+			with Return e1 ->
+				let e1 = (EMeta(m,e1),(pos e)) in
+				raise (Return e1)
+			end
 		| EDisplay(_,DKStructure) ->
 			raise (Return e0)
 		| EDisplay (s,call) ->
@@ -1403,6 +1434,7 @@ let optimize_completion_expr e =
 	and map e =
 		Ast.map_expr loop e
 	in
+	List.iter (fun ((n,_),_,_,t,e) -> decl n (Option.map fst t) e) args;
 	(try loop e with Return e -> e)
 
 (* ---------------------------------------------------------------------- *)

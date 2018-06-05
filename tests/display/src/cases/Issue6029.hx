@@ -6,12 +6,12 @@ class Issue6029 extends DisplayTestCase {
 		typedef B = {}
 
 		typedef C = {
-			>A{-1-},
-			>B{-2-},
+			>{-1-}A,
+			>{-2-}B,
 		}
 	**/
 	function test() {
-		eq("cases.A", type(pos(1)));
-		eq("cases.B", type(pos(2)));
+		eq("A", type(pos(1)));
+		eq("B", type(pos(2)));
 	}
 }

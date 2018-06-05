@@ -358,7 +358,7 @@ let encode_unop op =
 let encode_import (path,mode) =
 	let tag,pl = match mode with
 		| INormal -> 0, []
-		| IAsName s -> 1, [encode_string s]
+		| IAsName(s,_) -> 1, [encode_string s]
 		| IAll -> 2,[]
 	in
 	let mode = encode_enum IImportMode tag pl in
@@ -474,8 +474,8 @@ and encode_display_kind dk =
 	| DKCall -> 0
 	| DKDot -> 1
 	| DKStructure -> 2
-	| DKToplevel -> 3
-	| DKMarked -> 4
+	| DKMarked -> 3
+	| DKPattern -> 4
 	in
 	encode_enum ~pos:None ICType tag []
 
@@ -644,7 +644,7 @@ let decode_unop op =
 let decode_import_mode t =
 	match decode_enum t with
 	| 0, [] -> INormal
-	| 1, [alias] -> IAsName (decode_string alias)
+	| 1, [alias] -> IAsName (decode_string alias,Globals.null_pos) (* TODO: is it okay to lose the pos here? *)
 	| 2, [] -> IAll
 	| _ -> raise Invalid_expr
 
@@ -762,8 +762,8 @@ and decode_display_kind v = match fst (decode_enum v) with
 	| 0 -> DKCall
 	| 1 -> DKDot
 	| 2 -> DKStructure
-	| 3 -> DKToplevel
-	| 4 -> DKMarked
+	| 3 -> DKMarked
+	| 4 -> DKPattern
 	| _ -> raise Invalid_expr
 
 and decode_expr v =
@@ -1732,7 +1732,7 @@ let macro_api ccom get_api =
 			let data = Bytes.unsafe_to_string data in
 			if name = "" then failwith "Empty resource name";
 			Hashtbl.replace (ccom()).resources name data;
-			let m = if name.[0] = '$' then (get_api()).current_macro_module() else (get_api()).current_module() in
+			let m = if Globals.starts_with name '$' then (get_api()).current_macro_module() else (get_api()).current_module() in
 			m.m_extra.m_binded_res <- PMap.add name data m.m_extra.m_binded_res;
 			vnull
 		);
@@ -1888,7 +1888,7 @@ let macro_api ccom get_api =
 			vnull
 		);
 		"get_display_pos", vfun0 (fun() ->
-			let p = !Parser.resume_display in
+			let p = !DisplayPosition.display_position in
 			if p = Globals.null_pos then
 				vnull
 			else

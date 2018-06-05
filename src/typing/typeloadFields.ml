@@ -24,7 +24,8 @@ open Ast
 open Type
 open Typecore
 open Typeload
-open Common.DisplayMode
+open DisplayTypes.DisplayMode
+open CompletionItem.ClassFieldOrigin
 open Common
 open Error
 
@@ -59,8 +60,12 @@ type field_init_ctx = {
 	is_display_field : bool;
 	is_field_debug : bool;
 	field_kind : field_kind;
+	display_modifier : placed_access option;
 	mutable do_bind : bool;
 	mutable do_add : bool;
+	(* If true, cf_expr = None makes a difference in the logic. We insert a dummy expression in
+	   display mode in order to address this. *)
+	mutable expr_presence_matters : bool;
 }
 
 let locate_macro_error = ref true
@@ -94,6 +99,7 @@ let dump_field_context fctx =
 		"field_kind",s_field_kind fctx.field_kind;
 		"do_bind",string_of_bool fctx.do_bind;
 		"do_add",string_of_bool fctx.do_add;
+		"expr_presence_matters",string_of_bool fctx.expr_presence_matters;
 	]
 
 
@@ -205,7 +211,7 @@ let transform_abstract_field com this_t a_t a f =
 		let init p = (EVars [("this",null_pos),Some this_t,None],p) in
 		let cast e = (ECast(e,None)),pos e in
 		let ret p = (EReturn (Some (cast (EConst (Ident "this"),p))),p) in
-		let meta = (Meta.Impl,[],null_pos) :: f.cff_meta in
+		let meta = (Meta.Impl,[],null_pos) :: (Meta.NoCompletion,[],null_pos) :: f.cff_meta in
 		if Meta.has Meta.MultiType a.a_meta then begin
 			if List.mem_assoc AInline f.cff_access then error "MultiType constructors cannot be inline" f.cff_pos;
 			if fu.f_expr <> None then error "MultiType constructors cannot have a body" f.cff_pos;
@@ -271,6 +277,17 @@ let patch_class ctx c fields =
 					loop (f :: acc) l
 		in
 		List.rev (loop [] fields)
+
+let lazy_display_type ctx f =
+	(* if ctx.is_display_file then begin
+		let r = exc_protect ctx (fun r ->
+			let t = f () in
+			r := lazy_processing (fun () -> t);
+			t
+		) "" in
+		TLazy r
+	end else *)
+		f ()
 
 let build_enum_abstract ctx c a fields p =
 	List.iter (fun field ->
@@ -398,6 +415,7 @@ let create_field_context (ctx,cctx) c cff =
 		ctx with
 		pass = PBuildClass; (* will be set later to PTypeExpr *)
 	} in
+	let display_modifier = Typeload.check_field_access ctx cff in
 	let is_static = List.mem_assoc AStatic cff.cff_access in
 	let is_extern = List.mem_assoc AExtern cff.cff_access in
 	let is_extern = if Meta.has Meta.Extern cff.cff_meta then begin
@@ -426,12 +444,14 @@ let create_field_context (ctx,cctx) c cff =
 		is_macro = is_macro;
 		is_extern = is_extern;
 		is_final = List.mem_assoc AFinal cff.cff_access;
-		is_display_field = ctx.is_display_file && Display.is_display_position cff.cff_pos;
+		is_display_field = ctx.is_display_file && DisplayPosition.encloses_display_position cff.cff_pos;
 		is_field_debug = cctx.is_class_debug;
+		display_modifier = display_modifier;
 		is_abstract_member = cctx.abstract <> None && Meta.has Meta.Impl cff.cff_meta;
 		field_kind = field_kind;
 		do_bind = (((not c.cl_extern || is_inline) && not c.cl_interface) || field_kind = FKInit);
 		do_add = true;
+		expr_presence_matters = false;
 	} in
 	if fctx.is_display_field then cctx.has_display_field <- true;
 	ctx,fctx
@@ -546,8 +566,20 @@ let bind_type (ctx,cctx,fctx) cf r p =
 			if not (is_full_type cf.cf_type) then begin
 				cctx.delayed_expr <- (ctx, None) :: cctx.delayed_expr;
 				cf.cf_type <- TLazy r;
-			end;
+			end else if fctx.expr_presence_matters then
+				cf.cf_expr <- Some (mk (TConst TNull) t_dynamic null_pos)
 		end
+	end
+
+let check_field_display ctx fctx c cf =
+	if fctx.is_display_field then begin
+		let scope = if fctx.is_static then CFSStatic else if fctx.field_kind = FKConstructor then CFSConstructor else CFSMember in
+		let origin = match c.cl_kind with
+			| KAbstractImpl a -> Self (TAbstractDecl a)
+			| _ -> Self (TClassDecl c)
+		in
+		DisplayEmitter.maybe_display_field ctx origin scope cf cf.cf_name_pos;
+		DisplayEmitter.check_field_modifiers ctx c cf fctx.override fctx.display_modifier;
 	end
 
 let bind_var (ctx,cctx,fctx) cf e =
@@ -581,7 +613,7 @@ let bind_var (ctx,cctx,fctx) cf e =
 
 	match e with
 	| None ->
-		if fctx.is_display_field then Display.DisplayEmitter.maybe_display_field ctx (cf.cf_name_pos) cf;
+		check_field_display ctx fctx c cf;
 	| Some e ->
 		if requires_value_meta ctx.com (Some c) then cf.cf_meta <- ((Meta.Value,[e],null_pos) :: cf.cf_meta);
 		let check_cast e =
@@ -608,7 +640,7 @@ let bind_var (ctx,cctx,fctx) cf e =
 					| _ -> !analyzer_run_on_expr_ref ctx.com e
 				in
 				let require_constant_expression e msg =
-					if ctx.com.display.dms_display && ctx.com.display.dms_error_policy <> EPCollect then
+					if ctx.com.display.dms_kind <> DMNone && ctx.com.display.dms_error_policy <> EPCollect then
 						e
 					else match Optimizer.make_constant_expression ctx (maybe_run_analyzer e) with
 					| Some e -> e
@@ -668,7 +700,7 @@ let bind_var (ctx,cctx,fctx) cf e =
 				let e = check_cast e in
 				cf.cf_expr <- Some e;
 				cf.cf_type <- t;
-				if fctx.is_display_field then Display.DisplayEmitter.maybe_display_field ctx (cf.cf_name_pos) cf;
+				check_field_display ctx fctx c cf;
 			end;
 			t
 		) "bind_var" in
@@ -689,15 +721,7 @@ let create_variable (ctx,cctx,fctx) c f t eo p =
 		| None ->
 			mk_mono()
 		| Some t ->
-			(* TODO is_lib: only load complex type if needed *)
-			let old = ctx.type_params in
-			if fctx.is_static then ctx.type_params <- (match cctx.abstract with
-				| Some a -> a.a_params
-				| _ -> []
-			);
-			let t = load_complex_type ctx true p t in
-			if fctx.is_static then ctx.type_params <- old;
-			t
+			lazy_display_type ctx (fun () -> load_type_hint ctx p (Some t))
 	) in
 	let kind = if fctx.is_inline then
 		{ v_read = AccInline ; v_write = AccNever }
@@ -770,6 +794,7 @@ let check_abstract (ctx,cctx,fctx) c cf fd t ret p =
 				| ((Meta.ArrayAccess,_,_) | (Meta.Op,[(EArrayDecl _),_],_)) :: _ ->
 					if fctx.is_macro then error (cf.cf_name ^ ": Macro array-access functions are not supported") p;
 					a.a_array <- cf :: a.a_array;
+					fctx.expr_presence_matters <- true;
 				| (Meta.Op,[EBinop(op,_,_),_],_) :: _ ->
 					if fctx.is_macro then error (cf.cf_name ^ ": Macro operator functions are not supported") p;
 					let targ = if fctx.is_abstract_member then tthis else ta in
@@ -786,12 +811,14 @@ let check_abstract (ctx,cctx,fctx) c cf fd t ret p =
 					if right_eq && Meta.has Meta.Commutative cf.cf_meta then error (cf.cf_name ^ ": @:commutative is only allowed if the right argument is not " ^ (s_type (print_context()) targ)) cf.cf_pos;
 					a.a_ops <- (op,cf) :: a.a_ops;
 					allows_no_expr := true;
+					fctx.expr_presence_matters <- true;
 				| (Meta.Op,[EUnop(op,flag,_),_],_) :: _ ->
 					if fctx.is_macro then error (cf.cf_name ^ ": Macro operator functions are not supported") p;
 					let targ = if fctx.is_abstract_member then tthis else ta in
 					(try type_eq EqStrict t (tfun [targ] (mk_mono())) with Unify_error l -> raise (Error ((Unify l),cf.cf_pos)));
 					a.a_unops <- (op,flag,cf) :: a.a_unops;
 					allows_no_expr := true;
+					fctx.expr_presence_matters <- true;
 				| (Meta.Impl,_,_) :: ml when cf.cf_name <> "_new" && not fctx.is_macro ->
 					begin match follow t with
 						| TFun((_,_,t1) :: _, _) when type_iseq tthis t1 ->
@@ -899,11 +926,7 @@ let create_method (ctx,cctx,fctx) c f fd p =
 	let parent = (if not fctx.is_static then get_parent c (fst f.cff_name) else None) in
 	let dynamic = List.mem_assoc ADynamic f.cff_access || (match parent with Some { cf_kind = Method MethDynamic } -> true | _ -> false) in
 	if fctx.is_inline && dynamic then error (fst f.cff_name ^ ": You can't have both 'inline' and 'dynamic'") p;
-	ctx.type_params <- (match cctx.abstract with
-		| Some a when fctx.is_abstract_member ->
-			params @ a.a_params
-		| _ ->
-			if fctx.is_static then params else params @ ctx.type_params);
+	ctx.type_params <- if fctx.is_static && not fctx.is_abstract_member then params else ctx.type_params @ params;
 	(* TODO is_lib: avoid forcing the return type to be typed *)
 	let ret = if fctx.field_kind = FKConstructor then ctx.t.tvoid else type_opt (ctx,cctx) p fd.f_type in
 	let rec loop args = match args with
@@ -957,24 +980,14 @@ let create_method (ctx,cctx,fctx) c f fd p =
 				| None ->
 					if fctx.field_kind = FKConstructor then FunConstructor else if fctx.is_static then FunStatic else FunMember
 			) in
-			(match ctx.com.platform with
+			begin match ctx.com.platform with
 				| Java when is_java_native_function cf.cf_meta ->
 					if fd.f_expr <> None then
 						ctx.com.warning "@:native function definitions shouldn't include an expression. This behaviour is deprecated." cf.cf_pos;
 					cf.cf_expr <- None;
 					cf.cf_type <- t
 				| _ ->
-					if ctx.is_display_file && ctx.com.display.dms_kind = DMPosition then begin match fctx.override with
-						| Some p when Display.is_display_position p ->
-							begin match c.cl_super with
-							| Some(c,tl) ->
-								let _,_,cf = raw_class_field (fun cf -> cf.cf_type) c tl cf.cf_name in
-								Display.DisplayEmitter.display_field ctx.com.display cf p
-							| _ ->
-								()
-							end
-						| _ -> ()
-					end;
+					if cf.cf_name = Parser.magic_display_field_name then DisplayEmitter.check_field_modifiers ctx c cf fctx.override fctx.display_modifier;
 					let e , fargs = TypeloadFunction.type_function ctx args ret fmode fd fctx.is_display_field p in
 					begin match fctx.field_kind with
 					| FKNormal when not fctx.is_static -> TypeloadCheck.check_overriding ctx c cf
@@ -995,25 +1008,22 @@ let create_method (ctx,cctx,fctx) c f fd p =
 						| _ -> c.cl_init <- Some e);
 					cf.cf_expr <- Some (mk (TFunction tf) t p);
 					cf.cf_type <- t;
-				if fctx.is_display_field then Display.DisplayEmitter.maybe_display_field ctx (cf.cf_name_pos) cf);
+					check_field_display ctx fctx c cf;
+			end;
 		end;
 		t
 	) "type_fun" in
 	if fctx.do_bind then bind_type (ctx,cctx,fctx) cf r (match fd.f_expr with Some e -> snd e | None -> f.cff_pos)
-	else if fctx.is_display_field then Display.DisplayEmitter.maybe_display_field ctx (cf.cf_name_pos) cf;
+	else check_field_display ctx fctx c cf;
 	cf
 
 let create_property (ctx,cctx,fctx) c f (get,set,t,eo) p =
 	let name = fst f.cff_name in
-	(match cctx.abstract with
-	| Some a when fctx.is_abstract_member ->
-		ctx.type_params <- a.a_params;
-	| _ -> ());
 	(* TODO is_lib: lazify load_complex_type *)
 	let ret = (match t, eo with
 		| None, None -> error (name ^ ": Property must either define a type or a default value") p;
 		| None, _ -> mk_mono()
-		| Some t, _ -> load_complex_type ctx true p t
+		| Some t, _ -> lazy_display_type ctx (fun () -> load_type_hint ctx p (Some t))
 	) in
 	let t_get,t_set = match cctx.abstract with
 		| Some a when fctx.is_abstract_member ->
@@ -1094,7 +1104,7 @@ let create_property (ctx,cctx,fctx) c f (get,set,t,eo) p =
 	let display_accessor m p =
 		try
 			let cf = match find_accessor m with [_,cf] -> cf | _ -> raise Not_found in
-			Display.DisplayEmitter.display_field ctx.com.display cf p
+			DisplayEmitter.display_field ctx (Self (TClassDecl c)) (if fctx.is_static then CFSStatic else CFSMember) cf p
 		with Not_found ->
 			()
 	in
@@ -1106,7 +1116,7 @@ let create_property (ctx,cctx,fctx) c f (get,set,t,eo) p =
 		| "default",_ -> AccNormal
 		| get,pget ->
 			let get = if get = "get" then "get_" ^ name else get in
-			if fctx.is_display_field && Display.is_display_position pget then delay ctx PTypeField (fun () -> display_accessor get pget);
+			if fctx.is_display_field && DisplayPosition.encloses_display_position pget then delay ctx PTypeField (fun () -> display_accessor get pget);
 			if not cctx.is_lib then delay_check (fun() -> check_method get t_get (if get <> "get" && get <> "get_" ^ name then Some ("get_" ^ name) else None));
 			AccCall
 	) in
@@ -1122,7 +1132,7 @@ let create_property (ctx,cctx,fctx) c f (get,set,t,eo) p =
 		| "default",_ -> AccNormal
 		| set,pset ->
 			let set = if set = "set" then "set_" ^ name else set in
-			if fctx.is_display_field && Display.is_display_position pset then delay ctx PTypeField (fun () -> display_accessor set pset);
+			if fctx.is_display_field && DisplayPosition.encloses_display_position pset then delay ctx PTypeField (fun () -> display_accessor set pset);
 			if not cctx.is_lib then delay_check (fun() -> check_method set t_set (if set <> "set" && set <> "set_" ^ name then Some ("set_" ^ name) else None));
 			AccCall
 	) in
@@ -1144,17 +1154,21 @@ let init_field (ctx,cctx,fctx) f =
 	let name = fst f.cff_name in
 	TypeloadCheck.check_global_metadata ctx f.cff_meta (fun m -> f.cff_meta <- m :: f.cff_meta) c.cl_module.m_path c.cl_path (Some name);
 	let p = f.cff_pos in
-	if name.[0] = '$' then display_error ctx "Field names starting with a dollar are not allowed" p;
+	if starts_with name '$' then display_error ctx "Field names starting with a dollar are not allowed" p;
 	List.iter (fun acc ->
 		match (fst acc, f.cff_kind) with
 		| APublic, _ | APrivate, _ | AStatic, _ | AFinal, _ | AExtern, _ -> ()
 		| ADynamic, FFun _ | AOverride, FFun _ | AMacro, FFun _ | AInline, FFun _ | AInline, FVar _ -> ()
-		| _, FVar _ -> error ("Invalid accessor '" ^ Ast.s_placed_access acc ^ "' for variable " ^ name) p
-		| _, FProp _ -> error ("Invalid accessor '" ^ Ast.s_placed_access acc ^ "' for property " ^ name) p
+		| _, FVar _ -> display_error ctx ("Invalid accessor '" ^ Ast.s_placed_access acc ^ "' for variable " ^ name) p
+		| _, FProp _ -> display_error ctx ("Invalid accessor '" ^ Ast.s_placed_access acc ^ "' for property " ^ name) p
 	) f.cff_access;
 	begin match fctx.override with
 		| Some _ -> (match c.cl_super with None -> error ("Invalid override on field '" ^ name ^ "': class has no super class") p | _ -> ());
 		| None -> ()
+	end;
+	begin match cctx.abstract with
+		| Some a when fctx.is_abstract_member -> ctx.type_params <- a.a_params;
+		| _ -> ()
 	end;
 	match f.cff_kind with
 	| FVar (t,e) ->
@@ -1296,7 +1310,7 @@ let init_class ctx c p context_init herits fields =
 		let open Display in
 		let l = PMap.fold (fun cf acc ->
 			if not (List.exists (fun cf' -> cf'.cf_name = cf.cf_name) c.cl_overrides) then
-				(IdentifierType.ITMember cf) :: acc
+				(IdentifierType.ITClassMember cf) :: acc
 			else acc
 		) fields [] in
 		raise (Display.DisplayToplevel l)

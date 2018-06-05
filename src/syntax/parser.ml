@@ -20,6 +20,8 @@
 open Ast
 open Globals
 open Reification
+open DisplayTypes.DisplayMode
+open DisplayPosition
 
 type error_msg =
 	| Unexpected of token
@@ -30,9 +32,15 @@ type error_msg =
 	| Missing_type
 	| Custom of string
 
+type syntax_completion =
+	| SCComment
+	| SCClassRelation
+	| SCInterfaceRelation
+
 exception Error of error_msg * pos
-exception TypePath of string list * (string * bool) option * bool (* in import *)
+exception TypePath of string list * (string * bool) option * bool (* in import *) * pos
 exception Display of expr
+exception SyntaxCompletion of syntax_completion * pos
 
 let error_msg = function
 	| Unexpected t -> "Unexpected "^(s_token t)
@@ -42,6 +50,9 @@ let error_msg = function
 	| Unimplemented -> "Not implemented for current platform"
 	| Missing_type -> "Missing type declaration"
 	| Custom s -> s
+
+let syntax_completion kind p =
+	raise (SyntaxCompletion(kind,p))
 
 let error m p = raise (Error (m,p))
 let display_error : (error_msg -> pos -> unit) ref = ref (fun _ _ -> assert false)
@@ -74,14 +85,34 @@ module TokenCache = struct
 		(fun () -> cache := old_cache)
 end
 
-let last_doc : (string * int) option ref = ref None
+(* Global state *)
+
+let in_display = ref false
 let use_doc = ref false
-let resume_display = ref null_pos
+let was_auto_triggered = ref false
+let display_mode = ref DMNone
 let in_macro = ref false
+let had_resume = ref false
+
+let reset_state () =
+	in_display := false;
+	use_doc := false;
+	was_auto_triggered := false;
+	display_mode := DMNone;
+	display_position := null_pos;
+	in_macro := false;
+	had_resume := false
+
+(* Per-file state *)
+
+let in_display_file = ref false
+let last_doc : (string * int) option ref = ref None
 
 let last_token s =
 	let n = Stream.count s in
 	TokenCache.get (if n = 0 then 0 else n - 1)
+
+let last_pos s = pos (last_token s)
 
 let get_doc s =
 	(* do the peek first to make sure we fetch the doc *)
@@ -96,36 +127,25 @@ let get_doc s =
 
 let serror() = raise (Stream.Error "")
 
-let do_resume() = !resume_display <> null_pos
-
 let display e = raise (Display e)
 
-let type_path sl in_import = match sl with
-	| n :: l when n.[0] >= 'A' && n.[0] <= 'Z' -> raise (TypePath (List.rev l,Some (n,false),in_import));
-	| _ -> raise (TypePath (List.rev sl,None,in_import))
+let magic_display_field_name = " - display - "
+let magic_type_path = { tpackage = []; tname = ""; tparams = []; tsub = None }
 
-let is_resuming_file file =
-	Path.unique_full_path file = !resume_display.pfile
+let type_path sl in_import p = match sl with
+	| n :: l when n.[0] >= 'A' && n.[0] <= 'Z' -> raise (TypePath (List.rev l,Some (n,false),in_import,p));
+	| _ -> raise (TypePath (List.rev sl,None,in_import,p))
 
-let is_resuming p =
-	let p2 = !resume_display in
-	p.pmax = p2.pmin && is_resuming_file p.pfile
+let would_skip_display_position p1 s =
+	if !in_display_file then match Stream.npeek 1 s with
+		| [ (_,p2) ] -> encloses_display_position (punion p1 p2)
+		| _ -> false
+	else false
 
-let set_resume p =
-	resume_display := { p with pfile = Path.unique_full_path p.pfile }
-
-let encloses_resume p =
-	p.pmin <= !resume_display.pmin && p.pmax >= !resume_display.pmax
-
-let would_skip_resume p1 s =
-	match Stream.npeek 1 s with
-	| [ (_,p2) ] ->
-		is_resuming_file p2.pfile && encloses_resume (punion p1 p2)
-	| _ ->
-		false
+let cut_pos_at_display p = { p with pmax = !display_position.pmax }
 
 let is_dollar_ident e = match fst e with
-	| EConst (Ident n) when n.[0] = '$' ->
+	| EConst (Ident n) when starts_with n '$' ->
 		true
 	| _ ->
 		false
@@ -194,3 +214,40 @@ let make_is e (t,p_t) p p_is =
 let next_token s = match Stream.peek s with
 	| Some tk -> tk
 	| _ -> last_token s
+
+let next_pos s = pos (next_token s)
+
+let punion_next p1 s =
+	let _,p2 = next_token s in
+	{
+		pfile = p1.pfile;
+		pmin = p1.pmin;
+		pmax = p2.pmax - 1;
+	}
+
+let mk_null_expr p = (EConst(Ident "null"),p)
+
+let mk_display_expr e dk = (EDisplay(e,dk),(pos e))
+
+let is_completion () =
+	!display_mode = DMDefault
+
+let is_signature_display () =
+	!display_mode = DMSignature
+
+let check_resume p fyes fno =
+	if is_completion () && !in_display_file && p.pmax = !display_position.pmin then begin
+		had_resume := true;
+		fyes()
+	end else
+		fno()
+
+let check_resume_range p s fyes fno =
+	if is_completion () && !in_display_file then begin
+		let pnext = next_pos s in
+		if p.pmin < !display_position.pmin && pnext.pmin >= !display_position.pmax then
+			fyes pnext
+		else
+			fno()
+	end else
+		fno()

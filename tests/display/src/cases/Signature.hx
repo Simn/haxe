@@ -173,16 +173,48 @@ class Signature extends DisplayTestCase {
 		sigEq(0, [["a:String", "b:Int"]], signature(pos(1)));
 	}
 
-	function sigEq(arg:Int, params:Array<Array<String>>, sig:SignatureHelp, ?pos:haxe.PosInfos) {
-		eq(arg, sig.activeParameter, pos);
-		eq(params.length, sig.signatures.length, pos);
-		for (i in 0...params.length) {
-			var sigInf = sig.signatures[i];
-			var args = params[i];
-			eq(sigInf.parameters.length, args.length, pos);
-			for (i in 0...args.length) {
-				eq(sigInf.parameters[i].label, args[i], pos);
-			}
+	/**
+	class Some {
+		static function main() {
+			test2(test({-1-}
 		}
+
+		static function test(a:String, b:Int) { }
+		static function test2(a:Int, b:String) { }
+	}
+	**/
+	function testNestedNotPointless() {
+		sigEq(0, [["a:String", "b:Int"]], signature(pos(1)));
+	}
+
+	/**
+	class Main {
+
+		static function main() {
+			lotsOfArgs({-1-}  "f{-2-}oo" {-3-} {-4-},{-5-}  12{-6-},{-7-} {-8-}   {-9-},{-10-} {-11-} [{-12-}]{-13-},{-14-}
+
+	{-15-}
+		}
+
+		static function lotsOfArgs(a:String, b:Int, c:Bool, d:Array<Int>, e:Dynamic) { }
+	}
+	**/
+	function testBroken() {
+		var sig = [["a:String", "b:Int", "c:Bool", "d:Array<Int>", "e:Dynamic"]];
+		sigEq(0, sig, signature(pos(1)));
+		sigEq(0, sig, signature(pos(2)));
+		sigEq(0, sig, signature(pos(3)));
+		sigEq(0, sig, signature(pos(4)));
+		sigEq(1, sig, signature(pos(5)));
+		sigEq(1, sig, signature(pos(6)));
+		sigEq(2, sig, signature(pos(7)));
+		sigEq(2, sig, signature(pos(8)));
+		sigEq(2, sig, signature(pos(9)));
+		sigEq(3, sig, signature(pos(10)));
+		sigEq(3, sig, signature(pos(11)));
+		sigEq(3, sig, signature(pos(12)));
+		sigEq(3, sig, signature(pos(13)));
+		sigEq(4, sig, signature(pos(14)));
+		sigEq(4, sig, signature(pos(15)));
 	}
 }

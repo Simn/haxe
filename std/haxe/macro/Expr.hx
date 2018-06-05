@@ -536,8 +536,8 @@ enum DisplayKind {
 	DKCall;
 	DKDot;
 	DKStructure;
-	DKToplevel;
 	DKMarked;
+	DKPattern;
 }
 
 /**
