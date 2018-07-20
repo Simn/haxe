@@ -59,7 +59,7 @@ let executable_path() =
 	Extc.executable_path()
 
 let message ctx msg =
-	ctx.messages <- msg :: ctx.messages
+	ctx.messages <- (CMWarning("I'm fine",null_pos)) :: ctx.messages
 
 let deprecated = []
 
