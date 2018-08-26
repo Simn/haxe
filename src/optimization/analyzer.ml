@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -141,7 +141,7 @@ module Ssa = struct
 	let rec rename_in_block ctx bb =
 		let write_var v is_phi i =
 			update_reaching_def ctx v bb;
-			let v' = alloc_var (v.v_name) v.v_type v.v_pos in
+			let v' = alloc_var v.v_kind v.v_name v.v_type v.v_pos in
 			declare_var ctx.graph v' bb;
 			v'.v_meta <- v.v_meta;
 			v'.v_capture <- v.v_capture;
@@ -153,15 +153,15 @@ module Ssa = struct
 			v'
 		in
 		let rec loop is_phi i e = match e.eexpr with
-			| TLocal v when not (is_unbound v) ->
+			| TLocal v ->
 				let v' = local ctx e v bb in
 				add_ssa_edge ctx.graph v' bb is_phi i;
 				{e with eexpr = TLocal v'}
-			| TVar(v,Some e1) when not (is_unbound v) ->
+			| TVar(v,Some e1) ->
 				let e1 = (loop is_phi i) e1 in
 				let v' = write_var v is_phi i in
 				{e with eexpr = TVar(v',Some e1)}
-			| TBinop(OpAssign,({eexpr = TLocal v} as e1),e2) when not (is_unbound v) ->
+			| TBinop(OpAssign,({eexpr = TLocal v} as e1),e2) ->
 				let e2 = (loop is_phi i) e2 in
 				let v' = write_var v is_phi i in
 				{e with eexpr = TBinop(OpAssign,{e1 with eexpr = TLocal v'},e2)};
@@ -348,8 +348,10 @@ module ConstPropagation = DataFlow(struct
 	type t =
 		| Top
 		| Bottom
+		| Null of Type.t
 		| Const of tconstant
 		| EnumValue of int * t list
+		| ModuleType of module_type * Type.t
 
 	let conditional = true
 	let flag = FlagExecutable
@@ -365,13 +367,16 @@ module ConstPropagation = DataFlow(struct
 	let equals lat1 lat2 = match lat1,lat2 with
 		| Top,Top | Bottom,Bottom -> true
 		| Const ct1,Const ct2 -> ct1 = ct2
+		| Null t1,Null t2 -> t1 == t2
 		| EnumValue(i1,_),EnumValue(i2,_) -> i1 = i2
+		| ModuleType(mt1,_),ModuleType (mt2,_) -> mt1 == mt2
 		| _ -> false
 
 	let transfer ctx bb e =
 		let rec eval bb e =
 			let wrap = function
 				| Const ct -> mk (TConst ct) t_dynamic null_pos
+				| Null t -> mk (TConst TNull) t e.epos
 				| _ -> raise Exit
 			in
 			let unwrap e = match e.eexpr with
@@ -379,12 +384,16 @@ module ConstPropagation = DataFlow(struct
 				| _ -> raise Exit
 			in
 			match e.eexpr with
-			| TConst (TSuper | TThis | TNull) ->
+			| TConst (TSuper | TThis) ->
 				Bottom
+			| TConst TNull ->
+				Null e.etype
 			| TConst ct ->
 				Const ct
+			| TTypeExpr mt ->
+				ModuleType(mt,e.etype)
 			| TLocal v ->
-				if is_unbound v || (follow v.v_type) == t_dynamic || v.v_capture then
+				if (follow v.v_type) == t_dynamic || v.v_capture then
 					Bottom
 				else
 					get_cell v.v_id
@@ -429,7 +438,7 @@ module ConstPropagation = DataFlow(struct
 				begin match follow e1.etype,eval bb e1 with
 					| TEnum _,EnumValue(i,_) -> Const (TInt (Int32.of_int i))
 					| _,e1 ->
-						begin match Optimizer.api_inline2 ctx.com c cf.cf_name [wrap e1] e.epos with
+						begin match Inline.api_inline2 ctx.com c cf.cf_name [wrap e1] e.epos with
 							| None -> raise Exit
 							| Some e -> eval bb e
 						end
@@ -437,7 +446,7 @@ module ConstPropagation = DataFlow(struct
 			| TCall ({ eexpr = TField (_,FStatic(c,cf))},el) ->
 				let el = List.map (eval bb) el in
 				let el = List.map wrap el in
-				begin match Optimizer.api_inline2 ctx.com c cf.cf_name el e.epos with
+				begin match Inline.api_inline2 ctx.com c cf.cf_name el e.epos with
 					| None -> raise Exit
 					| Some e -> eval bb e
 				end
@@ -445,7 +454,8 @@ module ConstPropagation = DataFlow(struct
 				eval bb e1
 			| _ ->
 				let e1 = match ctx.com.platform,e.eexpr with
-					| Js,TArray(e1,{eexpr = TConst(TInt i)}) when Int32.to_int i = 1 -> e1
+					| Js,TArray(e1,{eexpr = TConst(TInt i)}) when Int32.to_int i = 1 && Define.defined ctx.com.defines Define.JsEnumsAsArrays -> e1
+					| Js,TField(e1,FDynamic "_hx_index") when not (Define.defined ctx.com.defines Define.JsEnumsAsArrays) -> e1
 					| Cpp,TCall({eexpr = TField(e1,FDynamic "__Index")},[]) -> e1
 					| Neko,TField(e1,FDynamic "index") -> e1
 					| _ -> raise Exit
@@ -465,12 +475,15 @@ module ConstPropagation = DataFlow(struct
 
 	let commit ctx =
 		let inline e i = match get_cell i with
-			| Top | Bottom | EnumValue _ ->
+			| Top | Bottom | EnumValue _ | Null _ ->
 				raise Not_found
 			| Const ct ->
-				let e' = Codegen.type_constant ctx.com (tconst_to_const ct) e.epos in
+				let e' = Texpr.type_constant ctx.com.basic (tconst_to_const ct) e.epos in
 				if not (type_change_ok ctx.com e'.etype e.etype) then raise Not_found;
 				e'
+			| ModuleType(mt,t) ->
+				if not (type_change_ok ctx.com t e.etype) then raise Not_found;
+				mk (TTypeExpr mt) t e.epos
 		in
 		let is_special_var v = v.v_capture || is_asvar_type v.v_type in
 		let rec commit e = match e.eexpr with
@@ -603,7 +616,7 @@ module LocalDce = struct
 	let rec has_side_effect e =
 		let rec loop e =
 			match e.eexpr with
-			| TConst _ | TLocal _ | TTypeExpr _ | TFunction _ -> ()
+			| TConst _ | TLocal _ | TTypeExpr _ | TFunction _ | TIdent _ -> ()
 			| TCall ({ eexpr = TField(_,FStatic({ cl_path = ([],"Std") },{ cf_name = "string" })) },args) -> Type.iter loop e
 			| TCall ({eexpr = TField(_,FEnum _)},_) -> Type.iter loop e
 			| TCall ({eexpr = TConst (TString ("phi" | "fun"))},_) -> ()
@@ -625,7 +638,7 @@ module LocalDce = struct
 			Meta.has Meta.Used v.v_meta
 		in
 		let keep v =
-			is_used v || (not (Meta.has Meta.CompilerGenerated v.v_meta) && not ctx.config.local_dce) || is_ref_type v.v_type || v.v_capture || Meta.has Meta.This v.v_meta
+			is_used v || ((match v.v_kind with VUser _ | VInlined -> true | _ -> false) && not ctx.config.local_dce) || is_ref_type v.v_type || v.v_capture || Meta.has Meta.This v.v_meta
 		in
 		let rec use v =
 			if not (is_used v) then begin
@@ -637,9 +650,9 @@ module LocalDce = struct
 				end
 			end
 		and expr e = match e.eexpr with
-			| TLocal v when not (is_unbound v) ->
+			| TLocal v ->
 				use v;
-			| TBinop(OpAssign,{eexpr = TLocal v},e1) | TVar(v,Some e1) when not (is_unbound v) ->
+			| TBinop(OpAssign,{eexpr = TLocal v},e1) | TVar(v,Some e1) ->
 				if has_side_effect e1 || keep v then expr e1
 				else ()
 			| _ ->
@@ -754,8 +767,6 @@ module Debug = struct
 			edge bb_try "try";
 			List.iter (fun (_,bb_catch) -> edge bb_catch "catch") bbl;
 			edge bb_next "next";
-		| SEEnd ->
-			()
 		| SENone ->
 			()
 
@@ -801,7 +812,7 @@ module Debug = struct
 	let dot_debug ctx c cf =
 		let g = ctx.graph in
 		let start_graph ?(graph_config=[]) suffix =
-			let ch = Codegen.Dump.create_file suffix [] (get_dump_path ctx c cf) in
+			let ch = Path.create_file false suffix [] (get_dump_path ctx c cf) in
 			Printf.fprintf ch "digraph graphname {\n";
 			List.iter (fun s -> Printf.fprintf ch "%s;\n" s) graph_config;
 			ch,(fun () ->
@@ -893,7 +904,7 @@ module Run = struct
 	open Graph
 
 	let with_timer detailed s f =
-		let timer = timer (if detailed then "analyzer" :: s else ["analyzer"]) in
+		let timer = Timer.timer (if detailed then "analyzer" :: s else ["analyzer"]) in
 		let r = f() in
 		timer();
 		r
@@ -928,9 +939,10 @@ module Run = struct
 				tf,e.etype,true
 			| _ ->
 				(* Wrap expression in a function so we don't have to treat it as a special case throughout. *)
+				let t = e.etype in
 				let e = mk (TReturn (Some e)) t_dynamic e.epos in
-				let tf = { tf_args = []; tf_type = e.etype; tf_expr = e; } in
-				tf,tfun [] e.etype,false
+				let tf = { tf_args = []; tf_type = t; tf_expr = e; } in
+				tf,tfun [] t,false
 		in
 		with_timer actx.config.detail_times ["->";"from-texpr"] (fun () -> AnalyzerTexprTransformer.from_tfunction actx tf t e.epos);
 		is_real_function
@@ -949,20 +961,49 @@ module Run = struct
 			e
 		else begin
 			(* Get rid of the wrapping function and its return expressions. *)
-			let rec loop first e = match e.eexpr with
-				| TReturn (Some e) -> e
-				| TFunction tf when first ->
-					begin match loop false tf.tf_expr with
-						| {eexpr = TBlock _ | TIf _ | TSwitch _ | TTry _} when actx.com.platform = Cpp || actx.com.platform = Hl ->
-							mk (TCall(e,[])) tf.tf_type e.epos
-						| e ->
+			match e.eexpr with
+			| TFunction tf ->
+				let get_t t = if ExtType.is_void t then tf.tf_type else t in
+				let rec loop e = match e.eexpr with
+					| TBlock [e1] ->
+						loop e1
+					(* If there's a complex expression, keep the function and generate a call to it. *)
+					| TBlock _ | TIf _ | TSwitch _ | TTry _ when actx.com.platform = Cpp || actx.com.platform = Hl ->
+						raise Exit
+					(* Remove generated return *)
+					| TReturn (Some e) ->
+						e
+					| TBlock el ->
+						begin match List.rev el with
+						| e1 :: el ->
+							let e1 = loop e1 in
+							let e = {e with eexpr = TBlock (List.rev (e1 :: el))} in
 							e
-					end
-				| TBlock [e] -> loop first e
-				| TFunction _ -> e
-				| _ -> Type.map_expr (loop first) e
-			in
-			loop true e
+						| [] ->
+							e
+						end
+					| TIf(e1,e2,Some e3) ->
+						let e2 = loop e2 in
+						let e3 = loop e3 in
+						{e with eexpr = TIf(e1,e2,Some e3); etype = get_t e.etype}
+					| TSwitch(e1,cases,edef) ->
+						let cases = List.map (fun (el,e) -> el,loop e) cases in
+						let edef = Option.map loop edef in
+						{e with eexpr = TSwitch(e1,cases,edef); etype = get_t e.etype}
+					| TTry(e1,catches) ->
+						let e1 = loop e1 in
+						let catches = List.map (fun (v,e) -> v,loop e) catches in
+						{e with eexpr = TTry(e1,catches); etype = get_t e.etype}
+					| TMeta(m,e1) ->
+						{e with eexpr = TMeta(m,loop e1)}
+					| TParenthesis e1 ->
+						{e with eexpr = TParenthesis (loop e1)}
+					| _ ->
+						e
+				in
+				(try loop tf.tf_expr with Exit -> mk (TCall(e,[])) tf.tf_type e.epos)
+			| _ ->
+				assert false
 		end in
 		e
 

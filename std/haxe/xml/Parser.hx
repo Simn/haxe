@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -378,7 +378,7 @@ class Parser
 							var c = s.fastCodeAt(1) == 'x'.code
 								? Std.parseInt("0" +s.substr(1, s.length - 1))
 								: Std.parseInt(s.substr(1, s.length - 1));
-							#if (neko || cpp || php || lua || eval)
+							#if (neko || (cpp && !hxcpp_smart_strings) || php || lua || eval)
 							if( c >= 128 ) {
 								// UTF8-encode it
 								if( c <= 0x7FF ) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -25,9 +25,9 @@
 @:forwardStatics
 @:forward abstract Long(LongClass) from LongClass to LongClass
 {
-	@:to @:extern inline public function toLong():haxe.Int64
+	@:to extern inline public function toLong():haxe.Int64
 		return this.longValue();
-	@:from @:extern inline public static function fromLong(b:haxe.Int64):Long
+	@:from extern inline public static function fromLong(b:haxe.Int64):Long
 		return LongClass.valueOf(b);
 }
 

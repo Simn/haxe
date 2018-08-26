@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -212,6 +212,11 @@ enum Binop {
 		`=>`
 	**/
 	OpArrow;
+
+	/**
+		`in`
+	**/
+	OpIn;
 }
 
 /**
@@ -332,6 +337,41 @@ typedef Catch = {
 }
 
 /**
+	Represents the way something is quoted.
+**/
+enum QuoteStatus {
+	/**
+		No quotes
+	**/
+	Unquoted;
+
+	/**
+		Double quotes `"`
+	**/
+	Quoted;
+}
+
+/**
+	Represents the field of an object declaration.
+**/
+typedef ObjectField = {
+	/**
+		The name of the field.
+	**/
+	var field : String;
+
+	/**
+		The field expression.
+	**/
+	var expr : Expr;
+
+	/**
+		How the field name is quoted.
+	**/
+	@:optional var quotes : QuoteStatus;
+}
+
+/**
 	Represents the kind of a node in the AST.
 **/
 enum ExprDef {
@@ -363,7 +403,7 @@ enum ExprDef {
 	/**
 		An object declaration.
 	**/
-	EObjectDecl( fields : Array<{ field : String, expr : Expr }> );
+	EObjectDecl( fields : Array<ObjectField> );
 
 	/**
 		An array declaration `[el]`.
@@ -412,11 +452,6 @@ enum ExprDef {
 		A `for` expression.
 	**/
 	EFor( it : Expr, expr : Expr );
-
-	/**
-		A `(e1 in e2)` expression.
-	**/
-	EIn( e1 : Expr, e2 : Expr );
 
 	/**
 		An `if(econd) eif` or `if(econd) eif else eelse` expression.
@@ -474,7 +509,7 @@ enum ExprDef {
 	/**
 		Internally used to provide completion.
 	**/
-	EDisplay( e : Expr, isCall : Bool );
+	EDisplay( e : Expr, displayKind:DisplayKind );
 
 	/**
 		Internally used to provide completion.
@@ -495,6 +530,14 @@ enum ExprDef {
 		A `@m e` expression.
 	**/
 	EMeta( s : MetadataEntry, e : Expr );
+}
+
+enum DisplayKind {
+	DKCall;
+	DKDot;
+	DKStructure;
+	DKMarked;
+	DKPattern( outermost : Bool );
 }
 
 /**
@@ -535,6 +578,16 @@ enum ComplexType {
 		Represents an optional type.
 	**/
 	TOptional( t : ComplexType );
+
+	/**
+		Represents a type with a name.
+	**/
+	TNamed( n : String, t : ComplexType );
+
+	/**
+		Represents an intersection type `T1 & T2 & ... & TN`.
+	**/
+	TIntersection(tl:Array<ComplexType>);
 }
 
 /**
@@ -772,6 +825,17 @@ enum Access {
 		normal functions which are executed as soon as they are typed.
 	**/
 	AMacro;
+
+	/**
+		Final access modifier. For functions, they can not be overridden. For
+		variables, it means they can be assigned to only once.
+	**/
+	AFinal;
+
+	/**
+		Extern access modifier.
+	**/
+	AExtern;
 }
 
 /**
@@ -807,6 +871,12 @@ typedef TypeDefinition = {
 		The name of the type definition.
 	**/
 	var name : String;
+
+	/**
+		The documentation of the type, if available. If the type has no
+		documentation, the value is `null`.
+	**/
+	@:optional var doc : Null<String>;
 
 	/**
 		The position to the type definition.

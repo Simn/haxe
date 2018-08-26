@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -87,8 +87,7 @@ class ExprTools {
 			case EArray(e1, e2),
 				EWhile(e1, e2, _),
 				EBinop(_, e1, e2),
-				EFor(e1, e2),
-				EIn(e1, e2):
+				EFor(e1, e2):
 					f(e1);
 					f(e2);
 			case EVars(vl):
@@ -165,7 +164,7 @@ class ExprTools {
 			case EObjectDecl(fields):
 				var ret = [];
 				for (field in fields)
-					ret.push( { field: field.field, expr: f(field.expr) } );
+					ret.push( { field: field.field, expr: f(field.expr), quotes: field.quotes } );
 				EObjectDecl(ret);
 			case EArrayDecl(el): EArrayDecl(ExprArrayTools.map(el, f));
 			case ECall(e, params): ECall(f(e), ExprArrayTools.map(params, f));
@@ -178,14 +177,13 @@ class ExprTools {
 				EVars(ret);
 			case EBlock(el): EBlock(ExprArrayTools.map(el, f));
 			case EFor(it, expr): EFor(f(it), f(expr));
-			case EIn(e1, e2): EIn(f(e1), f(e2));
 			case EIf(econd, eif, eelse): EIf(f(econd), f(eif), opt(eelse, f));
 			case EWhile(econd, e, normalWhile): EWhile(f(econd), f(e), normalWhile);
 			case EReturn(e): EReturn(opt(e,f));
 			case EUntyped(e): EUntyped(f(e));
 			case EThrow(e): EThrow(f(e));
 			case ECast(e, t): ECast(f(e), t);
-			case EDisplay(e, isCall): EDisplay(f(e), isCall);
+			case EDisplay(e, dk): EDisplay(f(e), dk);
 			case ETernary(econd, eif, eelse): ETernary(f(econd), f(eif), f(eelse));
 			case ECheckType(e, t): ECheckType(f(e), t);
 			case EDisplayNew(_),

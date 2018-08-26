@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -42,7 +42,7 @@ let stdlib = ref None
 let debug = ref None
 
 let create com api is_macro =
-	let t = Common.timer [(if is_macro then "macro" else "interp");"create"] in
+	let t = Timer.timer [(if is_macro then "macro" else "interp");"create"] in
 	incr sid;
 	let builtins = match !stdlib with
 		| None ->
@@ -71,11 +71,8 @@ let create com api is_macro =
 					let s = Common.defined_value com Define.EvalDebugger in
 					if s = "1" then raise Exit;
 					let host,port = try ExtString.String.split s ":" with _ -> fail "Invalid host format, expected host:port" in
-					let host = try Unix.inet_addr_of_string host with exc -> fail (Printexc.to_string exc) in
 					let port = try int_of_string port with _ -> fail "Invalid port, expected int" in
-					let socket = try (Unix.socket Unix.PF_INET Unix.SOCK_STREAM) 0 with exc -> fail (Printexc.to_string exc) in
-					Unix.connect socket (Unix.ADDR_INET (host,port));
-					Some {addr = host; port = port; socket = Some socket}
+					Some (try Socket.create host port with exc -> fail (Printexc.to_string exc))
 				with _ ->
 					None
 			in
@@ -84,10 +81,11 @@ let create com api is_macro =
 				breakpoints = Hashtbl.create 0;
 				support_debugger = support_debugger;
 				debug_state = DbgStart;
-				breakpoint = EvalDebugMisc.make_breakpoint 0 0 BPDisabled BPAny;
+				breakpoint = EvalDebugMisc.make_breakpoint 0 0 BPDisabled BPAny None;
 				caught_types = Hashtbl.create 0;
 				environment_offset_delta = 0;
 				debug_socket = socket;
+				exception_mode = CatchUncaught;
 			} in
 			debug := Some debug';
 			debug'
@@ -95,7 +93,6 @@ let create com api is_macro =
 			debug
 	in
 	let detail_times = Common.defined com Define.EvalTimes in
-	let record_stack = debug.support_debugger || detail_times || Common.defined com Define.EvalStack in
 	let evals = DynArray.create () in
 	let eval = {
 		environments = DynArray.make 32;
@@ -106,7 +103,6 @@ let create com api is_macro =
 		ctx_id = !sid;
 		is_macro = is_macro;
 		debug = debug;
-		record_stack = record_stack;
 		detail_times = detail_times;
 		curapi = api;
 		builtins = builtins;
@@ -115,11 +111,19 @@ let create com api is_macro =
 		had_error = false;
 		(* prototypes *)
 		string_prototype = fake_proto key_String;
+		array_prototype = fake_proto key_Array;
+		vector_prototype = fake_proto key_eval_Vector;
 		static_prototypes = IntMap.empty;
 		instance_prototypes = IntMap.empty;
 		constructors = IntMap.empty;
 		get_object_prototype = get_object_prototype;
 		(* eval *)
+		toplevel = 	vobject {
+			ofields = [||];
+			oproto = fake_proto key_eval_toplevel;
+			oextra = IntMap.empty;
+			oremoved = IntMap.empty;
+		};
 		eval = eval;
 		exception_stack = [];
 	} in
@@ -312,6 +316,8 @@ let value_signature v =
 				add (string_of_int !function_count);
 				incr function_count
 			)
+		| VLazy f ->
+			loop (!f())
 	and loop_fields fields =
 		List.iter (fun (name,v) ->
 			adds (rev_hash_s name);
@@ -337,15 +343,15 @@ let setup get_api =
 	let api = get_api (fun() -> (get_ctx()).curapi.get_com()) (fun() -> (get_ctx()).curapi) in
 	List.iter (fun (n,v) -> match v with
 		| VFunction(f,b) ->
-			let v = match f with
-				| Fun0 f -> VFunction (Fun0 (fun () -> try f () with Sys_error msg | Failure msg -> exc_string msg),b)
-				| Fun1 f -> VFunction (Fun1 (fun a -> try f a with Sys_error msg | Failure msg -> exc_string msg),b)
-				| Fun2 f -> VFunction (Fun2 (fun a b -> try f a b with Sys_error msg | Failure msg -> exc_string msg),b)
-				| Fun3 f -> VFunction (Fun3 (fun a b c -> try f a b c with Sys_error msg | Failure msg -> exc_string msg),b)
-				| Fun4 f -> VFunction (Fun4 (fun a b c d -> try f a b c d with Sys_error msg | Failure msg -> exc_string msg),b)
-				| Fun5 f -> VFunction (Fun5 (fun a b c d e -> try f a b c d e with Sys_error msg | Failure msg -> exc_string msg),b)
-				| FunN f -> VFunction (FunN (fun vl -> try f vl with Sys_error msg | Failure msg -> exc_string msg),b)
+			let f vl = try
+				f vl
+			with
+			| Sys_error msg | Failure msg ->
+				exc_string msg
+			| MacroApi.Invalid_expr ->
+				exc_string "Invalid expression"
 			in
+			let v = VFunction (f,b) in
 			Hashtbl.replace EvalStdLib.macro_lib n v
 		| _ -> assert false
 	) api;
@@ -387,7 +393,7 @@ let rec value_to_expr v p =
 		in
 		make_path mt
 	in
-	match v with
+	match vresolve v with
 	| VNull -> (EConst (Ident "null"),p)
 	| VTrue -> (EConst (Ident "true"),p)
 	| VFalse -> (EConst (Ident "false"),p)
@@ -395,7 +401,10 @@ let rec value_to_expr v p =
 	| VFloat f -> haxe_float f p
 	| VString(r,s) -> (EConst (String (Lazy.force s)),p)
 	| VArray va -> (EArrayDecl (List.map (fun v -> value_to_expr v p) (EvalArray.to_list va)),p)
-	| VObject o -> (EObjectDecl (List.map (fun (k,v) -> ((rev_hash_s k,p),(value_to_expr v p))) (object_fields o)),p)
+	| VObject o -> (EObjectDecl (List.map (fun (k,v) ->
+			let n = rev_hash_s k in
+			((n,p,(if Lexer.is_valid_identifier n then NoQuotes else DoubleQuotes)),(value_to_expr v p))
+		) (object_fields o)),p)
 	| VEnumValue e ->
 		let epath =
 			let proto = get_static_prototype_raise (get_ctx()) e.epath in
@@ -425,3 +434,103 @@ let value_string = value_string
 let exc_string = exc_string
 
 let eval_expr ctx e = eval_expr ctx key_questionmark key_questionmark e
+
+let handle_decoding_error v t =
+	let line = ref 1 in
+	let errors = ref [] in
+	let error msg v s =
+		errors := (msg,!line) :: !errors;
+		Printf.sprintf "%s%s <- %s" s (value_string v) msg
+	in
+	let rec loop tabs s t v =
+		match t with
+		| TAnon an ->
+			let s = s ^ "{" in
+			let s = PMap.fold (fun cf s ->
+				incr line;
+				let s = Printf.sprintf "%s\n%s%s: " s (tabs ^ "\t") cf.cf_name in
+				try
+					let vf = field_raise v (EvalHash.hash_s cf.cf_name) in
+					begin match vf with
+					| VNull when not (is_explicit_null cf.cf_type) -> error "expected value" vf s
+					| _ -> loop (tabs ^ "\t") s cf.cf_type vf
+					end
+				with Not_found ->
+					if not (is_explicit_null cf.cf_type) then error "expected value" VNull s
+					else s ^ "null"
+			) an.a_fields s in
+			incr line;
+			Printf.sprintf "%s\n%s}" s tabs
+		| TInst({cl_path=[],"Array"},[t1]) ->
+			begin match v with
+				| VArray va ->
+					let s = s ^ "[" in
+					let s = snd (List.fold_left (fun (first,s) v ->
+						let s = if first then s else s ^ ", " in
+						false,loop tabs s t1 v
+					) (true,s) (EvalArray.to_list va)) in
+					s ^ "]"
+				| _ -> error "expected Array" v s
+			end
+		| TInst({cl_path=[],"String"},_) ->
+			begin match v with
+				| VString _ -> s ^ (value_string v)
+				| _ -> error "expected String" v s
+			end
+		| TAbstract({a_path=[],"Null"},[t1]) ->
+			if v = VNull then s ^ "null" else loop tabs s t1 v
+		| TAbstract({a_path=[],"Bool"},_) ->
+			begin match v with
+				| VTrue -> s ^ "true"
+				| VFalse -> s ^ "false"
+				| _ -> error "expected Bool" v s
+			end
+		| TAbstract({a_path=[],("Int" | "Float")},_) ->
+			begin match v with
+				| VInt32 _ | VFloat _ -> s ^ (value_string v)
+				| _ -> error "expected Bool" v s
+			end
+		| TType(t,tl) ->
+			loop tabs s (apply_params t.t_params tl t.t_type) v
+		| TAbstract({a_path=["haxe";"macro"],"Position"},_) ->
+			begin match v with
+				| VInstance {ikind=IPos _} -> s ^ "#pos"
+				| _ -> error "expected Position" v s
+			end
+		| TEnum(en,_) ->
+			begin match v with
+				| VEnumValue ev ->
+					let ef = PMap.find (List.nth en.e_names ev.eindex) en.e_constrs in
+					let s = Printf.sprintf "%s%s" s ef.ef_name in
+					let rec loop2 first s tl vl = match tl,vl with
+						| _,[] -> s
+						| [],_ -> s (* ? *)
+						| (_,_,t) :: tl,v :: vl ->
+							let s = if first then s else s ^ ", " in
+							let s = loop tabs s t v in
+							loop2 false s tl vl
+					in
+					begin match follow ef.ef_type,Array.to_list ev.eargs with
+						| _,[] -> s
+						| TFun(tl,_),vl ->
+							let s = s ^ "(" in
+							let s =  loop2 true s tl vl in
+							s ^ ")"
+						| _ -> s
+					end
+				| _ -> error "expected enum value" v s
+			end
+		| TInst _ | TAbstract _ | TFun _ ->
+			(* TODO: might need some more of these, not sure *)
+			assert false
+		| TMono r ->
+			begin match !r with
+				| None -> s
+				| Some t -> loop tabs s t v
+			end
+		| TLazy r ->
+			loop tabs s (lazy_type r) v
+		| TDynamic _ ->
+			s (* Nothing we can do *)
+	in
+	loop "" "" t v,!errors

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -55,7 +55,7 @@ class Type {
 		var e : hl.BaseType.Enum = et.allocObject();
 		e.__type__ = t;
 		e.__evalues__ = t.getEnumValues();
-		e.__ename__ = t.getName();
+		e.__ename__ = t.getTypeName();
 		e.__emap__ = new hl.types.BytesMap();
 		e.__constructs__ = new Array();
 		var cl = t.getEnumFields();
@@ -75,6 +75,10 @@ class Type {
 
 	public static function getClass<T>( o : T ) : Class<T> {
 		var t = hl.Type.getDynamic(o);
+		if( t.kind == HVirtual ) {
+			o = hl.Api.getVirtualValue(o);
+			t = hl.Type.getDynamic(o);
+		}
 		if( t.kind == HObj )
 			return t.getGlobal();
 		return null;

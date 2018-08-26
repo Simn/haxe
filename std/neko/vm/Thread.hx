@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -21,7 +21,9 @@
  */
 package neko.vm;
 
-enum ThreadHandle {
+@:callable
+@:coreType
+abstract ThreadHandle {
 }
 
 class Thread {
@@ -63,7 +65,7 @@ class Thread {
 		return thread_read_message(block);
 	}
 
-	@:keep function __compare(t) {
+	@:keep function __compare(t:Dynamic) {
 		return untyped __dollar__compare(handle,t.handle);
 	}
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -182,7 +182,10 @@ class String {
 		return bytes;
 	}
 
-	@:keep function __compare( s : String ) : Int {
+	@:keep function __compare( v : Dynamic ) : Int {
+		var s = Std.instance(v, String);
+		if( s == null )
+			return hl.Api.comparePointer(this, v);
 		var v = bytes.compare(0, s.bytes, 0, (length < s.length ? length : s.length) << 1);
 		return v == 0 ? length - s.length : v;
 	}

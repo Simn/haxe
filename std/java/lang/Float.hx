@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -25,9 +25,9 @@
 @:forwardStatics
 @:forward abstract Float(FloatClass) from FloatClass to FloatClass
 {
-	@:to @:extern inline public function toFloat():std.StdTypes.Float
+	@:to extern inline public function toFloat():std.StdTypes.Float
 		return this.floatValue();
-	@:from @:extern inline public static function fromFloat(b:std.StdTypes.Single):Float
+	@:from extern inline public static function fromFloat(b:std.StdTypes.Single):Float
 		return FloatClass.valueOf(b);
 }
 
@@ -62,8 +62,8 @@
 	@:overload @:throws("java.lang.NumberFormatException") static function parseFloat(param1 : String) : Single;
 	@:overload static function toHexString(param1 : Single) : String;
 	@:native("toString") @:overload static function _toString(param1 : Single) : String;
-	@:overload @:throws("java.lang.NumberFormatException") static function valueOf(param1 : String) : Float;
 	@:overload static function valueOf(param1 : Single) : Float;
+	@:overload @:throws("java.lang.NumberFormatException") static function valueOf(param1 : String) : Float;
 
 }
 

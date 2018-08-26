@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,6 +20,8 @@
  * DEALINGS IN THE SOFTWARE.
  */
 package neko;
+
+import haxe.ds.List;
 
 /**
 	This class is used for accessing the local Web server and the current
@@ -192,7 +194,7 @@ class Web {
 		_set_cookie(untyped key.__s, untyped v.__s);
 	}
 
-	static function addPair( buf : StringBuf, name, value ) {
+	static function addPair( buf : StringBuf, name:String, value:String ) {
 		if( value == null ) return;
 		buf.add("; ");
 		buf.add(name);

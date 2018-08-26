@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -182,6 +182,7 @@ class Boot {
 			case "number" : {
 				if (o == std.Math.POSITIVE_INFINITY) "Infinity";
 				else if (o == std.Math.NEGATIVE_INFINITY) "-Infinity";
+				else if (o == 0) "0";
 				else if (o != o) "NaN";
 				else untyped tostring(o);
 			}
@@ -225,8 +226,19 @@ class Boot {
 	   Define an array from the given table
 	*/
 	public inline static function defArray<T>(tab: Table<Int,T>, ?length : Int) : Array<T> {
-		if (length == null) length = TableTools.maxn(tab) + 1; // maxn doesn't count 0 index
-		return untyped _hx_tab_array(tab, length);
+		if (length == null){
+			length = TableTools.maxn(tab);
+			if (length > 0){
+				var head = tab[1];
+				Table.remove(tab, 1);
+				tab[0] =  head;
+				return untyped _hx_tab_array(tab, length);
+			} else {
+				return [];
+			}
+		} else {
+			return untyped _hx_tab_array(tab, length);
+		}
 	}
 
 	/*
@@ -336,6 +348,12 @@ class Boot {
 	}
 
 	public static function fieldIterator( o : Table<String,Dynamic>) : Iterator<String> {
+		if (Lua.type(o) != "table") {
+			return  {
+				next : function() return null,
+				hasNext : function() return false
+			}
+		}
 		var tbl : Table<String,String> =  cast (untyped o.__fields__ != null) ?  o.__fields__ : o;
 		var cur = Lua.pairs(tbl).next;
 		var next_valid = function(tbl, val){
@@ -358,7 +376,7 @@ class Boot {
 	static var os_patterns = [
 		'Windows' => ['windows','^mingw','^cygwin'],
 		'Linux'   => ['linux'],
-		'Mac'     => ['mac','darwin'],
+		'Mac'     => ['mac','darwin','osx'],
 		'BSD'     => ['bsd$'],
 		'Solaris' => ['SunOS']
 	];
@@ -373,7 +391,7 @@ class Boot {
 			var popen_result : lua.FileHandle = null;
 			untyped __lua__("popen_status, popen_result = pcall(_G.io.popen, '')");
 			if (popen_status) {
-				popen_result.close;
+				popen_result.close();
 				os = lua.Io.popen('uname -s','r').read('*l').toLowerCase();
 			} else {
 				os = lua.Os.getenv('OS').toLowerCase();

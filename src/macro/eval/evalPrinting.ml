@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -50,14 +50,14 @@ let rec s_object depth o =
 and s_array depth va =
 	concat empty [
 		of_char '[';
-		EvalArray.join va (s_value 0) rcomma;
+		EvalArray.join va (s_value depth) rcomma;
 		of_char ']';
 	]
 
 and s_vector depth vv =
 	concat empty [
 		of_char '[';
-		EvalArray.join (EvalArray.create vv) (s_value 0) rcomma;
+		EvalArray.join (EvalArray.create vv) (s_value depth) rcomma;
 		of_char ']';
 	]
 
@@ -98,15 +98,10 @@ and s_value depth v =
 	| VTrue -> rtrue
 	| VFalse -> rfalse
 	| VFloat f ->
-		let s = Common.float_repres f in
+		let s = Numeric.float_repres f in
 		let len = String.length s in
 		of_string (if String.unsafe_get s (len - 1) = '.' then String.sub s 0 (len - 1) else s)
-	| VFunction (f,_) ->
-		let s = match num_args f with
-			| -1 -> ""
-			| i -> string_of_int i
-		in
-		concat2 rfun (Rope.of_string (s))
+	| VFunction (f,_) -> concat2 rfun (Rope.of_string (""))
 	| VFieldClosure _ -> rclosure
 	| VEnumValue ve -> s_enum_value depth ve
 	| VString(s,_) -> s
@@ -116,6 +111,7 @@ and s_value depth v =
 	| VInstance {ikind=IPos p} -> of_string ("#pos(" ^ Lexer.get_error_pos (Printf.sprintf "%s:%d:") p ^ ")")
 	| VInstance i -> (try call_to_string () with Not_found -> rev_hash i.iproto.ppath)
 	| VObject o -> (try call_to_string () with Not_found -> s_object (depth + 1) o)
+	| VLazy f -> s_value depth (!f())
 	| VPrototype proto ->
 		try
 			call_to_string()

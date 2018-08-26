@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -81,17 +81,9 @@ module StdEvalVector = struct
 		let this = this vthis in
 		let a = match f with
 			| VFunction(f,_) ->
-				begin match f with
-					| Fun1 f -> Array.map (fun v -> f v) this
-					| FunN f -> Array.map (fun v -> f [v]) this
-					| _ -> invalid_call_arg_number 1 (num_args f)
-				end
+				Array.map (fun v -> f [v]) this
 			| VFieldClosure(v1,f) ->
-				begin match f with
-					| Fun2 f -> Array.map (fun v -> f v1 v) this
-					| FunN f -> Array.map (fun v -> f [v1;v]) this
-					| _ -> invalid_call_arg_number 2 (num_args f)
-				end
+				Array.map (fun v -> f (v1 :: [v])) this
 			| _ -> exc_string ("Cannot call " ^ (value_string f))
 		in
 		encode_vector_instance a
@@ -167,17 +159,9 @@ module StdArray = struct
 		let this = this vthis in
 		let a = match f with
 			| VFunction(f,_) ->
-				begin match f with
-					| Fun1 f -> EvalArray.map this (fun v -> f v)
-					| FunN f -> EvalArray.map this (fun v -> f [v])
-					| _ -> invalid_call_arg_number 1 (num_args f)
-				end
+				EvalArray.map this (fun v -> f [v])
 			| VFieldClosure(v1,f) ->
-				begin match f with
-					| Fun2 f -> EvalArray.map this (fun v -> f v1 v)
-					| FunN f -> EvalArray.map this (fun v -> f [v1;v])
-					| _ -> invalid_call_arg_number 2 (num_args f)
-				end
+				EvalArray.map this (fun v -> f (v1 :: [v]))
 			| _ -> exc_string ("Cannot call " ^ (value_string f))
 		in
 		encode_array_instance a
@@ -252,6 +236,13 @@ module StdArray = struct
 	let unshift = vifun1 (fun vthis v ->
 		let this = this vthis in
 		EvalArray.unshift this v;
+		vnull
+	)
+
+	let resize = vifun1 (fun vthis len ->
+		let this = this vthis in
+		let len = decode_int len in
+		EvalArray.resize this len;
 		vnull
 	)
 end
@@ -561,8 +552,8 @@ module StdCallStack = struct
 		let l = DynArray.create () in
 		List.iter (fun (pos,kind) ->
 			let file_pos s =
-				let line = Lexer.get_error_line pos in
-				encode_enum_value key_haxe_StackItem 2 [|s;encode_string pos.pfile;vint line|] None
+				let line1,col1,_,_ = Lexer.get_pos_coords pos in
+				encode_enum_value key_haxe_StackItem 2 [|s;encode_string pos.pfile;vint line1;vint col1|] None
 			in
 			match kind with
 			| EKLocalFunction i ->
@@ -583,7 +574,7 @@ module StdCallStack = struct
 			| _ :: _ :: envs -> envs (* Skip calls to callStack() and getCallStack() *)
 			| _ -> envs
 		in
-		make_stack (List.map (fun env -> {pfile = rev_hash_s env.env_info.pfile;pmin = env.env_leave_pmin; pmax = env.env_leave_pmax},env.env_info.kind) envs)
+		make_stack (List.map (fun env -> {pfile = rev_file_hash env.env_info.pfile;pmin = env.env_leave_pmin; pmax = env.env_leave_pmax},env.env_info.kind) envs)
 	)
 
 	let getExceptionStack = vfun0 (fun () ->
@@ -654,7 +645,7 @@ module StdContext = struct
 		let file = decode_string file in
 		let line = decode_int line in
 		begin try
-			ignore(EvalDebugMisc.add_breakpoint (get_ctx()) file line BPAny);
+			ignore(EvalDebugMisc.add_breakpoint (get_ctx()) file line BPAny None);
 		with Not_found ->
 			exc_string ("Could not find file " ^ file)
 		end;
@@ -721,6 +712,27 @@ module StdDate = struct
 				tm_sec = int_of_string (Str.matched_group 6 s);
 			} in
 			encode_date (fst (Unix.mktime t))
+		| 10 ->
+			let r = Str.regexp "^\\([0-9][0-9][0-9][0-9]\\)-\\([0-9][0-9]\\)-\\([0-9][0-9]\\)$" in
+			if not (Str.string_match r s 0) then exc_string ("Invalid date format : " ^ s);
+			let t = Unix.localtime (Unix.time()) in
+			let t = { t with
+				tm_year = int_of_string (Str.matched_group 1 s) - 1900;
+				tm_mon = int_of_string (Str.matched_group 2 s) - 1;
+				tm_mday = int_of_string (Str.matched_group 3 s);
+				tm_hour = 0;
+				tm_min = 0;
+				tm_sec = 0;
+			} in
+			encode_date (fst (Unix.mktime t))
+		| 8 ->
+			let r = Str.regexp "^\\([0-9][0-9]\\):\\([0-9][0-9]\\):\\([0-9][0-9]\\)$" in
+			if not (Str.string_match r s 0) then exc_string ("Invalid date format : " ^ s);
+			let h = int_of_string (Str.matched_group 1 s) in
+			let m = int_of_string (Str.matched_group 2 s) in
+			let s = int_of_string (Str.matched_group 3 s) in
+			let t = h * 60 * 60 + m * 60 + s in
+			encode_date (float_of_int t)
 		| _ ->
 			exc_string ("Invalid date format : " ^ s)
 	)
@@ -908,7 +920,7 @@ module StdFile = struct
 	let create_out path binary flags =
 		let path = decode_string path in
 		let binary = match binary with
-			| VTrue -> true
+			| VTrue | VNull -> true
 			| _ -> false
 		in
 		let perms = 0o666 in
@@ -928,6 +940,10 @@ module StdFile = struct
 
 	let append = vfun2 (fun path binary ->
 		create_out path binary [Open_append]
+	)
+
+	let update = vfun2 (fun path binary ->
+		create_out path binary [Open_rdonly; Open_wronly]
 	)
 
 	let getBytes = vfun1 (fun path ->
@@ -1105,7 +1121,7 @@ module StdFileSystem = struct
 			| _ -> p
 
 	let patch_path s =
-		if String.length s > 0 && String.length s <= 3 && s.[1] = ':' then Path.add_trailing_slash s
+		if String.length s > 1 && String.length s <= 3 && s.[1] = ':' then Path.add_trailing_slash s
 		else remove_trailing_slash s
 
 	let absolutePath = vfun1 (fun relPath ->
@@ -1113,7 +1129,7 @@ module StdFileSystem = struct
 	)
 
 	let createDirectory = vfun1 (fun path ->
-		(try Common.mkdir_from_path (Path.add_trailing_slash (decode_string path)) with Unix.Unix_error (_,cmd,msg) -> exc_string (cmd ^ " " ^ msg));
+		(try Path.mkdir_from_path (Path.add_trailing_slash (decode_string path)) with Unix.Unix_error (_,cmd,msg) -> exc_string (cmd ^ " " ^ msg));
 		vnull
 	)
 
@@ -1333,14 +1349,17 @@ module StdLog = struct
 
 	let trace = vfun2 (fun v infos ->
 		let s = value_string v in
-		let infos = decode_object infos in
-		let file_name = decode_string (object_field infos key_fileName) in
-		let line_number = decode_int (object_field infos key_lineNumber) in
-		let l = match object_field infos key_customParams with
-			| VArray va -> s :: (List.map value_string (EvalArray.to_list va))
-			| _ -> [s]
-		in
-		((get_ctx()).curapi.MacroApi.get_com()).Common.print (Printf.sprintf "%s:%i: %s\n" file_name line_number (String.concat "," l));
+		let s = match infos with
+			| VNull -> Printf.sprintf "%s\n" s
+			| _ ->  let infos = decode_object infos in
+				let file_name = decode_string (object_field infos key_fileName) in
+				let line_number = decode_int (object_field infos key_lineNumber) in
+				let l = match object_field infos key_customParams with
+					| VArray va -> s :: (List.map value_string (EvalArray.to_list va))
+					| _ -> [s]
+				in
+				 (Printf.sprintf "%s:%i: %s\n" file_name line_number (String.concat "," l)) in
+		((get_ctx()).curapi.MacroApi.get_com()).Common.print s;
 		vnull
 	)
 end
@@ -1480,21 +1499,25 @@ module StdNativeProcess = struct
 		let len = decode_int len in
 		f this (Bytes.unsafe_to_string bytes) pos len
 
+	let process_catch f vthis =
+		try f (this vthis)
+		with Failure msg -> exc_string msg
+
 	let close = vifun0 (fun vthis ->
-		Process.close (this vthis);
+		process_catch Process.close vthis;
 		vnull
 	)
 
 	let exitCode = vifun0 (fun vthis ->
-		vint (Process.exit (this vthis))
+		vint (process_catch Process.exit vthis)
 	)
 
 	let getPid = vifun0 (fun vthis ->
-		vint (Process.pid (this vthis))
+		vint (process_catch Process.pid vthis)
 	)
 
 	let kill = vifun0 (fun vthis ->
-		Process.kill (this vthis);
+		process_catch Process.kill vthis;
 		vnull
 	)
 
@@ -1507,7 +1530,7 @@ module StdNativeProcess = struct
 	)
 
 	let closeStdin = vifun0 (fun vthis ->
-		Process.close_stdin (this vthis);
+		process_catch Process.close_stdin vthis;
 		vnull
 	)
 
@@ -1542,7 +1565,7 @@ module StdReflect = struct
 		vbool (loop a b)
 	)
 
-	let copy = vfun1 (fun o -> match o with
+	let copy = vfun1 (fun o -> match vresolve o with
 		| VObject o -> VObject { o with ofields = Array.copy o.ofields }
 		| VInstance vi -> vinstance {
 			ifields = Array.copy vi.ifields;
@@ -1557,7 +1580,7 @@ module StdReflect = struct
 
 	let deleteField = vfun2 (fun o name ->
 		let name = hash (decode_rope name) in
-		match o with
+		match vresolve o with
 		| VObject o ->
 			if IntMap.mem name o.oextra then begin
 				o.oextra <- IntMap.remove name o.oextra;
@@ -1579,7 +1602,7 @@ module StdReflect = struct
 
 	let fields = vfun1 (fun o ->
 		let proto_fields proto = IntMap.fold (fun name _ acc -> name :: acc) proto.pnames [] in
-		let fields = match o with
+		let fields = match vresolve o with
 			| VObject o -> List.map fst (object_fields o)
 			| VInstance vi -> IntMap.fold (fun name _ acc -> name :: acc) vi.iproto.pinstance_names []
 			| VPrototype proto -> proto_fields proto
@@ -1599,7 +1622,7 @@ module StdReflect = struct
 
 	let hasField = vfun2 (fun o field ->
 		let name = hash (decode_rope field) in
-		let b = match o with
+		let b = match vresolve o with
 			| VObject o -> (IntMap.mem name o.oproto.pinstance_names && not (IntMap.mem name o.oremoved)) || IntMap.mem name o.oextra
 			| VInstance vi -> IntMap.mem name vi.iproto.pinstance_names || IntMap.mem name vi.iproto.pnames
 			| VPrototype proto -> IntMap.mem name proto.pnames
@@ -1619,13 +1642,13 @@ module StdReflect = struct
 		| _ -> vfalse
 	)
 
-	let isObject = vfun1 (fun v -> match v with
+	let isObject = vfun1 (fun v -> match vresolve v with
 		| VObject _ | VString _ | VArray _ | VVector _ | VInstance _ | VPrototype _ -> vtrue
 		| _ -> vfalse
 	)
 
 	let makeVarArgs = vfun1 (fun f ->
-		vstatic_function (FunN (fun vl -> call_value f [encode_array vl]))
+		vstatic_function ((fun vl -> call_value f [encode_array vl]))
 	)
 
 	let setField = vfun3 (fun o name v ->
@@ -1657,6 +1680,18 @@ module StdResource = struct
 
 	let getBytes = vfun1 (fun name ->
 		try encode_bytes (Bytes.unsafe_of_string (Hashtbl.find ((get_ctx()).curapi.MacroApi.get_com()).resources (decode_string name))) with Not_found -> vnull
+	)
+end
+
+module StdSha1 = struct
+	let encode = vfun1 (fun s ->
+		let s = decode_string s in
+		encode_string (Sha1.to_hex (Sha1.string s))
+	)
+
+	let make = vfun1 (fun b ->
+		let b = decode_bytes b in
+		encode_bytes (Bytes.unsafe_of_string (Sha1.to_bin (Sha1.string (Bytes.unsafe_to_string b))))
 	)
 end
 
@@ -1743,14 +1778,19 @@ module StdSocket = struct
 
 	let select = vfun4 (fun read write others timeout ->
 		let proto = get_instance_prototype (get_ctx()) key_sys_net_Socket null_pos in
-		let i = get_instance_field_index proto key_socket in
+		let i = get_instance_field_index proto key_socket null_pos in
 		let pair = function
-			| VInstance vi as v -> this vi.iproto.pfields.(i),v
+			| VInstance vi as v -> this vi.ifields.(i),v
 			| v -> unexpected_value v "NativeSocket"
 		in
-		let read = List.map pair (decode_array read) in
-		let write = List.map pair (decode_array write) in
-		let others = List.map pair (decode_array others) in
+		let decode_optional_array = function
+			| VNull -> []
+			| VArray va -> EvalArray.to_list va
+			| v -> unexpected_value v "array"
+		in
+		let read = List.map pair (decode_optional_array read) in
+		let write = List.map pair (decode_optional_array write) in
+		let others = List.map pair (decode_optional_array others) in
 		let timeout = match timeout with VNull -> 0. | VInt32 i -> Int32.to_float i | VFloat f -> f | _ -> unexpected_value timeout "number" in
 		let read',write',others' = Unix.select (List.map fst read) (List.map fst write) (List.map fst others) timeout in
 		let read = List.map (fun sock -> List.assq sock read) read' in
@@ -1807,34 +1847,6 @@ module StdSocket = struct
 end
 
 module StdStd = struct
-	let parse_float s =
-		let rec loop sp i =
-			if i = String.length s then (if sp = 0 then s else String.sub s sp (i - sp)) else
-			match String.unsafe_get s i with
-			| ' ' when sp = i -> loop (sp + 1) (i + 1)
-			| '0'..'9' | '-' | '+' | 'e' | 'E' | '.' -> loop sp (i + 1)
-			| _ -> String.sub s sp (i - sp)
-		in
-		float_of_string (loop 0 0)
-
-	let parse_int s =
-		let rec loop_hex i =
-			if i = String.length s then s else
-			match String.unsafe_get s i with
-			| '0'..'9' | 'a'..'f' | 'A'..'F' -> loop_hex (i + 1)
-			| _ -> String.sub s 0 i
-		in
-		let rec loop sp i =
-			if i = String.length s then (if sp = 0 then s else String.sub s sp (i - sp)) else
-			match String.unsafe_get s i with
-			| '0'..'9' -> loop sp (i + 1)
-			| ' ' when sp = i -> loop (sp + 1) (i + 1)
-			| '-' when i = 0 -> loop sp (i + 1)
-			| ('x' | 'X') when i = 1 && String.get s 0 = '0' -> loop_hex (i + 1)
-			| _ -> String.sub s sp (i - sp)
-		in
-		Int32.of_string (loop 0 0)
-
 	let is' = vfun2 (fun v t -> match t with
 		| VNull -> vfalse
 		| VPrototype proto -> vbool (is v proto.ppath)
@@ -1856,11 +1868,11 @@ module StdStd = struct
 	)
 
 	let parseInt = vfun1 (fun v ->
-		try vint32 (parse_int (decode_string v)) with _ -> vnull
+		try vint32 (Numeric.parse_int (decode_string v)) with _ -> vnull
 	)
 
 	let parseFloat = vfun1 (fun v ->
-		try vfloat (parse_float (decode_string v)) with _ -> vnull
+		try vfloat (Numeric.parse_float (decode_string v)) with _ -> vnull
 	)
 
 	let random = vfun1 (fun v ->
@@ -2069,17 +2081,7 @@ end
 module StdStringTools = struct
 	let url_encode s =
 		let b = Rope.Buffer.create 0 in
-		let hex = "0123456789ABCDEF" in
-		for i = 0 to String.length s - 1 do
-			let c = String.unsafe_get s i in
-			match c with
-			| 'A'..'Z' | 'a'..'z' | '0'..'9' | '_' | '-' | '.' ->
-				Rope.Buffer.add_char b c
-			| _ ->
-				Rope.Buffer.add_char b '%';
-				Rope.Buffer.add_char b (String.unsafe_get hex (int_of_char c lsr 4));
-				Rope.Buffer.add_char b (String.unsafe_get hex (int_of_char c land 0xF));
-		done;
+		Common.url_encode s (Rope.Buffer.add_char b);
 		Rope.Buffer.contents b
 
 	let fastCodeAt = vfun2 (fun s index ->
@@ -2158,7 +2160,7 @@ module StdSys = struct
 	let exit = vfun1 (fun code ->
 		(* TODO: Borrowed from interp.ml *)
 		if (get_ctx()).curapi.use_cache() then raise (Error.Fatal_error ("",Globals.null_pos));
-		raise (Interp.Sys_exit(decode_int code));
+		raise (Sys_exit(decode_int code));
 	)
 
 	let getChar = vfun1 (fun echo ->
@@ -2347,7 +2349,11 @@ module StdType = struct
 	)
 
 	let enumEq = vfun2 (fun a b ->
-		vbool (equals_structurally a b)
+		let rec weird_eq a b = match a,b with
+			| VEnumValue a,VEnumValue b -> a == b || a.eindex = b.eindex && arrays_equal weird_eq a.eargs b.eargs && a.epath = b.epath
+			| _ -> equals a b
+		in
+		vbool (weird_eq a b)
 	)
 
 	let enumIndex = vfun1 (fun v -> match v with
@@ -2455,7 +2461,7 @@ module StdType = struct
 
 	let typeof = vfun1 (fun v ->
 		let ctx = (get_ctx()) in
-		let i,vl = match v with
+		let rec loop v = match v with
 			| VNull -> 0,[||]
 			| VInt32 _ -> 1,[||]
 			| VFloat _ -> 2,[||]
@@ -2471,7 +2477,10 @@ module StdType = struct
 				5,[||]
 			| VEnumValue ve ->
 				7,[|get_static_prototype_as_value ctx ve.epath null_pos|]
+			| VLazy f ->
+				loop (!f())
 		in
+		let i,vl = loop v in
 		encode_enum_value key_ValueType i vl None
 	)
 end
@@ -2651,6 +2660,18 @@ let init_constructors builtins =
 	add key_haxe_ds_IntMap (fun _ -> encode_instance key_haxe_ds_IntMap ~kind:(IIntMap (IntHashtbl.create 0)));
 	add key_haxe_ds_ObjectMap (fun _ -> encode_instance key_haxe_ds_ObjectMap ~kind:(IObjectMap (Obj.magic (ValueHashtbl.create 0))));
 	add key_haxe_io_BytesBuffer (fun _ -> encode_instance key_haxe_io_BytesBuffer ~kind:(IOutput (Buffer.create 0)));
+	add key_haxe_io_Bytes
+		(fun vl -> match vl with
+			| [length;b] ->
+				let length = decode_int length in
+				let b = decode_bytes b in
+				let blit_length = if length > Bytes.length b then Bytes.length b else length in
+				let b' = Bytes.create length in
+				Bytes.blit b 0 b' 0 blit_length;
+				encode_bytes b'
+			| _ ->
+				assert false
+		);
 	add key_sys_io__Process_NativeProcess
 		(fun vl -> match vl with
 			| [cmd;args] ->
@@ -2687,7 +2708,7 @@ let init_constructors builtins =
 let init_empty_constructors builtins =
 	let h = builtins.empty_constructor_builtins in
 	Hashtbl.add h key_Array (fun () -> encode_array_instance (EvalArray.create [||]));
-	Hashtbl.add h key_eval_Vector (fun () -> encode_vector_instance (Array.create 0 vnull));
+	Hashtbl.add h key_eval_Vector (fun () -> encode_vector_instance (Array.make 0 vnull));
 	Hashtbl.add h key_Date (fun () -> encode_instance key_Date ~kind:(IDate 0.));
 	Hashtbl.add h key_EReg (fun () -> encode_instance key_EReg ~kind:(IRegex {r = Pcre.regexp ""; r_global = false; r_string = ""; r_groups = [||]}));
 	Hashtbl.add h key_String (fun () -> encode_rope Rope.empty);
@@ -2714,6 +2735,7 @@ let init_standard_library builtins =
 		"pop",StdArray.pop;
 		"push",StdArray.push;
 		"remove",StdArray.remove;
+		"resize",StdArray.resize;
 		"reverse",StdArray.reverse;
 		"shift",StdArray.shift;
 		"slice",StdArray.slice;
@@ -2825,6 +2847,7 @@ let init_standard_library builtins =
 		"read",StdFile.read;
 		"saveBytes",StdFile.saveBytes;
 		"saveContent",StdFile.saveContent;
+		"update",StdFile.update;
 		"write",StdFile.write;
 	] [];
 	init_fields builtins (["sys";"io"],"FileInput") [] [
@@ -2950,6 +2973,10 @@ let init_standard_library builtins =
 		"listNames",StdResource.listNames;
 		"getString",StdResource.getString;
 		"getBytes",StdResource.getBytes;
+	] [];
+	init_fields builtins (["haxe";"crypto"],"Sha1") [
+		"encode",StdSha1.encode;
+		"make",StdSha1.make;
 	] [];
 	init_fields builtins (["sys";"net";"_Socket"],"NativeSocket") [
 		"select",StdSocket.select;

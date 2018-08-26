@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -28,7 +28,7 @@ package cs.internal;
 	@:readOnly public var name(default,never):String;
 	public var value:Dynamic;
 	public var next:FieldHashConflict;
-	public function new(hash, name, value, next) {
+	public function new(hash, name, value:Dynamic, next) {
 		untyped this.hash = hash;
 		untyped this.name = name;
 		this.value = value;
@@ -290,7 +290,7 @@ package cs.internal;
 		a[length - 1] = null;
 	}
 
-	@:extern
+	extern
 	static inline function __insert<T>(a:cs.NativeArray<T>, length:Int, pos:Int, x:T):cs.NativeArray<T>
 	{
 		var capacity = a.Length;

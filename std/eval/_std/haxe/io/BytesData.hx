@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,9 +22,9 @@
 package haxe.io;
 
 @:forward
-private abstract BytesDataAbstract(Bytes) from Bytes to Bytes {
+private abstract NativeBytesDataAbstract(Bytes) from Bytes to Bytes {
 	@:arrayAccess public inline function get(i:Int) return this.get(i);
 	@:arrayAccess public inline function set(i:Int, v:Dynamic) this.set(i, v);
 }
 
-typedef BytesData = BytesDataAbstract;
+typedef BytesData = NativeBytesDataAbstract;

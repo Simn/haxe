@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -41,26 +41,27 @@ enum ValueType {
 	public static function getEnum( o : EnumValue ) : Enum<Dynamic> untyped {
 		if( o == null )
 			return null;
+		#if js_enums_as_arrays
 		return o.__enum__;
+		#else
+		return $hxEnums[o.__enum__];
+		#end
 	}
 
-	public static function getSuperClass( c : Class<Dynamic> ) : Class<Dynamic> untyped {
-		return c.__super__;
+	public static inline function getSuperClass( c : Class<Dynamic> ) : Class<Dynamic> {
+		return (cast c).__super__;
 	}
 
 
-	public static function getClassName( c : Class<Dynamic> ) : String {
-		var a : Array<String> = untyped c.__name__;
-		if (a == null)
-			return null;
-		return a.join(".");
+	public static inline function getClassName( c : Class<Dynamic> ) : String {
+		return untyped __define_feature__("Type.getClassName", c.__name__);
 	}
 
-	public static function getEnumName( e : Enum<Dynamic> ) : String {
-		var a : Array<String> = untyped e.__ename__;
-		return a.join(".");
+	public static inline function getEnumName( e : Enum<Dynamic> ) : String {
+		return untyped __define_feature__("Type.getEnumName", e.__ename__);
 	}
 
+	#if js_enums_as_arrays
 	public static function resolveClass( name : String ) : Class<Dynamic> untyped {
 		var cl : Class<Dynamic> = $hxClasses[name];
 		// ensure that this is a class
@@ -76,50 +77,63 @@ enum ValueType {
 			return null;
 		return e;
 	}
+	#else
+	public static inline function resolveClass( name : String ) : Class<Dynamic> {
+		return untyped __define_feature__("Type.resolveClass", $hxClasses[name]);
+	}
 
-	public static function createInstance<T>( cl : Class<T>, args : Array<Dynamic> ) : T untyped {
+	public static inline function resolveEnum( name : String ) : Enum<Dynamic> {
+		return untyped $hxEnums[name];
+	}
+	#end
+
+	#if (js_es < 5)
+	public static function createInstance<T>( cl : Class<T>, args : Array<Dynamic> ) : T {
 		switch( args.length ) {
 		case 0:
-			return __new__(cl);
+			return js.Syntax.construct(cl);
 		case 1:
-			return __new__(cl,args[0]);
+			return js.Syntax.construct(cl,args[0]);
 		case 2:
-			return __new__(cl,args[0],args[1]);
+			return js.Syntax.construct(cl,args[0],args[1]);
 		case 3:
-			return __new__(cl,args[0],args[1],args[2]);
+			return js.Syntax.construct(cl,args[0],args[1],args[2]);
 		case 4:
-			return __new__(cl,args[0],args[1],args[2],args[3]);
+			return js.Syntax.construct(cl,args[0],args[1],args[2],args[3]);
 		case 5:
-			return __new__(cl,args[0],args[1],args[2],args[3],args[4]);
+			return js.Syntax.construct(cl,args[0],args[1],args[2],args[3],args[4]);
 		case 6:
-			return __new__(cl,args[0],args[1],args[2],args[3],args[4],args[5]);
+			return js.Syntax.construct(cl,args[0],args[1],args[2],args[3],args[4],args[5]);
 		case 7:
-			return __new__(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6]);
+			return js.Syntax.construct(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6]);
 		case 8:
-			return __new__(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7]);
+			return js.Syntax.construct(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7]);
 		case 9:
-			return __new__(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8]);
+			return js.Syntax.construct(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8]);
 		case 10:
-			return __new__(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8],args[9]);
+			return js.Syntax.construct(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8],args[9]);
 		case 11:
-			return __new__(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8],args[9],args[10]);
+			return js.Syntax.construct(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8],args[9],args[10]);
 		case 12:
-			return __new__(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8],args[9],args[10],args[11]);
+			return js.Syntax.construct(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8],args[9],args[10],args[11]);
 		case 13:
-			return __new__(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8],args[9],args[10],args[11],args[12]);
+			return js.Syntax.construct(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8],args[9],args[10],args[11],args[12]);
 		case 14:
-			return __new__(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8],args[9],args[10],args[11],args[12],args[13]);
+			return js.Syntax.construct(cl,args[0],args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8],args[9],args[10],args[11],args[12],args[13]);
 		default:
 			throw "Too many arguments";
 		}
 	}
 
-	#if (js_es < 5)
 	public static function createEmptyInstance<T>( cl : Class<T> ) : T untyped {
 		__js__("function empty() {}; empty.prototype = cl.prototype");
 		return __js__("new empty()");
 	}
 	#else
+	public static function createInstance<T>( cl : Class<T>, args : Array<Dynamic> ) : T untyped {
+		return untyped __js__("new ({0})", Function.prototype.bind.apply(cl, [null].concat(args)));
+	}
+
 	public static inline function createEmptyInstance<T>( cl : Class<T> ) : T {
 		return js.Object.create((cast cl).prototype);
 	}
@@ -168,7 +182,7 @@ enum ValueType {
 
 	@:access(js.Boot)
 	public static function typeof( v : Dynamic ) : ValueType {
-		switch (js.Lib.typeof(v)) {
+		switch (js.Syntax.typeof(v)) {
 		case "boolean":
 			return TBool;
 		case "string":
@@ -182,8 +196,13 @@ enum ValueType {
 			if( v == null )
 				return TNull;
 			var e = v.__enum__;
-			if( e != null )
+			if( e != null ){
+				#if js_enums_as_arrays
 				return TEnum(e);
+				#else
+				return TEnum(untyped $hxEnums[e]);
+				#end
+			}
 			var c = js.Boot.getClass(v);
 			if( c != null )
 				return TClass(c);
@@ -199,18 +218,33 @@ enum ValueType {
 		}
 	}
 
-	public static function enumEq<T>( a : T, b : T ) : Bool untyped {
+	public static function enumEq<T:EnumValue>( a : T, b : T ) : Bool untyped {
 		if( a == b )
 			return true;
 		try {
+			var e = a.__enum__;
+			if( e == null || e != b.__enum__ )
+				return false;
+
+			#if js_enums_as_arrays
 			if( a[0] != b[0] )
 				return false;
 			for( i in 2...a.length )
 				if( !enumEq(a[i],b[i]) )
 					return false;
-			var e = a.__enum__;
-			if( e != b.__enum__ || e == null )
+			#else
+			if (a._hx_index != b._hx_index)
 				return false;
+
+			var enm = $hxEnums[e];
+			var ctorName = enm.__constructs__[a._hx_index];
+			var params:Array<String> = enm[ctorName].__params__;
+			for (f in params) {
+				if ( !enumEq(a[f],b[f]) ){
+					return false;
+				}
+			}
+			#end
 		} catch( e : Dynamic ) {
 			return false;
 		}
@@ -218,19 +252,36 @@ enum ValueType {
 	}
 
 	public inline static function enumConstructor( e : EnumValue ) : String {
+		#if js_enums_as_arrays
 		return untyped e[0];
+		#else
+		return untyped $hxEnums[e.__enum__].__constructs__[e._hx_index];
+		#end
 	}
 
+	#if js_enums_as_arrays
 	public inline static function enumParameters( e : EnumValue ) : Array<Dynamic> {
 		return untyped e.slice(2);
 	}
+	#else
+	public static function enumParameters( e : EnumValue ) : Array<Dynamic> untyped {
+		var enm:Enum<Dynamic> = $hxEnums[e.__enum__];
+		var ctorName:String = enm.__constructs__[e._hx_index];
+		var params:Array<String> = enm[ctorName].__params__;
+		return params != null ? [for (p in params) e[p]] : [];
+	}
+	#end
 
 	public inline static function enumIndex( e : EnumValue ) : Int {
+		#if !js_enums_as_arrays
+		return untyped e._hx_index;
+		#else
 		return untyped e[1];
+		#end
 	}
 
 	public inline static function allEnums<T>( e : Enum<T> ) : Array<T> {
-		return untyped __define_feature__("Type.allEnums", e.__empty_constructs__);
+		return untyped __define_feature__("Type.allEnums", e.__empty_constructs__.slice());
 	}
 
 }

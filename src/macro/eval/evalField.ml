@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -45,16 +45,16 @@ let object_field o name =
 	try object_field_raise o name with Not_found -> vnull
 
 let field_raise v f =
-	match v with
+	match vresolve v with
 	| VObject o -> object_field_raise o f
 	| VInstance {ikind = IBytes s} when f = key_length -> vint (Bytes.length s)
 	| VPrototype proto -> proto_field_raise proto f
 	| VArray va ->
 		if f = key_length then vint (va.alength)
-		else proto_field_direct (get_instance_prototype_raise (get_ctx()) key_Array) f
+		else proto_field_direct (get_ctx()).array_prototype f
 	| VVector vv ->
 		if f = key_length then vint (Array.length vv)
-		else proto_field_direct (get_instance_prototype_raise (get_ctx()) key_eval_Vector) f
+		else proto_field_direct (get_ctx()).vector_prototype f
 	| VString (_,s) ->
 		if f = key_length then vint (String.length (Lazy.force s))
 		else proto_field_direct (get_ctx()).string_prototype f

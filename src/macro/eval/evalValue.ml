@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -69,15 +69,9 @@ type value =
 	| VPrototype of vprototype
 	| VFunction of vfunc * bool
 	| VFieldClosure of value * vfunc
+	| VLazy of (unit -> value) ref
 
-and vfunc =
-	| Fun0 of (unit -> value)
-	| Fun1 of (value -> value)
-	| Fun2 of (value -> value -> value)
-	| Fun3 of (value -> value -> value -> value)
-	| Fun4 of (value -> value -> value -> value -> value)
-	| Fun5 of (value -> value -> value -> value -> value -> value)
-	| FunN of (value list -> value)
+and vfunc = value list -> value
 
 and vobject = {
 	(* The fields of the object known when it is created. *)
@@ -130,7 +124,7 @@ and vinstance_kind =
 	| IThread of Thread.t
 	| IZip of vzlib (* Compress/Uncompress *)
 	| ITypeDecl of Type.module_type
-	| ILazyType of ((unit -> Type.t) ref) * (unit -> value)
+	| ILazyType of (Type.tlazy ref) * (unit -> value)
 	| IRef of Obj.t
 	| INormal
 
@@ -143,7 +137,7 @@ and vinstance = {
 	*)
 	iproto : vprototype;
 	(* The [vinstance_kind]. *)
-	ikind : vinstance_kind;
+	mutable ikind : vinstance_kind;
 }
 
 and varray = {
@@ -160,18 +154,32 @@ and venum_value = {
 	enpos : pos option;
 }
 
+let rec equals a b = match a,b with
+	| VTrue,VTrue
+	| VFalse,VFalse
+	| VNull,VNull -> true
+	| VInt32 a,VInt32 b -> a = b
+	| VFloat a,VFloat b -> a = b
+	| VFloat a,VInt32 b -> a = (Int32.to_float b)
+	| VInt32 a,VFloat b -> (Int32.to_float a) = b
+	| VEnumValue a,VEnumValue b -> a == b || a.eindex = b.eindex && Array.length a.eargs = 0 && Array.length b.eargs = 0 && a.epath = b.epath
+	| VObject vo1,VObject vo2 -> vo1 == vo2
+	| VInstance vi1,VInstance vi2 -> vi1 == vi2
+	| VString(r1,s1),VString(r2,s2) -> r1 == r2 || Lazy.force s1 = Lazy.force s2
+	| VArray va1,VArray va2 -> va1 == va2
+	| VVector vv1,VVector vv2 -> vv1 == vv2
+	| VFunction(vf1,_),VFunction(vf2,_) -> vf1 == vf2
+	| VPrototype proto1,VPrototype proto2 -> proto1.ppath = proto2.ppath
+	| VLazy f1,_ -> equals (!f1()) b
+	| _,VLazy f2 -> equals a (!f2())
+	| _ -> a == b
+
 module ValueHashtbl = Hashtbl.Make(struct
 	type t = value
 
-	let equal a b = match a,b with
-		| VObject o1,VObject o2 -> o1 == o2
-		| VInstance vi1,VInstance vi2 -> vi1 == vi2
-		| VPrototype p1,VPrototype p2 -> p1 == p2
-		| VFunction(f1,_),VFunction(f2,_) -> f1 == f2
-		| VFieldClosure(v1,f1),VFieldClosure(v2,f2) -> v1 == v2 && f1 == f2
-		| _ -> false
+	let equal = equals
 
-	let hash = Hashtbl.hash
+	let hash _ = 0
 end)
 
 let vnull = VNull
@@ -191,11 +199,6 @@ let venum_value e = VEnumValue e
 
 let s_expr_pretty e = (Type.s_expr_pretty false "" false (Type.s_type (Type.print_context())) e)
 
-let num_args = function
-	| Fun0 _ -> 0
-	| Fun1 _ -> 1
-	| Fun2 _ -> 2
-	| Fun3 _ -> 3
-	| Fun4 _ -> 4
-	| Fun5 _ -> 5
-	| FunN _ -> -1
+let rec vresolve v = match v with
+	| VLazy f -> vresolve (!f())
+	| _ -> v

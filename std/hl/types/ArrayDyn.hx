@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -91,6 +91,10 @@ class ArrayDyn extends ArrayAccess {
 
 	public function reverse() : Void {
 		array.reverse();
+	}
+
+	public function resize( len : Int ) {
+		array.resize(len);
 	}
 
 	public function shift() : Null<Dynamic> {
@@ -211,6 +215,10 @@ class ArrayDyn extends ArrayAccess {
 			return arr;
 		}
 		return null;
+	}
+
+	@:keep function __compare( a : Dynamic ) : Int {
+		return a == array ? 0 : hl.Api.comparePointer(this,a);
 	}
 
 	public static function alloc( a : ArrayBase, allowReinterpret = false ) : ArrayDyn {

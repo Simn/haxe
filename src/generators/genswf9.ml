@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -188,8 +188,8 @@ let rec follow_basic t =
 		| Some t -> follow_basic t
 		| _ -> t)
 	| TLazy f ->
-		follow_basic (!f())
-	| TType ({ t_path = [],"Null" },[tp]) ->
+		follow_basic (lazy_type f)
+	| TAbstract ({ a_path = [],"Null" },[tp]) ->
 		(match follow_basic tp with
 		| TMono _
 		| TFun _
@@ -228,7 +228,9 @@ let rec type_id ctx t =
 			| _ -> type_path ctx ([],"Object"))
 		| _ ->
 			type_path ctx c.cl_path)
-	| TAbstract (a,_) ->
+	| TAbstract ({ a_path = [],"Null"},_) ->
+		HMPath ([],"Object")
+	| TAbstract (a,_) when Meta.has Meta.CoreType a.a_meta ->
 		type_path ctx a.a_path
 	| TFun _ | TType ({ t_path = ["flash";"utils"],"Function" },[]) ->
 		type_path ctx ([],"Function")
@@ -317,7 +319,7 @@ let property ctx p t =
 		(match p with
 		| "length" -> ident p, Some KInt, false (* UInt in the spec *)
 		| "map" | "filter" when Common.defined ctx.com Define.NoFlashOverride -> ident (p ^ "HX"), None, true
-		| "copy" | "insert" | "remove" | "iterator" | "toString" | "map" | "filter" -> ident p , None, true
+		| "copy" | "insert" | "remove" | "iterator" | "toString" | "map" | "filter" | "resize" -> ident p , None, true
 		| _ -> as3 p, None, false);
 	| TInst ({ cl_path = ["flash"],"Vector" },_) ->
 		(match p with
@@ -924,7 +926,7 @@ let rec gen_access ctx e (forset : 'a) : 'a access =
 			else
 				VCast (id,classify ctx e.etype)
 		)
-	| TArray ({ eexpr = TLocal { v_name = "__global__" } },{ eexpr = TConst (TString s) }) ->
+	| TArray ({ eexpr = TIdent "__global__" },{ eexpr = TConst (TString s) }) ->
 		let path = parse_path s in
 		let id = type_path ctx path in
 		if is_set forset then write ctx HGetGlobalScope;
@@ -1023,7 +1025,7 @@ let rec gen_expr_content ctx retval e =
 	| TParenthesis e | TMeta (_,e) ->
 		gen_expr ctx retval e
 	| TObjectDecl fl ->
-		List.iter (fun (name,e) ->
+		List.iter (fun ((name,_,_),e) ->
 			write ctx (HString (reserved name));
 			gen_expr ctx true e
 		) fl;
@@ -1311,6 +1313,15 @@ let rec gen_expr_content ctx retval e =
 		);
 		List.iter (fun j -> j()) jend;
 		branch());
+	| TCast (e1,Some t) when not retval ->
+		let p = e.epos in
+		let e2 = mk (TTypeExpr t) t_dynamic p in
+		let eis = mk (TIdent "__is__") t_dynamic p in
+		let ecall = mk (TCall(eis,[e1;e2])) ctx.com.basic.tbool p in
+		let enot = {ecall with eexpr = TUnop(Not,Prefix,ecall)} in
+		let exc = mk (TThrow (mk (TConst (TString "Class cast error")) ctx.com.basic.tstring p)) ctx.com.basic.tvoid p in
+		let eif = mk (TIf(enot,exc,None)) ctx.com.basic.tvoid p in
+		gen_expr ctx retval eif
 	| TCast (e1,t) ->
 		gen_expr ctx retval e1;
 		if retval then begin
@@ -1349,10 +1360,12 @@ let rec gen_expr_content ctx retval e =
 					j();
 					write ctx (HCast tid)
 		end
+	| TIdent s ->
+		abort ("Unbound variable " ^ s) e.epos
 
 and gen_call ctx retval e el r =
 	match e.eexpr , el with
-	| TLocal { v_name = "__is__" }, [e;t] ->
+	| TIdent "__is__", [e;t] ->
 		gen_expr ctx true e;
 		gen_expr ctx true t;
 		write ctx (HOp A3OIs)
@@ -1361,31 +1374,31 @@ and gen_call ctx retval e el r =
 		gen_expr ctx true e;
 		gen_expr ctx true t;
 		write ctx (HOp A3OIs)
-	| TLocal { v_name = "__as__" }, [e;t] ->
+	| TIdent "__as__", [e;t] ->
 		gen_expr ctx true e;
 		gen_expr ctx true t;
 		write ctx (HOp A3OAs)
-	| TLocal { v_name = "__int__" }, [e] ->
+	| TIdent "__int__", [e] ->
 		gen_expr ctx true e;
 		write ctx HToInt
-	| TLocal { v_name = "__float__" }, [e] ->
+	| TIdent "__float__", [e] ->
 		gen_expr ctx true e;
 		write ctx HToNumber
-	| TLocal { v_name = "__foreach__" }, [obj;counter] ->
+	| TIdent "__foreach__", [obj;counter] ->
 		gen_expr ctx true obj;
 		gen_expr ctx true counter;
 		write ctx HForEach
-	| TLocal { v_name = "__forin__" }, [obj;counter] ->
+	| TIdent "__forin__", [obj;counter] ->
 		gen_expr ctx true obj;
 		gen_expr ctx true counter;
 		write ctx HForIn
-	| TLocal { v_name = "__has_next__" }, [obj;counter] ->
+	| TIdent "__has_next__", [obj;counter] ->
 		let oreg = match gen_access ctx obj Read with VReg r -> r | _ -> abort "Must be a local variable" obj.epos in
 		let creg = match gen_access ctx counter Read with VReg r -> r | _ -> abort "Must be a local variable" obj.epos in
 		write ctx (HNext (oreg.rid,creg.rid))
-	| TLocal { v_name = "__hkeys__" }, [e2]
-	| TLocal { v_name = "__foreach__" }, [e2]
-	| TLocal { v_name = "__keys__" }, [e2] ->
+	| TIdent "__hkeys__", [e2]
+	| TIdent "__foreach__", [e2]
+	| TIdent "__keys__", [e2] ->
 		let racc = alloc_reg ctx (KType (type_path ctx ([],"Array"))) in
 		let rcounter = alloc_reg ctx KInt in
 		let rtmp = alloc_reg ctx KDynamic in
@@ -1401,9 +1414,9 @@ and gen_call ctx retval e el r =
 		write ctx (HReg rtmp.rid);
 		write ctx (HReg rcounter.rid);
 		(match e.eexpr with
-		| TLocal { v_name = "__foreach__" } ->
+		| TIdent "__foreach__" ->
 			write ctx HForEach
-		| TLocal { v_name = "__hkeys__" } ->
+		| TIdent "__hkeys__" ->
 			write ctx HForIn;
 			write ctx (HSmallInt 1);
 			write ctx (HCallProperty (as3 "substr",1));
@@ -1417,26 +1430,26 @@ and gen_call ctx retval e el r =
 		free_reg ctx rtmp;
 		free_reg ctx rcounter;
 		free_reg ctx racc;
-	| TLocal { v_name = "__new__" }, e :: el ->
+	| TIdent "__new__", e :: el ->
 		gen_expr ctx true e;
 		List.iter (gen_expr ctx true) el;
 		write ctx (HConstruct (List.length el))
-	| TLocal { v_name = "__delete__" }, [o;f] ->
+	| TIdent "__delete__", [o;f] ->
 		gen_expr ctx true o;
 		gen_expr ctx true f;
 		write ctx (HDeleteProp dynamic_prop);
-	| TLocal { v_name = "__unprotect__" }, [e] ->
+	| TIdent "__unprotect__", [e] ->
 		write ctx (HGetLex (type_path ctx (["flash"],"Boot")));
 		gen_expr ctx true e;
 		write ctx (HCallProperty (ident "__unprotect__",1));
-	| TLocal { v_name = "__typeof__" }, [e] ->
+	| TIdent "__typeof__", [e] ->
 		gen_expr ctx true e;
 		write ctx HTypeof
-	| TLocal { v_name = "__in__" }, [e; f] ->
+	| TIdent "__in__", [e; f] ->
 		gen_expr ctx true e;
 		gen_expr ctx true f;
 		write ctx (HOp A3OIn)
-	| TLocal { v_name = "__resources__" }, [] ->
+	| TIdent "__resources__", [] ->
 		let count = ref 0 in
 		Hashtbl.iter (fun name data ->
 			incr count;
@@ -1445,7 +1458,7 @@ and gen_call ctx retval e el r =
 			write ctx (HObject 1);
 		) ctx.com.resources;
 		write ctx (HArray !count)
-	| TLocal { v_name = "__vmem_set__" }, [{ eexpr = TConst (TInt code) };e1;e2] ->
+	| TIdent "__vmem_set__", [{ eexpr = TConst (TInt code) };e1;e2] ->
 		gen_expr ctx true e2;
 		gen_expr ctx true e1;
 		write ctx (HOp (match code with
@@ -1456,7 +1469,7 @@ and gen_call ctx retval e el r =
 			| 4l -> A3OMemSetDouble
 			| _ -> assert false
 		))
-	| TLocal { v_name = "__vmem_get__" }, [{ eexpr = TConst (TInt code) };e] ->
+	| TIdent "__vmem_get__", [{ eexpr = TConst (TInt code) };e] ->
 		gen_expr ctx true e;
 		write ctx (HOp (match code with
 			| 0l -> A3OMemGet8
@@ -1466,7 +1479,7 @@ and gen_call ctx retval e el r =
 			| 4l -> A3OMemGetDouble
 			| _ -> assert false
 		))
-	| TLocal { v_name = "__vmem_sign__" }, [{ eexpr = TConst (TInt code) };e] ->
+	| TIdent "__vmem_sign__", [{ eexpr = TConst (TInt code) };e] ->
 		gen_expr ctx true e;
 		write ctx (HOp (match code with
 			| 0l -> A3OSign1
@@ -1474,12 +1487,12 @@ and gen_call ctx retval e el r =
 			| 2l -> A3OSign16
 			| _ -> assert false
 		))
-	| TLocal { v_name = "__vector__" }, [ep] ->
+	| TIdent "__vector__", [ep] ->
 		gen_type ctx (type_id ctx r);
 		write ctx HGetGlobalScope;
 		gen_expr ctx true ep;
 		write ctx (HCallStack 1)
-	| TArray ({ eexpr = TLocal { v_name = "__global__" } },{ eexpr = TConst (TString s) }), _ ->
+	| TArray ({ eexpr = TIdent "__global__" },{ eexpr = TConst (TString s) }), _ ->
 		(match gen_access ctx e Read with
 		| VGlobal id ->
 			write ctx (HFindPropStrict id);
@@ -1678,7 +1691,7 @@ and gen_binop ctx retval op e1 e2 t p =
 		gen_op A3OLt
 	| OpLte ->
 		gen_op A3OLte
-	| OpInterval | OpArrow ->
+	| OpInterval | OpArrow | OpIn ->
 		assert false
 
 and gen_expr ctx retval e =
@@ -1775,7 +1788,7 @@ let generate_construct ctx fdata c =
 	(* if skip_constructor, then returns immediatly *)
 	if ctx.need_ctor_skip then (match c.cl_kind with
 	| KGenericInstance _ -> ()
-	| _ when not (Codegen.constructor_side_effects fdata.tf_expr) -> ()
+	| _ when not (Texpr.constructor_side_effects fdata.tf_expr) -> ()
 	| _ ->
 		let id = ident "skip_constructor" in
 		getvar ctx (VGlobal (type_path ctx (["flash"],"Boot")));
@@ -1955,7 +1968,7 @@ let generate_field_kind ctx f c stat =
 		in
 		loop f.cf_meta
 	in
-	if is_extern_field f then None else
+	if not (is_physical_field f) then None else
 	match f.cf_expr with
 	| Some { eexpr = TFunction fdata } ->
 		let rec loop c name =
@@ -1994,7 +2007,7 @@ let generate_field_kind ctx f c stat =
 			) args;
 			let dparams = (match !dparams with None -> None | Some l -> Some (List.rev l)) in
 			Some (HFMethod {
-				hlm_type = end_fun ctx (List.map (fun (a,opt,t) -> alloc_var a t f.cf_pos, (if opt then Some TNull else None)) args) dparams tret;
+				hlm_type = end_fun ctx (List.map (fun (a,opt,t) -> alloc_var (VUser TVOArgument) a t f.cf_pos, (if opt then Some TNull else None)) args) dparams tret;
 				hlm_final = false;
 				hlm_override = false;
 				hlm_kind = snd (method_kind());
@@ -2120,18 +2133,9 @@ let generate_class ctx c =
 	let fields = if c.cl_path <> ctx.boot then fields else begin
 		{
 			hlf_name = make_name {
-				cf_name = "init";
+				(mk_field "init" (TFun ([],t_dynamic)) c.cl_pos null_pos) with
 				cf_public = ctx.swc && ctx.swf_protected;
-				cf_meta = [];
-				cf_doc = None;
-				cf_pos = c.cl_pos;
-				cf_name_pos = null_pos;
-				cf_type = TFun ([],t_dynamic);
-				cf_params = [];
-				cf_expr = None;
-				cf_expr_unoptimized = None;
 				cf_kind = Method MethNormal;
-				cf_overloads = [];
 			} false;
 			hlf_slot = 0;
 			hlf_kind = (HFMethod {
@@ -2195,7 +2199,7 @@ let generate_class ctx c =
 let generate_enum ctx e meta =
 	let name_id = type_path ctx e.e_path in
 	let api = ctx.com.basic in
-	let f = begin_fun ctx [alloc_var "tag" api.tstring e.e_pos, None;alloc_var "index" api.tint e.e_pos, None;alloc_var "params" (api.tarray (mk_mono())) e.e_pos, None] api.tvoid [ethis] false e.e_pos in
+	let f = begin_fun ctx [alloc_var VGenerated "tag" api.tstring e.e_pos, None;alloc_var VGenerated "index" api.tint e.e_pos, None;alloc_var VGenerated "params" (api.tarray (mk_mono())) e.e_pos, None] api.tvoid [ethis] false e.e_pos in
 	let tag_id = ident "tag" in
 	let index_id = ident "index" in
 	let params_id = ident "params" in
@@ -2226,7 +2230,7 @@ let generate_enum ctx e meta =
 			hlf_slot = !st_count;
 			hlf_kind = (match f.ef_type with
 				| TFun (args,_) ->
-					let fdata = begin_fun ctx (List.map (fun (a,opt,t) -> alloc_var a t e.e_pos, (if opt then Some TNull else None)) args) (TEnum (e,[])) [] true f.ef_pos in
+					let fdata = begin_fun ctx (List.map (fun (a,opt,t) -> alloc_var VGenerated a t e.e_pos, (if opt then Some TNull else None)) args) (TEnum (e,[])) [] true f.ef_pos in
 					write ctx (HFindPropStrict name_id);
 					write ctx (HString f.ef_name);
 					write ctx (HInt f.ef_index);
@@ -2323,7 +2327,7 @@ let rec generate_type ctx t =
 		if e.e_extern then
 			None
 		else
-			let meta = Codegen.build_metadata ctx.com t in
+			let meta = Texpr.build_metadata ctx.com.basic t in
 			let hlc = generate_enum ctx e meta in
 			let init = begin_fun ctx [] ctx.com.basic.tvoid [ethis] false e.e_pos in
 			generate_enum_init ctx e hlc meta;

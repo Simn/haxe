@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -25,9 +25,9 @@
 @:forwardStatics
 @:forward abstract Integer(IntegerClass) from IntegerClass to IntegerClass
 {
-	@:to @:extern inline public function toInt():Int
+	@:to extern inline public function toInt():Int
 		return this.intValue();
-	@:from @:extern inline public static function fromInt(b:Int):Integer
+	@:from extern inline public static function fromInt(b:Int):Integer
 		return IntegerClass.valueOf(b);
 }
 
@@ -66,8 +66,8 @@
 	@:overload static function toOctalString(param1 : Int) : String;
 	@:native("toString") @:overload static function _toString(param1 : Int, param2 : Int) : String;
 	@:native("toString") @:overload static function _toString(param1 : Int) : String;
-	@:overload @:throws("java.lang.NumberFormatException") static function valueOf(param1 : String, param2 : Int) : Integer;
 	@:overload static function valueOf(param1 : Int) : Integer;
+	@:overload @:throws("java.lang.NumberFormatException") static function valueOf(param1 : String, param2 : Int) : Integer;
 	@:overload @:throws("java.lang.NumberFormatException") static function valueOf(param1 : String) : Integer;
 }
 

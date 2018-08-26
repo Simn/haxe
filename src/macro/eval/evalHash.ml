@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -119,6 +119,7 @@ let key_haxe_macro_ModuleType = hash_s "haxe.macro.ModuleType"
 let key_haxe_macro_FieldAccess = hash_s "haxe.macro.FieldAccess"
 let key_haxe_macro_AnonStatus = hash_s "haxe.macro.AnonStatus"
 let key_haxe_macro_ImportMode = hash_s "haxe.macro.ImportMode"
+let key_haxe_macro_QuoteStatus = hash_s "haxe.macro.QuoteStatus"
 let key_haxe_CallStack = hash_s "haxe.CallStack"
 let key___init__ = hash_s "__init__"
 let key_new = hash_s "new"
@@ -136,3 +137,4 @@ let key_eval_vm_Thread = hash_s "eval.vm.Thread"
 let key_haxe_zip_Compress = hash_s "haxe.zip.Compress"
 let key_haxe_zip_Uncompress = hash_s "haxe.zip.Uncompress"
 let key_done = hash_s "done"
+let key_eval_toplevel = hash_s "eval-toplevel"

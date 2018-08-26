@@ -15,13 +15,7 @@
 
 -swf all9.swf
 -xml flash9.xml
--swf-version 11.4
-
---next
-
--D php7
--php all_php7
--xml php7.xml
+--swf-version 11.4
 
 --next
 

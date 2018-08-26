@@ -97,13 +97,14 @@ class Toplevel extends DisplayTestCase {
 	}
 
 	/**
+	class C0 { }
 	class C extends {-1-} {
 	**/
 	function testTypeCompletionExtends() {
 		// TODO: this currently doesn't work if there's no token after extends
 		var typesCompletion = toplevel(pos(1));
-		eq(true, hasToplevel(typesCompletion, "type", "Array"));
-		eq(true, hasToplevel(typesCompletion, "package", "haxe"));
+		eq(true, hasToplevel(typesCompletion, "type", "C0"));
+		// eq(true, hasToplevel(typesCompletion, "package", "haxe"));
 	}
 
 	/**
@@ -111,9 +112,10 @@ class Toplevel extends DisplayTestCase {
 	**/
 	function testTypeCompletionImplements() {
 		// TODO: this currently doesn't work if there's no token after implements
-		var typesCompletion = toplevel(pos(1));
-		eq(true, hasToplevel(typesCompletion, "type", "Array"));
-		eq(true, hasToplevel(typesCompletion, "package", "haxe"));
+		// NOTE: This test is invalid, we only show interfaces after `implements`
+		// var typesCompletion = toplevel(pos(1));
+		// eq(true, hasToplevel(typesCompletion, "type", "Array"));
+		// eq(true, hasToplevel(typesCompletion, "package", "haxe"));
 	}
 
 	/**
@@ -163,7 +165,198 @@ class Toplevel extends DisplayTestCase {
 		eq(true, hasToplevel(toplevel(pos(2)), "type", "FieldT2"));
 	}
 
-	public static function hasToplevel(a:Array<ToplevelElement>, kind:String, name:String):Bool {
-		return a.exists(function(t) return t.kind == kind && t.name == name);
+	/**
+	import cases.Toplevel.E.a;
+
+	enum E {
+		a;
+	}
+
+	class Main {
+		static var a:Int;
+		function new(a) {
+			{-1-}
+		}
+
+		static function main() {
+		}
+	}
+	**/
+	function testDuplicates() {
+		var toplevels = toplevel(pos(1));
+		toplevels = toplevels.filter(function(t) return t.name == "a");
+		eq(1, toplevels.length);
+		eq("local", toplevels[0].kind);
+	}
+
+	/**
+	class Main {
+		static function main() {
+			{-1-}
+		}
+		@:noCompletion static function test() { }
+	}
+	**/
+	function testIssue6407() {
+		eq(false, hasToplevel(toplevel(pos(1)), "static", "test"));
+	}
+
+	/**
+	class Parent {
+		function parent() {
+			{-1-}
+		}
+	}
+	class Child extends Parent {
+		function child() {
+			{-2-}
+		}
+	}
+	**/
+	function testThisSuper() {
+		eq(true, hasToplevel(toplevel(pos(1)), "literal", "this"));
+		eq(false, hasToplevel(toplevel(pos(1)), "literal", "super"));
+
+		eq(true, hasToplevel(toplevel(pos(2)), "literal", "this"));
+		eq(true, hasToplevel(toplevel(pos(2)), "literal", "super"));
+	}
+
+	/**
+	class Main {
+    	static function f(t:Type.ValueType) {}
+
+    	public static function main() {
+    	    f({-1-}
+	**/
+	function testExpectedType1() {
+		var fields = toplevel(pos(1));
+		eq(true, hasToplevel(fields, "enum", "TNull"));
+	}
+
+	/**
+	class Main {
+    	public static function main() {
+    	    var x:Type.ValueType = {-1-}
+	**/
+	function testExpectedType2() {
+		var fields = toplevel(pos(1));
+		eq(true, hasToplevel(fields, "enum", "TNull"));
+	}
+
+	/**
+	class Main {
+    	public static function main() {
+    	    var x:Type.ValueType;
+			x = {-1-}
+	**/
+	function testExpectedType3() {
+		var fields = toplevel(pos(1));
+		eq(true, hasToplevel(fields, "enum", "TNull"));
+	}
+
+	/**
+	class Main {
+    	public static function main() {
+    	    var x:{v:Type.ValueType} = {v: {-1-}};
+	**/
+	function testExpectedType4() {
+		var fields = toplevel(pos(1));
+		eq(true, hasToplevel(fields, "enum", "TNull"));
+	}
+
+	/**
+	class Main {
+    	public static function main() {
+    	    var x:Array<Type.ValueType> = [{-1-}];
+	**/
+	function testExpectedType5() {
+		var fields = toplevel(pos(1));
+		eq(true, hasToplevel(fields, "enum", "TNull"));
+	}
+
+	/**
+	class Main {
+    	public static function main() {
+    	    var x:Array<Type.ValueType> = [{-1-}
+	**/
+	function testExpectedType6() {
+		var fields = toplevel(pos(1));
+		eq(true, hasToplevel(fields, "enum", "TNull"));
+	}
+
+	/**
+	class Main {
+    	public static function main() {
+    	    var x:Array<Type.ValueType> = [null, {-1-}
+	**/
+	function testExpectedType7() {
+		var fields = toplevel(pos(1));
+		eq(true, hasToplevel(fields, "enum", "TNull"));
+	}
+
+	/**
+	class Main {
+    	public static function main() {
+    	    var x:Array<Type.ValueType> = [null, {-1-} ]
+	**/
+	function testExpectedType8() {
+		var fields = toplevel(pos(1));
+		eq(true, hasToplevel(fields, "enum", "TNull"));
+	}
+
+	/**
+	class Main {
+    	public static function main() {
+    	    var x:Type.ValueType = {-1-}
+
+			trace("ok");
+	**/
+	function testExpectedType9() {
+		var fields = toplevel(pos(1));
+		eq(true, hasToplevel(fields, "enum", "TNull"));
+	}
+
+	/**
+	class Main {
+    	public static function main() {
+    	    var x:Type.ValueType;
+			x = {-1-}
+
+			trace("ok");
+	**/
+	function testExpectedType10() {
+		var fields = toplevel(pos(1));
+		eq(true, hasToplevel(fields, "enum", "TNull"));
+	}
+
+	/**
+	class Main {
+		static function main() {
+			for (foo in 0...10){-1-}
+				{-2-}
+		}
+	}
+	**/
+	function testBokenAST1() {
+		var fields = toplevel(pos(1));
+		eq(true, hasToplevel(fields, "local", "foo"));
+	}
+
+	/**
+	class C1<T> {
+		public function f1(t:T) { }
+	}
+
+	class C2<T> extends C1<T> { }
+
+	class C3 extends C2<String> {
+		function f2() {
+			{-1-}
+		}
+	}
+	**/
+	function testTypeParameterApplication() {
+		var toplevel = toplevel(pos(1));
+		eq(true, hasToplevel(toplevel, "member", "f1", "t : String -> Void"));
 	}
 }

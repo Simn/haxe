@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -25,9 +25,9 @@
 @:forwardStatics
 @:forward abstract Character(CharacterClass) from CharacterClass to CharacterClass
 {
-	@:to @:extern inline public function toCharacter():java.types.Char16
+	@:to extern inline public function toCharacter():java.types.Char16
 		return this.charValue();
-	@:from @:extern inline public static function fromCharacter(b:java.types.Char16):Character
+	@:from extern inline public static function fromCharacter(b:java.types.Char16):Character
 		return CharacterClass.valueOf(b);
 }
 

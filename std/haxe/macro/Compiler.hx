@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -176,15 +176,31 @@ class Compiler {
 
 		@param rec If true, recursively adds all sub-packages.
 		@param ignore Array of module names to ignore for inclusion.
+		       You can use `module*` with a * at the end for Wildcard matching
 		@param classPaths An alternative array of paths (directory names) to use to search for modules to include.
 		       Note that if you pass this argument, only the specified paths will be used for inclusion.
 		@param strict If true and given package wasn't found in any of class paths, fail with an error.
 	**/
 	public static function include( pack : String, ?rec = true, ?ignore : Array<String>, ?classPaths : Array<String>, strict = false ) {
+		var ignoreWildcard:Array<String> = [];
+		var ignoreString:Array<String> = [];
+		if(ignore != null) {
+			for (ignoreRule in ignore) {
+				if(StringTools.endsWith(ignoreRule, "*")) {
+					ignoreWildcard.push(ignoreRule.substr(0, ignoreRule.length-1));
+				}else{
+					ignoreString.push(ignoreRule);
+				}
+			}
+		}
 		var skip = if( ignore == null ) {
 			function(c) return false;
 		} else {
-			function(c) return Lambda.has(ignore, c);
+			function(c:String) {
+				if(Lambda.has(ignoreString, c)) return true;
+				for (ignoreRule in ignoreWildcard) if(StringTools.startsWith(c, ignoreRule)) return true;
+				return false;
+			}
 		}
 		var displayValue = Context.definedValue("display");
 		if( classPaths == null ) {
@@ -410,7 +426,7 @@ class Compiler {
 
 	#if (js || lua || macro)
 	/**
-		Embed a JavaScript file at compile time (can be called by `--macro` or within an `__init__` method).
+		Embed a JavaScript or Lua file at compile time (can be called by `--macro` or within an `__init__` method).
 	**/
 	public static #if !macro macro #end function includeFile( file : String, position:IncludePosition = Top ) {
 		return switch ((position:String).toLowerCase()) {
@@ -420,7 +436,8 @@ class Compiler {
 
 				var f = try sys.io.File.getContent(Context.resolvePath(file)) catch( e : Dynamic ) Context.error(Std.string(e), Context.currentPos());
 				var p = Context.currentPos();
-				{ expr : EUntyped( { expr : ECall( { expr : EConst(CIdent("__js__")), pos : p }, [ { expr : EConst(CString(f)), pos : p } ]), pos : p } ), pos : p };
+				var magic = if (Context.defined("js")) "__js__" else "__lua__";
+				{ expr : EUntyped( { expr : ECall( { expr : EConst(CIdent(magic)), pos : p }, [ { expr : EConst(CString(f)), pos : p } ]), pos : p } ), pos : p };
 			case Top | Closure:
 				@:privateAccess Context.includeFile(file, position);
 				macro {};
@@ -433,7 +450,7 @@ class Compiler {
 
 }
 
-@:enum abstract IncludePosition(String) from String to String {
+enum abstract IncludePosition(String) from String to String {
 	/**
 		Prepend the file content to the output file.
 	*/

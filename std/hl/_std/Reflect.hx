@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -63,12 +63,22 @@ class Reflect {
 		if( ft.kind != HFun )
 			throw "Invalid function " + func;
 		var need = ft.getArgsCount();
-		var cval = hl.Api.getClosureValue(func);
+		var cval : Dynamic = hl.Api.getClosureValue(func);
 		var isClosure = cval != null && need >= 0;
-		if( o == null )
-			o = cval;
-		else if( !isClosure && count == need )
-			o = null;
+		if( isClosure ) {
+			if( o == null )
+				o = cval;
+			else if( isFunction(cval) ) {
+				// swap the sub object for closure wrapping
+				// see hashlink/#143
+				var subO = hl.Api.getClosureValue(cval);
+				if( subO != null )
+					o = hl.Api.makeClosure(cval, o);
+			}
+		} else {
+			if( count == need )
+				o = null;
+		}
 		var nargs = o == null ? count : count + 1;
 		if( isClosure ) need++;
 		if( nargs < need ) nargs = need;
@@ -129,7 +139,7 @@ class Reflect {
 	}
 
 	@:overload(function( f : Array<Dynamic> -> Void ) : Dynamic {})
-	@:extern public inline static function makeVarArgs( f : Array<Dynamic> -> Dynamic ) : Dynamic {
+	extern public inline static function makeVarArgs( f : Array<Dynamic> -> Dynamic ) : Dynamic {
 		return _makeVarArgs(f);
 	}
 

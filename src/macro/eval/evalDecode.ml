@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -21,7 +21,7 @@ open Globals
 open EvalValue
 open EvalExceptions
 
-let decode_object v = match v with
+let decode_object v = match vresolve v with
 	| VObject o -> o
 	| _ -> unexpected_value v "object"
 

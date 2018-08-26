@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -45,30 +45,30 @@ package hl;
 
 	public var length(get,never):Int;
 
-	@:extern public inline function new( length : Int ) {
+	extern public inline function new( length : Int ) {
 		this = untyped $aalloc(length);
 	}
 
-	@:extern inline function get_length() : Int {
+	extern inline function get_length() : Int {
 		return untyped $asize(this);
 	}
 
-	@:extern @:arrayAccess inline function get( pos : Int ) : T {
+	@:arrayAccess extern inline function get( pos : Int ) : T {
 		return untyped ($aget(this,pos):T);
 	}
 
-	@:extern @:arrayAccess inline function set( pos : Int, value : T ) : T {
+	@:arrayAccess extern inline function set( pos : Int, value : T ) : T {
 		untyped $aset(this,pos,value);
 		return value;
 	}
 
-	@:extern public inline function sub( pos : Int, len : Int ) {
+	extern public inline function sub( pos : Int, len : Int ) {
 		var n = new NativeArray<T>(len);
 		n.blit(0, this, pos, len);
 		return n;
 	}
 
-	@:to @:extern public inline function getRef() : Ref<T> {
+	@:to extern public inline function getRef() : Ref<T> {
 		return untyped $refdata(this);
 	}
 

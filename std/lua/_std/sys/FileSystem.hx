@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -32,12 +32,8 @@ class FileSystem {
 	public static function exists( path : String ) : Bool {
 		if (path == null) return false;
 		else{
-			var f = Io.open(path);
-			if (f == null) return false;
-			else {
-				f.close();
-				return true;
-			}
+			var res = LFileSystem.stat(path);
+			return res.result != null;
 		}
 	}
 
@@ -107,7 +103,7 @@ class FileSystem {
 		}
 	}
 
-	public inline static function createDirectory( path : String ) : Void {
+	public static function createDirectory( path : String ) : Void {
 
 		var path = haxe.io.Path.addTrailingSlash(path);
 		var _p = null;

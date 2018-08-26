@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -85,7 +85,7 @@ let build_dependencies t =
 		| TDynamic t2 ->
 			add_type_rec (t::l) t2;
 		| TLazy f ->
-			add_type_rec l ((!f)())
+			add_type_rec l (lazy_type f)
 		| TMono r ->
 			(match !r with
 			| None -> ()
@@ -638,7 +638,7 @@ let generate swf_header com =
 		{header with h_frame_count = header.h_frame_count + 1},loop tags
 	| _ -> swf in
 	(* write swf/swc *)
-	let t = Common.timer ["write";"swf"] in
+	let t = Timer.timer ["write";"swf"] in
 	let level = (try int_of_string (Common.defined_value com Define.SwfCompressLevel) with Not_found -> 9) in
 	SwfParser.init Extc.input_zip (Extc.output_zip ~level);
 	(match swc with

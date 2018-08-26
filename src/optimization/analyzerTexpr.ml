@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -125,7 +125,6 @@ let rec can_be_used_as_value com e =
 		(* | TCall _ | TNew _ when (match com.platform with Cpp | Php -> true | _ -> false) -> raise Exit *)
 		| TReturn _ | TThrow _ | TBreak | TContinue -> raise Exit
 		| TUnop((Increment | Decrement),_,_) when not (target_handles_unops com) -> raise Exit
-		| TNew _ when com.platform = Php && not (Common.is_php7 com) -> raise Exit
 		| TFunction _ -> ()
 		| _ -> Type.iter loop e
 	in
@@ -142,12 +141,12 @@ let rec can_be_used_as_value com e =
 let wrap_meta s e =
 	mk (TMeta((Meta.Custom s,[],e.epos),e)) e.etype e.epos
 
-let is_really_unbound v = match v.v_name with
+let is_really_unbound s = match s with
 	| "`trace" | "__int__" -> false
-	| _ -> is_unbound v
+	| _ -> true
 
 let r = Str.regexp "^\\([A-Za-z0-9_]\\)+$"
-let is_unbound_call_that_might_have_side_effects v el = match v.v_name,el with
+let is_unbound_call_that_might_have_side_effects s el = match s,el with
 	| "__js__",[{eexpr = TConst (TString s)}] when Str.string_match r s 0 -> false
 	| _ -> true
 
@@ -167,7 +166,7 @@ let rec is_asvar_type t =
 	| TEnum(en,_) -> check en.e_meta
 	| TType(t,tl) -> check t.t_meta || (is_asvar_type (apply_params t.t_params tl t.t_type))
 	| TAbstract(a,_) -> check a.a_meta
-	| TLazy f -> is_asvar_type (!f())
+	| TLazy f -> is_asvar_type (lazy_type f)
 	| TMono r ->
 		(match !r with
 		| Some t -> is_asvar_type t
@@ -188,10 +187,10 @@ let type_change_ok com t1 t2 =
 		let rec is_nullable_or_whatever = function
 			| TMono r ->
 				(match !r with None -> false | Some t -> is_nullable_or_whatever t)
-			| TType ({ t_path = ([],"Null") },[_]) ->
+			| TAbstract ({ a_path = ([],"Null") },[_]) ->
 				true
 			| TLazy f ->
-				is_nullable_or_whatever (!f())
+				is_nullable_or_whatever (lazy_type f)
 			| TType (t,tl) ->
 				is_nullable_or_whatever (apply_params t.t_params tl t.t_type)
 			| TFun _ ->
@@ -226,6 +225,8 @@ module TexprKindMapper = struct
 		| KWrite        (* Expression is lhs of =. *)
 		| KReadWrite    (* Expression is lhs of += .*)
 		| KStore        (* Expression is stored (via =, += or in array/object declaration). *)
+		| KEq           (* Expression is lhs or rhs of == or != *)
+		| KEqNull       (* Expression is lhs or rhs of == null or != null *)
 		| KCalled       (* Expression is being called. *)
 		| KCallArgument (* Expression is call argument (leaves context). *)
 		| KReturn       (* Expression is returned (leaves context). *)
@@ -236,7 +237,8 @@ module TexprKindMapper = struct
 		| TLocal _
 		| TBreak
 		| TContinue
-		| TTypeExpr _ ->
+		| TTypeExpr _
+		| TIdent _ ->
 			e
 		| TArray(e1,e2) ->
 			let e1 = f KAccess e1 in
@@ -250,6 +252,26 @@ module TexprKindMapper = struct
 			let e1 = f KReadWrite e1 in
 			let e2 = f KStore e2 in
 			{ e with eexpr = TBinop(OpAssignOp op,e1,e2) }
+		| TBinop((OpEq | OpNotEq) as op,e1,e2) ->
+			let e1,e2 = match (Texpr.skip e1).eexpr,(Texpr.skip e2).eexpr with
+				| TConst TNull,TConst TNull ->
+					let e1 = f KRead e1 in
+					let e2 = f KRead e2 in
+					e1,e2
+				| TConst TNull,_ ->
+					let e1 = f KRead e1 in
+					let e2 = f KEqNull e2 in
+					e1,e2
+				| _,TConst TNull ->
+					let e1 = f KEqNull e1 in
+					let e2 = f KRead e2 in
+					e1,e2
+				| _ ->
+					let e1 = f KEq e1 in
+					let e2 = f KEq e2 in
+					e1,e2
+			in
+			{e with eexpr = TBinop(op,e1,e2)}
 		| TBinop(op,e1,e2) ->
 			let e1 = f KRead e1 in
 			let e2 = f KRead e2 in
@@ -356,7 +378,7 @@ module TexprFilter = struct
 		| TWhile(e1,e2,flag) when not (is_true_expr e1) ->
 			let p = e.epos in
 			let e_break = mk TBreak t_dynamic p in
-			let e_not = mk (TUnop(Not,Prefix,Codegen.mk_parent e1)) e1.etype e1.epos in
+			let e_not = mk (TUnop(Not,Prefix,Texpr.Builder.mk_parent e1)) e1.etype e1.epos in
 			let e_if eo = mk (TIf(e_not,e_break,eo)) com.basic.tvoid p in
 			let rec map_continue e = match e.eexpr with
 				| TContinue ->
@@ -370,10 +392,10 @@ module TexprFilter = struct
 			let e_if = e_if None in
 			let e_block = if flag = NormalWhile then Type.concat e_if e2 else Type.concat e2 e_if in
 			let e_true = mk (TConst (TBool true)) com.basic.tbool p in
-			let e = mk (TWhile(Codegen.mk_parent e_true,e_block,NormalWhile)) e.etype p in
+			let e = mk (TWhile(Texpr.Builder.mk_parent e_true,e_block,NormalWhile)) e.etype p in
 			loop e
 		| TFor(v,e1,e2) ->
-			let e = Codegen.for_remap com v e1 e2 e.epos in
+			let e = Texpr.for_remap com.basic v e1 e2 e.epos in
 			loop e
 		| _ ->
 			Type.map_expr loop e
@@ -487,7 +509,7 @@ module InterferenceReport = struct
 				loop e1;
 				loop e2;
 			(* state *)
-			| TCall({eexpr = TLocal v},el) when not (is_unbound_call_that_might_have_side_effects v el) ->
+			| TCall({eexpr = TIdent s},el) when not (is_unbound_call_that_might_have_side_effects s el) ->
 				List.iter loop el
 			| TNew(c,_,el) when (match c.cl_constructor with Some cf when PurityState.is_pure c cf -> true | _ -> false) ->
 				set_state_read ir;
@@ -619,6 +641,7 @@ module Fusion = struct
 		| OpBoolOr
 		| OpAssignOp _
 		| OpInterval
+		| OpIn
 		| OpArrow ->
 			false
 
@@ -655,6 +678,15 @@ module Fusion = struct
 				block_element acc (e1 :: el1 @ el2)
 			| {eexpr = TNew(c,tl,el1)} :: el2 when (match c.cl_constructor with Some cf when PurityState.is_pure c cf -> true | _ -> false) && config.local_dce ->
 				block_element acc (el1 @ el2)
+			| {eexpr = TIf ({ eexpr = TConst (TBool t) },e1,e2)} :: el ->
+				if t then
+					block_element acc (e1 :: el)
+				else begin match e2 with
+					| None ->
+						block_element acc el
+					| Some e ->
+						block_element acc (e :: el)
+				end
 			(* no-side-effect composites *)
 			| {eexpr = TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) | TField(e1,_) | TUnop(_,_,e1)} :: el ->
 				block_element acc (e1 :: el)
@@ -679,7 +711,7 @@ module Fusion = struct
 			let num_uses = state#get_reads v in
 			let num_writes = state#get_writes v in
 			let can_be_used_as_value = can_be_used_as_value com e in
-			let is_compiler_generated = Meta.has Meta.CompilerGenerated v.v_meta in
+			let is_compiler_generated = match v.v_kind with VUser _ | VInlined -> false | _ -> true in
 			let has_type_params = match v.v_extra with Some (tl,_) when tl <> [] -> true | _ -> false in
 			let b = num_uses <= 1 &&
 			        num_writes = 0 &&
@@ -704,7 +736,6 @@ module Fusion = struct
 				can_be_used_as_value com e1 &&
 				not (ExtType.is_void e1.etype) &&
 				(match com.platform with
-					| Php when not (Common.is_php7 com) -> false
 					| Cpp when not (Common.defined com Define.Cppia) -> false
 					| _ -> true)
 				->
@@ -805,17 +836,8 @@ module Fusion = struct
 							let el = List.map replace el in
 							let e2 = replace e2 in
 							e2,el
-						| Php | Cpp  when not (Common.defined com Define.Cppia) && not (Common.is_php7 com) ->
-							let is_php_safe e1 =
-								let rec loop e = match e.eexpr with
-									| TCall _ -> raise Exit
-									| TCast(e1,_) | TParenthesis e1 | TMeta(_,e1) -> loop e1
-									| _ -> ()
-								in
-								try loop e1; true with Exit -> false
-							in
-							(* PHP5 doesn't like call()() expressions. *)
-							let e2 = if com.platform = Php && not (is_php_safe e1) then explore e2 else replace e2 in
+						| Cpp ->
+							let e2 = replace e2 in
 							let el = handle_el el in
 							e2,el
 						| _ ->
@@ -852,6 +874,9 @@ module Fusion = struct
 							let e2 = replace e2 in
 							if not !found && has_var_read ir v then raise Exit;
 							{e with eexpr = TBinop(OpAssign,e1,e2)}
+						(* Never fuse into write-positions (issue #7298) *)
+						| TBinop(OpAssignOp _,{eexpr = TLocal v2},_) | TUnop((Increment | Decrement),_,{eexpr = TLocal v2}) when v1 == v2 ->
+							raise Exit
 						| TBinop(OpAssignOp _ as op,({eexpr = TLocal v} as e1),e2) ->
 							let e2 = replace e2 in
 							if not !found && (has_var_read ir v || has_var_write ir v) then raise Exit;
@@ -878,8 +903,29 @@ module Fusion = struct
 						| TUnop((Increment | Decrement),_,{eexpr = TField(e1,fa)}) when has_field_read ir (field_name fa) || has_state_read ir
 							|| has_field_write ir (field_name fa) || has_state_write ir ->
 							raise Exit
+						(* array *)
+						| TArray(e1,e2) ->
+							let e1 = replace e1 in
+							let e2 = replace e2 in
+							if not !found && has_state_write ir then raise Exit;
+							{e with eexpr = TArray(e1,e2)}
+						| TBinop(OpAssign,({eexpr = TArray(e1,e2)} as ef),e3) ->
+							let e1 = replace e1 in
+							let e2 = replace e2 in
+							let e3 = replace e3 in
+							if not !found && (has_state_read ir) then raise Exit;
+							{e with eexpr = TBinop(OpAssign,{ef with eexpr = TArray(e1,e2)},e3)}
+						| TBinop(OpAssignOp _ as op,({eexpr = TArray(e1,e2)} as ef),e3) ->
+							let e1 = replace e1 in
+							let e2 = replace e2 in
+							if not !found && has_state_write ir then raise Exit;
+							let e3 = replace e3 in
+							if not !found && has_state_read ir then raise Exit;
+							{e with eexpr = TBinop(op,{ef with eexpr = TArray(e1,e2)},e3)}
+						| TUnop((Increment | Decrement),_,{eexpr = TArray _}) when has_state_read ir || has_state_write ir ->
+							raise Exit
 						(* state *)
-						| TCall({eexpr = TLocal v},el) when not (is_unbound_call_that_might_have_side_effects v el) ->
+						| TCall({eexpr = TIdent s},el) when not (is_unbound_call_that_might_have_side_effects s el) ->
 							e
 						| TNew(c,tl,el) when (match c.cl_constructor with Some cf when PurityState.is_pure c cf -> true | _ -> false) ->
 							let el = handle_el el in
@@ -890,7 +936,7 @@ module Fusion = struct
 							if not !found && (has_state_write ir || has_state_read ir || has_any_field_read ir || has_any_field_write ir) then raise Exit;
 							{e with eexpr = TNew(c,tl,el)}
 						| TCall({eexpr = TField(_,FEnum _)} as ef,el) ->
-							let el = List.map replace el in
+							let el = handle_el el in
 							{e with eexpr = TCall(ef,el)}
 						| TCall({eexpr = TField(_,fa)} as ef,el) when PurityState.is_pure_field_access fa ->
 							let ef,el = handle_call ef el in
@@ -898,7 +944,7 @@ module Fusion = struct
 							{e with eexpr = TCall(ef,el)}
 						| TCall(e1,el) ->
 							let e1,el = match e1.eexpr with
-								| TLocal v when is_really_unbound v -> e1,el
+								| TIdent s when s <> "`trace" && s <> "__int__" -> e1,el
 								| _ -> handle_call e1 el
 							in
 							if not !found && (((has_state_read ir || has_any_field_read ir)) || has_state_write ir || has_any_field_write ir) then raise Exit;
@@ -911,24 +957,13 @@ module Fusion = struct
 							let el = handle_el el in
 							(*if not !found && (has_state_write ir || has_any_field_write ir) then raise Exit;*)
 							{e with eexpr = TArrayDecl el}
-						| TBinop(OpAssign,({eexpr = TArray(e1,e2)} as ea),e3) ->
-							let e1 = replace e1 in
-							let e2 = replace e2 in
-							let e3 = replace e3 in
-							if not !found && has_state_read ir then raise Exit;
-							{e with eexpr = TBinop(OpAssign,{ea with eexpr = TArray(e1,e2)},e3)}
-						| TBinop(op,e1,e2) when (match com.platform with Cpp | Php when not (Common.is_php7 com) -> true | _ -> false) ->
+						| TBinop(op,e1,e2) when (match com.platform with Cpp -> true | _ -> false) ->
 							let e1 = replace e1 in
 							let temp_found = !found in
 							found := false;
 							let e2 = replace e2 in
 							found := !found || temp_found;
 							{e with eexpr = TBinop(op,e1,e2)}
-						| TArray(e1,e2) ->
-							let e1 = replace e1 in
-							let e2 = replace e2 in
-							if not !found && has_state_write ir then raise Exit;
-							{e with eexpr = TArray(e1,e2)}
 						| _ ->
 							Type.map_expr replace e
 				in
@@ -1037,7 +1072,7 @@ module Fusion = struct
 				in
 				let el = fuse_loop el in
 				{e with eexpr = TBlock el}
-			| TCall({eexpr = TLocal v},_) when is_really_unbound v ->
+			| TCall({eexpr = TIdent s},_) when is_really_unbound s ->
 				e
 			| _ ->
 				Type.map_expr loop e
@@ -1069,7 +1104,7 @@ module Cleanup = struct
 				if_or_op e e1 e2 e3;
 			| TUnop((Increment | Decrement),_,e1) when (match (Texpr.skip e1).eexpr with TConst _ -> true | _ -> false) ->
 				loop e1
-			| TCall({eexpr = TLocal v},_) when is_really_unbound v ->
+			| TCall({eexpr = TIdent s},_) when is_really_unbound s ->
 				e
 			| TBlock el ->
 				let el = List.map (fun e ->
@@ -1115,7 +1150,7 @@ module Cleanup = struct
 		in
 		let e = loop e in
 		let rec loop kind e = match kind,e.eexpr with
-			| KRead,TField(e1,FClosure(Some(c,tl),cf)) ->
+			| KEqNull,TField(e1,FClosure(Some(c,tl),cf)) ->
 				let e1 = loop KAccess e1 in
 				{e with eexpr = TField(e1,FInstance(c,tl,cf))}
 			| _ ->
@@ -1222,7 +1257,7 @@ module Purity = struct
 					| _ ->
 						taint_raise node (* Can that even happen? *)
 				end
-			| TCall({eexpr = TLocal v},el) when not (is_unbound_call_that_might_have_side_effects v el) ->
+			| TCall({eexpr = TIdent s},el) when not (is_unbound_call_that_might_have_side_effects s el) ->
 				List.iter loop el;
 			| TCall _ ->
 				taint_raise node
@@ -1237,7 +1272,7 @@ module Purity = struct
 				| None ->
 					if not (is_pure c cf) then taint node
 				(* TODO: The function code check shouldn't be here I guess. *)
-				| Some _ when (Meta.has Meta.Extern cf.cf_meta || Meta.has Meta.FunctionCode cf.cf_meta || Meta.has (Meta.Custom ":hlNative") cf.cf_meta || Meta.has (Meta.Custom ":hlNative") c.cl_meta) ->
+				| Some _ when (cf.cf_extern || Meta.has Meta.FunctionCode cf.cf_meta || Meta.has (Meta.HlNative) cf.cf_meta || Meta.has (Meta.HlNative) c.cl_meta) ->
 					if not (is_pure c cf) then taint node
 				| Some e ->
 					try

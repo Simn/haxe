@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,8 +22,9 @@
 package sys.net;
 import haxe.io.Error;
 
-private enum SocketHandle {
-}
+@:callable
+@:coreType
+abstract SocketHandle { }
 
 private class SocketOutput extends haxe.io.Output {
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -26,19 +26,19 @@ package cpp.objc;
 @:objc
 extern abstract NSDictionary( DictionaryData )
 {
-   @:native("_hx_obj_to_nsdictionary") @:extern static function _hx_obj_to_nsdictionary(obj:Dynamic) : DictionaryData return null;
-   @:native("_hx_nsdictionary_to_obj") @:extern static function _hx_nsdictionary_to_obj(d:DictionaryData) : Dynamic return null;
+   @:native("_hx_obj_to_nsdictionary") extern static function _hx_obj_to_nsdictionary(obj:Dynamic) : DictionaryData return null;
+   @:native("_hx_nsdictionary_to_obj") extern static function _hx_nsdictionary_to_obj(d:DictionaryData) : Dynamic return null;
 
 
    inline function new(dict:DictionaryData) this = dict;
 
-   @:from @:extern
+   @:from extern
    static public inline function fromDynamic(o:Dynamic):NSDictionary return new NSDictionary( _hx_obj_to_nsdictionary(o) );
 
-   @:to @:extern
+   @:to extern
    public inline function toDynamic():Dynamic return _hx_nsdictionary_to_obj(this);
 
-   @:to @:extern public inline function toNSObject():NSObject return cast this;
+   @:to extern public inline function toNSObject():NSObject return cast this;
 
 }
 

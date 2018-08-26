@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -28,7 +28,7 @@ class Json {
 		return haxe.format.JsonParser.parse(text);
 	}
 
-	public static function stringify( value : Dynamic, ?replacer:Dynamic -> Dynamic -> Dynamic, ?space:String ) : String {
+	public static function stringify( value : Dynamic, ?replacer:(key:Dynamic, value:Dynamic) -> Dynamic, ?space:String ) : String {
 		return haxe.format.JsonPrinter.print(value, replacer, space);
 	}
 

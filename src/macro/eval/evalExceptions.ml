@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -27,6 +27,7 @@ open EvalField
 exception Break
 exception Continue
 exception Return of value
+exception Sys_exit of int
 
 let is v path =
 	path = key_Dynamic || match v with
@@ -72,6 +73,7 @@ let s_value_kind = function
 	| VPrototype _ -> "VPrototype"
 	| VFunction _ -> "VFunction"
 	| VFieldClosure _ -> "VFieldClosure"
+	| VLazy _ -> "VLazy"
 
 let unexpected_value : 'a . value -> string -> 'a = fun v s ->
 	let str = Printf.sprintf "Unexpected value %s(%s), expected %s" (s_value_kind v) (value_string v) s in
@@ -85,26 +87,24 @@ let format_pos p =
 	Lexer.get_error_pos error_printer p
 
 let uncaught_exception_string v p extra =
-	(Printf.sprintf "%s: Uncaught exception %s%s" (format_pos p) (value_string v) extra)
+	(Printf.sprintf "%s : Uncaught exception %s%s" (format_pos p) (value_string v) extra)
 
 let get_exc_error_message ctx v stack p =
-	let pl = List.map (fun env -> {pfile = rev_hash_s env.env_info.pfile;pmin = env.env_leave_pmin; pmax = env.env_leave_pmax}) stack in
+	let pl = List.map (fun env -> {pfile = rev_file_hash env.env_info.pfile;pmin = env.env_leave_pmin; pmax = env.env_leave_pmax}) stack in
 	let pl = List.filter (fun p -> p <> null_pos) pl in
 	match pl with
 	| [] ->
-		let extra = if ctx.record_stack then "" else "\nNo stack information available, consider compiling with -D eval-stack" in
-		uncaught_exception_string v p extra
+		uncaught_exception_string v p ""
 	| _ ->
-		let sstack = String.concat "\n" (List.map (fun p -> Printf.sprintf "%s: Called from here" (format_pos p)) pl) in
-		Printf.sprintf "%s: Uncaught exception %s\n%s" (format_pos p) (value_string v) sstack
+		let sstack = String.concat "\n" (List.map (fun p -> Printf.sprintf "%s : Called from here" (format_pos p)) pl) in
+		Printf.sprintf "%s : Uncaught exception %s\n%s" (format_pos p) (value_string v) sstack
 
 let build_exception_stack ctx environment_offset =
 	let eval = get_eval ctx in
-	let d = if not ctx.record_stack then [] else DynArray.to_list (DynArray.sub eval.environments environment_offset (eval.environment_offset - environment_offset)) in
+	let d = DynArray.to_list (DynArray.sub eval.environments environment_offset (eval.environment_offset - environment_offset)) in
 	ctx.exception_stack <- List.map (fun env ->
-		env.env_in_use <- false;
 		env.env_debug.timer();
-		{pfile = rev_hash_s env.env_info.pfile;pmin = env.env_leave_pmin; pmax = env.env_leave_pmax},env.env_info.kind
+		{pfile = rev_file_hash env.env_info.pfile;pmin = env.env_leave_pmin; pmax = env.env_leave_pmax},env.env_info.kind
 	) d
 
 let catch_exceptions ctx ?(final=(fun() -> ())) f p =

@@ -1,6 +1,6 @@
 
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -43,8 +43,8 @@ class Sys {
 		return lua.Lib.println(v);
 	}
 	public inline static function args() : Array<String> {
-		var args = lua.Lib.tableToArray(lua.Lua.arg).copy();
-		args.shift();
+		var targs = lua.PairTools.copy(lua.Lua.arg);
+		var args = lua.Lib.tableToArray(targs);
 		return args;
 	}
 	public static function command( cmd : String, ?args : Array<String> ) : Int  {

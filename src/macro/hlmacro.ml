@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -29,7 +29,7 @@ type context = {
 	com : Common.context; (* macro one *)
 	mutable gen : Genhl.context option;
 	interp : Hlinterp.context;
-	types : (Type.path,int) Hashtbl.t;
+	types : (Globals.path,int) Hashtbl.t;
 	cached_protos : (obj_type, (virtual_proto * vfield array)) Hashtbl.t;
 	cached_enums : (enum_type, ttype) Hashtbl.t;
 	mutable curapi : value MacroApi.compiler_api;
@@ -513,12 +513,12 @@ let value_to_expr v p =
 			else if (f <> f) then
 				(Ast.EField (math, "NaN"), p)
 			else
-				(Ast.EConst (Ast.Float (Common.float_repres f)), p)
+				(Ast.EConst (Ast.Float (Numeric.float_repres f)), p)
 		| VAbstract (APos p) ->
 			(Ast.EObjectDecl (
-				(("fileName",Globals.null_pos) , (Ast.EConst (Ast.String p.Globals.pfile) , p)) ::
-				(("lineNumber",Globals.null_pos) , (Ast.EConst (Ast.Int (string_of_int (Lexer.get_error_line p))),p)) ::
-				(("className",Globals.null_pos) , (Ast.EConst (Ast.String ("")),p)) ::
+				(("fileName",Globals.null_pos,NoQuotes) , (Ast.EConst (Ast.String p.Globals.pfile) , p)) ::
+				(("lineNumber",Globals.null_pos,NoQuotes) , (Ast.EConst (Ast.Int (string_of_int (Lexer.get_error_line p))),p)) ::
+				(("className",Globals.null_pos,NoQuotes) , (Ast.EConst (Ast.String ("")),p)) ::
 				[]
 			), p)
 		| VObj { oproto = { pclass = { pname = "String" } }; ofields = [|VBytes content;VInt _|] } ->

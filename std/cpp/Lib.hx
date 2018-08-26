@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,8 +22,8 @@
 package cpp;
 
 /**
-	Platform-specific Cpp Library. Provides some platform-specific functions 
-	for the C++ target, such as conversion from Haxe types to native types 
+	Platform-specific Cpp Library. Provides some platform-specific functions
+	for the C++ target, such as conversion from Haxe types to native types
 	and vice-versa.
 **/
 class Lib {
@@ -65,7 +65,7 @@ class Lib {
 		Tries to load, and always returns a valid function, but the function may throw
 		if called.
 	**/
-	public static function loadLazy(lib,prim,nargs) : Dynamic {
+	public static function loadLazy(lib:String, prim:String, nargs:Int) : Dynamic {
 		try {
 			return untyped __global__.__loadprim(lib,prim,nargs);
 		} catch( e : Dynamic ) {
@@ -81,8 +81,8 @@ class Lib {
 		return null;
 	}
 
-	@:extern  @:noDebug @:native("HX_STACK_DO_RETHROW")
-	static function do_rethrow(inExp:Dynamic) { throw inExp; }
+	@:noDebug @:native("HX_STACK_DO_RETHROW")
+	extern static function do_rethrow(inExp:Dynamic) { throw inExp; }
 
 	@:noDebug #if(!cppia) inline #end
 	public static function rethrow(inExp:Dynamic) { do_rethrow(inExp); }

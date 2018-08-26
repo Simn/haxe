@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -21,7 +21,7 @@
  */
 package hl;
 
-@:enum
+enum
 abstract TypeKind(Int) {
 	public var HVoid = 0;
 	public var HUI8 = 1;
@@ -49,7 +49,7 @@ abstract TypeKind(Int) {
 
 	public var kind(get,never) : TypeKind;
 
-	@:extern inline function get_kind() : TypeKind {
+	extern inline function get_kind() : TypeKind {
 		return untyped $tkind(this);
 	}
 
@@ -57,16 +57,17 @@ abstract TypeKind(Int) {
 		return null;
 	}
 
-	@:extern public static inline function getDynamic( v : Dynamic ) : Type {
+	extern public static inline function getDynamic( v : Dynamic ) : Type {
 		return untyped $tdyntype(v);
 	}
 
-	@:extern public static inline function get<T>( v : T ) : Type {
+	extern public static inline function get<T>( v : T ) : Type {
 		return untyped $ttype(v);
 	}
 
-	@:extern public inline function getName() : String {
+	extern public inline function getTypeName() : String {
 		var s = getNameBytes();
+		if( s == null ) return null;
 		return @:privateAccess String.fromUCS2(s);
 	}
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -30,6 +30,7 @@ extern class Ffi {
 	public function new(type : String, arg : Dynamic);
 
 	// Declaring and accessing external symbols
+	public static function cdef(def : String) : Void;
 	public static var C : Dynamic;
 	public static function gc(cdata : Dynamic, finalizer : Function) : Void;
 	public static function load (name : String, ?global : Bool) : Dynamic;

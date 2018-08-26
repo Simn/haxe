@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -25,9 +25,9 @@
 @:forwardStatics
 @:forward abstract Short(ShortClass) from ShortClass to ShortClass
 {
-	@:to @:extern inline public function toShort():java.types.Int16
+	@:to extern inline public function toShort():java.types.Int16
 		return this.shortValue();
-	@:from @:extern inline public static function fromShort(b:java.types.Int16):Short
+	@:from extern inline public static function fromShort(b:java.types.Int16):Short
 		return ShortClass.valueOf(b);
 }
 
@@ -50,8 +50,8 @@
 	@:overload @:throws("java.lang.NumberFormatException") static function parseShort(param1 : String) : java.types.Int16;
 	@:overload static function reverseBytes(param1 : java.types.Int16) : java.types.Int16;
 	@:native("toString") @:overload static function _toString(param1 : java.types.Int16) : String;
-	@:overload @:throws("java.lang.NumberFormatException") static function valueOf(param1 : String, param2 : Int) : Short;
 	@:overload static function valueOf(param1 : java.types.Int16) : Short;
+	@:overload @:throws("java.lang.NumberFormatException") static function valueOf(param1 : String, param2 : Int) : Short;
 	@:overload @:throws("java.lang.NumberFormatException") static function valueOf(param1 : String) : Short;
 }
 

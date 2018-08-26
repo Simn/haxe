@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -81,12 +81,12 @@ let rec func ctx bb tf t p =
 		close_node g bb;
 		g.g_unreachable
 	in
-	let check_unbound_call v el =
-		if v.v_name = "$ref" then begin match el with
+	let check_unbound_call s el =
+		if s = "$ref" then begin match el with
 			| [{eexpr = TLocal v}] -> v.v_capture <- true
 			| _ -> ()
 		end;
-		if is_unbound_call_that_might_have_side_effects v el then ctx.has_unbound <- true;
+		if is_unbound_call_that_might_have_side_effects s el then ctx.has_unbound <- true;
 	in
 	let no_void t p =
 		if ExtType.is_void (follow t) then Error.error "Cannot use Void as value" p
@@ -96,7 +96,7 @@ let rec func ctx bb tf t p =
 		(fun () -> ctx.name_stack <- List.tl ctx.name_stack)
 	in
 	let rec value' bb e = match e.eexpr with
-		| TLocal v ->
+		| TLocal _ | TIdent _ ->
 			bb,e
 		| TBinop(OpAssign,({eexpr = TLocal v} as e1),e2) ->
 			block_element bb e,e1
@@ -104,8 +104,8 @@ let rec func ctx bb tf t p =
 			value bb e1
 		| TBlock _ | TIf _ | TSwitch _ | TTry _ ->
 			bind_to_temp bb false e
-		| TCall({eexpr = TLocal v},el) when is_really_unbound v ->
-			check_unbound_call v el;
+		| TCall({eexpr = TIdent s},el) when is_really_unbound s ->
+			check_unbound_call s el;
 			bb,e
 		| TCall(e1,el) ->
 			call bb e e1 el
@@ -239,11 +239,7 @@ let rec func ctx bb tf t p =
 				| s :: _ -> s
 				| [] -> ctx.temp_var_name
 		in
-		let v = match v with Some v -> v | None -> alloc_var (loop e) e.etype e.epos in
-		begin match ctx.com.platform with
-			| Globals.Cpp when sequential && not (Common.defined ctx.com Define.Cppia) -> ()
-			| _ -> v.v_meta <- [Meta.CompilerGenerated,[],e.epos];
-		end;
+		let v = match v with Some v -> v | None -> alloc_var VGenerated (loop e) e.etype e.epos in
 		let bb = declare_var_and_assign bb v e e.epos in
 		let e = {e with eexpr = TLocal v} in
 		let e = List.fold_left (fun e f -> f e) e fl in
@@ -314,7 +310,7 @@ let rec func ctx bb tf t p =
 				e
 			| _ ->
 				if is_asvar_type t then begin
-					let v = alloc_var "tmp" t e.epos in
+					let v = alloc_var VGenerated "tmp" t e.epos in
 					let bb',e = bind_to_temp ~v:(Some v) !bb false e in
 					bb := bb';
 					e
@@ -521,8 +517,8 @@ let rec func ctx bb tf t p =
 			set_syntax_edge bb (SETry(bb_try,bb_exc,catches,bb_next,e.epos));
 			if bb_try_next != g.g_unreachable then add_cfg_edge bb_try_next bb_next CFGGoto;
 			close_node g bb_try_next;
-            close_node g bb_exc;
-            close_node g bb;
+			close_node g bb_exc;
+			close_node g bb;
 			bb_next
 		(* control flow *)
 		| TReturn None ->
@@ -564,8 +560,8 @@ let rec func ctx bb tf t p =
 				add_terminator bb {e with eexpr = TThrow e1};
 			end
 		(* side_effects *)
-		| TCall({eexpr = TLocal v},el) when is_really_unbound v ->
-			check_unbound_call v el;
+		| TCall({eexpr = TIdent s},el) when is_really_unbound s ->
+			check_unbound_call s el;
 			add_texpr bb e;
 			bb
 		| TCall(e1,el) ->
@@ -606,7 +602,7 @@ let rec func ctx bb tf t p =
 			add_texpr bb e;
 			bb
 		(* no-side-effect *)
-		| TEnumParameter _ | TEnumIndex _ | TFunction _ | TConst _ | TTypeExpr _ | TLocal _ ->
+		| TEnumParameter _ | TEnumIndex _ | TFunction _ | TConst _ | TTypeExpr _ | TLocal _ | TIdent _ ->
 			bb
 		(* no-side-effect composites *)
 		| TParenthesis e1 | TMeta(_,e1) | TCast(e1,None) | TField(e1,_) | TUnop(_,_,e1) ->
@@ -665,8 +661,7 @@ let from_tfunction ctx tf t p =
 	let bb_func,bb_exit = func ctx g.g_root tf t p in
 	ctx.entry <- bb_func;
 	close_node g g.g_root;
-	g.g_exit <- bb_exit;
-	set_syntax_edge bb_exit SEEnd
+	g.g_exit <- bb_exit
 
 let rec block_to_texpr_el ctx bb =
 	if bb.bb_dominator == ctx.graph.g_unreachable then
@@ -680,7 +675,7 @@ let rec block_to_texpr_el ctx bb =
 				Some bb_next,(block bb_sub) :: el
 			| el,SEMerge bb_next ->
 				Some bb_next,el
-			| el,(SEEnd | SENone) ->
+			| el,SENone ->
 				None,el
 			| {eexpr = TWhile(e1,_,flag)} as e :: el,(SEWhile(_,bb_body,bb_next)) ->
 				let e2 = block bb_body in
@@ -717,9 +712,9 @@ and func ctx i =
 	let bb,t,p,tf = Hashtbl.find ctx.graph.g_functions i in
 	let e = block_to_texpr ctx bb in
 	let rec loop e = match e.eexpr with
-		| TLocal v when not (is_unbound v) ->
+		| TLocal v ->
 			{e with eexpr = TLocal (get_var_origin ctx.graph v)}
-		| TVar(v,eo) when not (is_unbound v) ->
+		| TVar(v,eo) ->
 			let eo = Option.map loop eo in
 			let v' = get_var_origin ctx.graph v in
 			{e with eexpr = TVar(v',eo)}
@@ -731,7 +726,7 @@ and func ctx i =
 				| OpAdd | OpMult | OpDiv | OpSub | OpAnd
 				| OpOr | OpXor | OpShl | OpShr | OpUShr | OpMod ->
 					true
-				| OpAssignOp _ | OpInterval | OpArrow | OpAssign | OpEq
+				| OpAssignOp _ | OpInterval | OpArrow | OpIn | OpAssign | OpEq
 				| OpNotEq | OpGt | OpGte | OpLt | OpLte | OpBoolAnd | OpBoolOr ->
 					false
 			in
@@ -747,7 +742,7 @@ and func ctx i =
 			end
 		| TCall({eexpr = TConst (TString "fun")},[{eexpr = TConst (TInt i32)}]) ->
 			func ctx (Int32.to_int i32)
-		| TCall({eexpr = TLocal v},_) when is_really_unbound v ->
+		| TCall({eexpr = TIdent s},_) when is_really_unbound s ->
 			e
 		| _ ->
 			Type.map_expr loop e

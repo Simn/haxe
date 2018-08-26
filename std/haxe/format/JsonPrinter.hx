@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -41,19 +41,19 @@ class JsonPrinter {
 		If `space` is given and is not null, the result will be pretty-printed.
 		Successive levels will be indented by this string.
 	**/
-	static public function print(o:Dynamic, ?replacer:Dynamic -> Dynamic -> Dynamic, ?space:String) : String {
+	static public function print(o:Dynamic, ?replacer:(key:Dynamic, value:Dynamic) -> Dynamic, ?space:String) : String {
 		var printer = new JsonPrinter(replacer, space);
 		printer.write("", o);
 		return printer.buf.toString();
 	}
 
 	var buf : #if flash flash.utils.ByteArray #else StringBuf #end;
-	var replacer : Dynamic -> Dynamic -> Dynamic;
+	var replacer:(key:Dynamic, value:Dynamic) -> Dynamic;
 	var indent:String;
 	var pretty:Bool;
 	var nind:Int;
 
-	function new(replacer:Dynamic -> Dynamic -> Dynamic, space:String) {
+	function new(replacer:(key:Dynamic, value:Dynamic) -> Dynamic, space:String) {
 		this.replacer = replacer;
 		this.indent = space;
 		this.pretty = space != null;
@@ -122,11 +122,7 @@ class JsonPrinter {
 				var v : Date = v;
 				quote(v.toString());
 			} else
-				#if flash
 				classString(v);
-				#else
-				objString(v);
-				#end
 		case TEnum(_):
 			var i : Dynamic = Type.enumIndex(v);
 			add(i);
@@ -137,7 +133,7 @@ class JsonPrinter {
 		}
 	}
 
-	@:extern inline function addChar(c:Int) {
+	extern inline function addChar(c:Int) {
 		#if flash
 		buf.writeByte(c);
 		#else
@@ -145,7 +141,7 @@ class JsonPrinter {
 		#end
 	}
 
-	@:extern inline function add(v:String) {
+	extern inline function add(v:String) {
 		#if flash
 		// argument is not always a string but will be automatically casted
 		buf.writeUTFBytes(v);
@@ -154,11 +150,9 @@ class JsonPrinter {
 		#end
 	}
 
-	#if flash
 	function classString ( v : Dynamic ) {
 		fieldsString(v,Type.getInstanceFields(Type.getClass(v)));
 	}
-	#end
 
 	inline function objString( v : Dynamic ) {
 		fieldsString(v,Reflect.fields(v));

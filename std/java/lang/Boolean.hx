@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -25,9 +25,9 @@
 @:forward
 @:forwardStatics abstract Boolean(BooleanClass) from BooleanClass to BooleanClass
 {
-	@:to @:extern inline public function toBool():Bool
+	@:to extern inline public function toBool():Bool
 		return this.booleanValue();
-	@:from @:extern inline public static function fromBool(b:Bool):Boolean
+	@:from extern inline public static function fromBool(b:Bool):Boolean
 		return BooleanClass.valueOf(b);
 }
 

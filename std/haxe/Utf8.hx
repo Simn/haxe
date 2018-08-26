@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -90,7 +90,7 @@ class Utf8 {
 	/**
 		Returns the number of UTF8 chars of the String.
 	**/
-	#if js @:extern #end
+	#if js extern #end
 	public static inline function length( s : String ) : Int {
 		return s.length;
 	}

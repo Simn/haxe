@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2017  Haxe Foundation
+	Copyright (C) 2005-2018  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -21,7 +21,7 @@ open Common
 open Ast
 open Type
 open Codegen
-open Codegen.ExprBuilder
+open Texpr.Builder
 
 (* ******************************************* *)
 (* Try / Catch + throw native types handling *)
@@ -79,9 +79,9 @@ let init com (should_wrap:t->bool) (wrap_throw:texpr->texpr) (unwrap_expr:texpr-
 			| _, (v, c) :: _ ->
 				let pos = c.epos in
 
-				let temp_var = alloc_var "catchallException" catchall_type pos in
+				let temp_var = alloc_var VGenerated "catchallException" catchall_type pos in
 				let temp_local = make_local temp_var pos in
-				let catchall_var = alloc_var "realException" t_dynamic pos in
+				let catchall_var = alloc_var VGenerated "realException" t_dynamic pos in
 				let catchall_local = make_local catchall_var pos in
 
 				(* if it is of type wrapper_type, unwrap it *)
@@ -127,22 +127,22 @@ let configure_cs com =
 		| TInst (cl,_) -> is_parent base_exception cl
 		| _ -> false
 	in
-	let v_rethrow = alloc_unbound_var "__rethrow__" t_dynamic null_pos in
+	let e_rethrow = mk (TIdent "__rethrow__") t_dynamic null_pos in
 	let should_wrap t = not (is_exception t) in
 	let wrap_throw expr =
 		match expr.eexpr with
-		| TLocal { v_name = "__rethrow__" } ->
+		| TIdent "__rethrow__" ->
 			make_throw expr expr.epos
 		| _ ->
 			let e_hxexception = make_static_this hx_exception expr.epos in
 			let e_wrap = fcall e_hxexception "wrap" [expr] base_exception_t expr.epos in
 			make_throw e_wrap expr.epos
 	in
-	let unwrap_expr local_to_unwrap = Codegen.field (mk_cast local_to_unwrap hx_exception_t local_to_unwrap.epos) "obj" t_dynamic local_to_unwrap.epos in
-	let rethrow_expr rethrow = make_throw (make_local v_rethrow rethrow.epos) rethrow.epos in
+	let unwrap_expr local_to_unwrap = field (mk_cast local_to_unwrap hx_exception_t local_to_unwrap.epos) "obj" t_dynamic local_to_unwrap.epos in
+	let rethrow_expr rethrow = make_throw e_rethrow rethrow.epos in
 	let catch_map v e =
 		let e_exc = make_static_this exc_cl e.epos in
-		let e_field = Codegen.field e_exc "exception" base_exception_t e.epos in
+		let e_field = field e_exc "exception" base_exception_t e.epos in
 		let e_setstack = binop OpAssign e_field (make_local v e.epos) v.v_type e.epos in
 		Type.concat e_setstack e
 	in
@@ -171,7 +171,7 @@ let configure_java com =
 		let e_wrap = fcall e_hxexception "wrap" [expr] base_exception_t expr.epos in
 		make_throw e_wrap expr.epos
 	in
-	let unwrap_expr local_to_unwrap = Codegen.field (mk_cast local_to_unwrap hx_exception_t local_to_unwrap.epos) "obj" t_dynamic local_to_unwrap.epos in
+	let unwrap_expr local_to_unwrap = field (mk_cast local_to_unwrap hx_exception_t local_to_unwrap.epos) "obj" t_dynamic local_to_unwrap.epos in
 	let rethrow_expr exc = { exc with eexpr = TThrow exc } in
 	let catch_map v e =
 		let exc = make_static_this exc_cl e.epos in

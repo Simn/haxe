@@ -3,7 +3,7 @@ open Ast
 open Type
 open Globals
 open MacroApi
-open Unix
+open JsonRpcSocket
 open Json
 open EvalContext
 open EvalValue
@@ -12,128 +12,14 @@ open EvalPrinting
 open EvalMisc
 open EvalDebugMisc
 
-module JsonRpc = struct
-	let jsonrpc_field = "jsonrpc", JString "2.0"
-
-	let notification method_name params =
-		let fl = [
-			jsonrpc_field;
-			"method", JString method_name;
-		] in
-		let fl = Option.map_default (fun params -> ("params",params) :: fl) fl params in
-		JObject fl
-
-	let result id data =
-		JObject [
-			jsonrpc_field;
-			"id", id;
-			"result", data;
-		]
-
-	let error id code message =
-		JObject [
-			jsonrpc_field;
-			"id", id;
-			"error", JObject [
-				"code", JInt code;
-				"message", JString message;
-			];
-		]
-
-	type json_rpc_error =
-		| Parse_error of string
-		| Invalid_request of string
-		| Method_not_found of Json.t * string (* id->methodname *)
-		| Invalid_params of Json.t
-		| Custom of Json.t * int * string (* id->code->message *)
-
-	exception JsonRpc_error of json_rpc_error
-
-	let handle_jsonrpc_error f output =
-		try f () with JsonRpc_error e ->
-			match e with
-			| Parse_error s -> output (error JNull (-32700) s)
-			| Invalid_request s -> output (error JNull (-32600) s)
-			| Method_not_found (id,meth) -> output (error id (-32601) (Printf.sprintf "Method `%s` not found" meth))
-			| Invalid_params id -> output (error id (-32602) "Invalid params")
-			| Custom (id,code,msg) -> output (error id code msg)
-
-	let process_request input handle output =
-		let open Json.Reader in
-		let lexbuf = Sedlexing.Utf8.from_string input in
-		let json = try read_json lexbuf with Json_error s -> raise (JsonRpc_error (Parse_error s)) in
-		let fields = match json with JObject fl -> fl | _ -> raise (JsonRpc_error (Invalid_request "not an object")) in
-		let get_field name map =
-			let field = try List.find (fun (n,_) -> n = name) fields with Not_found -> raise (JsonRpc_error (Invalid_request ("no `" ^ name ^ "` field"))) in
-			let value = map (snd field) in
-			match value with
-			| None -> raise (JsonRpc_error (Invalid_request (Printf.sprintf "`%s` field has invalid data" name)))
-			| Some v -> v
-		in
-		let id = get_field "id" (fun v -> Some v) in
-		let meth = get_field "method" (function JString s -> Some s | _ -> None) in
-		let params =
-			try
-				let f = List.find (fun (n,_) -> n = "params") fields in
-			 	Some (snd f)
-			with Not_found ->
-				None
-		in
-		let res = handle id meth params in
-		output id res
-end
-
-module Transport = struct
-	let read_byte this i = int_of_char (Bytes.get this i)
-
-	let read_ui16 this i =
-		let ch1 = read_byte this i in
-		let ch2 = read_byte this (i + 1) in
-		ch1 lor (ch2 lsl 8)
-
-	let read_string socket =
-		match socket.socket with
-			| None ->
-				failwith "no socket" (* TODO: reconnect? *)
-			| Some socket ->
-				let buf = Bytes.create 2 in
-				let _ = recv socket buf 0 2 [] in
-				let i = read_ui16 buf 0 in
-				let buf = Bytes.create i in
-				let _ = recv socket buf 0 i [] in
-				Bytes.to_string buf
-
-	let send_string socket s =
-		match socket.socket with
-		| None ->
-			failwith "no socket" (* TODO: reconnect? *)
-		| Some socket ->
-			let l = String.length s in
-			assert (l < 0xFFFF);
-			let buf = Bytes.make 2 ' ' in
-			Bytes.set buf 0 (Char.unsafe_chr l);
-			Bytes.set buf 1 (Char.unsafe_chr (l lsr 8));
-			ignore(send socket buf 0 2 []);
-			ignore(send socket (Bytes.unsafe_of_string s) 0 (String.length s) [])
-end
-
 (* Printing *)
-
-
-let print_json socket json =
-	let b = Buffer.create 0 in
-	write_json (Buffer.add_string b) json;
-	Transport.send_string socket (Buffer.contents b)
-
-let output_event socket event data =
-	print_json socket (JsonRpc.notification event data)
 
 let var_to_json name value access =
 	let jv t v structured =
 		JObject ["name",JString name;"type",JString t;"value",JString v;"structured",JBool structured;"access",JString access]
 	in
 	let string_repr s = "\"" ^ (Ast.s_escape (Lazy.force s)) ^ "\"" in
-	let level2_value_repr = function
+	let rec level2_value_repr = function
 		| VNull -> "null"
 		| VTrue -> "true"
 		| VFalse -> "false"
@@ -151,6 +37,7 @@ let var_to_json name value access =
 		| VInstance vi -> (rev_hash_s vi.iproto.ppath) ^ " {...}"
 		| VPrototype proto -> Rope.to_string (s_proto_kind proto)
 		| VFunction _ | VFieldClosure _ -> "<fun>"
+		| VLazy f -> level2_value_repr (!f())
 	in
 	let fields_string fields =
 		let l = List.map (fun (name, value) -> Printf.sprintf "%s: %s" (rev_hash_s name) (level2_value_repr value)) fields in
@@ -160,7 +47,7 @@ let var_to_json name value access =
 		let l = List.map level2_value_repr l in
 		Printf.sprintf "[%s]" (String.concat ", " l)
 	in
-	let value_string v = match v with
+	let rec value_string v = match v with
 		| VNull -> jv "NULL" "null" false
 		| VTrue -> jv "Bool" "true" false
 		| VFalse -> jv "Bool" "false" false
@@ -186,6 +73,7 @@ let var_to_json name value access =
 			jv class_name (class_name ^ " " ^ (fields_string (instance_fields vi))) true
 		| VPrototype proto -> jv "Anonymous" (Rope.to_string (s_proto_kind proto)) false (* TODO: show statics *)
 		| VFunction _ | VFieldClosure _ -> jv "Function" "<fun>" false
+		| VLazy f -> value_string (!f())
 	in
 	value_string value
 
@@ -269,7 +157,7 @@ let output_scope_vars env scope =
 	JArray vars
 
 let output_inner_vars v access =
-	let children = match v with
+	let rec loop v = match v with
 		| VNull | VTrue | VFalse | VInt32 _ | VFloat _ | VFunction _ | VFieldClosure _ -> []
 		| VEnumValue ve ->
 			begin match ve.eargs with
@@ -311,7 +199,9 @@ let output_inner_vars v access =
 				n, v, a
 			) fields
 		| VPrototype proto -> [] (* TODO *)
+		| VLazy f -> loop (!f())
 	in
+	let children = loop v in
 	let vars = List.map (fun (n,v,a) -> var_to_json n v a) children in
 	JArray vars
 
@@ -319,7 +209,6 @@ type command_outcome =
 	| Loop of Json.t
 	| Run of Json.t * EvalContext.env
 	| Wait of Json.t * EvalContext.env
-
 
 let make_connection socket =
 	(* Reads input and reacts accordingly. *)
@@ -337,6 +226,18 @@ let make_connection socket =
 				let invalid_params () =
 					let open JsonRpc in
 					raise (JsonRpc_error (Invalid_params id))
+				in
+				let parse_breakpoint = function
+					| JObject fl ->
+						let rec loop (line,column,condition) fl = match fl with
+							| ("line",JInt i) :: fl -> loop (i,column,condition) fl
+							| ("column",JInt i) :: fl -> loop (line,BPColumn i,condition) fl
+							| ("condition",JString s) :: fl -> loop (line,column,Some (parse_expr ctx s env.env_debug.expr.epos)) fl
+							| _ :: fl -> loop (line,column,condition) fl
+							| [] -> line,column,condition
+						in
+						loop (0,BPAny,None) fl
+					| _ -> invalid_params ()
 				in
 				let rec move_frame offset =
 					if offset < 0 || offset >= (get_eval ctx).environment_offset then begin
@@ -370,15 +271,6 @@ let make_connection socket =
 						| Some (JObject fl) ->
 							let file = try List.find (fun (n,_) -> n = "file") fl with Not_found -> invalid_params () in
 							let file = match (snd file) with JString s -> s | _ -> invalid_params () in
-							let parse_breakpoint = function
-								| JObject fl ->
-									let line = try List.find (fun (n,_) -> n = "line") fl with Not_found -> invalid_params () in
-									let line = match (snd line) with JInt s -> s | _ -> invalid_params () in
-									let column = try Some (List.find (fun (n,_) -> n = "column") fl) with Not_found -> None in
-									let column = Option.map_default (fun (_,v) -> match v with JInt i -> BPColumn i | _ -> invalid_params ()) BPAny column in
-									line,column
-								| _ -> invalid_params ()
-							in
 							let bps = try List.find (fun (n,_) -> n = "breakpoints") fl with Not_found -> invalid_params () in
 							let bps = match (snd bps) with JArray jl -> jl | _ -> invalid_params () in
 							let bps = List.map parse_breakpoint bps in
@@ -397,28 +289,25 @@ let make_connection socket =
 							Hashtbl.add ctx.debug.breakpoints hash h;
 							h
 					in
-					let bps = List.map (fun (line,column) ->
-						let bp = make_breakpoint hash line BPEnabled column in
+					let bps = List.map (fun (line,column,condition) ->
+						let bp = make_breakpoint hash line BPEnabled column condition in
 						Hashtbl.add h line bp;
 						JObject ["id",JInt bp.bpid]
 					) bps in
 					Loop (JArray bps)
 				| "setBreakpoint" ->
-					let file,line,column =
+					let file,line,column,condition =
 						match params with
-						| Some (JObject fl) ->
+						| Some (JObject fl as jo) ->
 							let file = try List.find (fun (n,_) -> n = "file") fl with Not_found -> invalid_params () in
 							let file = match (snd file) with JString s -> s | _ -> invalid_params () in
-							let line = try List.find (fun (n,_) -> n = "line") fl with Not_found -> invalid_params () in
-							let line = match (snd line) with JInt s -> s | _ -> invalid_params () in
-							let column = try Some (List.find (fun (n,_) -> n = "column") fl) with Not_found -> None in
-							let column = Option.map_default (fun (_,v) -> match v with JInt i -> BPColumn i | _ -> invalid_params ()) BPAny column in
-							file,line,column
+							let line,column,condition = parse_breakpoint jo in
+							file,line,column,condition
 						| _ ->
 							invalid_params ();
 					in
 					begin try
-						let breakpoint = add_breakpoint ctx file line column in
+						let breakpoint = add_breakpoint ctx file line column condition in
 						Loop (JObject ["id",JInt breakpoint.bpid])
 					with Not_found ->
 						invalid_params ();
@@ -485,8 +374,8 @@ let make_connection socket =
 					begin try
 						let e = parse_expr ctx e env.env_debug.expr.epos in
 						begin try
-							let access,v = expr_to_value ctx env e in
-							Loop (output_inner_vars v access)
+							let v = expr_to_value ctx env e in
+							Loop (output_inner_vars v (Ast.s_expr e))
 						with Exit ->
 							error ("Don't know how to handle this expression: " ^ (Ast.s_expr e))
 						end
@@ -509,36 +398,48 @@ let make_connection socket =
 					begin try
 						let expr,value = parse expr_s,parse value in
 						begin try
-							let _,value = expr_to_value ctx env value in
-							begin match fst expr with
-								(* TODO: support setting array elements and enum values *)
-								| EField(e1,s) ->
-									let _,v1 = expr_to_value ctx env e1 in
-									set_field v1 (hash_s s) value;
-									Loop (var_to_json s value expr_s)
-								| EConst (Ident s) ->
-									begin try
-										let slot = get_var_slot_by_name env.env_debug.scopes name in
-										env.env_locals.(slot) <- value;
-										Loop (var_to_json name value s)
-									with Not_found ->
-										error ("No variable found: " ^ name);
-									end
-								| _ ->
-									raise Exit
-							end
+							let value = expr_to_value ctx env value in
+							write_expr ctx env expr value;
+							Loop (var_to_json name value expr_s)
 						with Exit ->
 							error "Don't know how to handle this expression"
 						end
 					with Parse_expr_error e ->
 						error e
 					end
+				| "evaluate" ->
+					let s =
+						match params with
+						| Some (JObject fl) ->
+							let id = try List.find (fun (n,_) -> n = "expr") fl with Not_found -> invalid_params () in
+							(match (snd id) with JString s -> s | _ -> invalid_params ())
+						| _ -> invalid_params ()
+					in
+					begin try
+						let e = parse_expr ctx s env.env_debug.expr.epos in
+						let v = expr_to_value ctx env e in
+						Loop (var_to_json "" v (Ast.s_expr e))
+					with
+					| Parse_expr_error e ->
+						error e
+					| Exit ->
+						error "Don't know how to handle this expression"
+					end
+				| "setExceptionOptions" ->
+					let sl = match params with
+						| Some (JArray ja) -> List.map (function JString s -> s | _ -> invalid_params()) ja
+						| _ -> invalid_params()
+					in
+					ctx.debug.exception_mode <- if List.mem "all" sl then CatchAll
+						else if List.mem "uncaught" sl then CatchUncaught
+						else CatchNone;
+					Loop(JNull)
 				| meth ->
 					let open JsonRpc in
 					raise (JsonRpc_error (Method_not_found (id, meth)))
 			in
 			let process_outcome id outcome =
-				let output j = print_json socket (JsonRpc.result id j) in
+				let output j = send_json socket (JsonRpc.result id j) in
 				match outcome with
 				| Loop result ->
 					output result;
@@ -551,18 +452,18 @@ let make_connection socket =
 					wait ctx run env;
 			in
 			let send_output_and_continue json =
-				print_json socket json;
+				send_json socket json;
 				loop ();
 			in
-			JsonRpc.handle_jsonrpc_error (fun () -> JsonRpc.process_request (Transport.read_string socket) handle_request process_outcome) send_output_and_continue;
+			JsonRpc.handle_jsonrpc_error (fun () -> JsonRpc.process_request (Socket.read_string socket) handle_request process_outcome) send_output_and_continue;
 		in
 		loop ()
 	in
 	let output_breakpoint_stop _ _ =
-		output_event socket "breakpointStop" None
+		send_event socket "breakpointStop" None
 	in
 	let output_exception_stop _ v _ =
-		output_event socket "exceptionStop" (Some (JObject ["text",JString (value_string v)]))
+		send_event socket "exceptionStop" (Some (JObject ["text",JString (value_string v)]))
 	in
 	{
 		wait = wait;

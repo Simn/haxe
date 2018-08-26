@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -21,7 +21,7 @@
  */
 package hl;
 
-@:enum abstract PixelFormat(Int) {
+enum abstract PixelFormat(Int) {
   var RGB = 0;
   var BGR = 1;
   var RGBX = 2;
@@ -65,4 +65,38 @@ class Format {
 	public static function scaleImage( out : hl.Bytes, outPos : Int,  outStride : Int, outWidth : Int, outHeight : Int, _in : hl.Bytes, inPos : Int,  inStride : Int, inWidth : Int, inHeight : Int, flags : Int ) {
 	}
 
+	/**
+		Performs a cryptographic digest of some bytes.
+		0 = Md5 , 1 = Sha1 , 2 = Crc32, 3 = Adler32
+		Set 256 flag to tell the src are String bytes.
+	**/
+	@:hlNative("fmt", "digest")
+	public static function digest( out : hl.Bytes, src : hl.Bytes, srcLen : Int, algorithm : Int ) {
+	}
+
 }
+
+#if !hl_disable_mikkt
+class Mikktspace {
+	public var buffer : hl.BytesAccess<Single>;
+	public var stride : Int;
+	public var xPos : Int;
+	public var normalPos : Int;
+	public var uvPos : Int;
+	public var tangents : hl.BytesAccess<Single>;
+	public var tangentStride : Int;
+	public var tangentPos : Int;
+	public var indexes : hl.BytesAccess<Int>;
+	public var indices : Int;
+	public function new() {
+	}
+
+	public function compute( threshold = 180. ) {
+		if( !_compute(this,threshold) ) throw "assert";
+	}
+
+	@:hlNative("fmt","compute_mikkt_tangents") static function _compute( m : Dynamic, threshold : Float ) : Bool {
+		return false;
+	}
+}
+#end

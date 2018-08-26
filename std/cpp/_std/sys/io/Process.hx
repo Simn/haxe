@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -28,7 +28,7 @@ private class Stdin extends haxe.io.Output {
 	var p : Dynamic;
 	var buf : haxe.io.Bytes;
 
-	public function new(p) {
+	public function new(p:Dynamic) {
 		this.p = p;
 		buf = haxe.io.Bytes.alloc(1);
 	}
@@ -60,7 +60,7 @@ private class Stdout extends haxe.io.Input {
 	var out : Bool;
 	var buf : haxe.io.Bytes;
 
-	public function new(p,out) {
+	public function new(p:Dynamic,out) {
 		this.p = p;
 		this.out = out;
 		buf = haxe.io.Bytes.alloc(1);
@@ -115,7 +115,7 @@ class Process {
 	}
 
 	public function kill() : Void {
-		throw "Not implemented";
+		NativeProcess.process_kill(p);
 	}
 
 }

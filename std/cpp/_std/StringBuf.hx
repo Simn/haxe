@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -72,8 +72,16 @@ class StringBuf {
    }
 
    public #if !cppia inline #end function addChar( c : Int ) : Void {
-      if (charBuf==null) charBuf = new Array<cpp.Char>();
+      #if hxcpp_smart_strings
+      if (c>=127)
+         add(String.fromCharCode(c));
+      else
+      #end
+      {
+      if (charBuf==null)
+          charBuf = new Array<cpp.Char>();
       charBuf.push(c);
+      }
    }
 
    public function toString() : String {

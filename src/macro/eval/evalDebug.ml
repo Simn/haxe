@@ -55,11 +55,22 @@ let debug_loop jit e f =
 	let line,col1,_,_ = Lexer.get_pos_coords e.epos in
 	let column_matches breakpoint = match breakpoint.bpcolumn with
 		| BPAny -> true
-		| BPColumn i -> i = col1 + 1
+		| BPColumn i -> i = col1
+	in
+	let condition_holds env breakpoint = match breakpoint.bpcondition with
+		| None -> true
+		| Some e -> match expr_to_value_safe ctx env e with
+			| VTrue -> true
+			| _ -> false
 	in
 	let conn = match ctx.debug.debug_socket with
 		| Some socket -> EvalDebugSocket.make_connection socket
 		| None -> EvalDebugCLI.connection
+	in
+	let debugger_catches v = match ctx.debug.exception_mode with
+		| CatchAll -> true
+		| CatchUncaught -> not (is_caught ctx v)
+		| CatchNone -> false
 	in
 	(* Checks if we hit a breakpoint, runs the code if not. *)
 	let rec run_check_breakpoint env =
@@ -67,7 +78,7 @@ let debug_loop jit e f =
 			let h = Hashtbl.find ctx.debug.breakpoints env.env_info.pfile in
 			let breakpoint = Hashtbl.find h env.env_debug.line in
 			begin match breakpoint.bpstate with
-				| BPEnabled when column_matches breakpoint ->
+				| BPEnabled when column_matches breakpoint && condition_holds env breakpoint ->
 					breakpoint.bpstate <- BPHit;
 					ctx.debug.breakpoint <- breakpoint;
 					conn.bp_stop ctx env;
@@ -79,7 +90,7 @@ let debug_loop jit e f =
 		with Not_found -> try
 			f env
 		with
-		| RunTimeException(v,_,_) when not (is_caught ctx v) ->
+		| RunTimeException(v,_,_) when debugger_catches v ->
 			conn.exc_stop ctx v e.epos;
 			ctx.debug.debug_state <- DbgWaiting;
 			run_loop ctx conn.wait run_check_breakpoint env

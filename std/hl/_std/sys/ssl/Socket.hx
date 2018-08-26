@@ -35,6 +35,8 @@ private class SocketInput extends haxe.io.Input {
 	}
 
 	public override function readBytes( buf : haxe.io.Bytes, pos : Int, len : Int ) : Int {
+		if( pos < 0 || len < 0 || ((pos+len):UInt) > (buf.length : UInt) )
+			throw haxe.io.Error.OutsideBounds;
 		__s.handshake();
 		var r = ssl_recv(  @:privateAccess __s.ssl, @:privateAccess buf.b, pos, len );
 		if( r == -1 )
@@ -70,6 +72,8 @@ private class SocketOutput extends haxe.io.Output {
 	}
 
 	public override function writeBytes( buf : haxe.io.Bytes, pos : Int, len : Int) : Int {
+		if( pos < 0 || len < 0 || ((pos+len):UInt) > (buf.length : UInt) )
+			throw haxe.io.Error.OutsideBounds;
 		__s.handshake();
 		var r = ssl_send( @:privateAccess __s.ssl, @:privateAccess buf.b, pos, len);
 		if( r == -1 )
@@ -108,6 +112,7 @@ class Socket extends sys.net.Socket {
 	private var altSNIContexts : Null<Array<{match: String->Bool, key: Key, cert: Certificate}>>;
 	private var sniCallback : hl.Bytes -> SNICbResult;
 	private var handshakeDone : Bool;
+	private var isBlocking : Bool = true;
 
 	private override function init() : Void {
 		__s = sys.net.Socket.socket_new( false );
@@ -133,7 +138,8 @@ class Socket extends sys.net.Socket {
 			ssl_set_hostname( ssl, @:privateAccess hostname.toUtf8() );
 		if( !sys.net.Socket.socket_connect( __s, host.ip, port ) )
 			throw new Sys.SysError("Failed to connect on "+host.toString()+":"+port);
-		handshake();
+		if( isBlocking )
+			handshake();
 	}
 
 	public function handshake() : Void {
@@ -146,6 +152,11 @@ class Socket extends sys.net.Socket {
 			else
 				throw new haxe.io.Eof();
 		}
+	}
+
+	override function setBlocking( b : Bool ) : Void {
+		super.setBlocking(b);
+		isBlocking = b;
 	}
 
 	public function setCA( cert : Certificate ) : Void {

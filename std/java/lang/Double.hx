@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -25,9 +25,9 @@
 @:forwardStatics
 @:forward abstract Double(DoubleClass) from DoubleClass to DoubleClass
 {
-	@:to @:extern inline public function toFloat():Float
+	@:to extern inline public function toFloat():Float
 		return this.doubleValue();
-	@:from @:extern inline public static function fromFloat(b:Float):Double
+	@:from extern inline public static function fromFloat(b:Float):Double
 		return DoubleClass.valueOf(b);
 }
 
@@ -61,6 +61,6 @@
 	@:overload @:throws("java.lang.NumberFormatException") static function parseDouble(param1 : String) : Float;
 	@:overload static function toHexString(param1 : Float) : String;
 	@:native("toString") @:overload static function _toString(param1 : Float) : String;
-	@:overload @:throws("java.lang.NumberFormatException") static function valueOf(param1 : String) : Double;
 	@:overload static function valueOf(param1 : Float) : Double;
+	@:overload @:throws("java.lang.NumberFormatException") static function valueOf(param1 : String) : Double;
 }

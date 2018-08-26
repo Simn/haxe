@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -80,13 +80,13 @@ class DataView {
 	}
 
 	public function getFloat32( byteOffset : Int, ?littleEndian : Bool ) : Float {
-		return haxe.io.FPHelper.i32ToFloat(getInt32(byteOffset,littleEndian));
+		return @:privateAccess haxe.io.FPHelper._i32ToFloat(getInt32(byteOffset, littleEndian));
 	}
 
 	public function getFloat64( byteOffset : Int, ?littleEndian : Bool ) : Float {
 		var a = getInt32(byteOffset, littleEndian);
 		var b = getInt32(byteOffset + 4, littleEndian);
-		return haxe.io.FPHelper.i64ToDouble(littleEndian?a:b,littleEndian?b:a);
+		return @:privateAccess haxe.io.FPHelper._i64ToDouble(littleEndian ? a : b, littleEndian ? b : a);
 	}
 
 	public function setInt8( byteOffset : Int, value : Int ) : Void {
@@ -104,8 +104,8 @@ class DataView {
 	public function setUint16( byteOffset : Int, value : Int, ?littleEndian : Bool ) : Void {
 		var p = byteOffset + offset;
 		if( littleEndian ) {
-			buf.a[p] = value&0xFF;
-			buf.a[p++] = (value>>8) & 0xFF;
+			buf.a[p++] = value&0xFF;
+			buf.a[p] = (value>>8) & 0xFF;
 		} else {
 			buf.a[p++] = (value>>8) & 0xFF;
 			buf.a[p] = value&0xFF;
@@ -132,22 +132,22 @@ class DataView {
 	}
 
 	public function setFloat32( byteOffset : Int, value : Float, ?littleEndian : Bool ) : Void {
-		setUint32(byteOffset, haxe.io.FPHelper.floatToI32(value),littleEndian);
+		setUint32(byteOffset, @:privateAccess haxe.io.FPHelper._floatToI32(value), littleEndian);
 	}
 
 	public function setFloat64( byteOffset : Int, value : Float, ?littleEndian : Bool ) : Void {
-		var i64 = haxe.io.FPHelper.doubleToI64(value);
+		var i64 = @:privateAccess haxe.io.FPHelper._doubleToI64(value);
 		if( littleEndian ) {
-			setUint32(byteOffset, i64.low);
-			setUint32(byteOffset, i64.high);
+			setUint32(byteOffset,     i64.low , true);
+			setUint32(byteOffset + 4, i64.high, true);
 		} else {
-			setUint32(byteOffset, i64.high);
-			setUint32(byteOffset, i64.low);
+			setUint32(byteOffset,     i64.high, false);
+			setUint32(byteOffset + 4, i64.low , false);
 		}
 	}
 
 	static function __init__() {
-		var DataView = untyped js.Lib.global.DataView || js.html.compat.DataView;
+		untyped __js__("var DataView = {0} || {1}", js.Lib.global.DataView, js.html.compat.DataView);
 	}
 
 }

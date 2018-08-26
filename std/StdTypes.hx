@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -57,7 +57,7 @@
 **/
 @:coreType @:notNull @:runtimeValue abstract Int to Float { }
 
-#if (java || cs || hl)
+#if (java || cs || hl || cpp)
 /**
 	Single-precision IEEE 32bit float (4-byte).
 **/
@@ -72,7 +72,9 @@
 
 	@see https://haxe.org/manual/types-nullability.html
 **/
-typedef Null<T> = T
+@:forward
+@:coreType
+abstract Null<T> from T to T { }
 
 /**
 	The standard Boolean type, which can either be `true` or `false`.

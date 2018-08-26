@@ -51,6 +51,7 @@ let value_string value =
 		| VInstance vi -> rev_hash_s vi.iproto.ppath,instance_fields (depth + 1) vi
 		| VPrototype proto -> "Anonymous",Rope.to_string (s_proto_kind proto)
 		| VFunction _ | VFieldClosure _ -> "Function","fun"
+		| VLazy f -> value_string depth (!f())
 	in
 	let s_type,s_value = value_string 0 value in
 	Printf.sprintf "%s = %s" s_type s_value
@@ -186,7 +187,7 @@ let rec wait ctx run env =
 		| ["quit" | "exit"] ->
 			(* TODO: Borrowed from interp.ml *)
 			if (get_ctx()).curapi.use_cache() then raise (Error.Fatal_error ("",Globals.null_pos));
-			raise (Interp.Sys_exit 0);
+			raise (Sys_exit 0);
 		| ["detach"] ->
 			Hashtbl.iter (fun _ h ->
 				Hashtbl.clear h
@@ -223,7 +224,7 @@ let rec wait ctx run env =
 			begin try
 				let file,line,column = parse_breakpoint_pattern pattern in
 				begin try
-					let breakpoint = add_breakpoint ctx file line column in
+					let breakpoint = add_breakpoint ctx file line column None in
 					output_breakpoint_set breakpoint;
 				with Not_found ->
 					output_error ("Could not find file " ^ file);
@@ -344,8 +345,8 @@ let rec wait ctx run env =
 			begin try
 				let e = parse_expr ctx e env.env_debug.expr.epos in
 				begin try
-					let name,v = expr_to_value ctx env e in
-					output_value name v
+					let v = expr_to_value ctx env e in
+					output_value (Ast.s_expr e) v
 				with Exit ->
 					output_error ("Don't know how to handle this expression: " ^ (Ast.s_expr e))
 				end
@@ -358,17 +359,8 @@ let rec wait ctx run env =
 			begin try
 				let expr,value = parse expr_s,parse value in
 				begin try
-					let _,value = expr_to_value ctx env value in
-					begin match fst expr with
-						(* TODO: support setting array elements and enum values *)
-						| EField(e1,s) ->
-							let _,v1 = expr_to_value ctx env e1 in
-							set_field v1 (hash_s s) value;
-						| EConst (Ident s) ->
-							set_variable ctx env.env_debug.scopes s value env;
-						| _ ->
-							raise Exit
-					end
+					let value = expr_to_value ctx env value in
+					write_expr ctx env expr value;
 				with Exit ->
 					output_error ("Don't know how to handle this expression")
 				end

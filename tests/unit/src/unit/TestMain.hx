@@ -1,6 +1,7 @@
 package unit;
 
 import unit.Test.*;
+import haxe.ds.List;
 
 @:access(unit.Test)
 @:expose("unit.TestMain")
@@ -19,6 +20,18 @@ class TestMain {
 
 	static function main() {
 		Test.startStamp = haxe.Timer.stamp();
+
+		#if js
+		if (js.Browser.supported) {
+			var oTrace = haxe.Log.trace;
+			var traceElement = js.Browser.document.getElementById("haxe:trace");
+			haxe.Log.trace = function(v, ?infos) {
+				oTrace(v, infos);
+				traceElement.innerHTML += infos.fileName + ":" + infos.lineNumber + ": " + StringTools.htmlEscape(v) + "<br/>";
+			}
+		}
+		#end
+
 		var verbose = #if ( cpp || neko || php ) Sys.args().indexOf("-v") >= 0 #else false #end;
 
 		#if cs //"Turkey Test" - Issue #996
@@ -56,12 +69,15 @@ class TestMain {
 			new TestInt64(),
 			new TestReflect(),
 			new TestSerialize(),
+			new TestSerializerCrossTarget(),
 			new TestMeta(),
 			new TestType(),
 			new TestOrder(),
 			new TestGADT(),
 			new TestGeneric(),
 			new TestArrowFunctions(),
+			new TestCasts(),
+			new TestSyntaxModule(),
 			#if !no_pattern_matching
 			new TestMatch(),
 			#end
@@ -87,10 +103,13 @@ class TestMain {
 			#if (java || cs)
 			new TestOverloads(),
 			#end
+			new TestInterface(),
 			new TestNaN(),
-			// #if ((dce == "full") && !interp && !as3)
-			// new TestDCE(),
-			// #end
+			#if ((dce == "full") && !interp && !as3)
+			new TestDCE(),
+			#end
+			new TestMapComprehension(),
+			new TestMacro(),
 			// #if ( (java || neko) && !macro && !interp)
 			// new TestThreads(),
 			// #end

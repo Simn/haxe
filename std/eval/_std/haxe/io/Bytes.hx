@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,6 +22,7 @@
 package haxe.io;
 
 extern class Bytes {
+	function new(length:Int,b:BytesData):Void;
 	public var length(default,null):Int;
 	public function get( pos : Int ) : Int;
 	public function set( pos : Int, v : Int ) : Void;

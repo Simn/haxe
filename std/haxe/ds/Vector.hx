@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -65,7 +65,7 @@ abstract Vector<T>(VectorData<T>) {
 		#elseif neko
 			this = untyped __dollar__amake(length);
 		#elseif js
-			this = untyped __new__(Array, length);
+			this = js.Syntax.construct(Array, length);
 		#elseif cs
 			this = new cs.NativeArray(length);
 		#elseif java
@@ -73,7 +73,7 @@ abstract Vector<T>(VectorData<T>) {
 		#elseif cpp
 			this = NativeArray.create(length);
 		#elseif python
-			this = python.Syntax.pythonCode("[{0}]*{1}", null, length);
+			this = python.Syntax.code("[{0}]*{1}", null, length);
 		#elseif lua
 			this = untyped __lua_table__({length:length});
 		#elseif eval
@@ -239,7 +239,7 @@ abstract Vector<T>(VectorData<T>) {
 
 		If `array` is null, the result is unspecified.
 	**/
-	#if as3 @:extern #end
+	#if as3 extern #end
 	static public inline function fromArrayCopy<T>(array:Array<T>):Vector<T> {
 		#if python
 		return cast array.copy();
@@ -271,7 +271,7 @@ abstract Vector<T>(VectorData<T>) {
 		`a[i] == a.copy()[i]` is true for any valid `i`. However,
 		`a == a.copy()` is always false.
 	**/
-	#if cs @:extern #end public inline function copy<T>():Vector<T> {
+	#if cs extern #end public inline function copy<T>():Vector<T> {
 		#if eval
 		return fromData(this.copy());
 		#else
@@ -294,12 +294,11 @@ abstract Vector<T>(VectorData<T>) {
 
 		If `sep` is null, the result is unspecified.
 	**/
-	#if cs @:extern #end public inline function join<T>(sep:String):String {
+	#if cs extern #end public inline function join<T>(sep:String):String {
 		#if (flash10 || cpp || eval)
 		return this.join(sep);
 		#else
 		var b = new StringBuf();
-		var i = 0;
 		var len = length;
 		for(i in 0...len) {
 			b.add( Std.string(get(i)) );
@@ -318,13 +317,12 @@ abstract Vector<T>(VectorData<T>) {
 
 		If `f` is null, the result is unspecified.
 	**/
-	#if cs @:extern #end public inline function map<S>(f:T->S):Vector<S> {
+	#if cs extern #end public inline function map<S>(f:T->S):Vector<S> {
 		#if eval
 			return fromData(this.map(f));
 		#else
 		var length = length;
 		var r = new Vector<S>(length);
-		var i = 0;
 		var len = length;
 		for(i in 0...len) {
 			var v = f(get(i));

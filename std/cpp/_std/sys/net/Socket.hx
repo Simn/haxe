@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,12 +23,14 @@ package sys.net;
 
 import haxe.io.Error;
 import cpp.NativeSocket;
+import cpp.NativeString;
+import cpp.Pointer;
 
 private class SocketInput extends haxe.io.Input {
 
    var __s : Dynamic;
 
-   public function new(s) {
+   public function new(s:Dynamic) {
       __s = s;
    }
 
@@ -73,7 +75,7 @@ private class SocketOutput extends haxe.io.Output {
 
    var __s : Dynamic;
 
-   public function new(s) {
+   public function new(s:Dynamic) {
       __s = s;
    }
 
@@ -144,7 +146,8 @@ class Socket {
    public function read() : String {
       var bytes:haxe.io.BytesData = NativeSocket.socket_read(__s);
       if (bytes==null) return "";
-      return bytes.toString();
+      var arr:Array<cpp.Char> = cast bytes;
+      return NativeString.fromPointer(Pointer.ofArray(arr));
    }
 
    public function write( content : String ) : Void {

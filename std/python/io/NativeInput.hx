@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -62,11 +62,11 @@ class NativeInput<T:IOBase> extends Input {
 	}
 
 	function readinto (b:Bytearray):Int {
-		throw "abstract method, should be overriden";
+		throw "abstract method, should be overridden";
 	}
 
 	function seek (p:Int, mode:sys.io.FileSeek) {
-		throw "abstract method, should be overriden";
+		throw "abstract method, should be overridden";
 	}
 
 	override public function readBytes(s:haxe.io.Bytes, pos:Int, len:Int):Int {

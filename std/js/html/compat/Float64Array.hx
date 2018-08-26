@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -31,7 +31,7 @@ class Float64Array {
 
 	static function _new( ?arg1 : Dynamic, ?offset : Int, ?length : Int ) : Dynamic {
 		var arr : Array<Float>;
-		if( untyped __typeof__(arg1) == 'number' ) {
+		if( js.Syntax.typeof(arg1) == 'number' ) {
 			arr = new Array();
 			for( i in 0...arg1 )
 				arr[i] = 0;
@@ -87,7 +87,7 @@ class Float64Array {
 		return arr;
 	}
 
-	static function _set( ?arg : Dynamic, ?offset : Int ) {
+	static function _set( ?arg : Dynamic, offset = 0 ) {
 		if( Std.is(arg.buffer,ArrayBuffer) ) {
 			var a : Array<Int> = arg;
 			if( arg.byteLength + offset > nativeThis.byteLength )
@@ -111,7 +111,7 @@ class Float64Array {
 	}
 
 	static function __init__() {
-		var Float64Array = untyped js.Lib.global.Float64Array || (js.Lib.global.Float32Array ? 'notsupported' : null) || _new;
+		untyped __js__("var Float64Array = {0} || ({1} ? 'notsupported' : null) || {2}", js.Lib.global.Float64Array, js.Lib.global.Float32Array, _new);
 	}
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2017 Haxe Foundation
+ * Copyright (C)2005-2018 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -105,7 +105,7 @@ class Gc
       cpp.NativeGc.setMinimumWorkingMemory(inBytes);
 
    #if !cppia
-   @:native("__hxcpp_set_finalizer") @:extern
+   @:native("__hxcpp_set_finalizer") extern
    static public function setFinalizer<T>(inObject:T, inFinalizer:cpp.Callable<T->Void> ) : Void { }
    #end
 }
