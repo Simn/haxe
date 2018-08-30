@@ -515,4 +515,11 @@ class TestBasetypes extends Test {
 			unspec(function() a.f);
 		});
 	}
+
+	@:analyzer(ignore)
+	function testClosureTypeChangeEquality() {
+		function f1(x:Float) { }
+		var f2:Int -> Void = f1;
+		t(f1 == f2);
+	}
 }
