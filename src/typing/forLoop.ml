@@ -336,7 +336,7 @@ let type_for_loop ctx handle_display it e2 p =
 		| EBinop(OpIn,e1,e2) ->
 			begin match fst e1 with
 			| EBinop(OpArrow,ei1,ei2) -> IKKeyValue(loop_ident None ei1,loop_ident None ei2),e2
-			| _ -> IKNormal (loop_ident None e1),e2
+			| _ -> IKNormal (loop_ident dko e1),e2
 			end
 		| EDisplay(e1,dk) -> loop (Some dk) e1
 		| EBinop(OpArrow,ei1,(EBinop(OpIn,ei2,e2),_)) -> IKKeyValue(loop_ident None ei1,loop_ident None ei2),e2
