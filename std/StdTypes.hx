@@ -144,6 +144,12 @@ typedef Iterable<T> = {
 	function iterator() : Iterator<T>;
 }
 
+typedef KeyValueIterator<K,V> = Iterator<{key:K, value:V}>;
+
+typedef KeyValueIterable<K,V> = {
+    function keyValueIterator():KeyValueIterator<K,V>;
+}
+
 /**
 	`ArrayAccess` is used to indicate a class that can be accessed using brackets.
 	The type parameter represents the type of the elements stored.
