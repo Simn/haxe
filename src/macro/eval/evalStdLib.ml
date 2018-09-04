@@ -910,8 +910,22 @@ module StdEReg = struct
 		if String.length s = 0 then encode_array [encode_string ""]
 		else begin
 			let max = if this.r_global then -1 else 2 in
-			let l = Pcre.split ~max ~rex:this.r s in
-			encode_array (List.map encode_string l)
+			let l = Pcre.full_split ~max ~rex:this.r s in
+			let rec loop split cur acc l = match l with
+				| Text s :: l ->
+					loop split (cur ^ s) acc l
+				| Delim s :: l ->
+					if split then
+						loop this.r_global "" ((encode_string cur) :: acc) l
+					else
+						loop false (cur ^ s) acc l
+				| _ :: l ->
+					loop split cur acc l
+				| [] ->
+					List.rev ((encode_string cur) :: acc)
+			in
+			let l = loop true "" [] l in
+			encode_array l
 		end
 	)
 end
@@ -1565,7 +1579,7 @@ module StdReflect = struct
 		vbool (loop a b)
 	)
 
-	let copy = vfun1 (fun o -> match o with
+	let copy = vfun1 (fun o -> match vresolve o with
 		| VObject o -> VObject { o with ofields = Array.copy o.ofields }
 		| VInstance vi -> vinstance {
 			ifields = Array.copy vi.ifields;
@@ -1580,7 +1594,7 @@ module StdReflect = struct
 
 	let deleteField = vfun2 (fun o name ->
 		let name = hash (decode_rope name) in
-		match o with
+		match vresolve o with
 		| VObject o ->
 			if IntMap.mem name o.oextra then begin
 				o.oextra <- IntMap.remove name o.oextra;
@@ -1602,7 +1616,7 @@ module StdReflect = struct
 
 	let fields = vfun1 (fun o ->
 		let proto_fields proto = IntMap.fold (fun name _ acc -> name :: acc) proto.pnames [] in
-		let fields = match o with
+		let fields = match vresolve o with
 			| VObject o -> List.map fst (object_fields o)
 			| VInstance vi -> IntMap.fold (fun name _ acc -> name :: acc) vi.iproto.pinstance_names []
 			| VPrototype proto -> proto_fields proto
@@ -1622,7 +1636,7 @@ module StdReflect = struct
 
 	let hasField = vfun2 (fun o field ->
 		let name = hash (decode_rope field) in
-		let b = match o with
+		let b = match vresolve o with
 			| VObject o -> (IntMap.mem name o.oproto.pinstance_names && not (IntMap.mem name o.oremoved)) || IntMap.mem name o.oextra
 			| VInstance vi -> IntMap.mem name vi.iproto.pinstance_names || IntMap.mem name vi.iproto.pnames
 			| VPrototype proto -> IntMap.mem name proto.pnames
@@ -1642,7 +1656,7 @@ module StdReflect = struct
 		| _ -> vfalse
 	)
 
-	let isObject = vfun1 (fun v -> match v with
+	let isObject = vfun1 (fun v -> match vresolve v with
 		| VObject _ | VString _ | VArray _ | VVector _ | VInstance _ | VPrototype _ -> vtrue
 		| _ -> vfalse
 	)
@@ -2461,7 +2475,7 @@ module StdType = struct
 
 	let typeof = vfun1 (fun v ->
 		let ctx = (get_ctx()) in
-		let i,vl = match v with
+		let rec loop v = match v with
 			| VNull -> 0,[||]
 			| VInt32 _ -> 1,[||]
 			| VFloat _ -> 2,[||]
@@ -2477,7 +2491,10 @@ module StdType = struct
 				5,[||]
 			| VEnumValue ve ->
 				7,[|get_static_prototype_as_value ctx ve.epath null_pos|]
+			| VLazy f ->
+				loop (!f())
 		in
+		let i,vl = loop v in
 		encode_enum_value key_ValueType i vl None
 	)
 end

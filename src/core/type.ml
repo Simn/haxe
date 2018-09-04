@@ -85,10 +85,26 @@ and tconstant =
 
 and tvar_extra = (type_params * texpr option) option
 
+and tvar_origin =
+	| TVOLocalVariable
+	| TVOArgument
+	| TVOForVariable
+	| TVOPatternVariable
+	| TVOCatchVariable
+	| TVOLocalFunction
+
+and tvar_kind =
+	| VUser of tvar_origin
+	| VGenerated
+	| VInlined
+	| VInlinedConstructorVariable
+	| VExtractorVariable
+
 and tvar = {
 	mutable v_id : int;
 	mutable v_name : string;
 	mutable v_type : t;
+	mutable v_kind : tvar_kind;
 	mutable v_capture : bool;
 	mutable v_extra : tvar_extra;
 	mutable v_meta : metadata;
@@ -174,6 +190,7 @@ and tclass_field = {
 	mutable cf_expr_unoptimized : tfunc option;
 	mutable cf_overloads : tclass_field list;
 	mutable cf_extern : bool; (* this is only true if the field itself is extern, not its class *)
+	mutable cf_final : bool;
 }
 
 and tclass_kind =
@@ -211,6 +228,7 @@ and tclass = {
 	(* do not insert any fields above *)
 	mutable cl_kind : tclass_kind;
 	mutable cl_extern : bool;
+	mutable cl_final : bool;
 	mutable cl_interface : bool;
 	mutable cl_super : (tclass * tparams) option;
 	mutable cl_implements : (tclass * tparams) list;
@@ -358,55 +376,11 @@ type class_field_scope =
 	| CFSMember
 	| CFSConstructor
 
-module TVarOrigin = struct
-	type t =
-		| TVOLocalVariable
-		| TVOArgument
-		| TVOForVariable
-		| TVOPatternVariable
-		| TVOCatchVariable
-		| TVOLocalFunction
-
-	let to_int = function
-		| TVOLocalVariable -> 0
-		| TVOArgument -> 1
-		| TVOForVariable -> 2
-		| TVOPatternVariable -> 3
-		| TVOCatchVariable -> 4
-		| TVOLocalFunction -> 5
-
-	let to_string = function
-		| TVOArgument -> "Argument"
-		| TVOLocalVariable -> "LocalVariable"
-		| TVOPatternVariable -> "PatternVariable"
-		| TVOLocalFunction -> "LocalFunction"
-		| TVOForVariable -> "ForVariable"
-		| TVOCatchVariable -> "CatchVariable"
-
-	let from_string = function
-		| "Argument" -> TVOArgument
-		| "LocalVariable" -> TVOLocalVariable
-		| "PatternVariable" -> TVOPatternVariable
-		| "LocalFunction" -> TVOLocalFunction
-		| "ForVariable" -> TVOForVariable
-		| "CatchVariable" -> TVOCatchVariable
-		| _ -> raise Not_found
-
-	let encode_in_meta tvo =
-		let name = to_string tvo in
-		(Meta.TVarOrigin,[(EConst(Ident name),null_pos)],null_pos)
-
-	let decode_from_meta meta =
-		match Meta.get Meta.TVarOrigin meta with
-		| _,[(EConst(Ident s),_)],_ -> from_string s
-		| _ -> raise Not_found
-end
-
 (* ======= General utility ======= *)
 
 let alloc_var =
 	let uid = ref 0 in
-	(fun n t p -> incr uid; { v_name = n; v_type = t; v_id = !uid; v_capture = false; v_extra = None; v_meta = []; v_pos = p })
+	(fun kind n t p -> incr uid; { v_kind = kind; v_name = n; v_type = t; v_id = !uid; v_capture = false; v_extra = None; v_meta = []; v_pos = p })
 
 let alloc_mid =
 	let mid = ref 0 in
@@ -450,6 +424,7 @@ let mk_class m path pos name_pos =
 		cl_private = false;
 		cl_kind = KNormal;
 		cl_extern = false;
+		cl_final = false;
 		cl_interface = false;
 		cl_params = [];
 		cl_super = None;
@@ -505,6 +480,7 @@ let mk_field name t p name_pos = {
 	cf_params = [];
 	cf_overloads = [];
 	cf_extern = false;
+	cf_final = false;
 }
 
 let null_module = {
@@ -1286,12 +1262,12 @@ let rec s_expr_ast print_var_ids tabs s_type e =
 	in
 	let var_id v = if print_var_ids then v.v_id else 0 in
 	let const c t = tag "Const" ~t [s_const c] in
-	let local v = sprintf "[Local %s(%i):%s]" v.v_name (var_id v) (s_type v.v_type) in
+	let local v t = sprintf "[Local %s(%i):%s%s]" v.v_name (var_id v) (s_type v.v_type) (match t with None -> "" | Some t -> ":" ^ (s_type t)) in
 	let var v sl = sprintf "[Var %s(%i):%s]%s" v.v_name (var_id v) (s_type v.v_type) (tag_args tabs sl) in
 	let module_type mt = sprintf "[TypeExpr %s:%s]" (s_type_path (t_path mt)) (s_type e.etype) in
 	match e.eexpr with
 	| TConst c -> const c (Some e.etype)
-	| TLocal v -> local v
+	| TLocal v -> local v (Some e.etype)
 	| TArray (e1,e2) -> tag "Array" [loop e1; loop e2]
 	| TBinop (op,e1,e2) -> tag "Binop" [loop e1; s_binop op; loop e2]
 	| TUnop (op,flag,e1) -> tag "Unop" [s_unop op; if flag = Postfix then "Postfix" else "Prefix"; loop e1]
@@ -1315,7 +1291,7 @@ let rec s_expr_ast print_var_ids tabs s_type e =
 	| TNew (c,tl,el) -> tag "New" ((s_type (TInst(c,tl))) :: (List.map loop el))
 	| TFunction f ->
 		let arg (v,cto) =
-			tag "Arg" ~t:(Some v.v_type) ~extra_tabs:"\t" (match cto with None -> [local v] | Some ct -> [local v;const ct None])
+			tag "Arg" ~t:(Some v.v_type) ~extra_tabs:"\t" (match cto with None -> [local v None] | Some ct -> [local v None;const ct None])
 		in
 		tag "Function" ((List.map arg f.tf_args) @ [loop f.tf_expr])
 	| TVar (v,eo) -> var v (match eo with None -> [] | Some e -> [loop e])
@@ -1330,10 +1306,10 @@ let rec s_expr_ast print_var_ids tabs s_type e =
 	| TReturn (Some e1) -> tag "Return" [loop e1]
 	| TWhile (e1,e2,NormalWhile) -> tag "While" [loop e1; loop e2]
 	| TWhile (e1,e2,DoWhile) -> tag "Do" [loop e1; loop e2]
-	| TFor (v,e1,e2) -> tag "For" [local v; loop e1; loop e2]
+	| TFor (v,e1,e2) -> tag "For" [local v None; loop e1; loop e2]
 	| TTry (e1,catches) ->
 		let sl = List.map (fun (v,e) ->
-			sprintf "Catch %s%s" (local v) (tag_args (tabs ^ "\t") [loop ~extra_tabs:"\t" e]);
+			sprintf "Catch %s%s" (local v None) (tag_args (tabs ^ "\t") [loop ~extra_tabs:"\t" e]);
 		) catches in
 		tag "Try" ((loop e1) :: sl)
 	| TSwitch (e1,cases,eo) ->
@@ -1450,6 +1426,7 @@ module Printer = struct
 			"cl_params",s_type_params c.cl_params;
 			"cl_kind",s_class_kind c.cl_kind;
 			"cl_extern",string_of_bool c.cl_extern;
+			"cl_final",string_of_bool c.cl_final;
 			"cl_interface",string_of_bool c.cl_interface;
 			"cl_super",s_opt (fun (c,tl) -> s_type (TInst(c,tl))) c.cl_super;
 			"cl_implements",s_list ", " (fun (c,tl) -> s_type (TInst(c,tl))) c.cl_implements;
@@ -1583,6 +1560,7 @@ module Printer = struct
 		| HPrivate -> "HPrivate"
 		| HExtends tp -> "HExtends " ^ (s_type_path (fst tp))
 		| HImplements tp -> "HImplements " ^ (s_type_path (fst tp))
+		| HFinal -> "HFinal"
 
 	let s_placed f (x,p) =
 		s_pair (f x) (s_pos p)
@@ -1692,6 +1670,7 @@ type unify_error =
 	| Invariant_parameter of t * t
 	| Constraint_failure of string
 	| Missing_overload of tclass_field * t
+	| FinalInvariance (* nice band name *)
 	| Unify_custom of string
 
 exception Unify_error of unify_error list
@@ -1857,10 +1836,7 @@ let rec type_eq param a b =
 					let f2 = PMap.find n a2.a_fields in
 					if f1.cf_kind <> f2.cf_kind && (param = EqStrict || param = EqCoreType || not (unify_kind f1.cf_kind f2.cf_kind)) then error [invalid_kind n f1.cf_kind f2.cf_kind];
 					let a = f1.cf_type and b = f2.cf_type in
-					rec_stack eq_stack (a,b)
-						(fun (a2,b2) -> fast_eq a a2 && fast_eq b b2)
-						(fun() -> type_eq param a b)
-						(fun l -> error (invalid_field n :: l))
+					(try type_eq param a b with Unify_error l -> error (invalid_field n :: l))
 				with
 					Not_found ->
 						if is_closed a2 then error [has_no_field b n];
@@ -2031,7 +2007,7 @@ let rec unify a b =
 					unify_new_monos := !monos @ !unify_new_monos;
 					rec_stack unify_stack (ft,f2.cf_type)
 						(fun (a2,b2) -> fast_eq b2 f2.cf_type && fast_eq_mono !unify_new_monos ft a2)
-						(fun() -> try unify_with_access ft f2 with e -> unify_new_monos := old_monos; raise e)
+						(fun() -> try unify_with_access f1 ft f2 with e -> unify_new_monos := old_monos; raise e)
 						(fun l -> error (invalid_field n :: l));
 					unify_new_monos := old_monos;
 				| Method MethNormal | Method MethInline | Var { v_write = AccNo } | Var { v_write = AccNever } ->
@@ -2040,13 +2016,13 @@ let rec unify a b =
 					unify_new_monos := !monos @ !unify_new_monos;
 					rec_stack unify_stack (f2.cf_type,ft)
 						(fun(a2,b2) -> fast_eq_mono !unify_new_monos b2 ft && fast_eq f2.cf_type a2)
-						(fun() -> try unify_with_access ft f2 with e -> unify_new_monos := old_monos; raise e)
+						(fun() -> try unify_with_access f1 ft f2 with e -> unify_new_monos := old_monos; raise e)
 						(fun l -> error (invalid_field n :: l));
 					unify_new_monos := old_monos;
 				| _ ->
 					(* will use fast_eq, which have its own stack *)
 					try
-						unify_with_access ft f2
+						unify_with_access f1 ft f2
 					with
 						Unify_error l ->
 							error (invalid_field n :: l));
@@ -2177,7 +2153,7 @@ and unify_anons a b a1 a2 =
 				| _ -> error [invalid_kind n f1.cf_kind f2.cf_kind]);
 			if f2.cf_public && not f1.cf_public then error [invalid_visibility n];
 			try
-				unify_with_access (field_type f1) f2;
+				unify_with_access f1 (field_type f1) f2;
 				(match !(a1.a_status) with
 				| Statics c when not (Meta.has Meta.MaybeUsed f1.cf_meta) -> f1.cf_meta <- (Meta.MaybeUsed,[],f1.cf_pos) :: f1.cf_meta
 				| _ -> ());
@@ -2316,14 +2292,23 @@ and with_variance f t1 t2 =
 	with Unify_error _ ->
 		raise (Unify_error l)
 
-and unify_with_access t1 f2 =
+and unify_with_access f1 t1 f2 =
 	match f2.cf_kind with
 	(* write only *)
 	| Var { v_read = AccNo } | Var { v_read = AccNever } -> unify f2.cf_type t1
 	(* read only *)
-	| Method MethNormal | Method MethInline | Var { v_write = AccNo } | Var { v_write = AccNever } -> unify t1 f2.cf_type
+	| Method MethNormal | Method MethInline | Var { v_write = AccNo } | Var { v_write = AccNever } ->
+		if f1.cf_final <> f2.cf_final then raise (Unify_error [FinalInvariance]);
+		unify t1 f2.cf_type
 	(* read/write *)
 	| _ -> with_variance (type_eq EqBothDynamic) t1 f2.cf_type
+
+let does_unify a b =
+	try
+		unify a b;
+		true
+	with Unify_error _ ->
+		false
 
 (* ======= Mapping and iterating ======= *)
 
