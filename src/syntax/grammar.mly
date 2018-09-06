@@ -1119,9 +1119,6 @@ and expr = parser
 			| [< t,pt = parse_type_hint; '(PClose,p2); s >] ->
 				let ep = EParenthesis (ECheckType(e,(t,pt)),punion p1 p2), punion p1 p2 in
 				expr_next (ECast (ep,None),punion p1 (pos ep)) s
-			| [< '(Const (Ident "is"),p_is); t = parse_type_path; '(PClose,p2); >] ->
-				let e_is = make_is e t (punion p1 p2) p_is in
-				expr_next (ECast (e_is,None),punion p1 (pos e_is)) s
 			| [< '(PClose,p2); s >] ->
 				let ep = expr_next (EParenthesis(e),punion pp p2) s in
 				expr_next (ECast (ep,None),punion p1 (pos ep)) s
@@ -1163,7 +1160,6 @@ and expr = parser
 						with_args al er
 					| [< >] -> serror())
 				| [< >] -> serror())
-			| [< '(Const (Ident "is"),p_is); t = parse_type_path; '(PClose,p2); >] -> expr_next (make_is e t (punion p1 p2) p_is) s
 			| [< >] -> serror())
 		)
 	| [< '(BkOpen,p1); e = parse_array_decl p1; s >] -> expr_next e s
@@ -1248,6 +1244,8 @@ and expr_next' e1 = parser
 		(ETernary (e1,e2,e3),punion (pos e1) (pos e3))
 	| [< '(Kwd In,_); e2 = expr >] ->
 		make_binop OpIn e1 e2
+	| [< '(Const (Ident "is"),p_is); t = parse_type_path; s >] ->
+		expr_next (make_is e1 t (punion (pos e1) (pos t)) p_is) s
 	| [< >] -> e1
 
 and parse_field e1 p s =
