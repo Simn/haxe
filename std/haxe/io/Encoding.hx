@@ -19,12 +19,15 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+package haxe.io;
 
-package lua.lib.environ;
-@:luaRequire("environ.process")
-extern class Environ {
-	static function getenv(arg : String) : String;
-	static function setenv(arg : String, value : String) : Bool;
-	static var ENV : Table<String, String>;
+/**
+	String binary encoding supported by Haxe I/O
+**/
+enum Encoding {
+	UTF8;
+	/**
+		Output the string the way the platform represent it in memory. This is the most efficient but is platform-specific
+	**/
+	RawNative;
 }
-
