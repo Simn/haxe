@@ -23,18 +23,13 @@ let find_field_from ab pl a b =
 let find_to_from f ab_left tl_left ab_right tl_right tleft tright =
 	build_abstract ab_left;
 	build_abstract ab_right;
-	if has_direct_to ab_right tl_right tleft || has_direct_from ab_left tl_left tright tleft then
-		raise Not_found
-	else
-		try f ab_right tl_right (fun () -> find_field_to ab_right tl_right tleft)
-		with Not_found -> f ab_left tl_left (fun () -> find_field_from ab_left tl_left tright tleft)
+	try f ab_right tl_right (fun () -> find_field_to ab_right tl_right tleft)
+	with Not_found -> f ab_left tl_left (fun () -> find_field_from ab_left tl_left tright tleft)
 
 let find_to ab pl b =
 	build_abstract ab;
 	if follow b == t_dynamic then
 		List.find (fun (t,_) -> follow t == t_dynamic) ab.a_to_field
-	else if has_direct_to ab pl b then
-		raise Not_found (* legacy compatibility *)
 	else
 		find_field_to ab pl b
 
@@ -42,8 +37,6 @@ let find_from ab pl a b =
 	build_abstract ab;
 	if follow a == t_dynamic then
 		List.find (fun (t,_) -> follow t == t_dynamic) ab.a_from_field
-	else if has_direct_from ab pl a b then
-		raise Not_found (* legacy compatibility *)
 	else
 		find_field_from ab pl a b
 
