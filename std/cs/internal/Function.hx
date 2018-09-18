@@ -61,6 +61,9 @@ package cs.internal;
 
 @:keep @:nativeGen @:native('haxe.lang.Closure') class Closure extends VarArgsBase
 {
+	// TODO: needs WeakMap...
+	static var cache:Map<String, Map<{}, Closure>> = new Map();
+
 	private var obj:Dynamic;
 	private var field:String;
 	private var hash:Int;
@@ -89,5 +92,19 @@ package cs.internal;
 	public function GetHashCode():Int
 	{
 		return obj.GetHashCode() ^ untyped field.GetHashCode();
+	}
+
+	static public function create(obj:{}, field:String, hash:Int) {
+		var map = cache.get(field);
+		if (map == null) {
+			map = new Map();
+			cache.set(field, map);
+		}
+		var c = map.get(obj);
+		if (c == null) {
+			c = new Closure(obj, field, hash);
+			map.set(obj, c);
+		}
+		return c;
 	}
 }

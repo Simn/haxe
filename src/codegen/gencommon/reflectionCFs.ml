@@ -1410,8 +1410,11 @@ let get_closure_func ctx closure_cl =
 	let gen = ctx.rcf_gen in
 	let basic = gen.gcon.basic in
 	let closure_func eclosure e field is_static =
+		let e_cl = Texpr.Builder.make_static_this closure_cl e.epos in
+		let t_cf = tfun [t_dynamic;basic.tstring;basic.tint] (TInst(closure_cl,[])) in
+		let e_cf = Texpr.Builder.field e_cl "create" t_cf e.epos in
 		mk_cast eclosure.etype { eclosure with
-			eexpr = TNew(closure_cl, [], [
+			eexpr = TCall(e_cf, [
 				e;
 				make_string gen.gcon.basic field eclosure.epos
 			] @ (

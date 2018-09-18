@@ -63,6 +63,7 @@ import java.internal.Runtime;
 
 @:nativeGen @:native('haxe.lang.Closure') @:keep class Closure extends VarArgsBase
 {
+	static var cache:Map<String, haxe.ds.WeakMap<{}, Closure>> = new Map();
 	private var obj:Dynamic;
 	private var field:String;
 
@@ -90,5 +91,19 @@ import java.internal.Runtime;
 	public function hashCode():Int
 	{
 		return obj.hashCode() ^ untyped field.hashCode();
+	}
+
+	static public function create(obj:{}, field:String) {
+		var map = cache.get(field);
+		if (map == null) {
+			map = new haxe.ds.WeakMap();
+			cache.set(field, map);
+		}
+		var c = map.get(obj);
+		if (c == null) {
+			c = new Closure(obj, field);
+			map.set(obj, c);
+		}
+		return c;
 	}
 }
