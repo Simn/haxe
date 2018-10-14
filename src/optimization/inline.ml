@@ -373,6 +373,7 @@ class inline_state ctx ethis params cf f p = object(self)
 				acc
 			| e :: pl, (v, opt) :: al ->
 				let l = self#declare v in
+				l.i_subst.v_type <- e.etype;
 				(*
 					if we pass a Null<T> var to an inlined method that needs a T.
 					we need to force a local var to be created on some platforms.
@@ -553,7 +554,7 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 				l.i_called <- l.i_called + i
 			else
 				l.i_read <- l.i_read + i;
-			let e = { e with eexpr = TLocal l.i_subst } in
+			let e = { e with eexpr = TLocal l.i_subst; etype = l.i_subst.v_type } in
 			if l.i_abstract_this then mk (TCast(e,None)) v.v_type e.epos else e
 		| TConst TThis ->
 			let l = state#read vthis in
