@@ -223,11 +223,7 @@ module Pattern = struct
 			in
 			loop e
 		in
-		let try_typing e =
-			let old = ctx.untyped in
-			ctx.untyped <- true;
-			let e = try type_expr ctx e (WithType.with_type t) with exc -> ctx.untyped <- old; raise exc in
-			ctx.untyped <- old;
+		let handle_expr e =
 			match e.eexpr with
 				| TTypeExpr mt ->
 					unify_type_pattern ctx mt t e.epos;
@@ -245,51 +241,51 @@ module Pattern = struct
 					end;
 					pat
 		in
+		let try_typing e =
+			let e = type_expr ctx e (WithType.with_type t) in
+			handle_expr e
+		in
+		(* mini version of type_ident that only checks enum ctors and types *)
+		let lookup_ident s p =
+			try
+				Fields.lookup_enum_constructor ctx s MGet p
+			with Not_found -> try
+				if is_lower_ident s then raise Not_found;
+				let e = TyperBase.type_type ctx ([],s) p in
+				AKExpr e
+			with Error (Module_not_found ([],name),_) ->
+				raise Not_found
+		in
 		let handle_ident s p =
 			try
-				try_typing (EConst (Ident s),p)
+				let f = (fun () -> lookup_ident s p) in
+				let acc = TyperBase.maybe_type_against_enum ctx f (WithType.with_type t) false p in
+				let e = Calls.acc_get ctx acc p in
+				handle_expr e
 			with
-			| Exit | Bad_pattern _ ->
-				let restore =
-					let old = ctx.on_error in
-					ctx.on_error <- (fun _ _ _ ->
-						raise Exit
-					);
-					(fun () ->
-						ctx.on_error <- old
-					)
+			| Exit | Bad_pattern _ | Not_found ->
+				if not (is_lower_ident s) && (match s.[0] with '`' | '_' -> false | _ -> true) then begin
+					display_error ctx "Capture variables must be lower-case" p;
+				end;
+				let sl = match follow t with
+					| TEnum(en,_) ->
+						en.e_names
+					| TAbstract({a_impl = Some c} as a,pl) when Meta.has Meta.Enum a.a_meta ->
+						ExtList.List.filter_map (fun cf ->
+							if Meta.has Meta.Impl cf.cf_meta && Meta.has Meta.Enum cf.cf_meta then Some cf.cf_name else None
+						) c.cl_ordered_statics
+					| _ ->
+						[]
 				in
-				begin try
-					let mt = module_type_of_type t in
-					let e_mt = TyperBase.type_module_type ctx mt None p in
-					let e = type_field_access ctx ~resume:true e_mt s in
-					restore();
-					check_expr e
-				with _ ->
-					restore();
-					if not (is_lower_ident s) && (match s.[0] with '`' | '_' -> false | _ -> true) then begin
-						display_error ctx "Capture variables must be lower-case" p;
-					end;
-					let sl = match follow t with
-						| TEnum(en,_) ->
-							en.e_names
-						| TAbstract({a_impl = Some c} as a,pl) when Meta.has Meta.Enum a.a_meta ->
-							ExtList.List.filter_map (fun cf ->
-								if Meta.has Meta.Impl cf.cf_meta && Meta.has Meta.Enum cf.cf_meta then Some cf.cf_name else None
-							) c.cl_ordered_statics
-						| _ ->
-							[]
-					in
-					begin match StringError.get_similar s sl with
-						| [] ->
-							()
-							(* if toplevel then
-								pctx.ctx.com.warning (Printf.sprintf "`case %s` has been deprecated, use `case var %s` instead" s s) p *)
-						| l -> pctx.ctx.com.warning ("Potential typo detected (expected similar values are " ^ (String.concat ", " l) ^ "). Consider using `var " ^ s ^ "` instead") p
-					end;
-					let v = add_local false s p in
-					PatVariable v
-				end
+				begin match StringError.get_similar s sl with
+					| [] ->
+						()
+						(* if toplevel then
+							pctx.ctx.com.warning (Printf.sprintf "`case %s` has been deprecated, use `case var %s` instead" s s) p *)
+					| l -> pctx.ctx.com.warning ("Potential typo detected (expected similar values are " ^ (String.concat ", " l) ^ "). Consider using `var " ^ s ^ "` instead") p
+				end;
+				let v = add_local false s p in
+				PatVariable v
 		in
 		let rec loop e = match fst e with
 			| EParenthesis e1 | ECast(e1,None) ->
@@ -300,7 +296,7 @@ module Pattern = struct
 				let e = loop e in
 				pctx.in_reification <- old;
 				e
-			| EConst((Ident ("false" | "true") | Int _ | String _ | Float _) as ct) ->
+			| EConst((Ident ("false" | "true" | "null") | Int _ | String _ | Float _) as ct) ->
 				let p = pos e in
 				let e = Texpr.type_constant ctx.com.basic ct p in
 				unify_expected e.etype;

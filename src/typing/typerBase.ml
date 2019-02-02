@@ -191,3 +191,63 @@ let get_abstract_froms a pl =
 		| _ ->
 			acc
 	) l a.a_from_field
+
+let maybe_type_against_enum ctx f with_type iscall p =
+	try
+		begin match with_type with
+		| WithType.WithType(t,_) ->
+			let rec loop stack t = match follow t with
+				| TEnum (en,_) ->
+					true,en.e_path,en.e_names,TEnumDecl en
+				| TAbstract ({a_impl = Some c} as a,_) when has_meta Meta.Enum a.a_meta ->
+					let fields = ExtList.List.filter_map (fun cf ->
+						if Meta.has Meta.Enum cf.cf_meta then Some cf.cf_name else None
+					) c.cl_ordered_statics in
+					false,a.a_path,fields,TAbstractDecl a
+				| TAbstract (a,pl) when not (Meta.has Meta.CoreType a.a_meta) ->
+					begin match get_abstract_froms a pl with
+						| [t2] ->
+							if (List.exists (fast_eq t) stack) then raise Exit;
+							loop (t :: stack) t2
+						| _ -> raise Exit
+					end
+				| _ ->
+					raise Exit
+			in
+			let is_enum,path,fields,mt = loop [] t in
+			let old = ctx.m.curmod.m_types in
+			let restore () = ctx.m.curmod.m_types <- old in
+			ctx.m.curmod.m_types <- ctx.m.curmod.m_types @ [mt];
+			let e = try
+				f()
+			with
+			| Error (Unknown_ident n,_) ->
+				restore();
+				raise_or_display_message ctx (StringError.string_error n fields ("Identifier '" ^ n ^ "' is not part of " ^ s_type_path path)) p;
+				AKExpr (mk (TConst TNull) (mk_mono()) p)
+			| exc ->
+				restore();
+				raise exc;
+			in
+			restore();
+			begin match e with
+				| AKExpr e ->
+					begin match follow e.etype with
+						| TFun(_,t') when is_enum ->
+							(* TODO: this is a dodge for #7603 *)
+							(try Type.unify t' t with Unify_error _ -> ());
+							AKExpr e
+						| _ ->
+							if iscall then
+								AKExpr e
+							else begin
+								AKExpr (AbstractCast.cast_or_unify ctx t e e.epos)
+							end
+					end
+				| _ -> e (* ??? *)
+			end
+		| _ ->
+			raise Exit
+		end
+	with Exit ->
+		f()

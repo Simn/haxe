@@ -92,66 +92,6 @@ let get_iterable_param t =
 			raise Not_found)
 	| _ -> raise Not_found
 
-let maybe_type_against_enum ctx f with_type iscall p =
-	try
-		begin match with_type with
-		| WithType.WithType(t,_) ->
-			let rec loop stack t = match follow t with
-				| TEnum (en,_) ->
-					true,en.e_path,en.e_names,TEnumDecl en
-				| TAbstract ({a_impl = Some c} as a,_) when has_meta Meta.Enum a.a_meta ->
-					let fields = ExtList.List.filter_map (fun cf ->
-						if Meta.has Meta.Enum cf.cf_meta then Some cf.cf_name else None
-					) c.cl_ordered_statics in
-					false,a.a_path,fields,TAbstractDecl a
-				| TAbstract (a,pl) when not (Meta.has Meta.CoreType a.a_meta) ->
-					begin match get_abstract_froms a pl with
-						| [t2] ->
-							if (List.exists (fast_eq t) stack) then raise Exit;
-							loop (t :: stack) t2
-						| _ -> raise Exit
-					end
-				| _ ->
-					raise Exit
-			in
-			let is_enum,path,fields,mt = loop [] t in
-			let old = ctx.m.curmod.m_types in
-			let restore () = ctx.m.curmod.m_types <- old in
-			ctx.m.curmod.m_types <- ctx.m.curmod.m_types @ [mt];
-			let e = try
-				f()
-			with
-			| Error (Unknown_ident n,_) ->
-				restore();
-				raise_or_display_message ctx (StringError.string_error n fields ("Identifier '" ^ n ^ "' is not part of " ^ s_type_path path)) p;
-				AKExpr (mk (TConst TNull) (mk_mono()) p)
-			| exc ->
-				restore();
-				raise exc;
-			in
-			restore();
-			begin match e with
-				| AKExpr e ->
-					begin match follow e.etype with
-						| TFun(_,t') when is_enum ->
-							(* TODO: this is a dodge for #7603 *)
-							(try Type.unify t' t with Unify_error _ -> ());
-							AKExpr e
-						| _ ->
-							if iscall then
-								AKExpr e
-							else begin
-								AKExpr (AbstractCast.cast_or_unify ctx t e e.epos)
-							end
-					end
-				| _ -> e (* ??? *)
-			end
-		| _ ->
-			raise Exit
-		end
-	with Exit ->
-		f()
-
 let check_error ctx err p = match err with
 	| Module_not_found ([],name) when Diagnostics.is_diagnostics_run p ->
 		DisplayToplevel.handle_unresolved_identifier ctx name p true
@@ -358,54 +298,8 @@ let rec type_ident_raise ctx i p mode =
 		(* check_locals_masking already done in type_type *)
 		field_access ctx mode f (FStatic (ctx.curclass,f)) (field_type ctx ctx.curclass [] f p) e p
 	with Not_found -> try
-		let wrap e = if mode = MSet then
-				AKNo i
-			else
-				AKExpr e
-		in
 		(* lookup imported enums *)
-		let rec loop l =
-			match l with
-			| [] -> raise Not_found
-			| (t,pt) :: l ->
-				match t with
-				| TAbstractDecl ({a_impl = Some c} as a) when Meta.has Meta.Enum a.a_meta ->
-					begin try
-						let cf = PMap.find i c.cl_statics in
-						if not (Meta.has Meta.Enum cf.cf_meta) then
-							loop l
-						else begin
-							let et = type_module_type ctx (TClassDecl c) None p in
-							let fa = FStatic(c,cf) in
-							let t = monomorphs cf.cf_params cf.cf_type in
-							ImportHandling.maybe_mark_import_position ctx pt;
-							begin match cf.cf_kind with
-								| Var {v_read = AccInline} -> AKInline(et,cf,fa,t)
-								| _ -> AKExpr (mk (TField(et,fa)) t p)
-							end
-						end
-					with Not_found ->
-						loop l
-					end
-				| TClassDecl _ | TAbstractDecl _ ->
-					loop l
-				| TTypeDecl t ->
-					(match follow t.t_type with
-					| TEnum (e,_) -> loop ((TEnumDecl e,pt) :: l)
-					| TAbstract (a,_) when Meta.has Meta.Enum a.a_meta -> loop ((TAbstractDecl a,pt) :: l)
-					| _ -> loop l)
-				| TEnumDecl e ->
-					try
-						let ef = PMap.find i e.e_constrs in
-						let et = type_module_type ctx t None p in
-						let monos = List.map (fun _ -> mk_mono()) e.e_params in
-						let monos2 = List.map (fun _ -> mk_mono()) ef.ef_params in
-						ImportHandling.maybe_mark_import_position ctx pt;
-						wrap (mk (TField (et,FEnum (e,ef))) (enum_field_type ctx e ef monos monos2 p) p)
-					with
-						Not_found -> loop l
-		in
-		(try loop (List.rev_map (fun t -> t,null_pos) ctx.m.curmod.m_types) with Not_found -> loop ctx.m.module_types)
+		lookup_enum_constructor ctx i mode p
 	with Not_found ->
 		(* lookup imported globals *)
 		let t, name, pi = PMap.find i ctx.m.module_globals in
