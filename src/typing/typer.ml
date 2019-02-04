@@ -318,7 +318,7 @@ let rec type_ident_raise ctx i p mode =
 		AKExpr (mk (TConst TSuper) t p)
 	| "null" ->
 		if mode = MGet then
-			AKExpr (null (mk_mono()) p)
+			AKExpr (null (ctx.t.tnull (mk_mono())) p)
 		else
 			AKNo i
 	| _ ->

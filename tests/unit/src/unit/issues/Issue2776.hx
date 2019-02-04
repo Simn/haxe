@@ -24,11 +24,11 @@ class Issue2776 extends Test {
 		}));
 	}
 
-	static function getClassT<T>():Class<T> {
+	static function getClassT<T>():Null<Class<T>> {
 		return (null : Class<T>);
 	}
 
-	static function getEnumT<T>():Enum<T> {
+	static function getEnumT<T>():Null<Enum<T>> {
 		return (null : Enum<T>);
 	}
 }
