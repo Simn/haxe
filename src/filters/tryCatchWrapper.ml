@@ -149,7 +149,7 @@ let configure_cs com =
 	let std_cl = find_class com ([],"Std") in
 	let gen_typecheck e t pos =
 		let std = make_static_this std_cl pos in
-		let e_type = make_typeexpr (module_type_of_type t) pos in
+		let e_type = make_typeexpr (module_type_of_type (follow t)) pos in
 		fcall std "is" [e; e_type] com.basic.tbool pos
 	in
 	init com should_wrap wrap_throw unwrap_expr rethrow_expr base_exception_t hx_exception_t catch_map gen_typecheck
@@ -181,7 +181,7 @@ let configure_java com =
 	let std_cl = find_class com ([],"Std") in
 	let gen_typecheck e t pos =
 		let std = make_static_this std_cl pos in
-		let e_type = make_typeexpr (module_type_of_type t) pos in
+		let e_type = make_typeexpr (module_type_of_type (follow t)) pos in
 		fcall std "is" [e; e_type] com.basic.tbool pos
 	in
 	init com should_wrap wrap_throw unwrap_expr rethrow_expr base_exception_t hx_exception_t catch_map gen_typecheck
