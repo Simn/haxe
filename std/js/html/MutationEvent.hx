@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -45,5 +45,5 @@ extern class MutationEvent extends Event
 	var attrChange(default,null) : Int;
 	
 	/** @throws DOMError */
-	function initMutationEvent( type : String, canBubble : Bool, cancelable : Bool, relatedNode : Node, prevValue : String, newValue : String, attrName : String, attrChange : Int ) : Void;
+	function initMutationEvent( type : String, ?canBubble : Bool = false, ?cancelable : Bool = false, ?relatedNode : Node, ?prevValue : String = "", ?newValue : String = "", ?attrName : String = "", ?attrChange : Int = 0 ) : Void;
 }

@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -82,7 +82,7 @@ let error ctx msg p =
 
 let reserved_flags = [
 	"cross";"js";"lua";"neko";"flash";"php";"cpp";"cs";"java";"python";
-	"as3";"swc";"macro";"sys";"static"
+	"as3";"swc";"macro";"sys";"static";"utf16"
 	]
 
 let delete_file f = try Sys.remove f with _ -> ()
@@ -212,9 +212,6 @@ module Initialize = struct
 				add_std "neko";
 				"n"
 			| Js ->
-				if not (PMap.exists (fst (Define.infos Define.JqueryVer)) com.defines.Define.values) then
-					Common.define_value com Define.JqueryVer "30301";
-
 				let es_version =
 					try
 						int_of_string (Common.defined_value com Define.JsEs)
@@ -280,7 +277,10 @@ let generate tctx ext xml_out interp swf_header =
 		to accidentaly delete a source file. *)
 	if file_extension com.file = ext then delete_file com.file;
 	if com.platform = Flash || com.platform = Cpp || com.platform = Hl then List.iter (Codegen.fix_overrides com) com.types;
-	if Common.defined com Define.Dump then Codegen.Dump.dump_types com;
+	if Common.defined com Define.Dump then begin
+		Codegen.Dump.dump_types com;
+		Option.may Codegen.Dump.dump_types (com.get_macros())
+	end;
 	if Common.defined com Define.DumpDependencies then begin
 		Codegen.Dump.dump_dependencies com;
 		if not tctx.Typecore.in_macro then match tctx.Typecore.g.Typecore.macros with
@@ -406,7 +406,7 @@ let rec process_params create pl =
 			ctx.flush()
 		| arg :: l ->
 			match List.rev (ExtString.String.nsplit arg ".") with
-			| "hxml" :: _ when (match acc with "-cmd" :: _ -> false | _ -> true) ->
+			| "hxml" :: _ when (match acc with "-cmd" :: _ | "--cmd" :: _ -> false | _ -> true) ->
 				let acc, l =
 					(try
 						let parsed = parse_hxml arg in
@@ -418,7 +418,6 @@ let rec process_params create pl =
 	(* put --display in front if it was last parameter *)
 	let pl = (match List.rev pl with
 		| file :: "--display" :: pl when file <> "memory" -> "--display" :: file :: List.rev pl
-		| "use_rtti_doc" :: "-D" :: file :: "--display" :: pl -> "--display" :: file :: List.rev pl
 		| _ -> pl
 	) in
 	loop [] pl
@@ -445,20 +444,20 @@ and process_args arg_spec =
 		(List.map (fun (arg) -> (arg, dep_spec arg spec, doc)) dep)
 	) arg_spec)
 
-and usage_string arg_spec usage =
+and usage_string ?(print_cat=true) arg_spec usage =
 	let make_label = fun names hint -> Printf.sprintf "%s %s" (String.concat ", " names) hint in
 	let args = (List.filter (fun (cat, ok, dep, spec, hint, doc) -> (List.length ok) > 0) arg_spec) in
 	let cat_order = ["Target";"Compilation";"Optimization";"Debug";"Batch";"Services";"Compilation Server";"Target-specific";"Miscellaneous"] in
 	let cats = List.filter (fun x -> List.mem x (List.map (fun (cat, _, _, _, _, _) -> cat) args)) cat_order in
 	let max_length = List.fold_left max 0 (List.map String.length (List.map (fun (_, ok, _, _, hint, _) -> make_label ok hint) args)) in
-	usage ^ (String.concat "\n" (List.flatten (List.map (fun cat -> [cat] @ (List.map (fun (cat, ok, dep, spec, hint, doc) ->
+	usage ^ (String.concat "\n" (List.flatten (List.map (fun cat -> (if print_cat then ["\n"^cat^":"] else []) @ (List.map (fun (cat, ok, dep, spec, hint, doc) ->
 		let label = make_label ok hint in
 		Printf.sprintf "  %s%s  %s" label (String.make (max_length - (String.length label)) ' ') doc
 	) (List.filter (fun (cat', _, _, _, _, _) -> (if List.mem cat' cat_order then cat' else "Miscellaneous") = cat) args))) cats)))
 
 and init ctx =
 	let usage = Printf.sprintf
-		"Haxe Compiler %s - (C)2005-2018 Haxe Foundation\nUsage: haxe%s <target> [options] [hxml files...]\n\n"
+		"Haxe Compiler %s - (C)2005-2019 Haxe Foundation\nUsage: haxe%s <target> [options] [hxml files...]\n"
 		s_version (if Sys.os_type = "Win32" then ".exe" else "")
 	in
 	let com = ctx.com in
@@ -479,12 +478,12 @@ try
 	let swf_version = ref false in
 	Common.define_value com Define.HaxeVer (Printf.sprintf "%.3f" (float_of_int Globals.version /. 1000.));
 	Common.raw_define com "haxe3";
+	Common.raw_define com "haxe4";
 	Common.define_value com Define.Dce "std";
 	com.warning <- (fun msg p -> message ctx (CMWarning(msg,p)));
 	com.error <- error ctx;
 	if CompilationServer.runs() then com.run_command <- run_command ctx;
 	Parser.display_error := (fun e p -> com.error (Parser.error_msg e) p);
-	Parser.use_doc := !Parser.display_mode <> DMNone || (CompilationServer.runs());
 	com.class_path <- get_std_class_paths ();
 	com.std_path <- List.filter (fun p -> ExtString.String.ends_with p "std/" || ExtString.String.ends_with p "std\\") com.class_path;
 	let define f = Arg.Unit (fun () -> Common.define com f) in
@@ -564,13 +563,9 @@ try
 		("Compilation",["-L";"--library"],["-lib"],Arg.String (fun l ->
 			cp_libs := l :: !cp_libs;
 			Common.raw_define com l;
-		),"<library[:version]>","use a haxelib library");
+		),"<name[:ver]>","use a haxelib library");
 		("Compilation",["-D";"--define"],[],Arg.String (fun var ->
-			begin match var with
-				| "no_copt" | "no-copt" -> com.foptimize <- false;
-				| "use_rtti_doc" | "use-rtti-doc" -> Parser.use_doc := true;
-				| _ -> 	if List.mem var reserved_flags then raise (Arg.Bad (var ^ " is a reserved compiler flag and cannot be defined from command line"));
-			end;
+			if List.mem var reserved_flags then raise (Arg.Bad (var ^ " is a reserved compiler flag and cannot be defined from command line"));
 			Common.raw_define com var;
 		),"<var[=value]>","define a conditional compilation flag");
 		("Debug",["-v";"--verbose"],[],Arg.Unit (fun () ->
@@ -600,12 +595,9 @@ try
 			did_something := true
 		),"","print help for all compiler metadatas");
 		("Misc",["--run"],[], Arg.Unit (fun() -> assert false), "<module> [args...]","compile and execute a Haxe module with command line arguments");
-		("Miscellaneous",["--"],[], Arg.Rest (fun arg ->
-			com.sys_args <- com.sys_args @ [arg];
-		),"[args...]","args that will be passed to the macro interpreter");
 	] in
 	let adv_args_spec = [
-		("Optimization",["--dce";"--dead-code-elimination"],["-dce"],Arg.String (fun mode ->
+		("Optimization",["--dce"],["-dce"],Arg.String (fun mode ->
 			(match mode with
 			| "std" | "full" | "no" -> ()
 			| _ -> raise (Arg.Bad "Invalid DCE mode, expected std | full | no"));
@@ -693,11 +685,9 @@ try
 				DisplayOutput.handle_display_argument com input pre_compilation did_something;
 		),"","display code tips");
 		("Services",["--xml"],["-xml"],Arg.String (fun file ->
-			Parser.use_doc := true;
 			xml_out := Some file
 		),"<file>","generate XML types description");
 		("Services",["--json"],[],Arg.String (fun file ->
-			Parser.use_doc := true;
 			json_out := Some file
 		),"<file>","generate JSON types description");
 		("Services",["--gen-hx-classes"],[], Arg.Unit (fun() ->
@@ -753,7 +743,7 @@ try
 	let args_callback cl =
 		begin try
 			let path,name = Path.parse_path cl in
-			if Path.starts_uppercase name then
+			if StringHelper.starts_uppercase name then
 				classes := (path,name) :: !classes
 			else begin
 				force_typing := true;
@@ -775,14 +765,22 @@ try
 			raise (HelpMessage (usage_string all_args usage))
 		| Arg.Bad msg ->
 			let first_line = List.nth (Str.split (Str.regexp "\n") msg) 0 in
-			let new_msg = (Printf.sprintf "%s\n\n%s" first_line (usage_string all_args usage)) in
-			let r = Str.regexp "unknown option `\\([-A-Za-z]+\\)'" in
+			let new_msg = (Printf.sprintf "%s" first_line) in
+			let r = Str.regexp "unknown option [`']?\\([-A-Za-z]+\\)[`']?" in
 			try
 				ignore(Str.search_forward r msg 0);
 				let s = Str.matched_group 1 msg in
 				let sl = List.map (fun (s,_,_) -> s) all_args_spec in
-				let msg = StringError.string_error_raise s sl (Printf.sprintf "Invalid command: %s" s) in
-				raise (Arg.Bad msg)
+				let sl = StringError.get_similar s sl in
+				begin match sl with
+				| [] -> raise Not_found
+				| _ ->
+					let spec = List.filter (fun (_,sl',sl'',_,_,_) ->
+						List.exists (fun s -> List.mem s sl) (sl' @ sl'')
+					) all_args in
+					let new_msg = (Printf.sprintf "%s\nDid you mean:\n%s" first_line (usage_string ~print_cat:false spec "")) in
+					raise (Arg.Bad new_msg)
+				end;
 			with Not_found ->
 				raise (Arg.Bad new_msg));
 		arg_delays := []
@@ -830,7 +828,7 @@ try
 		Typecore.type_expr_ref := (fun ctx e with_type -> Typer.type_expr ctx e with_type);
 		let tctx = Typer.create com in
 		List.iter (MacroContext.call_init_macro tctx) (List.rev !config_macros);
-		List.iter (fun f -> f ()) (List.rev com.callbacks.after_init_macros);
+		List.iter (fun f -> f ()) (List.rev com.callbacks#get_after_init_macros);
 		begin match CompilationServer.get () with
 		| None -> ()
 		| Some cs ->
@@ -880,6 +878,10 @@ try
 			| None ->
 				None
 		in
+		begin match ctx.com.display.dms_kind,!Parser.delayed_syntax_completion with
+			| DMDefault,Some(kind,p) -> DisplayOutput.handle_syntax_completion com kind p
+			| _ -> ()
+		end;
 		if ctx.com.display.dms_exit_during_typing then begin
 			if ctx.has_next || ctx.has_error then raise Abort;
 			(* If we didn't find a completion point, load the display file in macro mode. *)
@@ -924,7 +926,7 @@ try
 		if not !no_output then generate tctx ext !xml_out !interp !swf_header;
 	end;
 	Sys.catch_break false;
-	List.iter (fun f -> f()) (List.rev com.callbacks.after_generation);
+	List.iter (fun f -> f()) (List.rev com.callbacks#get_after_generation);
 	if not !no_output then begin
 		List.iter (fun c ->
 			let r = run_command ctx c in
@@ -952,10 +954,6 @@ with
 		end
 	| Error.Error (m,p) ->
 		error ctx (Error.error_msg m) p
-	| Hlmacro.Error (msg,p :: l) ->
-		message ctx (CMError(msg,p));
-		List.iter (fun p -> message ctx (CMError("Called from",p))) l;
-		error ctx "Aborted" null_pos;
 	| Generic.Generic_Exception(m,p) ->
 		error ctx m p
 	| Arg.Bad msg ->
@@ -1001,7 +999,8 @@ with
 			| CRUsing
 			| CRNew
 			| CRPattern _
-			| CRTypeRelation ->
+			| CRTypeRelation
+			| CRTypeDecl ->
 				DisplayOutput.print_toplevel fields
 			| CRField _
 			| CRStructureField
@@ -1013,7 +1012,7 @@ with
 	| DisplayException(DisplayHover ({hitem = {CompletionItem.ci_type = Some (t,_)}} as hover)) ->
 		let doc = CompletionItem.get_documentation hover.hitem in
 		raise (DisplayOutput.Completion (DisplayOutput.print_type t hover.hpos doc))
-	| DisplayException(DisplaySignatures(signatures,_,display_arg)) ->
+	| DisplayException(DisplaySignatures(signatures,_,display_arg,_)) ->
 		if ctx.com.display.dms_kind = DMSignature then
 			raise (DisplayOutput.Completion (DisplayOutput.print_signature signatures display_arg))
 		else
@@ -1056,6 +1055,8 @@ with
 		if !measure_times then Timer.report_times prerr_endline;
 		exit i
 	| DisplayOutput.Completion _ as exc ->
+		raise exc
+	| Out_of_memory as exc ->
 		raise exc
 	| e when (try Sys.getenv "OCAMLRUNPARAM" <> "b" || CompilationServer.runs() with _ -> true) && not (is_debug_run()) ->
 		error ctx (Printexc.to_string e) null_pos

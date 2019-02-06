@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -63,6 +63,8 @@ type keyword =
 	| Abstract
 	| Macro
 	| Final
+	| Operator
+	| Overload
 
 type binop =
 	| OpAdd
@@ -193,7 +195,7 @@ and expr_def =
 	| ECall of expr * expr list
 	| ENew of placed_type_path * expr list
 	| EUnop of unop * unop_flag * expr
-	| EVars of (placed_name * type_hint option * expr option) list
+	| EVars of (placed_name * bool * type_hint option * expr option) list
 	| EFunction of placed_name option * func
 	| EBlock of expr list
 	| EFor of expr * expr
@@ -264,6 +266,7 @@ type class_flag =
 	| HPrivate
 	| HExtends of placed_type_path
 	| HImplements of placed_type_path
+	| HFinal
 
 type abstract_flag =
 	| AbPrivate
@@ -351,24 +354,10 @@ let parse_path s =
 	| [] -> [],"" (* This is how old extlib behaved. *)
 	| x :: l -> List.rev l, x
 
-let s_escape ?(hex=true) s =
-	let b = Buffer.create (String.length s) in
-	for i = 0 to (String.length s) - 1 do
-		match s.[i] with
-		| '\n' -> Buffer.add_string b "\\n"
-		| '\t' -> Buffer.add_string b "\\t"
-		| '\r' -> Buffer.add_string b "\\r"
-		| '"' -> Buffer.add_string b "\\\""
-		| '\\' -> Buffer.add_string b "\\\\"
-		| c when int_of_char c < 32 && hex -> Buffer.add_string b (Printf.sprintf "\\x%.2X" (int_of_char c))
-		| c -> Buffer.add_char b c
-	done;
-	Buffer.contents b
-
 let s_constant = function
 	| Int s -> s
 	| Float s -> s
-	| String s -> "\"" ^ s_escape s ^ "\""
+	| String s -> "\"" ^ StringHelper.s_escape s ^ "\""
 	| Ident s -> s
 	| Regexp (r,o) -> "~/" ^ r ^ "/"
 
@@ -429,6 +418,8 @@ let s_keyword = function
 	| Abstract -> "abstract"
 	| Macro -> "macro"
 	| Final -> "final"
+	| Operator -> "operator"
+	| Overload -> "overload"
 
 let rec s_binop = function
 	| OpAdd -> "+"
@@ -510,8 +501,8 @@ let unescape s =
 					Buffer.add_char b c;
 					inext := !inext + 2;
 				| 'x' ->
-					let c = (try char_of_int (int_of_string ("0x" ^ String.sub s (i+1) 2)) with _ -> fail()) in
-					Buffer.add_char b c;
+					let u = (try (int_of_string ("0x" ^ String.sub s (i+1) 2)) with _ -> fail()) in
+					UTF8.add_uchar b (UChar.uchar_of_int u);
 					inext := !inext + 2;
 				| 'u' ->
 					let (u, a) =
@@ -526,9 +517,7 @@ let unescape s =
 						with _ ->
 							fail()
 					in
-					let ub = UTF8.Buf.create 0 in
-					UTF8.Buf.add_char ub (UChar.uchar_of_int u);
-					Buffer.add_string b (UTF8.Buf.contents ub);
+					UTF8.add_uchar b (UChar.uchar_of_int u);
 					inext := !inext + a;
 				| _ ->
 					fail());
@@ -623,10 +612,10 @@ let map_expr loop (e,p) =
 		ENew (t,el)
 	| EUnop (op,f,e) -> EUnop (op,f,loop e)
 	| EVars vl ->
-		EVars (List.map (fun (n,t,eo) ->
+		EVars (List.map (fun (n,b,t,eo) ->
 			let t = opt type_hint t in
 			let eo = opt loop eo in
-			n,t,eo
+			n,b,t,eo
 		) vl)
 	| EFunction (n,f) -> EFunction (n,func f)
 	| EBlock el -> EBlock (List.map loop el)
@@ -707,10 +696,10 @@ let iter_expr loop (e,p) =
 	| EFunction(_,f) ->
 		List.iter (fun (_,_,_,_,eo) -> opt eo) f.f_args;
 		opt f.f_expr
-	| EVars vl -> List.iter (fun (_,_,eo) -> opt eo) vl
+	| EVars vl -> List.iter (fun (_,_,_,eo) -> opt eo) vl
 
 let s_object_key_name name =  function
-	| DoubleQuotes -> "\"" ^ s_escape name ^ "\""
+	| DoubleQuotes -> "\"" ^ StringHelper.s_escape name ^ "\""
 	| NoQuotes -> name
 
 let s_display_kind = function
@@ -820,7 +809,7 @@ let s_expr e =
 		if List.length tl > 0 then "<" ^ String.concat ", " (List.map (s_type_param tabs) tl) ^ ">" else ""
 	and s_func_arg tabs ((n,_),o,_,t,e) =
 		if o then "?" else "" ^ n ^ s_opt_type_hint tabs t ":" ^ s_opt_expr tabs e " = "
-	and s_var tabs ((n,_),t,e) =
+	and s_var tabs ((n,_),_,t,e) =
 		n ^ (s_opt_type_hint tabs t ":") ^ s_opt_expr tabs e " = "
 	and s_case tabs (el,e1,e2,_) =
 		"case " ^ s_expr_list tabs el ", " ^
@@ -852,6 +841,12 @@ let rec string_list_of_expr_path_raise (e,p) =
 	match e with
 	| EConst (Ident i) -> [i]
 	| EField (e,f) -> f :: string_list_of_expr_path_raise e
+	| _ -> raise Exit
+
+let rec string_pos_list_of_expr_path_raise (e,p) =
+	match e with
+	| EConst (Ident i) -> [i,p]
+	| EField (e,f) -> (f,p) :: string_pos_list_of_expr_path_raise e (* wrong p? *)
 	| _ -> raise Exit
 
 let expr_of_type_path (sl,s) p =
@@ -958,7 +953,7 @@ module Expr = struct
 				loop e1
 			| EVars vl ->
 				add "EVars";
-				List.iter (fun ((n,p),_,eo) -> match eo with
+				List.iter (fun ((n,p),_,_,eo) -> match eo with
 					| None -> ()
 					| Some e ->
 						add n;
@@ -1033,3 +1028,36 @@ module Expr = struct
 		loop' "" e;
 		Buffer.contents buf
 end
+
+let has_meta_option metas meta s =
+	let rec loop ml = match ml with
+		| (meta',el,_) :: ml when meta = meta' ->
+			if List.exists (fun (e,p) ->
+				match e with
+					| EConst(Ident s2) when s = s2 -> true
+					| _ -> false
+			) el then
+				true
+			else
+				loop ml
+		| _ :: ml ->
+			loop ml
+		| [] ->
+			false
+	in
+	loop metas
+
+let get_meta_options metas meta =
+	let rec loop ml = match ml with
+		| (meta',el,_) :: ml when meta = meta' ->
+			ExtList.List.filter_map (fun (e,p) ->
+				match e with
+					| EConst(Ident s2) -> Some s2
+					| _ -> None
+			) el
+		| _ :: ml ->
+			loop ml
+		| [] ->
+			[]
+	in
+	loop metas

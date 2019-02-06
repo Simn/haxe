@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -39,6 +39,10 @@ extern class DOMError
 		Returns a `DOMString` representing one of the error type names (see below).
 	**/
 	var name(default,null) : String;
+	
+	/**
+		Returns a `DOMString` representing a message or description associated with the given error type name.
+	**/
 	var message(default,null) : String;
 	
 	/** @throws DOMError */

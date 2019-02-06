@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -313,6 +313,11 @@ typedef Var = {
 		The expression of the variable, if available.
 	**/
 	var expr : Null<Expr>;
+
+	/**
+		Whether or not the variable can be assigned to.
+	**/
+	var ?isFinal : Bool;
 }
 
 /**
@@ -926,7 +931,7 @@ enum TypeDefKind {
 	/**
 		Represents a class kind.
 	**/
-	TDClass( ?superClass : TypePath, ?interfaces : Array<TypePath>, ?isInterface : Bool );
+	TDClass( ?superClass : TypePath, ?interfaces : Array<TypePath>, ?isInterface : Bool, ?isFinal : Bool );
 
 	/**
 		Represents an alias/typedef kind.

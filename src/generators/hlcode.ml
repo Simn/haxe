@@ -1,5 +1,5 @@
 (*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -46,6 +46,7 @@ type ttype =
 	| HAbstract of string * string index
 	| HEnum of enum_proto
 	| HNull of ttype
+	| HMethod of ttype list * ttype
 
 and class_proto = {
 	pname : string;
@@ -215,6 +216,7 @@ type code = {
 	strings : string array;
 	ints : int32 array;
 	floats : float array;
+	bytes : bytes array;
 	(* types : ttype array // only in bytecode, rebuilt on save() *)
 	globals : ttype array;
 	natives : (string index * string index * ttype * functable index) array;
@@ -252,8 +254,8 @@ let list_mapi f l =
 *)
 let is_nullable t =
 	match t with
-	| HBytes | HDyn | HFun _ | HObj _ | HArray | HVirtual _ | HDynObj | HAbstract _ | HEnum _ | HNull _ | HRef _ -> true
-	| HUI8 | HUI16 | HI32 | HI64 | HF32 | HF64 | HBool | HVoid | HType -> false
+	| HBytes | HDyn | HFun _ | HObj _ | HArray | HVirtual _ | HDynObj | HAbstract _ | HEnum _ | HNull _ | HRef _ | HType | HMethod _ -> true
+	| HUI8 | HUI16 | HI32 | HI64 | HF32 | HF64 | HBool | HVoid -> false
 
 
 let is_int = function
@@ -280,6 +282,7 @@ let rec tsame t1 t2 =
 	if t1 == t2 then true else
 	match t1, t2 with
 	| HFun (args1,ret1), HFun (args2,ret2) when List.length args1 = List.length args2 -> List.for_all2 tsame args1 args2 && tsame ret2 ret1
+	| HMethod (args1,ret1), HMethod (args2,ret2) when List.length args1 = List.length args2 -> List.for_all2 tsame args1 args2 && tsame ret2 ret1
 	| HObj p1, HObj p2 -> p1 == p2
 	| HEnum e1, HEnum e2 -> e1 == e2
 	| HAbstract (_,a1), HAbstract (_,a2) -> a1 == a2
@@ -335,27 +338,6 @@ let hl_hash b =
 	in
 	loop 0
 
-let utf16_add buf c =
-	let add c =
-		Buffer.add_char buf (char_of_int (c land 0xFF));
-		Buffer.add_char buf (char_of_int (c lsr 8));
-	in
-	if c >= 0 && c < 0x10000 then begin
-		if c >= 0xD800 && c <= 0xDFFF then failwith ("Invalid unicode char " ^ string_of_int c);
-		add c;
-	end else if c < 0x110000 then begin
-		let c = c - 0x10000 in
-		add ((c asr 10) + 0xD800);
-		add ((c land 1023) + 0xDC00);
-	end else
-		failwith ("Invalid unicode char " ^ string_of_int c)
-
-let utf8_to_utf16 str =
-	let b = Buffer.create (String.length str * 2) in
-	(try UTF8.iter (fun c -> utf16_add b (UChar.code c)) str with Invalid_argument _ | UChar.Out_of_range -> ()); (* if malformed *)
-	utf16_add b 0;
-	Buffer.contents b
-
 let rec get_index name p =
 	try
 		PMap.find name p.pindex
@@ -395,7 +377,7 @@ let gather_types (code:code) =
 		DynArray.add arr t;
 		types := PMap.add t index !types;
 		match t with
-		| HFun (args, ret) ->
+		| HFun (args, ret) | HMethod (args, ret) ->
 			List.iter get_type args;
 			get_type ret
 		| HObj p ->
@@ -441,6 +423,7 @@ let rec tstr ?(stack=[]) ?(detailed=false) t =
 	| HBytes -> "bytes"
 	| HDyn  -> "dyn"
 	| HFun (args,ret) -> "(" ^ String.concat "," (List.map (tstr ~stack ~detailed) args) ^ "):" ^ tstr ~stack ~detailed ret
+	| HMethod (args,ret) -> "method:(" ^ String.concat "," (List.map (tstr ~stack ~detailed) args) ^ "):" ^ tstr ~stack ~detailed ret
 	| HObj o when not detailed -> "#" ^ o.pname
 	| HObj o ->
 		let fields = "{" ^ String.concat "," (List.map (fun(s,_,t) -> s ^ " : " ^ tstr ~detailed:false t) (Array.to_list o.pfields)) ^ "}" in
@@ -602,6 +585,10 @@ let dump pr code =
 	Array.iteri (fun i s ->
 		pr ("	@" ^ string_of_int i ^ " : " ^ String.escaped s);
 	) code.strings;
+	pr (string_of_int (Array.length code.bytes) ^ " bytes");
+	Array.iteri (fun i s ->
+		pr ("	@" ^ string_of_int i ^ " : " ^ string_of_int (Bytes.length s));
+	) code.bytes;
 	pr (string_of_int (Array.length code.ints) ^ " ints");
 	Array.iteri (fun i v ->
 		pr ("	@" ^ string_of_int i ^ " : " ^ Int32.to_string v);

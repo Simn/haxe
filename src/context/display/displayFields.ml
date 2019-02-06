@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -60,7 +60,7 @@ let collect_static_extensions ctx items e p =
 					| TFun((_,_,TType({t_path=["haxe";"macro"], "ExprOf"}, [t])) :: args, ret)
 					| TFun((_,_,t) :: args, ret) ->
 						begin try
-							unify_raise ctx (dup e.etype) t e.epos;
+							let e = TyperBase.unify_static_extension ctx {e with etype = dup e.etype} t p in
 							List.iter2 (fun m (name,t) -> match follow t with
 								| TInst ({ cl_kind = KTypeParameter constr },_) when constr <> [] ->
 									List.iter (fun tc -> unify_raise ctx m (map tc) e.epos) constr
@@ -80,7 +80,7 @@ let collect_static_extensions ctx items e p =
 								let item = make_ci_class_field (CompletionClassField.make f CFSMember origin true) (f.cf_type,ct) in
 								PMap.add f.cf_name item acc
 							end
-						with Error (Unify _,_) ->
+						with Error (Unify _,_) | Unify_error _ ->
 							acc
 						end
 					| _ ->
@@ -95,6 +95,12 @@ let collect_static_extensions ctx items e p =
 	| _ ->
 		let items = loop items ctx.m.module_using in
 		let items = loop items ctx.g.global_using in
+		let items = try
+			let mt = module_type_of_type e.etype in
+			loop items (t_infos mt).mt_using
+		with Exit ->
+			items
+		in
 		items
 
 let collect ctx e_ast e dk with_type p =
@@ -108,6 +114,10 @@ let collect ctx e_ast e dk with_type p =
 			(not stat || not (Meta.has Meta.Impl cf.cf_meta)) &&
 			can_access ctx c cf stat
 	in
+	let make_class_field origin cf =
+		let ct = DisplayEmitter.completion_type_of_type ctx ~values:(get_value_meta cf.cf_meta) cf.cf_type in
+		make_ci_class_field (CompletionClassField.make cf CFSMember origin true) (cf.cf_type,ct)
+	in
 	let rec loop items t =
 		let is_new_item items name = not (PMap.mem name items) in
 		match follow t with
@@ -117,24 +127,38 @@ let collect ctx e_ast e dk with_type p =
 		| TInst(c0,tl) ->
 			(* For classes, browse the hierarchy *)
 			let fields = TClass.get_all_fields c0 tl in
+			merge_core_doc ctx (TClassDecl c0);
 			PMap.foldi (fun k (c,cf) acc ->
 				if should_access c cf false && is_new_item acc cf.cf_name then begin
 					let origin = if c == c0 then Self(TClassDecl c) else Parent(TClassDecl c) in
-					let ct = DisplayEmitter.completion_type_of_type ctx ~values:(get_value_meta cf.cf_meta) cf.cf_type in
-				 	let item = make_ci_class_field (CompletionClassField.make cf CFSMember origin true) (cf.cf_type,ct) in
+					let item = make_class_field origin cf in
 					PMap.add k item acc
 				end else
 					acc
 			) fields items
+		| TEnum _ ->
+			let t = ctx.g.do_load_type_def ctx p {tpackage=[];tname="EnumValue";tsub=None;tparams=[]} in
+			begin match t with
+			| TAbstractDecl ({a_impl = Some c} as a) ->
+				begin try
+					let cf = PMap.find "match" c.cl_statics in
+					let item = make_class_field (Self(TAbstractDecl a)) cf in
+					PMap.add "match" item items
+				with Not_found ->
+					items
+				end
+			| _ ->
+				items
+			end;
 		| TAbstract({a_impl = Some c} as a,tl) ->
+			merge_core_doc ctx (TAbstractDecl a);
 			(* Abstracts should show all their @:impl fields minus the constructor. *)
 			let items = List.fold_left (fun acc cf ->
 				if Meta.has Meta.Impl cf.cf_meta && not (Meta.has Meta.Enum cf.cf_meta) && should_access c cf false && is_new_item acc cf.cf_name then begin
 					let origin = Self(TAbstractDecl a) in
 					let cf = prepare_using_field cf in
 					let cf = if tl = [] then cf else {cf with cf_type = apply_params a.a_params tl cf.cf_type} in
-					let ct = DisplayEmitter.completion_type_of_type ctx ~values:(get_value_meta cf.cf_meta) cf.cf_type in
-					let item = make_ci_class_field (CompletionClassField.make cf CFSMember origin true) (cf.cf_type,ct) in
+					let item = make_class_field origin cf in
 					PMap.add cf.cf_name item acc
 				end else
 					acc
@@ -147,8 +171,8 @@ let collect ctx e_ast e dk with_type p =
 					| _ -> None
 				) el in
 				let forwarded_fields = loop PMap.empty (apply_params a.a_params tl a.a_this) in
-				if sl = [] then items else PMap.foldi (fun name item acc ->
-					if List.mem name sl && is_new_item acc name then
+				PMap.foldi (fun name item acc ->
+					if sl = [] || List.mem name sl && is_new_item acc name then
 						PMap.add name item acc
 					else
 						acc
@@ -180,11 +204,13 @@ let collect ctx e_ast e dk with_type p =
 							else
 								acc;
 						| Statics c ->
+							merge_core_doc ctx (TClassDecl c);
 							if should_access c cf true then add (Self (TClassDecl c)) make_ci_class_field else acc;
 						| EnumStatics en ->
 							let ef = PMap.find name en.e_constrs in
 							PMap.add name (make_ci_enum_field (CompletionEnumField.make ef (Self (TEnumDecl en)) true) (cf.cf_type,ct)) acc
 						| AbstractStatics a ->
+							merge_core_doc ctx (TAbstractDecl a);
 							let check = match a.a_impl with
 								| None -> true
 								| Some c -> allow_static_abstract_access c cf
@@ -230,7 +256,7 @@ let collect ctx e_ast e dk with_type p =
 	(* Add static extensions *)
 	let items = collect_static_extensions ctx items e p in
 	let items = PMap.fold (fun item acc -> item :: acc) items [] in
-	let items = sort_fields items Value (TKField p) in
+	let items = sort_fields items WithType.value (TKField p) in
 	try
 		let sl = string_list_of_expr_path_raise e_ast in
 		(* Add submodule fields *)

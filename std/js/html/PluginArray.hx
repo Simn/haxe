@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -34,6 +34,10 @@ package js.html;
 @:native("PluginArray")
 extern class PluginArray implements ArrayAccess<Plugin>
 {
+	
+	/**
+		The number of plugins in the array.
+	**/
 	var length(default,null) : Int;
 	
 	function item( index : Int ) : Plugin;

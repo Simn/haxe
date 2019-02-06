@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -26,15 +26,56 @@ type cmp =
 	| CInf
 	| CUndef
 
-type vstring = Rope.t * string Lazy.t
+type vstring_offset =
+	| VSONone
+	| VSOOne of (int * int) ref
+	| VSOTwo of (int * int) ref * (int * int) ref
 
-module StringHashtbl = Hashtbl.Make(struct
-	type t = vstring
-	let equal (r1,s1) (r2,s2) = r1 == r2 || Lazy.force s1 = Lazy.force s2
-	let hash (_,s) = Hashtbl.hash (Lazy.force s)
-end)
+type vstring = {
+	(* The bytes representation of the string. This is only evaluated if we
+	   need it for something like random access. *)
+	sstring : UTF8.t;
+	(* The length of the string. *)
+	slength : int;
+	(* The current (character * byte) offsets. *)
+	mutable soffset : vstring_offset;
+}
 
-module IntHashtbl = Hashtbl.Make(struct type t = int let equal = (=) let hash = Hashtbl.hash end)
+type vstring_buffer = {
+	        bbuffer : Buffer.t;
+	mutable blength : int;
+}
+
+let vstring_equal s1 s2 =
+	s1 == s2 || s1.sstring = s2.sstring
+
+module StringHashtbl = struct
+	type 'value t = (vstring * 'value) StringMap.t ref
+
+	let add this key v = this := StringMap.add key.sstring (key,v) !this
+	let copy this = ref !this
+	let create () = ref StringMap.empty
+	let find this key = StringMap.find key.sstring !this
+	let fold f this acc = StringMap.fold f !this acc
+	let is_empty this = StringMap.is_empty !this
+	let iter f this = StringMap.iter f !this
+	let mem this key = StringMap.mem key.sstring !this
+	let remove this key = this := StringMap.remove key.sstring !this
+end
+
+module IntHashtbl = struct
+	type 'value t = 'value IntMap.t ref
+
+	let add this key v = this := IntMap.add key v !this
+	let copy this = ref !this
+	let create () = ref IntMap.empty
+	let find this key = IntMap.find key !this
+	let fold f this acc = IntMap.fold f !this acc
+	let is_empty this = IntMap.is_empty !this
+	let iter f this = IntMap.iter f !this
+	let mem this key = IntMap.mem key !this
+	let remove this key = this := IntMap.remove key !this
+end
 
 type vregex = {
 	r : Pcre.regexp;
@@ -50,7 +91,7 @@ type vzlib = {
 
 type vprototype_kind =
 	| PClass of int list
-	| PEnum of string list
+	| PEnum of (string * int list) list
 	| PInstance
 	| PObject
 
@@ -75,17 +116,13 @@ and vfunc = value list -> value
 
 and vobject = {
 	(* The fields of the object known when it is created. *)
-	ofields : value array;
+	mutable ofields : value array;
 	(* The prototype of the object. *)
-	oproto : vprototype;
-	(* Extra fields that were added after the object was created. *)
-	mutable oextra : value IntMap.t;
-	(* Map of fields (in ofields) that were deleted via Reflect.deleteField *)
-	mutable oremoved : bool IntMap.t;
+	mutable oproto : vprototype;
 }
 
 and vprototype = {
-	(* The path of the prototype. Using rev_hash_s on this gives the original dot path. *)
+	(* The path of the prototype. Using rev_hash on this gives the original dot path. *)
 	ppath : int;
 	(* The fields of the prototype itself (static fields). *)
 	pfields : value array;
@@ -114,7 +151,7 @@ and vinstance_kind =
 	| IIntMap of value IntHashtbl.t
 	| IObjectMap of (value,value) Hashtbl.t
 	| IOutput of Buffer.t (* BytesBuffer *)
-	| IBuffer of Rope.Buffer.t (* StringBuf *)
+	| IBuffer of vstring_buffer(* StringBuf *)
 	| IPos of pos
 	| IUtf8 of UTF8.Buf.buf
 	| IProcess of Process.process
@@ -165,7 +202,7 @@ let rec equals a b = match a,b with
 	| VEnumValue a,VEnumValue b -> a == b || a.eindex = b.eindex && Array.length a.eargs = 0 && Array.length b.eargs = 0 && a.epath = b.epath
 	| VObject vo1,VObject vo2 -> vo1 == vo2
 	| VInstance vi1,VInstance vi2 -> vi1 == vi2
-	| VString(r1,s1),VString(r2,s2) -> r1 == r2 || Lazy.force s1 = Lazy.force s2
+	| VString s1,VString s2 -> vstring_equal s1 s2
 	| VArray va1,VArray va2 -> va1 == va2
 	| VVector vv1,VVector vv2 -> vv1 == vv2
 	| VFunction(vf1,_),VFunction(vf2,_) -> vf1 == vf2

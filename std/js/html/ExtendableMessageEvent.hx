@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -58,7 +58,7 @@ extern class ExtendableMessageEvent extends ExtendableEvent
 	/**
 		Returns the array containing the `MessagePort` objects representing the ports of the associated message channel.
 	**/
-	var ports(default,null) : MessagePortList;
+	var ports(default,null) : Array<MessagePort>;
 	
 	/** @throws DOMError */
 	function new( type : String, ?eventInitDict : ExtendableMessageEventInit ) : Void;

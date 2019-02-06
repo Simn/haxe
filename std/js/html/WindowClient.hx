@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -45,10 +45,16 @@ extern class WindowClient extends Client
 	**/
 	var focused(default,null) : Bool;
 	
-	/** @throws DOMError */
 	
 	/**
 		Gives user input focus to the current client. 
+		@throws DOMError
 	**/
 	function focus() : Promise<WindowClient>;
+	
+	/**
+		Loads a specified URL into a controlled client page.
+		@throws DOMError
+	**/
+	function navigate( url : String ) : Promise<WindowClient>;
 }

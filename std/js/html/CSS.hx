@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -34,8 +34,16 @@ package js.html;
 @:native("CSS")
 extern class CSS
 {
-	/** @throws DOMError */
+	
+	/**
+		Returns a `Boolean` indicating if the pair property-value, or the condition, given in parameter is supported.
+		@throws DOMError
+	**/
 	@:overload( function( property : String, value : String ) : Bool {} )
 	static function supports( conditionText : String ) : Bool;
+	
+	/**
+		Can be used to escape a string mostly for use as part of a CSS selector.
+	**/
 	static function escape( ident : String ) : String;
 }

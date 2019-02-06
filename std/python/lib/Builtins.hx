@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -131,7 +131,7 @@ extern class Builtins {
 	//public static function classmethod():Void;
 
 	public static function map<A,B>(fn:A->B, it:NativeIterable<A>):NativeIterator<B>;
-	//public static function repr():Void;
+	public static function repr(o:Dynamic):String;
 	//public static function xrange():Void;
 	//public static function cmp():Void;
 	//public static function globals():Void;

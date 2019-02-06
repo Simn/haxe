@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -29,8 +29,11 @@ import haxe.Constraints.Function;
 class Boot {
 
 	// Used temporarily for bind()
-	static var _;
+	static var _:Dynamic;
 	static var _fid = 0;
+
+	// A max stack size to respect for unpack operations
+	public static var MAXSTACKSIZE (default, null) = 1000;
 
 	public static var platformBigEndian = NativeStringTools.byte(NativeStringTools.dump(function(){}),7) > 0;
 
@@ -96,7 +99,7 @@ class Boot {
 			case Table:
 				return Lua.type(o) == "table";
 			case Dynamic:
-				return true;
+				return o != null;
 			default: {
 				if ( o!= null &&  Lua.type(o)  == "table" && Lua.type(cl) == "table"){
 					if (extendsOrImplements(getClass(o), cl)) return true;
@@ -132,7 +135,7 @@ class Boot {
 
 	@:ifFeature("typed_cast")
 	private static function __cast(o : Dynamic, t : Dynamic) {
-		if (__instanceof(o, t)) return o;
+		if (o == null || __instanceof(o, t)) return o;
 		else throw "Cannot cast " +Std.string(o) + " to " +Std.string(t);
 	}
 
@@ -188,7 +191,14 @@ class Boot {
 			}
 			case "boolean" : untyped tostring(o);
 			case "string"  : o;
-			case "userdata": "<userdata>";
+			case "userdata": {
+				var mt = lua.Lua.getmetatable(o);
+				if (mt != null && mt.__tostring != null){
+					lua.Lua.tostring(o);
+				} else {
+					"<userdata>";
+				}
+			}
 			case "function": "<function>";
 			case "thread"  : "<thread>";
 			case "table": {

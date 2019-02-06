@@ -110,19 +110,13 @@ class TestMain {
 			#end
 			new TestMapComprehension(),
 			new TestMacro(),
+			new TestKeyValueIterator(),
 			// #if ( (java || neko) && !macro && !interp)
 			// new TestThreads(),
 			// #end
 			//new TestUnspecified(),
 			//new TestRemoting(),
 		];
-
-
-		#if js
-		if (js.Browser.supported) {
-			classes.push(new TestJQuery());
-		}
-		#end
 
 		TestIssues.addIssueClasses("src/unit/issues", "unit.issues");
 		TestIssues.addIssueClasses("src/unit/hxcpp_issues", "unit.hxcpp_issues");

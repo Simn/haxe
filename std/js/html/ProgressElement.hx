@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -49,5 +49,10 @@ extern class ProgressElement extends Element
 		Returns a `double` value returning the result of dividing the current value (`value`) by the maximum value (`max`); if the progress bar is an indeterminate progress bar, it returns `-1`.
 	**/
 	var position(default,null) : Float;
+	
+	/**
+		Returns `NodeList` containing the list of `label` elements that are labels for this element.
+	**/
+	var labels(default,null) : NodeList;
 	
 }

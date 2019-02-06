@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -36,7 +36,7 @@ extern class HeadingElement extends Element
 {
 	
 	/**
-		Is a `DOMString` representing an enumerated attribute indicating alignment of the heading with respect to the surrounding context.
+		Is a `DOMString` representing an enumerated attribute indicating alignment of the heading with respect to the surrounding context. The possible values are `"left"`, `"right"`, `"justify"`, and `"center"`.
 	**/
 	var align : String;
 	

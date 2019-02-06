@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -338,6 +338,9 @@ class Parser
 							throw new XmlParserException("Expected node name", str, p);
 
 						var v = str.substr(start,p - start);
+						if (parent == null || parent.nodeType != Element) {
+							throw new XmlParserException('Unexpected </$v>, tag is not open', str, p);
+						}
 						if (v != parent.nodeName)
 							throw new XmlParserException("Expected </" +parent.nodeName + ">", str, p);
 
@@ -378,7 +381,7 @@ class Parser
 							var c = s.fastCodeAt(1) == 'x'.code
 								? Std.parseInt("0" +s.substr(1, s.length - 1))
 								: Std.parseInt(s.substr(1, s.length - 1));
-							#if (neko || (cpp && !hxcpp_smart_strings) || php || lua || eval)
+							#if (neko || (cpp && !hxcpp_smart_strings))
 							if( c >= 128 ) {
 								// UTF8-encode it
 								if( c <= 0x7FF ) {
@@ -428,6 +431,9 @@ class Parser
 
 		if (state == S.PCDATA)
 		{
+			if (parent.nodeType == Element) {
+				throw new XmlParserException("Unclosed node <" + parent.nodeName + ">", str, p);
+			}
 			if (p != start || nsubs == 0) {
 				buf.addSub(str, start, p-start);
 				addChild(Xml.createPCData(buf.toString()));

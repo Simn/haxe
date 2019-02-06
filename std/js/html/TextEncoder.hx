@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -41,7 +41,7 @@ extern class TextEncoder
 	var encoding(default,null) : String;
 	
 	/** @throws DOMError */
-	function new( ?utfLabel : String = "utf-8" ) : Void;
+	function new() : Void;
 	
 	/**
 		Returns a `Uint8Array` containing utf-8 encoded text.

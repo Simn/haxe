@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -155,7 +155,7 @@ let reify in_macro =
 		let rec fparam t p =
 			let fields = [
 				"name", to_placed_name t.tp_name;
-				"constraints", to_opt to_ctype t.tp_constraints p;
+				"constraints", (match t.tp_constraints with None -> to_null p | Some ct -> to_array to_ctype [ct] p);
 				"params", to_array fparam t.tp_params p;
 			] in
 			to_obj fields p
@@ -271,12 +271,12 @@ let reify in_macro =
 			) [] p in
 			expr "EUnop" [op;to_bool (flag = Postfix) p;loop e]
 		| EVars vl ->
-			expr "EVars" [to_array (fun ((n,pn),th,e) p ->
+			expr "EVars" [to_array (fun ((n,pn),final,th,e) p ->
 				let fields = [
-					(* "name", to_obj ["name",to_string n pn;"pos",to_pos pn] p; *)
 					"name", to_string n pn;
 					"type", to_opt to_type_hint th p;
 					"expr", to_opt to_expr e p;
+					"isFinal",to_bool final p;
 				] in
 				to_obj fields p
 			) vl p]
@@ -370,7 +370,7 @@ let reify in_macro =
 	and to_type_def (t,p) =
 		match t with
 		| EClass d ->
-			let ext = ref None and impl = ref [] and interf = ref false in
+			let ext = ref None and impl = ref [] and interf = ref false and final = ref false in
 			List.iter (function
 				| HExtern | HPrivate -> ()
 				| HInterface -> interf := true;
@@ -381,6 +381,7 @@ let reify in_macro =
 						!ext
 						end)
 				| HImplements i-> impl := (to_tpath i p) :: !impl
+				| HFinal -> final := true
 			) d.d_flags;
 			to_obj [
 				"pack", (EArrayDecl [],p);
@@ -389,7 +390,7 @@ let reify in_macro =
 				"meta", to_meta d.d_meta p;
 				"params", (EArrayDecl (List.map (to_tparam_decl p) d.d_params),p);
 				"isExtern", to_bool (List.mem HExtern d.d_flags) p;
-				"kind", mk_enum "TypeDefKind" "TDClass" [(match !ext with None -> (EConst (Ident "null"),p) | Some t -> t);(EArrayDecl (List.rev !impl),p);to_bool !interf p] p;
+				"kind", mk_enum "TypeDefKind" "TDClass" [(match !ext with None -> (EConst (Ident "null"),p) | Some t -> t);(EArrayDecl (List.rev !impl),p);to_bool !interf p;to_bool !final p] p;
 				"fields", (EArrayDecl (List.map (fun f -> to_cfield f p) d.d_data),p)
 			] p
 		| _ -> assert false

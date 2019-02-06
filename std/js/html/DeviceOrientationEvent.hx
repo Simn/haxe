@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -36,7 +36,7 @@ extern class DeviceOrientationEvent extends Event
 {
 	
 	/**
-		A number representing the motion of the device around the z axis, express in degrees with values ranging from 0 to 360
+		A number representing the motion of the device around the z axis, express in degrees with values ranging from 0 to 360.
 	**/
 	var alpha(default,null) : Float;
 	
@@ -57,5 +57,5 @@ extern class DeviceOrientationEvent extends Event
 	
 	/** @throws DOMError */
 	function new( type : String, ?eventInitDict : DeviceOrientationEventInit ) : Void;
-	function initDeviceOrientationEvent( type : String, canBubble : Bool, cancelable : Bool, alpha : Float, beta : Float, gamma : Float, absolute : Bool ) : Void;
+	function initDeviceOrientationEvent( type : String, ?canBubble : Bool = false, ?cancelable : Bool = false, ?alpha : Float, ?beta : Float, ?gamma : Float, ?absolute : Bool = false ) : Void;
 }

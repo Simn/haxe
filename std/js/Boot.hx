@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -186,7 +186,7 @@ class Boot {
 		case Array:
 			return js.Syntax.instanceof(o, Array) && o.__enum__ == null;
 		case Dynamic:
-			return true;
+			return o != null;
 		default:
 			if( o != null ) {
 				// Check if o is an instance of a Haxe class or a native JS object
@@ -215,7 +215,7 @@ class Boot {
 	}
 
 	@:ifFeature("typed_cast") private static function __cast(o : Dynamic, t : Dynamic) {
-		if (__instanceof(o, t)) return o;
+		if (o == null || __instanceof(o, t)) return o;
 		else throw "Cannot cast " +Std.string(o) + " to " +Std.string(t);
 	}
 

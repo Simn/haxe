@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -39,6 +39,10 @@ extern class ModElement extends Element
 		Is a `DOMString` reflecting the `cite` HTML attribute, containing a URI of a resource explaining the change.
 	**/
 	var cite : String;
+	
+	/**
+		Is a `DOMString` reflecting the `datetime` HTML attribute, containing a date-and-time string representing a timestamp for the change.
+	**/
 	var dateTime : String;
 	
 }

@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -96,14 +96,43 @@ type platform_config = {
 	pf_reserved_type_paths : path list;
 	(** supports function == function **)
 	pf_supports_function_equality : bool;
+	(** uses utf16 encoding with ucs2 api **)
+	pf_uses_utf16 : bool;
 }
 
-type compiler_callback = {
-	mutable after_init_macros : (unit -> unit) list;
-	mutable after_typing : (module_type list -> unit) list;
-	mutable before_dce : (unit -> unit) list;
-	mutable after_generation : (unit -> unit) list;
-}
+class compiler_callbacks = object(self)
+	val mutable after_init_macros = [];
+	val mutable after_typing = [];
+	val mutable before_save = [];
+	val mutable after_save = [];
+	val mutable after_generation = [];
+	val mutable null_safety_report = [];
+
+	method add_after_init_macros (f : unit -> unit) : unit =
+		after_init_macros <- f :: after_init_macros
+
+	method add_after_typing (f : module_type list -> unit) : unit =
+		after_typing <- f :: after_typing
+
+	method add_before_save (f : unit -> unit) : unit =
+		before_save <- f :: before_save
+
+	method add_after_save (f : unit -> unit) : unit =
+		after_save <- f :: after_save
+
+	method add_after_generation (f : unit -> unit) : unit =
+		after_generation <- f :: after_generation
+
+	method add_null_safety_report (f : (string*pos) list -> unit) : unit =
+		null_safety_report <- f :: null_safety_report
+
+	method get_after_init_macros = after_init_macros
+	method get_after_typing = after_typing
+	method get_before_save = before_save
+	method get_after_save = after_save
+	method get_after_generation = after_generation
+	method get_null_safety_report = null_safety_report
+end
 
 type shared_display_information = {
 	mutable import_positions : (pos,bool ref * placed_name list) PMap.t;
@@ -140,7 +169,7 @@ type context = {
 	mutable error : string -> pos -> unit;
 	mutable warning : string -> pos -> unit;
 	mutable load_extern_type : (path -> pos -> (string * Ast.package) option) list; (* allow finding types which are not in sources *)
-	callbacks : compiler_callback;
+	callbacks : compiler_callbacks;
 	defines : Define.define;
 	mutable print : string -> unit;
 	mutable get_macros : unit -> context option;
@@ -238,6 +267,7 @@ let default_config =
 		pf_can_skip_non_nullable_argument = true;
 		pf_reserved_type_paths = [];
 		pf_supports_function_equality = true;
+		pf_uses_utf16 = true;
 	}
 
 let get_config com =
@@ -258,12 +288,14 @@ let get_config com =
 			default_config with
 			pf_static = false;
 			pf_capture_policy = CPLoopVars;
+			pf_uses_utf16 = false;
 		}
 	| Neko ->
 		{
 			default_config with
 			pf_static = false;
 			pf_pad_nulls = true;
+			pf_uses_utf16 = false;
 		}
 	| Flash when defined Define.As3 ->
 		{
@@ -285,6 +317,7 @@ let get_config com =
 		{
 			default_config with
 			pf_static = false;
+			pf_uses_utf16 = false;
 		}
 	| Cpp ->
 		{
@@ -312,30 +345,23 @@ let get_config com =
 			default_config with
 			pf_static = false;
 			pf_capture_policy = CPLoopVars;
+			pf_uses_utf16 = false;
 		}
 	| Hl ->
 		{
 			default_config with
 			pf_capture_policy = CPWrapRef;
 			pf_pad_nulls = true;
-			pf_can_skip_non_nullable_argument = false;
 		}
 	| Eval ->
 		{
 			default_config with
 			pf_static = false;
 			pf_pad_nulls = true;
+			pf_uses_utf16 = false;
 		}
 
 let memory_marker = [|Unix.time()|]
-
-let create_callbacks () =
-	{
-		after_init_macros = [];
-		after_typing = [];
-		before_dce = [];
-		after_generation = [];
-	}
 
 let create version s_version args =
 	let m = Type.mk_mono() in
@@ -373,7 +399,7 @@ let create version s_version args =
 		package_rules = PMap.empty;
 		file = "";
 		types = [];
-		callbacks = create_callbacks();
+		callbacks = new compiler_callbacks;
 		modules = [];
 		main = None;
 		flash_version = 10.;
@@ -425,7 +451,7 @@ let clone com =
 		file_lookup_cache = Hashtbl.create 0;
 		parser_cache = Hashtbl.create 0;
 		module_to_file = Hashtbl.create 0;
-		callbacks = create_callbacks();
+		callbacks = new compiler_callbacks;
 		display_information = {
 			unresolved_identifiers = [];
 			interface_field_implementations = [];
@@ -478,6 +504,7 @@ let init_platform com pf =
 	com.config <- get_config com;
 	if com.config.pf_static then define com Define.Static;
 	if com.config.pf_sys then define com Define.Sys else com.package_rules <- PMap.add "sys" Forbidden com.package_rules;
+	if com.config.pf_uses_utf16 then define com Define.Utf16;
 	raw_define com name
 
 let add_feature com f =
@@ -505,22 +532,22 @@ let rec has_feature com f =
 		match List.rev (ExtString.String.nsplit f ".") with
 		| [] -> assert false
 		| [cl] -> has_feature com (cl ^ ".*")
-		| meth :: cl :: pack ->
+		| field :: cl :: pack ->
 			let r = (try
 				let path = List.rev pack, cl in
 				(match List.find (fun t -> t_path t = path && not (Meta.has Meta.RealPath (t_infos t).mt_meta)) com.types with
-				| t when meth = "*" -> (match t with TAbstractDecl a -> Meta.has Meta.ValueUsed a.a_meta | _ ->
-					Meta.has Meta.Used (t_infos t).mt_meta)
+				| t when field = "*" ->
+					not (has_dce com) ||
+					(match t with TAbstractDecl a -> Meta.has Meta.ValueUsed a.a_meta | _ -> Meta.has Meta.Used (t_infos t).mt_meta)
 				| TClassDecl ({cl_extern = true} as c) when com.platform <> Js || cl <> "Array" && cl <> "Math" ->
-					Meta.has Meta.Used (try PMap.find meth c.cl_statics with Not_found -> PMap.find meth c.cl_fields).cf_meta
+					not (has_dce com) || Meta.has Meta.Used (try PMap.find field c.cl_statics with Not_found -> PMap.find field c.cl_fields).cf_meta
 				| TClassDecl c ->
-					PMap.exists meth c.cl_statics || PMap.exists meth c.cl_fields
+					PMap.exists field c.cl_statics || PMap.exists field c.cl_fields
 				| _ ->
 					false)
 			with Not_found ->
 				false
 			) in
-			let r = r || not (has_dce com) in
 			Hashtbl.add com.features f r;
 			r
 
@@ -534,14 +561,8 @@ let abort msg p = raise (Abort (msg,p))
 
 let platform ctx p = ctx.platform = p
 
-let add_typing_filter ctx f =
-	ctx.callbacks.after_typing <- f :: ctx.callbacks.after_typing
-
-let add_filter ctx f =
-	ctx.callbacks.before_dce <- f :: ctx.callbacks.before_dce
-
-let add_final_filter ctx f =
-	ctx.callbacks.after_generation <- f :: ctx.callbacks.after_generation
+let platform_name_macro com =
+	if defined com Define.Macro then "macro" else platform_name com.platform
 
 let find_file ctx f =
 	try
@@ -559,7 +580,7 @@ let find_file ctx f =
 				if Sys.file_exists file then begin
 					(try
 						let ext = String.rindex file '.' in
-						let file_pf = String.sub file 0 (ext + 1) ^ platform_name ctx.platform ^ String.sub file ext (String.length file - ext) in
+						let file_pf = String.sub file 0 (ext + 1) ^ platform_name_macro ctx ^ String.sub file ext (String.length file - ext) in
 						if not (defined ctx Define.CoreApi) && Sys.file_exists file_pf then file_pf else file
 					with Not_found ->
 						file)
@@ -602,6 +623,72 @@ let url_encode s add_char =
 let url_encode_s s =
 	let b = Buffer.create 0 in
 	url_encode s (Buffer.add_char b);
+	Buffer.contents b
+
+(* UTF8 *)
+
+let to_utf8 str p =
+	let u8 = try
+		UTF8.validate str;
+		str;
+	with
+		UTF8.Malformed_code ->
+			(* ISO to utf8 *)
+			let b = UTF8.Buf.create 0 in
+			String.iter (fun c -> UTF8.Buf.add_char b (UChar.of_char c)) str;
+			UTF8.Buf.contents b
+	in
+	let ccount = ref 0 in
+	UTF8.iter (fun c ->
+		let c = UChar.code c in
+		if (c >= 0xD800 && c <= 0xDFFF) || c >= 0x110000 then abort "Invalid unicode char" p;
+		incr ccount;
+		if c > 0x10000 then incr ccount;
+	) u8;
+	u8, !ccount
+
+let utf16_add buf c =
+	let add c =
+		Buffer.add_char buf (char_of_int (c land 0xFF));
+		Buffer.add_char buf (char_of_int (c lsr 8));
+	in
+	if c >= 0 && c < 0x10000 then begin
+		if c >= 0xD800 && c <= 0xDFFF then failwith ("Invalid unicode char " ^ string_of_int c);
+		add c;
+	end else if c < 0x110000 then begin
+		let c = c - 0x10000 in
+		add ((c asr 10) + 0xD800);
+		add ((c land 1023) + 0xDC00);
+	end else
+		failwith ("Invalid unicode char " ^ string_of_int c)
+
+let utf8_to_utf16 str zt =
+	let b = Buffer.create (String.length str * 2) in
+	(try UTF8.iter (fun c -> utf16_add b (UChar.code c)) str with Invalid_argument _ | UChar.Out_of_range -> ()); (* if malformed *)
+	if zt then utf16_add b 0;
+	Buffer.contents b
+
+let utf16_to_utf8 str =
+	let b = Buffer.create 0 in
+	let add c = Buffer.add_char b (char_of_int (c land 0xFF)) in
+	let get i = int_of_char (String.unsafe_get str i) in
+	let rec loop i =
+		if i >= String.length str then ()
+		else begin
+			let c = get i in
+			if c < 0x80 then begin
+				add c;
+				loop (i + 2);
+			end else if c < 0x800 then begin
+				let c = c lor ((get (i + 1)) lsl 8) in
+				add c;
+				add (c lsr 8);
+				loop (i + 2);
+			end else
+				assert false;
+		end
+	in
+	loop 0;
 	Buffer.contents b
 
 let add_diagnostics_message com s p sev =

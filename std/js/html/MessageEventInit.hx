@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -31,5 +31,5 @@ typedef MessageEventInit =
 	@:optional var lastEventId : String;
 	@:optional var origin : String;
 	@:optional var ports : Array<MessagePort>;
-	@:optional var source : haxe.extern.EitherType<Window,MessagePort>;
+	@:optional var source : haxe.extern.EitherType<Window,haxe.extern.EitherType<MessagePort,ServiceWorker>>;
 }

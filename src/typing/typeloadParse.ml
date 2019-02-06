@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -123,7 +123,7 @@ let resolve_module_file com m remap p =
 		let meta = loop decls in
 		if not (Meta.has Meta.NoPackageRestrict meta) then begin
 			let x = (match fst m with [] -> assert false | x :: _ -> x) in
-			raise (Forbid_package ((x,m,p),[],if Common.defined com Define.Macro then "macro" else platform_name com.platform));
+			raise (Forbid_package ((x,m,p),[],platform_name_macro com));
 		end;
 	end;
 	file

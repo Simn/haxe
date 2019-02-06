@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,6 +22,7 @@
 package sys.io;
 
 import haxe.io.Bytes;
+import haxe.io.Encoding;
 import haxe.io.Input;
 import haxe.io.Output;
 import python.io.IFileOutput;
@@ -110,7 +111,7 @@ class FileOutput extends Output {
 		impl.writeInput(i,bufsize);
 	}
 
-	override public function writeString( s : String ):Void {
+	override public function writeString( s : String, ?encoding : Encoding ):Void {
 		impl.writeString(s);
 	}
 }

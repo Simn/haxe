@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -43,9 +43,9 @@ extern class Request extends js.html.EventTarget
 	var result(default,null) : Dynamic;
 	
 	/**
-		Returns an error in the event of an unsuccessful request, indicating what went wrong.
+		Returns a `DOMException` in the event of an unsuccessful request, indicating what went wrong.
 	**/
-	var error(default,null) : js.html.DOMError;
+	var error(default,null) : js.html.DOMException;
 	
 	/**
 		The source of the request, such as an `IDBIndex` or an `IDBObjectStore`. If no source exists (such as when calling `IDBFactory.open`), it returns null.

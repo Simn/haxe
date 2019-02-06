@@ -64,6 +64,11 @@ let copy_file src dst =
 	Unix.close fd_in;
 	Unix.close fd_out
 
+type used_type = {
+	ut_alias : string;
+	ut_type_path : (string list * string)
+}
+
 (**
 	Get list of keys in Hashtbl
 *)
@@ -418,6 +423,7 @@ let needs_dereferencing for_assignment expr =
 			| TCall ({ eexpr = TField (_, FStatic ({ cl_path = syntax_type_path }, { cf_name = name })) }, _) ->
 				(match name with
 					| "codeDeref" -> for_assignment
+					| "coalesce" -> for_assignment
 					| _ -> false
 				)
 			| _ -> false
@@ -543,20 +549,27 @@ let create_dir_recursive (path:string list) =
 (**
 	@return String representation of specified type path. E.g. returns "\example\Test" for (["example"], "Test")
 *)
-let get_full_type_name ?escape ?omit_first_slash (type_path:path) =
+let get_full_type_name ?(escape=false) ?(omit_first_slash=false) (type_path:path) =
 	let name =
 		match type_path with
+			| ([], type_name) ->
+				if omit_first_slash then
+					type_name
+				else
+					"\\" ^ type_name
 			| (module_path, type_name) ->
 				let parts =
-					match omit_first_slash with
-						| Some true -> get_real_path module_path
-						| _ -> "" :: get_real_path module_path
+					if omit_first_slash then
+						get_real_path module_path
+					else
+						"" :: get_real_path module_path
 				in
 				(String.concat "\\" parts) ^ "\\" ^ type_name
 	in
-	match escape with
-		| Some true -> String.escaped name
-		| _ -> name
+	if escape then
+		String.escaped name
+	else
+		name
 
 (**
 	Check if `target` is or implements native PHP `Throwable` interface
@@ -641,7 +654,7 @@ let inject_defaults (ctx:Common.context) (func:tfunc) =
 		match args with
 			| [] -> body_exprs
 			| (_, None) :: rest -> inject rest body_exprs
-			| (_, Some TNull) :: rest -> inject rest body_exprs
+			| (_, Some {eexpr = TConst TNull}) :: rest -> inject rest body_exprs
 			| (var, Some const) :: rest ->
 				let expr = Texpr.set_default ctx.basic var const func.tf_expr.epos in
 			 	expr :: (inject rest body_exprs)
@@ -1270,6 +1283,8 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 		val mutable sourcemap : sourcemap_builder option = None
 		(** Indicates if `super()` expressions should be generated if spotted. *)
 		val mutable has_super_constructor = true
+		(** The latest string written to the output buffer via `self#write_pos` method *)
+		val mutable last_written_pos = ""
 		(**
 			Get php name of current type
 		*)
@@ -1352,24 +1367,29 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 										| [] -> [name]
 										| _ -> rest
 									);
-									String.capitalize name
+									StringHelper.capitalize name
 						and added = ref false
 						and alias = ref (get_type_name type_path) in
-						if !alias = php_name then
-							alias := get_alias_next_part () ^ !alias;
+						let alias_upper = ref (StringHelper.uppercase !alias) in
+						let prepend_alias prefix =
+							alias := prefix ^ !alias;
+							alias_upper := StringHelper.uppercase !alias
+						in
+						if !alias_upper = (StringHelper.uppercase php_name) then
+							prepend_alias (get_alias_next_part ());
 						while not !added do
 							try
 								if (get_module_path type_path) <> namespace && type_name_used_in_namespace ctx !alias namespace then
-									alias := get_alias_next_part () ^ !alias
+									prepend_alias (get_alias_next_part ())
 								else
-									let used_type = Hashtbl.find use_table !alias in
-									if used_type = type_path then
+									let used_type = Hashtbl.find use_table !alias_upper in
+									if used_type.ut_type_path = type_path then
 										added := true
 									else
-										alias := get_alias_next_part () ^ !alias;
+										prepend_alias (get_alias_next_part ());
 							with
 								| Not_found ->
-									Hashtbl.add use_table !alias type_path;
+									Hashtbl.add use_table !alias_upper { ut_alias = !alias; ut_type_path = type_path; };
 									added := true
 								| _ -> fail self#pos __POS__
 						done;
@@ -1579,13 +1599,13 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 		*)
 		method write_use =
 			self#indent 0;
-			let write alias type_path =
-				if (get_module_path type_path) <> namespace then
-					if get_type_name type_path = alias then
-						self#write_statement ("use " ^ (get_full_type_name type_path))
+			let write _ used_type =
+				if (get_module_path used_type.ut_type_path) <> namespace then
+					if get_type_name used_type.ut_type_path = used_type.ut_alias then
+						self#write_statement ("use " ^ (get_full_type_name used_type.ut_type_path))
 					else
-						let full_name = get_full_type_name type_path in
-						self#write_statement ("use " ^ full_name ^ " as " ^ alias)
+						let full_name = get_full_type_name used_type.ut_type_path in
+						self#write_statement ("use " ^ full_name ^ " as " ^ used_type.ut_alias)
 			in
 			Hashtbl.iter write use_table
 		(**
@@ -1654,7 +1674,13 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 				| TBlock exprs -> self#write_expr_block expr
 				| TFor (var, iterator, body) -> fail self#pos __POS__
 				| TIf (condition, if_expr, else_expr) -> self#write_expr_if condition if_expr else_expr
-				| TWhile (condition, expr, do_while) -> self#write_expr_while condition expr do_while
+				| TWhile (condition, expr, do_while) ->
+					(match (reveal_expr_with_parenthesis condition).eexpr with
+						| TField (_, FStatic ({ cl_path = path }, { cf_name = "foreachCondition" })) when path = syntax_type_path  ->
+							self#write_expr_syntax_foreach expr
+						| _ ->
+							self#write_expr_while condition expr do_while
+					)
 				| TSwitch (switch, cases, default ) -> self#write_expr_switch switch cases default
 				| TTry (try_expr, catches) -> self#write_expr_try_catch try_expr catches
 				| TReturn expr -> self#write_expr_return expr
@@ -1845,7 +1871,14 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 			Write position of specified expression to output buffer
 		*)
 		method write_pos expr =
-			self#write ("#" ^ (stringify_pos expr.epos) ^ "\n");
+			let pos = ("#" ^ (stringify_pos expr.epos) ^ "\n") in
+			if pos = last_written_pos then
+				false
+			else begin
+				last_written_pos <- pos;
+				self#write pos;
+				true
+			end
 		(**
 			Writes "{ <expressions> }" to output buffer
 		*)
@@ -1854,10 +1887,8 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 			and exprs = match expr.eexpr with TBlock exprs -> exprs | _ -> [expr] in
 			let write_body () =
 				let write_expr expr =
-					if not !skip_line_directives && not (is_block expr) then begin
-						self#write_pos expr;
-						self#write_indentation
-					end;
+					if not !skip_line_directives && not (is_block expr) then
+						if self#write_pos expr then self#write_indentation;
 					self#write_expr expr;
 					match expr.eexpr with
 						| TBlock _ | TIf _ | TTry _ | TSwitch _ | TWhile (_, _, NormalWhile) -> self#write "\n"
@@ -2201,7 +2232,7 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 		method write_expr_field expr access =
 			match access with
 				| FInstance ({ cl_path = [], "String"}, _, { cf_name = "length"; cf_kind = Var _ }) ->
-					self#write "strlen(";
+					self#write "mb_strlen(";
 					self#write_expr expr;
 					self#write ")"
 				| FInstance (_, _, field) -> self#write_expr_for_field_access expr "->" (field_name field)
@@ -2254,7 +2285,9 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 					self#write "()"
 				end
 		(**
-			Writes field access on Dynamic expression to output buffer
+			Writes field access on Dynamic expression to output buffer.
+			Returns `true` if requested field is most likely belongs to String (and field resolution will be handled at runtime).
+			Otherwise returns `false`
 		*)
 		method write_expr_field_if_string expr field_name =
 			(* Special case for String fields *)
@@ -2310,7 +2343,8 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 		*)
 		method write_static_method_closure expr field_name =
 			let expr = reveal_expr expr in
-			self#write ("new " ^ (self#use hxclosure_type_path) ^ "(");
+			self#write ((self#use boot_type_path) ^ "::getStaticClosure(");
+			(* self#write ("new " ^ (self#use hxclosure_type_path) ^ "("); *)
 			(match (reveal_expr expr).eexpr with
 				| TTypeExpr (TClassDecl { cl_path = ([], "String") }) ->
 					self#write ((self#use hxstring_type_path) ^ "::class")
@@ -2335,7 +2369,8 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 						self#write_expr expr;
 						self#write ("->" ^ (field_name field))
 			else
-				let new_closure = "new " ^ (self#use hxclosure_type_path) in
+				(* let new_closure = "new " ^ (self#use hxclosure_type_path) in *)
+				let new_closure = ((self#use boot_type_path) ^ "::getInstanceClosure") in
 				match expr.eexpr with
 					| TTypeExpr mtype ->
 						let class_name = self#use_t (type_of_module_type mtype) in
@@ -2386,9 +2421,9 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 			in
 			match name with
 				| "code" | "codeDeref" -> self#write_expr_syntax_code args
+				| "coalesce" -> self#write_expr_syntax_coalesce args
 				| "instanceof" -> self#write_expr_syntax_instanceof args
 				| "nativeClassName" -> self#write_expr_syntax_native_class_name args
-				| "foreach" -> self#write_expr_syntax_foreach args
 				| "construct" -> self#write_expr_syntax_construct args
 				| "field" | "getField" -> self#write_expr_syntax_get_field args
 				| "setField" -> self#write_expr_syntax_set_field args
@@ -2402,12 +2437,20 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 				| "keepVar" -> ()
 				| _ -> ctx.error ("php.Syntax." ^ name ^ "() is not supported.") self#pos
 		(**
-			Writes plain php code (for `php.Syntax.php()`)
+			Writes plain php code (for `php.Syntax.code()`)
 		*)
 		method write_expr_syntax_code args =
 			match args with
 				| [] -> fail self#pos __POS__
 				| { eexpr = TConst (TString php) } :: args ->
+					let args = List.map
+						(fun arg ->
+							match (reveal_expr arg).eexpr with
+								| TBinop _ | TUnop _ -> parenthesis arg
+								| _ -> arg
+						)
+						args
+					in
 					Codegen.interpolate_code ctx php args self#write self#write_expr self#pos
 				| _ -> ctx.error "First argument of php.Syntax.code() must be a constant string." self#pos
 		(**
@@ -2526,6 +2569,18 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 			write_args self#write (fun e -> self#write_expr e) args;
 			self#write ")"
 		(**
+			Writes `$left ?? $right` expression to output buffer (for `php.Syntax.coalesce()`)
+		*)
+		method write_expr_syntax_coalesce args =
+			match args with
+				| left :: right :: [] ->
+					self#write "(";
+					self#write_expr left;
+					self#write " ?? ";
+					self#write_expr right;
+					self#write ")";
+				| _ -> fail self#pos __POS__
+		(**
 			Writes `instanceof` expression to output buffer (for `php.Syntax.instanceof()`)
 		*)
 		method write_expr_syntax_instanceof args =
@@ -2562,25 +2617,22 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 		(**
 			Writes `foreach` expression to output buffer (for `php.Syntax.foreach()`)
 		*)
-		method write_expr_syntax_foreach args =
-			match args with
-				| collection_expr :: { eexpr = TFunction fn } :: [] ->
-					let (key_name, value_name) = match fn.tf_args with
-						| ({ v_name = key_name }, _) :: ({ v_name = value_name }, _) :: [] -> (key_name, value_name)
-						| _ -> fail self#pos __POS__
-					and add_parentheses =
-						match collection_expr.eexpr with
-							| TLocal _ -> false
+		method write_expr_syntax_foreach body =
+			match body.eexpr with
+				| TBlock ({ eexpr = TCall (_, [collection]) } :: { eexpr = TVar (key, _) } :: { eexpr = TVar (value, _) } :: _ :: body_exprs) ->
+					let add_parentheses =
+						match collection.eexpr with
+							| TLocal _ | TField _ | TArray _ -> false
 							| _ -> true
 					in
 					self#write "foreach (";
 					if add_parentheses then self#write "(";
-					self#write_expr collection_expr;
+					self#write_expr collection;
 					if add_parentheses then self#write ")";
-					self#write (" as $" ^ key_name ^ " => $" ^ value_name ^ ") ");
-					self#write_as_block fn.tf_expr
+					self#write (" as $" ^ key.v_name ^ " => $" ^ value.v_name ^ ") ");
+					self#write_as_block ~unset_locals:true { body with eexpr = TBlock body_exprs };
 				| _ ->
-					ctx.error "php.Syntax.foreach() only accepts anonymous function declaration for second argument." self#pos
+					fail self#pos __POS__
 		(**
 			Writes TCall to output buffer
 		*)
@@ -2782,9 +2834,11 @@ class code_writer (ctx:Common.context) hx_type_path php_name =
 					self#write ("$" ^ arg_name);
 					match default_value with
 						| None -> ()
-						| Some const ->
+						| Some expr ->
 							self#write " = ";
-							self#write_expr_const const
+							match expr.eexpr with
+								| TConst _ -> self#write_expr expr
+								| _ -> self#write "null"
 		(**
 			Write an access to a field of dynamic value
 		*)
@@ -3219,7 +3273,7 @@ class class_builder ctx (cls:tclass) =
 			Indicates if type should be declared as `final`
 		*)
 		method is_final =
-			if not (Meta.has Meta.Final cls.cl_meta) then
+			if not cls.cl_final then
 				false
 			else begin
 				let hacked = ref false in
@@ -3238,7 +3292,7 @@ class class_builder ctx (cls:tclass) =
 			Indicates if `field` should be declared as `final`
 		*)
 		method is_final_field (field:tclass_field) : bool =
-			Meta.has Meta.Final field.cf_meta
+			field.cf_final
 		(**
 			Check if there is no native php constructor in inheritance chain of this class.
 			E.g. `StsClass` does have a constructor while still can be called with `new StdClass()`.
@@ -3729,7 +3783,7 @@ class generator (ctx:context) =
 					output_string channel "<?php\n";
 					output_string channel uses;
 					output_string channel "\n";
-					output_string channel ("set_include_path(__DIR__.'/" ^ (String.concat "/" self#get_lib_path) ^ "');\n");
+					output_string channel ("set_include_path(get_include_path().PATH_SEPARATOR.__DIR__.'/" ^ (String.concat "/" self#get_lib_path) ^ "');\n");
 					output_string channel "spl_autoload_register(\n";
 					output_string channel "	function($class){\n";
 					output_string channel "		$file = stream_resolve_include_path(str_replace('\\\\', '/', $class) .'.php');\n";

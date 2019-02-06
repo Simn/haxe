@@ -1,5 +1,5 @@
 (*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -139,9 +139,13 @@ let opcode_fx frw op =
 		read a; read b; read c
 	| ONew d ->
 		write d
-	| OArraySize (d, a)	| OGetType (d,a) | OGetTID (d,a) | ORef (d, a) | OUnref (d,a) | OSetref (d, a) | OEnumIndex (d, a) | OEnumField (d,a,_,_) ->
+	| OArraySize (d, a)	| OGetType (d,a) | OGetTID (d,a) | OUnref (d,a) | OSetref (d, a) | OEnumIndex (d, a) | OEnumField (d,a,_,_) ->
 		read a;
 		write d
+	| ORef (d, a) ->
+		read a;
+		write a; (* prevent issue with 'a' being reused later - this is not exact as it can be set everytime we pass it to a function *)
+		write d;
 	| OType (d,_) | OEnumAlloc (d,_) ->
 		write d
 	| OMakeEnum (d,_,rl) ->
@@ -642,6 +646,10 @@ let optimize dump get_str (f:fundecl) =
 				let s = state.(r) in
 				do_write r;
 				s.rnullcheck <- true;
+			| OToVirtual (v,o) ->
+				do_read o;
+				do_write v;
+				state.(v).rnullcheck <- state.(o).rnullcheck
 			| _ ->
 				opcode_fx (fun r read ->
 					if read then do_read r else do_write r
@@ -735,6 +743,14 @@ let optimize dump get_str (f:fundecl) =
 			write_counts.(d) <- write_counts.(d) - 1;
 			add_reg_moved i d r;
 			set_nop i "unused"
+		| OJAlways d when d >= 0 ->
+			let rec loop k =
+				if k = d then set_nop i "nojmp" else
+				match f.code.(i + k + 1) with
+				| ONop _ -> loop (k + 1)
+				| _ -> ()
+			in
+			loop 0
 		| _ -> ());
 	done;
 

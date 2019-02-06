@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -38,7 +38,6 @@ extern class ViewElement extends Element
 	static inline var SVG_ZOOMANDPAN_DISABLE : Int = 1;
 	static inline var SVG_ZOOMANDPAN_MAGNIFY : Int = 2;
 	
-	var viewTarget(default,null) : StringList;
 	var viewBox(default,null) : AnimatedRect;
 	var preserveAspectRatio(default,null) : AnimatedPreserveAspectRatio;
 	var zoomAndPan : Int;

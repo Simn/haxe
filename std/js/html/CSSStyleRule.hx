@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated from cssrule.webidl. Do not edit!
+// This file is generated from mozilla\CSSStyleRule.webidl. Do not edit!
 
 package js.html;
 
@@ -34,7 +34,15 @@ package js.html;
 @:native("CSSStyleRule")
 extern class CSSStyleRule extends CSSRule
 {
+	
+	/**
+		Gets the textual representation of the selector for this rule, e.g. `"h1,h2"`.
+	**/
 	var selectorText : String;
+	
+	/**
+		Returns the `CSSStyleDeclaration` object for the rule.
+	**/
 	var style(default,null) : CSSStyleDeclaration;
 	
 }

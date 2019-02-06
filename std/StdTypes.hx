@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -65,10 +65,13 @@
 #end
 
 /**
-	`Null` can be useful in two cases. In order to document some methods
-	that accept or can return a `null` value, or for the Flash compiler and AS3
-	generator to distinguish between base values that can be `null` and others that
-	can't.
+	`Null<T>` is a wrapper that can be used to make the basic types `Int`,
+	`Float` and `Bool` nullable on static targets.
+
+	If null safety is enabled, only types wrapped in `Null<T>` are nullable.
+
+	Otherwise, it has no effect on non-basic-types, but it can be useful as a way to document
+	that `null` is an acceptable value for a method argument, return value or variable.
 
 	@see https://haxe.org/manual/types-nullability.html
 **/
@@ -142,6 +145,19 @@ typedef Iterator<T> = {
 **/
 typedef Iterable<T> = {
 	function iterator() : Iterator<T>;
+}
+
+/**
+	A `KeyValueIterator` is an `Iterator` that has a key and a value.
+**/
+typedef KeyValueIterator<K,V> = Iterator<{key:K, value:V}>;
+
+/**
+	A `KeyValueIterable` is a data structure which has an `iterator()` method
+	to iterate over key-value-pairs.
+**/
+typedef KeyValueIterable<K,V> = {
+    function keyValueIterator():KeyValueIterator<K,V>;
 }
 
 /**

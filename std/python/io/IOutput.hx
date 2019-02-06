@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,6 +22,7 @@
 package python.io;
 
 import haxe.io.Bytes;
+import haxe.io.Encoding;
 import haxe.io.Input;
 
 interface IOutput {
@@ -60,5 +61,5 @@ interface IOutput {
 
 	public function writeInput( i : Input, ?bufsize : Int ):Void;
 
-	public function writeString( s : String ):Void;
+	public function writeString( s : String, ?encoding : Encoding ):Void;
 }

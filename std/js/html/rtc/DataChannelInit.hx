@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -27,13 +27,10 @@ package js.html.rtc;
 typedef DataChannelInit =
 {
 	@:optional var id : Int;
-	@:optional var maxRetransmitNum : Int;
+	@:optional var maxPacketLifeTime : Int;
 	@:optional var maxRetransmitTime : Int;
 	@:optional var maxRetransmits : Int;
 	@:optional var negotiated : Bool;
 	@:optional var ordered : Bool;
-	@:optional var outOfOrderAllowed : Bool;
-	@:optional var preset : Bool;
 	@:optional var protocol : String;
-	@:optional var stream : Int;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -34,7 +34,15 @@ package js.html.idb;
 @:native("IDBVersionChangeEvent")
 extern class VersionChangeEvent extends js.html.Event
 {
+	
+	/**
+		Returns the old version of the database.
+	**/
 	var oldVersion(default,null) : Int;
+	
+	/**
+		Returns the new version of the database.
+	**/
 	var newVersion(default,null) : Int;
 	
 	/** @throws DOMError */

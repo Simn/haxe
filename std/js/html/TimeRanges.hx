@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -40,16 +40,16 @@ extern class TimeRanges
 	**/
 	var length(default,null) : Int;
 	
-	/** @throws DOMError */
 	
 	/**
 		Returns the time for the start of the range with the specified index.
+		@throws DOMError
 	**/
 	function start( index : Int ) : Float;
-	/** @throws DOMError */
 	
 	/**
 		Returns the time for the end of the specified range.
+		@throws DOMError
 	**/
 	function end( index : Int ) : Float;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -64,9 +64,9 @@ class BytesBuffer {
 		__add(@:privateAccess src.b, 0, src.length);
 	}
 
-	public inline function addString( v : String ) : Void {
+	public inline function addString( v : String, ?encoding : Encoding ) : Void {
 		var len = 0;
-		@:privateAccess __add(v.bytes.utf16ToUtf8(0, len), 0, len);
+		@:privateAccess (encoding == RawNative ? __add(v.bytes,0,v.length<<1) : __add(v.bytes.utf16ToUtf8(0, len), 0, len));
 	}
 
 	public inline function addInt32( v : Int ) : Void {
@@ -82,15 +82,23 @@ class BytesBuffer {
 		pos += 8;
 	}
 
-	public inline function addFloat( v : Float ) : Void {
+	public inline function addFloat( v : Float ) : Void { 
 		if( pos + 4 > size ) __expand(0);
+		#if hl_check_align
+		if( pos & 3 == 0 ) b.setF32(pos, v); else @:privateAccess { haxe.io.Bytes.alignBuffer.setF32(0,v); b.blit(pos,haxe.io.Bytes.alignBuffer,0,4); } 
+		#else
 		b.setF32(pos, v);
-		pos += 4;
+		#end
+		pos += 4; 
 	}
-
+	
 	public inline function addDouble( v : Float ) : Void {
 		if( pos + 8 > size ) __expand(0);
+		#if hl_check_align
+		if( pos & 7 == 0 ) b.setF64(pos, v); else @:privateAccess { haxe.io.Bytes.alignBuffer.setF64(0,v); b.blit(pos,haxe.io.Bytes.alignBuffer,0,8); } 
+		#else
 		b.setF64(pos, v);
+		#end
 		pos += 8;
 	}
 

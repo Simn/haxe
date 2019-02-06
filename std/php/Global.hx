@@ -948,6 +948,11 @@ extern class Global {
 	static function utf8_decode( data:String ) : String;
 
 	/**
+		@see http://php.net/manual/en/function.mb-internal-encoding.php
+	**/
+	static function mb_internal_encoding( ?encoding:String ) : EitherType<Bool,String>;
+
+	/**
 		@see http://php.net/manual/en/function.mb-convert-encoding.php
 	**/
 	static function mb_convert_encoding( str:String, to_encoding:String, ?from_encoding:Dynamic ) : String;
@@ -958,6 +963,11 @@ extern class Global {
 	static function mb_check_encoding( str:String = null, ?encoding:String ) : Bool;
 
 	/**
+		@see http://php.net/manual/en/function.mb-split.php
+	**/
+	static function mb_split( pattern:String, str:String, ?limit:Int ) : NativeIndexedArray<String>;
+
+	/**
 		@see http://php.net/manual/en/function.mb-strlen.php
 	**/
 	static function mb_strlen( str:String, ?encoding:String ) : EitherType<Int,Bool>;
@@ -966,6 +976,43 @@ extern class Global {
 		@see http://php.net/manual/en/function.mb-substr.php
 	**/
 	static function mb_substr( str:String, start:Int, length:Int = null, ?encoding:String ) : String;
+
+	/**
+		@see http://php.net/manual/en/function.mb-chr.php
+		(Polyfilled for php 7.0)
+	**/
+	static function mb_chr( cp:Int, ?encoding:String ) : String;
+
+	/**
+		@see http://php.net/manual/en/function.mb-ord.php
+		(Polyfilled for php 7.0)
+	**/
+	static function mb_ord( str:String, ?encoding:String ) : Int;
+
+	/**
+		@see http://php.net/manual/en/function.mb-regex-encoding.php
+	**/
+	static function mb_regex_encoding( ?encoding:String ) : EitherType<Bool,String>;
+
+	/**
+		@see http://php.net/manual/en/function.mb-strtoupper.php
+	**/
+	static function mb_strtoupper( str:String, ?encoding:String ) : String;
+
+	/**
+		@see http://php.net/manual/en/function.mb-strpos.php
+	**/
+	static function mb_strpos( haystack:String, needle:String, ?offset:Int, ?encoding:String ) : EitherType<Int,Bool>;
+
+	/**
+		@see http://php.net/manual/en/function.mb-strrpos.php
+	**/
+	static function mb_strrpos( haystack:String, needle:String, ?offset:Int, ?encoding:String ) : EitherType<Int,Bool>;
+
+	/**
+		@see http://php.net/manual/en/function.mb-strtolower.php
+	**/
+	static function mb_strtolower( str:String, ?encoding:String ) : String;
 
 	/**
 		@see http://php.net/manual/en/function.proc-open.php
@@ -991,6 +1038,11 @@ extern class Global {
 		@see http://php.net/manual/en/function.stream-select.php
 	**/
 	static function stream_select( read:NativeArray, write:NativeArray, except:NativeArray, tv_sec:Int, tv_usec:Int = 0 ) : Bool;
+
+	/**
+		@see http://php.net/manual/en/function.stream-get-contents.php
+	**/
+	static function stream_get_contents( handle:Resource, maxlength:Int = -1, offset:Int = -1 ) : EitherType<String,Bool>;
 
 	/**
 		@see http://php.net/manual/en/function.stream-socket-shutdown.php
@@ -1080,7 +1132,7 @@ extern class Global {
 	/**
 		@see http://php.net/manual/en/function.socket-set-option.php
 	**/
-	static function socket_set_option( stream:Resource, level:Int, option:Int, val:Bool ) : Bool;
+	static function socket_set_option( stream:Resource, level:Int, option:Int, val:Any ) : Bool;
 
 	/**
 		@see http://php.net/manual/en/function.socket-select.php
@@ -1322,4 +1374,9 @@ extern class Global {
 		@see http://php.net/manual/en/function.is-uploaded-file.php
 	**/
 	static function is_uploaded_file( filename:String ) : Bool;
+
+	/**
+		@see http://php.net/manual/en/function.gc-collect-cycles.php
+	**/
+	static function gc_collect_cycles() : Int;
 }

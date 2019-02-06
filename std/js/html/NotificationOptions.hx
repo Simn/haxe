@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -31,5 +31,6 @@ typedef NotificationOptions =
 	@:optional var dir : NotificationDirection;
 	@:optional var icon : String;
 	@:optional var lang : String;
+	@:optional var requireInteraction : Bool;
 	@:optional var tag : String;
 }

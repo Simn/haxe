@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -32,14 +32,25 @@ type error_msg =
 	| Missing_type
 	| Custom of string
 
+type decl_flag =
+	| DPrivate
+	| DExtern
+	| DFinal
+
+type type_decl_completion_mode =
+	| TCBeforePackage
+	| TCAfterImport
+	| TCAfterType
+
 type syntax_completion =
 	| SCComment
 	| SCClassRelation
 	| SCInterfaceRelation
+	| SCTypeDecl of type_decl_completion_mode
+	| SCAfterTypeFlag of decl_flag list
 
 exception Error of error_msg * pos
 exception TypePath of string list * (string * bool) option * bool (* in import *) * pos
-exception Display of expr
 exception SyntaxCompletion of syntax_completion * pos
 
 let error_msg = function
@@ -59,21 +70,20 @@ let display_error : (error_msg -> pos -> unit) ref = ref (fun _ _ -> assert fals
 
 let special_identifier_files : (string,string) Hashtbl.t = Hashtbl.create 0
 
-type decl_flag =
-	| DPrivate
-	| DExtern
-
-let decl_flag_to_class_flag = function
+let decl_flag_to_class_flag (flag,p) = match flag with
 	| DPrivate -> HPrivate
 	| DExtern -> HExtern
+	| DFinal -> HFinal
 
-let decl_flag_to_enum_flag = function
+let decl_flag_to_enum_flag (flag,p) = match flag with
 	| DPrivate -> EPrivate
 	| DExtern -> EExtern
+	| DFinal -> error (Custom "final on enums is not allowed") p
 
-let decl_flag_to_abstract_flag = function
+let decl_flag_to_abstract_flag (flag,p) = match flag with
 	| DPrivate -> AbPrivate
 	| DExtern -> AbExtern
+	| DFinal -> error (Custom "final on abstracts is not allowed") p
 
 module TokenCache = struct
 	let cache = ref (DynArray.create ())
@@ -88,20 +98,22 @@ end
 (* Global state *)
 
 let in_display = ref false
-let use_doc = ref false
 let was_auto_triggered = ref false
 let display_mode = ref DMNone
 let in_macro = ref false
 let had_resume = ref false
+let code_ref = ref (Sedlexing.Utf8.from_string "")
+let delayed_syntax_completion : (syntax_completion * pos) option ref = ref None
 
 let reset_state () =
 	in_display := false;
-	use_doc := false;
 	was_auto_triggered := false;
 	display_mode := DMNone;
 	display_position := null_pos;
 	in_macro := false;
-	had_resume := false
+	had_resume := false;
+	code_ref := Sedlexing.Utf8.from_string "";
+	delayed_syntax_completion := None
 
 (* Per-file state *)
 
@@ -127,10 +139,11 @@ let get_doc s =
 
 let serror() = raise (Stream.Error "")
 
-let display e = raise (Display e)
-
 let magic_display_field_name = " - display - "
 let magic_type_path = { tpackage = []; tname = ""; tparams = []; tsub = None }
+
+let delay_syntax_completion kind p =
+	delayed_syntax_completion := Some(kind,p)
 
 let type_path sl in_import p = match sl with
 	| n :: l when n.[0] >= 'A' && n.[0] <= 'Z' -> raise (TypePath (List.rev l,Some (n,false),in_import,p));
@@ -211,6 +224,18 @@ let make_is e (t,p_t) p p_is =
 	let e2 = expr_of_type_path (t.tpackage,t.tname) p_t in
 	ECall(e_is,[e;e2]),p
 
+let handle_xml_literal p1 (name,pi) =
+	if p1.pmax <> pi.pmin then error (Custom("Unexpected <")) p1;
+	let open_tag = "<" ^ name in
+	let close_tag = "</" ^ name ^ ">" in
+	Lexer.reset();
+	Buffer.add_string Lexer.buf ("<" ^ name);
+	let i = Lexer.lex_xml p1.pmin open_tag close_tag !code_ref in
+	let xml = Lexer.contents() in
+	let e = EConst (String xml),{p1 with pmax = i} in
+	let e = make_meta Meta.Markup [] e p1 in
+	e
+
 let next_token s = match Stream.peek s with
 	| Some (Eof,p) ->
 		(Eof,{p with pmax = max_int})
@@ -255,3 +280,45 @@ let check_resume_range p s fyes fno =
 			fno()
 	end else
 		fno()
+
+let check_type_decl_flag_completion mode flags s =
+	if not !in_display_file then raise Stream.Failure;
+	let check_type_completion () = match Stream.peek s with
+		(* If there's an identifier coming up, it's probably an incomplete type
+			declaration. Let's just raise syntax completion in that case because
+			the parser would fail otherwise anyway. *)
+		| Some((Const(Ident _),p)) -> syntax_completion (SCTypeDecl mode) p
+		| _ -> raise Stream.Failure
+	in
+	match flags with
+	| [] -> check_type_completion()
+	| (_,p) :: _ ->
+		if would_skip_display_position p s then begin
+			let flags = List.map fst flags in
+			syntax_completion (SCAfterTypeFlag flags) p
+		end;
+		check_type_completion()
+
+let check_type_decl_completion mode pmax s =
+	if !in_display_file then begin
+		let pmin = match Stream.peek s with
+			| Some (Eof,_) | None -> max_int
+			| Some tk -> (pos tk).pmin
+		in
+		(* print_endline (Printf.sprintf "(%i <= %i) (%i >= %i)" pmax !display_position.pmin pmin !display_position.pmax); *)
+		if pmax <= !display_position.pmin && pmin >= !display_position.pmax then
+			delay_syntax_completion (SCTypeDecl mode) !display_position
+	end
+
+let check_signature_mark e p1 p2 =
+	if not (is_signature_display()) then e
+	else begin
+		let p = punion p1 p2 in
+		if true || not !was_auto_triggered then begin (* TODO: #6383 *)
+			if encloses_position_gt !display_position p then (mk_display_expr e DKMarked)
+			else e
+		end else begin
+			if !display_position.pmin = p1.pmax then (mk_display_expr e DKMarked)
+			else e
+		end
+	end

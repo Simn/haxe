@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -45,9 +45,4 @@ extern class TouchList implements ArrayAccess<Touch>
 		Returns the `Touch` object at the specified index in the list.
 	**/
 	function item( index : Int ) : Touch;
-	
-	/**
-		Returns the first `Touch` item in the list whose identifier matches a specified value.
-	**/
-	function identifiedTouch( identifier : Int ) : Touch;
 }

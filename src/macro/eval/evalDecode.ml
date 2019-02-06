@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -50,15 +50,11 @@ let decode_varray v = match v with
 	| _ -> unexpected_value v "array"
 
 let decode_string v = match v with
-	| VString(r,s) -> Lazy.force s
+	| VString s -> s.sstring
 	| _ -> unexpected_value v "string"
 
-let decode_rope v = match v with
-	| VString(s,_) -> s
-	| _ -> unexpected_value v "string"
-
-let decode_rope_string v = match v with
-	| VString(r,s) -> r,s
+let decode_vstring v = match v with
+	| VString s -> s
 	| _ -> unexpected_value v "string"
 
 let decode_bytes v = match v with

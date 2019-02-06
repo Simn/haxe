@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -27,6 +27,7 @@ import lua.lib.luv.Signal;
 import lua.lib.luv.Loop;
 import lua.Boot;
 import lua.Table;
+import lua.NativeStringTools;
 
 import haxe.io.Bytes;
 import haxe.io.Error;
@@ -74,9 +75,9 @@ class Process {
 
 
 	public function new( cmd : String, ?args : Array<String>, ?detached : Bool){
-	
+
 		if( detached ) throw "Detached process is not supported on this platform";
-	
+
 		var _stdout = new Pipe(false);
 		var _stderr = new Pipe(false);
 		var _stdin  = new Pipe(false);
@@ -126,14 +127,25 @@ private class ProcessInput extends haxe.io.Input {
 	var b : Pipe;
 	var buf : String;
 	var idx : Int;
+	var _eof:Bool;
 
 	public function new(pipe:Pipe) {
 		b = pipe;
+		_eof = false;
+	}
+
+	inline public function eof() : Bool {
+		return _eof;
+	}
+
+	override function readBytes( s : Bytes, pos : Int, len : Int ) : Int {
+		if(eof()) throw new haxe.io.Eof();
+		return super.readBytes(s, pos, len);
 	}
 
 	override public function readByte() {
 		var err_str = null;
-		if (buf == null || idx >= buf.length){
+		if (buf == null || idx >= NativeStringTools.len(buf)){
 			buf = null;
 			idx = 0;
 			var pending = true;
@@ -145,9 +157,12 @@ private class ProcessInput extends haxe.io.Input {
 			// process io until we read our input (emulate blocking)
 			while (pending) Loop.run();
 		}
-		if (buf == null) throw new haxe.io.Eof();
+		if (buf == null){
+			_eof = true;
+			throw new haxe.io.Eof();
+		}
 		if (err_str != null) throw err_str;
-		var code : Int =  cast buf.charCodeAt(idx++);
+		var code = NativeStringTools.byte(buf, ++idx);
 		return code;
 	}
 
@@ -164,7 +179,9 @@ private class ProcessInput extends haxe.io.Input {
 					total.addBytes(buf,0,len);
 				if (len < bufsize)  break;
 			}
-		} catch( e : Eof ) {}
+		} catch( e : Eof ) {
+			_eof = true;
+		}
 		return total.getBytes();
 	}
 
@@ -182,7 +199,7 @@ private class ProcessOutput extends haxe.io.Output {
 	}
 
 	override public function writeByte(c : Int ) : Void {
-		b.write(String.fromCharCode(c));
+		b.write(NativeStringTools.char(c));
 	}
 
 	override public function close(){

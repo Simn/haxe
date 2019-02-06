@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -40,6 +40,10 @@ extern class Crypto
 	**/
 	var subtle(default,null) : SubtleCrypto;
 	
-	/** @throws DOMError */
+	
+	/**
+		Fills the passed `TypedArray` with cryptographically sound random values.
+		@throws DOMError
+	**/
 	function getRandomValues( array : ArrayBufferView ) : ArrayBufferView;
 }

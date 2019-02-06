@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -42,5 +42,6 @@ extern class SharedWorker extends EventTarget
 	var onerror : haxe.Constraints.Function;
 	
 	/** @throws DOMError */
-	function new( scriptURL : String, ?name : String ) : Void;
+	@:overload( function( scriptURL : String, ?options : WorkerOptions) : SharedWorker {} )
+	function new( scriptURL : String, ?options : String ) : Void;
 }

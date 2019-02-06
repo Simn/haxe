@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -45,14 +45,6 @@ extern class File extends Blob
 	**/
 	var lastModified(default,null) : Int;
 	
-	/**
-		Returns the last modified `Date` of the file referenced by the `File` object.
-	**/
-	var lastModifiedDate(default,null) : Date;
-	
 	/** @throws DOMError */
-	@:overload( function( fileBits : Array<haxe.extern.EitherType<ArrayBuffer,haxe.extern.EitherType<ArrayBufferView,haxe.extern.EitherType<Blob,String>>>>, fileName : String, ?options : FilePropertyBag ) : Void {} )
-	@:overload( function( fileBits : Blob, ?options : ChromeFilePropertyBag ) : Void {} )
-	@:overload( function( fileBits : Dynamic/*MISSING nsIFile*/, ?options : ChromeFilePropertyBag ) : Void {} )
-	function new( fileBits : String, ?options : ChromeFilePropertyBag ) : Void;
+	function new( fileBits : Array<haxe.extern.EitherType<haxe.extern.EitherType<ArrayBufferView,ArrayBuffer>,haxe.extern.EitherType<Blob,String>>>, fileName : String, ?options : FilePropertyBag ) : Void;
 }

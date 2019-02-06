@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -278,7 +278,7 @@ class Compiler {
 				if( (p == pack || name == pack) || (rec && StringTools.startsWith(p, pack + ".")) )
 					excludeBaseType(b);
 			}
-		});
+		}, false);
 	}
 
 	/**
@@ -383,6 +383,16 @@ class Compiler {
 		for (path in paths) {
 			addGlobalMetadata(path, "@:keep", recursive, true, true);
 		}
+	}
+
+	/**
+		Enables null safety for a type or a package.
+
+		@param path A package, module or sub-type dot path to keep.
+		@param recursive If true, recurses into sub-packages for package paths.
+	**/
+	public static function nullSafety(path : String, ?recursive:Bool = true) {
+		addGlobalMetadata(path, "@:nullSafety", recursive);
 	}
 
 	/**

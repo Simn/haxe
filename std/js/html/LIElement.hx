@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -25,7 +25,7 @@
 package js.html;
 
 /**
-	The `HTMLLIElement` interface expose specific properties and methods (beyond those defined by regular `HTMLElement` interface it also has available to it by inheritance) for manipulating list elements.
+	The `HTMLLIElement` interface exposes specific properties and methods (beyond those defined by regular `HTMLElement` interface it also has available to it by inheritance) for manipulating list elements.
 
 	Documentation [HTMLLIElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLLIElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLLIElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -388,6 +388,10 @@ import java.NativeArray;
 	public inline function keys() : Iterator<String>
 	{
 		return new StringMapKeyIterator(this);
+	}
+
+	@:runtime public inline function keyValueIterator() : KeyValueIterator<String, T> {
+		return new haxe.iterators.MapKeyValueIterator(this);
 	}
 
 	/**

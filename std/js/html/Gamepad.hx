@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -66,7 +66,7 @@ extern class Gamepad
 	var axes(default,null) : Array<Float>;
 	
 	/**
-		A `DOMHighResTimeStamp` representing the last time the data for this gamepad was updated. Note that this property is not currently supported anywhere.
+		A `DOMHighResTimeStamp` representing the last time the data for this gamepad was updated.
 	**/
 	var timestamp(default,null) : Float;
 	

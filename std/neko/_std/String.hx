@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -21,7 +21,7 @@
  */
 @:coreApi @:final class String {
 
-	static var __is_String;
+	static var __is_String = true;
 	private static var __split : Dynamic = neko.Lib.load("std","string_split",2);
 
 	static function __init__() : Void {

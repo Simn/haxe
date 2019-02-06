@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -195,12 +195,9 @@ private typedef NativeString = String;
 		return me;
 	}
 
-	@:functionCode('
-		return java.lang.Character.toString( (char) code );
-	')
-	public static function fromCharCode(code:Int):NativeString
+	public static function fromCharCode(code:Int):String
 	{
-		return null;
+		return new String(java.lang.Character.toChars(code));
 	}
 }
 

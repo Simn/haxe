@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -30,7 +30,9 @@ exception Return of value
 exception Sys_exit of int
 
 let is v path =
-	path = key_Dynamic || match v with
+	if path = key_Dynamic then
+		v <> vnull
+	else match v with
 	| VInt32 _ -> path = key_Int || path = key_Float
 	| VFloat f -> path = key_Float || (path = key_Int && f = (float_of_int (int_of_float f)) && f <= 2147483647. && f >= -2147483648.)
 	| VTrue | VFalse -> path = key_Bool
@@ -76,7 +78,10 @@ let s_value_kind = function
 	| VLazy _ -> "VLazy"
 
 let unexpected_value : 'a . value -> string -> 'a = fun v s ->
-	let str = Printf.sprintf "Unexpected value %s(%s), expected %s" (s_value_kind v) (value_string v) s in
+	let str = match v with
+		| VNull -> "Null Access"
+		| _ -> Printf.sprintf "Unexpected value %s(%s), expected %s" (s_value_kind v) (value_string v) s
+	in
 	exc_string str
 
 let invalid_call_arg_number i i2 =
@@ -119,6 +124,7 @@ let catch_exceptions ctx ?(final=(fun() -> ())) f p =
 		Some v
 	with
 	| RunTimeException(v,stack,p') ->
+		ctx.debug.caught_exception <- vnull;
 		build_exception_stack ctx environment_offset;
 		eval.environment_offset <- environment_offset;
 		if is v key_haxe_macro_Error then begin
@@ -127,8 +133,8 @@ let catch_exceptions ctx ?(final=(fun() -> ())) f p =
 			get_ctx_ref := prev;
 			final();
 			match v1,v2 with
-				| VString(_,s),VInstance {ikind = IPos p} ->
-					raise (Error.Error (Error.Custom (Lazy.force s),p))
+				| VString s,VInstance {ikind = IPos p} ->
+					raise (Error.Error (Error.Custom s.sstring,p))
 				| _ ->
 					Error.error "Something went wrong" null_pos
 		end else begin

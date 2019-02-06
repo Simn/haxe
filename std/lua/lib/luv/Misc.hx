@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -37,6 +37,9 @@ extern class Misc {
   public static function get_total_memory() : Int;
   public static function get_free_memory() : Int;
   public static function getpid() : Int;
+
+  public static function os_getenv(env : String) : String;
+  public static function os_setenv(env : String, value : String) : Void;
 
   // TODO Windows only?
   public static function getuid() : Int;

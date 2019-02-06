@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -65,8 +65,8 @@ private class ReadablePipe extends Input {
 		var result:String = result;
 
 		var bytes = Bytes.ofString(result);
-		s.blit(pos, bytes, 0, result.length);
-		return result.length;
+		s.blit(pos, bytes, 0, result.strlen());
+		return result.strlen();
 	}
 }
 

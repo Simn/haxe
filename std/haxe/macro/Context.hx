@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -306,9 +306,15 @@ class Context {
 		The callback receives an `Array` containing all types which are about
 		to be generated. Modifications are limited to metadata, it is mainly
 		intended to obtain information.
+
+		By default, the callback is made before types are stored in the compilation
+		server, if active. This means that any effect persists for the next compilation.
+		If `persistent` is set to `false`, changes to types made by the callback only
+		affect the current compilation. If no compilation server is used, this flag has
+		no effect.
 	**/
-	public static function onGenerate( callback : Array<Type> -> Void ) {
-		load("on_generate",1)(callback);
+	public static function onGenerate( callback : Array<Type> -> Void, persistent:Bool = true ) {
+		load("on_generate",2)(callback, persistent);
 	}
 
 	/**
@@ -536,34 +542,6 @@ class Context {
 	}
 
 	/**
-		Evaluates `e` as macro code.
-
-		Any call to this function takes effect when the macro is executed, not
-		during typing. As a consequence, this function can not introduce new
-		local variables into the macro context and may have other restrictions.
-
-		Usage example:
-
-		```haxe
-		var e = macro function(i) return i * 2;
-		var f:Int -> Int = haxe.macro.Context.eval(e);
-		trace(f(2)); // 4
-		```
-
-		Code passed in from outside the macro cannot reference anything in its
-		context, such as local variables. However, it is possible to reference
-		static methods.
-
-		This method should be considered experimental.
-
-		If `e` is null, the result is unspecified.
-	**/
-	//@:require(haxe_ver >= 3.3)
-	//public static function eval( e : Expr ) : Dynamic {
-		//return load("eval",1)(e);
-	//}
-
-	/**
 		Manually adds a dependency between module `modulePath` and an external
 		file `externFile`.
 
@@ -576,30 +554,14 @@ class Context {
 		load("register_module_dependency", 2)(modulePath,externFile);
 	}
 
-	/**
-		Register a macro call to be performed every time the module `modulePath` is reused by the compilation cache,
-		meaning that neither the module itself nor its dependencies was changed since last compilation.
-
-		The `macroCall` should be a String containing valid Haxe expression, similar to `--init` macros (see https://haxe.org/manual/macro-initialization.html).
-		Multiple calls with the exact same `macroCall` value will only register the callback once.
-
-		This also triggers loading of given module and its dependencies, if it's not yet loaded,
-		but given macro call will not be called on the first module load.
-
-		If the compilation cache is not used, `macroCall` expressions will not be called,
-		but calling this function will still trigger loading of given `modulePath`.
-	**/
+	@:deprecated
 	public static function registerModuleReuseCall( modulePath : String, macroCall : String ) {
-		load("register_module_reuse_call", 2)(modulePath,macroCall);
+		throw "This method is no longer supported. See https://github.com/HaxeFoundation/haxe/issues/5746";
 	}
 
-	/**
-		Register a callback function that will be called every time the macro context cached is reused with a new
-		compilation. This enable to reset some static vars since the code might have been changed. If the callback
-		returns false, the macro context is discarded and another one is created.
-	**/
+	@:deprecated
 	public static function onMacroContextReused( callb : Void -> Bool ) {
-		load("on_macro_context_reused", 1)(callb);
+		throw "This method is no longer supported. See https://github.com/HaxeFoundation/haxe/issues/5746";
 	}
 
 	@:allow(haxe.macro.TypeTools)

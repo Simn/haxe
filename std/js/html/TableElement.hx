@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -136,16 +136,16 @@ extern class TableElement extends Element
 	**/
 	function deleteTFoot() : Void;
 	function createTBody() : Element;
-	/** @throws DOMError */
 	
 	/**
 		Returns an `HTMLTableRowElement` representing a new row of the table. It inserts it in the rows collection immediately before the `tr` element at the given `index` position. If necessary a `tbody` is created. If the `index` is `-1`, the new row is appended to the collection. If the `index` is smaller than `-1` or greater than the number of rows in the collection, a `DOMException` with the value `IndexSizeError` is raised.
+		@throws DOMError
 	**/
 	function insertRow( ?index : Int = -1 ) : Element;
-	/** @throws DOMError */
 	
 	/**
 		Removes the row corresponding to the `index` given in parameter. If the `index` value is `-1` the last row is removed; if it smaller than `-1` or greater than the amount of rows in the collection, a `DOMException` with the value `IndexSizeError` is raised.
+		@throws DOMError
 	**/
 	function deleteRow( index : Int ) : Void;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -24,15 +24,6 @@
 typedef ArrayBufferViewData = js.html.ArrayBufferView;
 
 abstract ArrayBufferView(ArrayBufferViewData) {
-
-	public static var EMULATED(get,never) : Bool;
-	static inline function get_EMULATED() {
-		#if nodejs
-		return false;
-		#else
-		return (cast js.html.ArrayBuffer) == js.html.compat.ArrayBuffer;
-		#end
-	}
 
 	public var buffer(get,never) : haxe.io.Bytes;
 	public var byteOffset(get, never) : Int;

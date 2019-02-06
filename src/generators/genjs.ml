@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -267,7 +267,7 @@ let write_mappings ctx smap =
 		"],\n");
 	if Common.defined ctx.com Define.SourceMapContent then begin
 		output_string channel ("\"sourcesContent\":[" ^
-			(String.concat "," (List.map (fun s -> try "\"" ^ Ast.s_escape (Std.input_file ~bin:true s) ^ "\"" with _ -> "null") sources)) ^
+			(String.concat "," (List.map (fun s -> try "\"" ^ StringHelper.s_escape (Std.input_file ~bin:true s) ^ "\"" with _ -> "null") sources)) ^
 			"],\n");
 	end;
 	output_string channel "\"names\":[],\n";
@@ -303,7 +303,7 @@ let rec concat ctx s f = function
 let fun_block ctx f p =
 	let e = List.fold_left (fun e (a,c) ->
 		match c with
-		| None | Some TNull -> e
+		| None | Some {eexpr = TConst TNull} -> e
 		| Some c -> Type.concat (Texpr.set_default ctx.com.basic a c p) e
 	) f.tf_expr f.tf_args in
 	e
@@ -346,7 +346,7 @@ let is_dynamic_iterator ctx e =
 let gen_constant ctx p = function
 	| TInt i -> print ctx "%ld" i
 	| TFloat s -> spr ctx s
-	| TString s -> print ctx "\"%s\"" (Ast.s_escape s)
+	| TString s -> print ctx "\"%s\"" (StringHelper.s_escape s)
 	| TBool b -> spr ctx (if b then "true" else "false")
 	| TNull -> spr ctx "null"
 	| TThis -> spr ctx (this ctx)
@@ -668,7 +668,7 @@ and gen_expr ctx e =
 	| TObjectDecl fields ->
 		spr ctx "{ ";
 		concat ctx ", " (fun ((f,_,qs),e) -> (match qs with
-			| DoubleQuotes -> print ctx "\"%s\" : " (Ast.s_escape f);
+			| DoubleQuotes -> print ctx "\"%s\" : " (StringHelper.s_escape f);
 			| NoQuotes -> print ctx "%s : " (anon_field f));
 			gen_value ctx e
 		) fields;
@@ -744,7 +744,7 @@ and gen_expr ctx e =
 		gen_expr ctx e
 	| TCast (e1,Some t) ->
 		print ctx "%s.__cast(" (ctx.type_accessor (TClassDecl { null_class with cl_path = ["js"],"Boot" }));
-		gen_expr ctx e1;
+		gen_value ctx e1;
 		spr ctx " , ";
 		spr ctx (ctx.type_accessor t);
 		spr ctx ")"
@@ -905,9 +905,9 @@ and gen_syntax ctx meth args pos =
 		concat ctx "," (gen_value ctx) params;
 		spr ctx ")"
 	| "instanceof", [o;t] ->
-		spr ctx "(";
+		spr ctx "((";
 		gen_value ctx o;
-		print ctx " instanceof ";
+		print ctx ") instanceof ";
 		gen_value ctx t;
 		spr ctx ")"
 	| "typeof", [o] ->
@@ -949,7 +949,7 @@ and gen_syntax ctx meth args pos =
 				else
 					spr ctx (String.concat "\n" (ExtString.String.nsplit code "\r\n"))
 			| _ ->
-				Codegen.interpolate_code ctx.com code args (spr ctx) (gen_expr ctx) code_pos
+				Codegen.interpolate_code ctx.com code args (spr ctx) (gen_value ctx) code_pos
 		end
 	| "field" , [eobj;efield] ->
 		gen_value ctx eobj;
@@ -1399,7 +1399,7 @@ let generate com =
 		match file with
 		| path, "top" ->
 			let file_content = Std.input_file ~bin:true (fst file) in
-			print ctx "%s\n" file_content;
+			print ctx "%s\n;" file_content;
 			()
 		| _ -> ()
 	) include_files;
@@ -1467,7 +1467,7 @@ let generate com =
 		match file with
 		| path, "closure" ->
 			let file_content = Std.input_file ~bin:true (fst file) in
-			print ctx "%s\n" file_content;
+			print ctx "%s\n;" file_content;
 			()
 		| _ -> ()
 	) include_files;
@@ -1490,7 +1490,7 @@ let generate com =
 	let vars = if has_feature ctx "has_enum"
 		then ("$estr = function() { return " ^ (ctx.type_accessor (TClassDecl { null_class with cl_path = ["js"],"Boot" })) ^ ".__string_rec(this,''); }") :: vars
 		else vars in
-	let vars = if enums_as_objects then "$hxEnums = $hxEnums || {}" :: vars else vars in
+	let vars = if (enums_as_objects && (has_feature ctx "has_enum" || has_feature ctx "Type.resolveEnum")) then "$hxEnums = $hxEnums || {}" :: vars else vars in
 	let vars,has_dollar_underscore =
 		if List.exists (function TEnumDecl { e_extern = false } -> true | _ -> false) com.types then
 			"$_" :: vars,true
@@ -1516,7 +1516,7 @@ let generate com =
 			"	for (var name in fields) proto[name] = fields[name];\n" ^
 			"	if( fields.toString !== Object.prototype.toString ) proto.toString = fields.toString;\n" ^
 			"	return proto;\n" ^
-			"}"
+			"}\n"
 		in
 		spr ctx extend_code
 	end;
@@ -1526,6 +1526,8 @@ let generate com =
 		match e.eexpr with
 		| TField (_,FClosure _) ->
 			add_feature ctx "use.$bind"
+		| TCall ({ eexpr = TField (_,f) } as ef, []) when field_name f = "iterator" && is_dynamic_iterator ctx ef ->
+			add_feature ctx "use.$getIterator";
 		| _ ->
 			Type.iter chk_features e
 	in

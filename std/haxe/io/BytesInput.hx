@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -191,8 +191,8 @@ class BytesInput extends Input {
 	}
 
 	@:dox(hide)
-	override function readString( len : Int ) {
-		return try b.readUTFBytes(len) catch( e : Dynamic ) throw new Eof();
+	override function readString( len : Int, ?encoding : Encoding ) {
+		return try encoding == RawNative ? b.readMultiByte(len,"unicode") : b.readUTFBytes(len) catch( e : Dynamic ) throw new Eof();
 	}
 
 	#end

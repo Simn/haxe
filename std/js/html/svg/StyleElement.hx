@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -35,9 +35,20 @@ package js.html.svg;
 extern class StyleElement extends Element
 {
 	var xmlspace : String;
+	
+	/**
+		A `DOMString` corresponding to the `type` attribute of the given element.
+		 SVG 1.1 defined that a `DOMException` is raised with code `NO_MODIFICATION_ALLOWED_ERR` on an attempt to change the value of a read-only attribute. This restriction was removed in SVG 2.
+		 
+	**/
 	var type : String;
+	
+	/**
+		A `DOMString` corresponding to the `media` attribute of the given element.
+		 SVG 1.1 defined that a `DOMException` is raised with code `NO_MODIFICATION_ALLOWED_ERR` on an attempt to change the value of a read-only attribute. This restriction was removed in SVG 2.
+		 
+	**/
 	var media : String;
-	var scoped : Bool;
 	var sheet(default,null) : js.html.StyleSheet;
 	
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -26,8 +26,8 @@ package js.html.rtc;
 
 typedef RtpParameters =
 {
-	@:optional var codecs : Array<Dynamic/*MISSING RTCRtpCodecParameters*/>;
-	@:optional var encodings : Array<Dynamic/*MISSING RTCRtpEncodingParameters*/>;
-	@:optional var headerExtensions : Array<Dynamic/*MISSING RTCRtpHeaderExtensionParameters*/>;
-	@:optional var rtcp : Dynamic/*MISSING RTCRtcpParameters*/;
+	@:optional var codecs : Array<RtpCodecParameters>;
+	@:optional var encodings : Array<RtpEncodingParameters>;
+	@:optional var headerExtensions : Array<RtpHeaderExtensionParameters>;
+	@:optional var rtcp : RtcpParameters;
 }

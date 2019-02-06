@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -36,7 +36,7 @@ extern class SharedWorkerGlobalScope extends WorkerGlobalScope
 {
 	
 	/**
-		The name that the `SharedWorker` was (optionally) given when it was created. This is the name that the `SharedWorker.SharedWorker` constructor can pass to get a reference to the `SharedWorkerGlobalScope`.
+		The name that the `SharedWorker` was (optionally) given when it was created using the `SharedWorker.SharedWorker` constructor. This is mainly useful for debugging purposes.
 	**/
 	var name(default,null) : String;
 	
@@ -45,4 +45,9 @@ extern class SharedWorkerGlobalScope extends WorkerGlobalScope
 	**/
 	var onconnect : haxe.Constraints.Function;
 	
+	
+	/**
+		Discards any tasks queued in the `SharedWorkerGlobalScope`'s event loop, effectively closing this particular scope.
+	**/
+	function close() : Void;
 }

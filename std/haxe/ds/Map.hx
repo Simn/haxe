@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -122,6 +122,15 @@ abstract Map<K,V>(IMap<K,V> ) {
 	**/
 	public inline function iterator():Iterator<V> {
 		return this.iterator();
+	}	
+
+	/**
+		Returns an Iterator over the keys and values of `this` Map.
+
+		The order of values is undefined.
+	**/
+	public inline function keyValueIterator():KeyValueIterator<K, V> {
+		return this.keyValueIterator();
 	}
 
 	/**

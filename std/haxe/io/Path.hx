@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -217,6 +217,10 @@ class Path {
 		for( token in path.split(slash) ) {
 			if(token == '..' && target.length > 0 && target[target.length-1] != "..") {
 				target.pop();
+			} else if(token == '') {
+				if(target.length > 0 || path.charCodeAt(0) == '/'.code) {
+					target.push(token);
+				}
 			} else if(token != '.') {
 				target.push(token);
 			}

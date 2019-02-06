@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -32,16 +32,10 @@ package js.html;
 @:native("Permissions")
 extern class Permissions
 {
-	/** @throws DOMError */
 	
 	/**
 		Returns the user permission status for a given API.
+		@throws DOMError
 	**/
 	function query( permission : Dynamic ) : Promise<PermissionStatus>;
-	/** @throws DOMError */
-	
-	/**
-		Revokes the permission currently set on a given API.
-	**/
-	function revoke( permission : Dynamic ) : Promise<PermissionStatus>;
 }

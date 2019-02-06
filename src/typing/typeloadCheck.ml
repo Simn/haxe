@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -95,14 +95,17 @@ let valid_redefinition ctx f1 t1 f2 t2 = (* child, parent *)
 		begin match follow t1, follow t2 with
 		| TFun (args1,r1) , TFun (args2,r2) -> (
 			if not (List.length args1 = List.length args2) then raise (Unify_error [Unify_custom "Different number of function arguments"]);
+			let i = ref 0 in
 			try
+				valid r1 r2;
 				List.iter2 (fun (n,o1,a1) (_,o2,a2) ->
+					incr i;
 					if o1 <> o2 then raise (Unify_error [Not_matching_optional n]);
 					(try valid a2 a1 with Unify_error _ -> raise (Unify_error [Cannot_unify(a1,a2)]))
 				) args1 args2;
-				valid r1 r2
 			with Unify_error l ->
-				raise (Unify_error (Cannot_unify (t1,t2) :: l)))
+				let msg = if !i = 0 then Invalid_return_type else Invalid_function_argument(!i,List.length args1) in
+				raise (Unify_error (Cannot_unify (t1,t2) :: msg :: l)))
 		| _ ->
 			assert false
 		end
@@ -154,7 +157,7 @@ let check_overriding ctx c f =
 				() (* allow to redefine a method as inlined *)
 			| _ ->
 				display_error ctx ("Field " ^ i ^ " has different property access than in superclass") p);
-			if has_meta Meta.Final f2.cf_meta then display_error ctx ("Cannot override final method " ^ i) p;
+			if f2.cf_final then display_error ctx ("Cannot override final method " ^ i) p;
 			try
 				let t = apply_params csup.cl_params params t in
 				valid_redefinition ctx f f.cf_type f2 t
@@ -365,10 +368,11 @@ module Inheritance = struct
 		let process_meta csup =
 			List.iter (fun m ->
 				match m with
-				| Meta.Final, _, _ -> if not (Meta.has Meta.Hack c.cl_meta || (match c.cl_kind with KTypeParameter _ -> true | _ -> false)) then error ("Cannot extend a final " ^ if c.cl_interface then "interface" else "class") p;
 				| Meta.AutoBuild, el, p -> c.cl_meta <- (Meta.Build,el,{ c.cl_pos with pmax = c.cl_pos.pmin }(* prevent display metadata *)) :: m :: c.cl_meta
 				| _ -> ()
-			) csup.cl_meta
+			) csup.cl_meta;
+			if csup.cl_final && not ((csup.cl_extern && Meta.has Meta.Hack c.cl_meta) || (match c.cl_kind with KTypeParameter _ -> true | _ -> false)) then
+				error ("Cannot extend a final " ^ if c.cl_interface then "interface" else "class") p;
 		in
 		let check_cancel_build csup =
 			match csup.cl_build() with
@@ -447,6 +451,7 @@ module Inheritance = struct
 					)
 				| TDynamic t ->
 					if c.cl_dynamic <> None then error "Cannot have several dynamics" p;
+					if not c.cl_extern then display_error ctx "In haxe 4, implements Dynamic is only supported on externs" p;
 					c.cl_dynamic <- Some t;
 					(fun () -> ())
 				| _ ->
@@ -464,7 +469,7 @@ module Inheritance = struct
 						| ITType({kind = Interface} as cm,_) -> (not is_extends || c.cl_interface) && CompletionModuleType.get_path cm <> c.cl_path
 						| ITType({kind = Class} as cm,_) ->
 							is_extends && not c.cl_interface && CompletionModuleType.get_path cm <> c.cl_path &&
-							(not (Meta.has Meta.Final cm.meta) || Meta.has Meta.Hack c.cl_meta) &&
+							(not cm.is_final || Meta.has Meta.Hack c.cl_meta) &&
 							(not (is_basic_class_path (cm.pack,cm.name)) || (c.cl_extern && cm.is_extern))
 						| _ -> false
 					) l in
@@ -481,7 +486,7 @@ end
 let check_final_vars ctx e =
 	let final_vars = Hashtbl.create 0 in
 	List.iter (fun cf -> match cf.cf_kind with
-		| Var _ when Meta.has Meta.Final cf.cf_meta && cf.cf_expr = None ->
+		| Var _ when cf.cf_final && cf.cf_expr = None ->
 			Hashtbl.add final_vars cf.cf_name cf
 		| _ ->
 			()

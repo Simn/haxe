@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -52,5 +52,5 @@ extern class ServiceWorker extends EventTarget
 	var onerror : haxe.Constraints.Function;
 	
 	/** @throws DOMError */
-	function postMessage( message : Dynamic, ?transferable : Array<Dynamic> ) : Void;
+	function postMessage( message : Dynamic, ?transferable : Array<Dynamic> = [] ) : Void;
 }

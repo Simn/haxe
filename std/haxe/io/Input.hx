@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -300,13 +300,13 @@ class Input {
 	/**
 		Read and `len` bytes as a string.
 	**/
-	public function readString( len : Int ) : String {
+	public function readString( len : Int, ?encoding : Encoding ) : String {
 		var b = Bytes.alloc(len);
 		readFullBytes(b,0,len);
 		#if neko
 		return neko.Lib.stringReference(b);
 		#else
-		return b.toString();
+		return b.getString(0, len, encoding);
 		#end
 	}
 

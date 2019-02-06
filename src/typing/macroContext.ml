@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -43,19 +43,17 @@ end
 
 let macro_enable_cache = ref false
 let macro_interp_cache = ref None
-let macro_interp_on_reuse = ref []
-let macro_interp_reused = ref false
-
-let delayed_macro_result = ref ((fun() -> assert false) : unit -> unit -> Interp.value)
 
 let safe_decode v t p f =
 	try
 		f ()
 	with MacroApi.Invalid_expr | EvalContext.RunTimeException _ ->
-		let s,errors = Interp.handle_decoding_error v t in
-		print_endline s;
-		List.iter (fun (s,i) -> print_endline (Printf.sprintf "line %i: %s" i s)) (List.rev errors);
-		error "There was a problem decoding" p
+		let path = ["dump";"decoding_error"] in
+		let ch = Path.create_file false ".txt" [] path  in
+		let errors = Interp.handle_decoding_error (output_string ch) v t in
+		List.iter (fun (s,i) -> Printf.fprintf ch "\nline %i: %s" i s) (List.rev errors);
+		close_out ch;
+		error (Printf.sprintf "There was a problem decoding (see %s.txt for details)" (String.concat "/" path)) p
 
 let get_next_stored_typed_expr_id =
 	let uid = ref 0 in
@@ -150,7 +148,7 @@ let make_macro_api ctx p =
 						{ tpackage = fst path; tname = snd path; tparams = []; tsub = None }
 				in
 				try
-					let m = Some (Typeload.load_instance ctx (tp,null_pos) true) in
+					let m = Some (Typeload.load_instance ctx (tp,p) true) in
 					m
 				with Error (Module_not_found _,p2) when p == p2 ->
 					None
@@ -167,21 +165,21 @@ let make_macro_api ctx p =
 			)
 		);
 		MacroApi.after_typing = (fun f ->
-			Common.add_typing_filter ctx.com (fun tl ->
+			ctx.com.callbacks#add_after_typing (fun tl ->
 				let t = macro_timer ctx ["afterTyping"] in
 				f tl;
 				t()
 			)
 		);
-		MacroApi.on_generate = (fun f ->
-			Common.add_filter ctx.com (fun() ->
+		MacroApi.on_generate = (fun f b ->
+			(if b then ctx.com.callbacks#add_before_save else ctx.com.callbacks#add_after_save) (fun() ->
 				let t = macro_timer ctx ["onGenerate"] in
 				f (List.map type_of_module_type ctx.com.types);
 				t()
 			)
 		);
 		MacroApi.after_generate = (fun f ->
-			Common.add_final_filter ctx.com (fun() ->
+			ctx.com.callbacks#add_after_generation (fun() ->
 				let t = macro_timer ctx ["afterGenerate"] in
 				f();
 				t()
@@ -199,10 +197,10 @@ let make_macro_api ctx p =
 		);
 		MacroApi.parse_string = parse_expr_string;
 		MacroApi.type_expr = (fun e ->
-			typing_timer ctx true (fun() -> type_expr ctx e Value)
+			typing_timer ctx true (fun() -> type_expr ctx e WithType.value)
 		);
 		MacroApi.type_macro_expr = (fun e ->
-			let e = typing_timer ctx true (fun() -> type_expr ctx e Value) in
+			let e = typing_timer ctx true (fun() -> type_expr ctx e WithType.value) in
 			let rec loop e = match e.eexpr with
 				| TField(_,FStatic(c,({cf_kind = Method _} as cf))) -> ignore(!load_macro_ref ctx false c.cl_path cf.cf_name e.epos)
 				| _ -> Type.iter loop e
@@ -249,14 +247,15 @@ let make_macro_api ctx p =
 			);
 		);
 		MacroApi.get_local_type = (fun() ->
-			match ctx.g.get_build_infos() with
+			match ctx.get_build_infos() with
 			| Some (mt,tl,_) ->
 				Some (match mt with
 					| TClassDecl c -> TInst (c,tl)
 					| TEnumDecl e -> TEnum (e,tl)
 					| TTypeDecl t -> TType (t,tl)
-					| TAbstractDecl a -> TAbstract(a,tl))
-			| None ->
+					| TAbstractDecl a -> TAbstract(a,tl)
+				)
+			| _ ->
 				if ctx.curclass == null_class then
 					None
 				else
@@ -264,7 +263,7 @@ let make_macro_api ctx p =
 		);
 		MacroApi.get_expected_type = (fun() ->
 			match ctx.with_type_stack with
-				| (WithType t) :: _ -> Some t
+				| (WithType.WithType(t,_)) :: _ -> Some t
 				| _ -> None
 		);
 		MacroApi.get_call_arguments = (fun() ->
@@ -285,7 +284,7 @@ let make_macro_api ctx p =
 			ctx.locals;
 		);
 		MacroApi.get_build_fields = (fun() ->
-			match ctx.g.get_build_infos() with
+			match ctx.get_build_infos() with
 			| None -> Interp.vnull
 			| Some (_,_,fields) -> Interp.encode_array (List.map Interp.encode_field fields)
 		);
@@ -335,25 +334,18 @@ let make_macro_api ctx p =
 			end
 		);
 		MacroApi.module_dependency = (fun mpath file ->
-			let m = typing_timer ctx false (fun() -> TypeloadModule.load_module ctx (parse_path mpath) p) in
+			let m = typing_timer ctx false (fun() ->
+				let old_deps = ctx.m.curmod.m_extra.m_deps in
+				let m = TypeloadModule.load_module ctx (parse_path mpath) p in
+				ctx.m.curmod.m_extra.m_deps <- old_deps;
+				m
+			) in
 			add_dependency m (create_fake_module ctx file);
-		);
-		MacroApi.module_reuse_call = (fun mpath call ->
-			let m = typing_timer ctx false (fun() -> TypeloadModule.load_module ctx (parse_path mpath) p) in
-			m.m_extra.m_reuse_macro_calls <- call :: List.filter ((<>) call) m.m_extra.m_reuse_macro_calls
 		);
 		MacroApi.current_module = (fun() ->
 			ctx.m.curmod
 		);
 		MacroApi.current_macro_module = (fun () -> assert false);
-		MacroApi.delayed_macro = (fun i ->
-			let mctx = (match ctx.g.macros with None -> assert false | Some (_,mctx) -> mctx) in
-			let f = (try DynArray.get mctx.g.delayed_macros i with _ -> failwith "Delayed macro retrieve failure") in
-			f();
-			let ret = !delayed_macro_result in
-			delayed_macro_result := (fun() -> assert false);
-			ret
-		);
 		MacroApi.use_cache = (fun() ->
 			!macro_enable_cache
 		);
@@ -389,9 +381,6 @@ let make_macro_api ctx p =
 			| CompilationServer.MacroContext -> add_macro ctx
 			| CompilationServer.NormalAndMacroContext -> add ctx; add_macro ctx;
 		);
-		MacroApi.on_reuse = (fun f ->
-			macro_interp_on_reuse := f :: !macro_interp_on_reuse
-		);
 		MacroApi.decode_expr = Interp.decode_expr;
 		MacroApi.encode_expr = Interp.encode_expr;
 		MacroApi.encode_ctype = Interp.encode_ctype;
@@ -407,8 +396,6 @@ let rec init_macro_interp ctx mctx mint =
 	Interp.init mint;
 	if !macro_enable_cache && not (Common.defined mctx.com Define.NoMacroCache) then begin
 		macro_interp_cache := Some mint;
-		macro_interp_on_reuse := [];
-		macro_interp_reused := true;
 	end
 
 and flush_macro_context mint ctx =
@@ -418,26 +405,6 @@ and flush_macro_context mint ctx =
 	let _, types, modules = ctx.g.do_generate mctx in
 	mctx.com.types <- types;
 	mctx.com.Common.modules <- modules;
-	let check_reuse() =
-		if !macro_interp_reused then
-			true
-		else if not (List.for_all (fun f -> f())  !macro_interp_on_reuse) then
-			false
-		else begin
-			macro_interp_reused := true;
-			true;
-		end
-	in
-	(* if one of the type we are using has been modified, we need to create a new macro context from scratch *)
-	let mint = if not (Interp.can_reuse mint types && check_reuse()) then begin
-		let com2 = mctx.com in
-		let mint = Interp.create com2 (make_macro_api ctx Globals.null_pos) true in
-		let macro = ((fun() -> Interp.select mint), mctx) in
-		ctx.g.macros <- Some macro;
-		mctx.g.macros <- Some macro;
-		init_macro_interp ctx mctx mint;
-		mint
-	end else mint in
 	(* we should maybe ensure that all filters in Main are applied. Not urgent atm *)
 	let expr_filters = [VarLazifier.apply mctx.com;AbstractCast.handle_abstract_casts mctx; CapturedVars.captured_vars mctx.com;] in
 
@@ -476,7 +443,6 @@ let create_macro_interp ctx mctx =
 			Interp.select mint;
 			mint, (fun() -> init_macro_interp ctx mctx mint)
 		| Some mint ->
-			macro_interp_reused := false;
 			Interp.do_reuse mint (make_macro_api ctx null_pos);
 			mint, (fun() -> ())
 	) in
@@ -671,11 +637,23 @@ let type_macro ctx mode cpath f (el:Ast.expr list) p =
 				| _ -> ());
 				e
 			with Error (Custom _,_) ->
-				(* if it's not a constant, let's make something that is typed as haxe.macro.Expr - for nice error reporting *)
-				(EBlock [
-					(EVars [("__tmp",null_pos),Some (CTPath ctexpr,p),Some (EConst (Ident "null"),p)],p);
-					(EConst (Ident "__tmp"),p);
-				],p)
+				let has_display e =
+					let rec loop e = match fst e with
+						| EDisplay _ -> raise Exit
+						| _ -> Ast.iter_expr loop e
+					in
+					try
+						loop e;
+						false
+					with Exit ->
+						true
+				in
+				if has_display e then
+					(* if the expression has EDisplay, pass it through as-is and hope that unify_call_args deals with it (issue #7699) *)
+					e
+				else
+					(* if it's not a constant, let's make something that is typed as haxe.macro.Expr - for nice error reporting *)
+					(ECheckType((EConst (Ident "null"),p),(CTPath ctexpr,p)),p)
 			) in
 			(* let's track the index by doing [e][index] (we will keep the expression type this way) *)
 			incr index;
@@ -719,13 +697,13 @@ let type_macro ctx mode cpath f (el:Ast.expr list) p =
 				| MExpr | MDisplay -> Interp.decode_expr v
 				| MBuild ->
 					let fields = if v = Interp.vnull then
-							(match ctx.g.get_build_infos() with
+							(match ctx.get_build_infos() with
 							| None -> assert false
 							| Some (_,_,fields) -> fields)
 						else
 							List.map Interp.decode_field (Interp.decode_array v)
 					in
-					(EVars [("fields",null_pos),Some (CTAnonymous fields,p),None],p)
+					(EVars [("fields",null_pos),false,Some (CTAnonymous fields,p),None],p)
 				| MMacroType ->
 					let t = if v = Interp.vnull then
 						mk_mono()
@@ -740,37 +718,12 @@ let type_macro ctx mode cpath f (el:Ast.expr list) p =
 				)
 			in
 			safe_decode v mret p process
-
 	in
-	let e = (if ctx.in_macro then begin
-		(*
-			this is super-tricky : we can't evaluate a macro inside a macro because we might trigger some cycles.
-			So instead, we generate a haxe.macro.Context.delayedCalled(i) expression that will only evaluate the
-			macro if/when it is called.
-
-			The tricky part is that the whole delayed-evaluation process has to use the same contextual information
-			as if it was evaluated now.
-		*)
-		let ctx = {
-			ctx with locals = ctx.locals;
-		} in
-		let pos = DynArray.length mctx.g.delayed_macros in
-		DynArray.add mctx.g.delayed_macros (fun() ->
-			delayed_macro_result := (fun() ->
-				let mint = Interp.get_ctx() in
-				match call() with
-				| None -> (fun() -> raise MacroApi.Abort)
-				| Some e -> Interp.eval_delayed mint (type_expr ctx e Value)
-			);
-		);
-		ctx.m.curmod.m_extra.m_time <- -1.; (* disable caching for modules having macro-in-macro *)
-		if Common.defined ctx.com Define.MacroDebug then
-			ctx.com.warning "Macro-in-macro call detected" p;
-		let e = (EConst (Ident "$__delayed_call__"),p) in
-		Some (EUntyped (ECall (e,[EConst (Int (string_of_int pos)),p]),p),p)
-	end else
+	let e = if ctx.in_macro then
+		Some (EThrow((EConst(String "macro-in-macro")),p),p)
+	else
 		call()
-	) in
+	in
 	e
 
 let call_macro ctx path meth args p =

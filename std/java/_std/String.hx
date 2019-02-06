@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -26,6 +26,7 @@
 
 	@:overload(function(b:haxe.io.BytesData, offset:Int, length:Int, charsetName:String):Void { })
 	@:overload(function(b:haxe.io.BytesData, offset:Int, length:Int):Void { })
+	@:overload(function(b:java.NativeArray<java.StdTypes.Char16>):Void { })
 	function new(string:String) : Void;
 
 	function toUpperCase() : String;

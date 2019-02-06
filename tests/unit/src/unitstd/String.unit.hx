@@ -83,6 +83,8 @@ s.lastIndexOf("foo") == 6;
 s.lastIndexOf("foofoo") == 3;
 s.lastIndexOf("f") == 6;
 s.lastIndexOf("barb") == 9;
+s.lastIndexOf("barb", 12) == 9;
+s.lastIndexOf("barb", 13) == 9;
 s.lastIndexOf("z") == -1;
 //s.lastIndexOf(null) == -1;
 //s.lastIndexOf(null, 1) == -1;
@@ -96,6 +98,8 @@ s.lastIndexOf("bar", 12) == 12;
 s.lastIndexOf("bar", 11) == 9;
 s.lastIndexOf("bar", 9) == 9;
 s.lastIndexOf("bar", 8) == -1;
+s.lastIndexOf("a", s.length) == 13;
+s.lastIndexOf("a", s.length + 9000) == 13;
 
 // split
 var s = "xfooxfooxxbarxbarxx";

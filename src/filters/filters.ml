@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -789,6 +789,7 @@ let run com tctx main =
 			| _ -> ());
 		not (is_cached t)
 	) com.types in
+	NullSafety.run com new_types;
 	(* PASS 1: general expression filters *)
 	let filters = [
 		(* ForRemap.apply tctx; *)
@@ -849,10 +850,13 @@ let run com tctx main =
 	t();
 	next_compilation();
 	let t = filter_timer detail_times ["callbacks"] in
-	List.iter (fun f -> f()) (List.rev com.callbacks.before_dce); (* macros onGenerate etc. *)
+	List.iter (fun f -> f()) (List.rev com.callbacks#get_before_save); (* macros onGenerate etc. *)
 	t();
 	let t = filter_timer detail_times ["save state"] in
 	List.iter (save_class_state tctx) new_types;
+	t();
+	let t = filter_timer detail_times ["callbacks"] in
+	List.iter (fun f -> f()) (List.rev com.callbacks#get_after_save); (* macros onGenerate etc. *)
 	t();
 	let t = filter_timer detail_times ["type 2"] in
 	(* PASS 2: type filters pre-DCE *)
@@ -871,12 +875,13 @@ let run com tctx main =
 	else
 		(try Common.defined_value com Define.Dce with _ -> "no")
 	in
-	begin match dce_mode with
-		| "full" -> Dce.run com main (not (Common.defined com Define.Interp))
-		| "std" -> Dce.run com main false
-		| "no" -> Dce.fix_accessors com
+	let dce_mode = match dce_mode with
+		| "full" -> if Common.defined com Define.Interp then Dce.DceNo else DceFull
+		| "std" -> DceStd
+		| "no" -> DceNo
 		| _ -> failwith ("Unknown DCE mode " ^ dce_mode)
-	end;
+	in
+	Dce.run com main dce_mode;
 	t();
 	(* PASS 3: type filters post-DCE *)
 	let type_filters = [

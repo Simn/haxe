@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -146,7 +146,7 @@ let valid_as3_ident s =
 
 let anon_field s =
 	let s = s_ident s in
-	if not (valid_as3_ident s) then "\"" ^ (Ast.s_escape s) ^ "\"" else s
+	if not (valid_as3_ident s) then "\"" ^ (StringHelper.s_escape s) ^ "\"" else s
 
 let rec create_dir acc = function
 	| [] -> ()
@@ -352,7 +352,7 @@ let generate_resources infos =
 			k := !k + 1;
 			print ctx "\t\t[Embed(source = \"__res/%s\", mimeType = \"application/octet-stream\")]\n" (Bytes.unsafe_to_string (Base64.str_encode name));
 			print ctx "\t\tpublic static var %s:Class;\n" varname;
-			inits := ("list[\"" ^ Ast.s_escape name ^ "\"] = " ^ varname ^ ";") :: !inits;
+			inits := ("list[\"" ^ StringHelper.s_escape name ^ "\"] = " ^ varname ^ ";") :: !inits;
 		) infos.com.resources;
 		spr ctx "\t\tstatic public function __init__():void {\n";
 		spr ctx "\t\t\tlist = new Dictionary();\n";
@@ -368,13 +368,13 @@ let generate_resources infos =
 let gen_constant ctx p = function
 	| TInt i -> print ctx "%ld" i
 	| TFloat s -> spr ctx s
-	| TString s -> print ctx "\"%s\"" (Ast.s_escape s)
+	| TString s -> print ctx "\"%s\"" (StringHelper.s_escape s)
 	| TBool b -> spr ctx (if b then "true" else "false")
 	| TNull -> spr ctx "null"
 	| TThis -> spr ctx (this ctx)
 	| TSuper -> spr ctx "super"
 
-let gen_function_header ctx name f params p =
+let rec gen_function_header ctx name f params p =
 	let old = ctx.in_value in
 	let old_t = ctx.local_types in
 	let old_bi = ctx.block_inits in
@@ -382,10 +382,10 @@ let gen_function_header ctx name f params p =
 	ctx.local_types <- List.map snd params @ ctx.local_types;
 	let init () =
  		List.iter (fun (v,o) -> match o with
-			| Some c when is_nullable v.v_type && c <> TNull ->
+			| Some c when is_nullable v.v_type && c.eexpr <> TConst TNull ->
 				newline ctx;
 				print ctx "if(%s==null) %s=" v.v_name v.v_name;
-				gen_constant ctx p c;
+				gen_expr ctx c;
 			| _ -> ()
 		) f.tf_args;
 		ctx.block_inits <- None;
@@ -410,9 +410,11 @@ let gen_function_header ctx name f params p =
 				match c with
 				| None ->
 					if ctx.constructor_block then print ctx " = %s" (default_value tstr);
-				| Some c ->
+				| Some ({eexpr = TConst _ } as e) ->
 					spr ctx " = ";
-					gen_constant ctx p c
+					gen_expr ctx e
+				| _ ->
+					spr ctx " = null"
 	) f.tf_args;
 	print ctx ") : %s " (type_str ctx f.tf_type p);
 	(fun () ->
@@ -421,7 +423,7 @@ let gen_function_header ctx name f params p =
 		ctx.block_inits <- old_bi;
 	)
 
-let rec gen_call ctx e el r =
+and gen_call ctx e el r =
 	match e.eexpr , el with
 	| TCall (x,_) , el ->
 		spr ctx "(";
@@ -967,9 +969,6 @@ and gen_value ctx e =
 		)) e.etype e.epos);
 		v()
 
-let final m =
-	if Meta.has Meta.Final m then " final " else ""
-
 let generate_field ctx static f =
 	newline ctx;
 	ctx.in_static <- static;
@@ -1006,7 +1005,7 @@ let generate_field ctx static f =
 	let p = ctx.curclass.cl_pos in
 	match f.cf_expr, f.cf_kind with
 	| Some { eexpr = TFunction fd }, Method (MethNormal | MethInline) ->
-		print ctx "%s%s " rights (if static then "" else final f.cf_meta);
+		print ctx "%s%s " rights (if static || not f.cf_final then "" else " final ");
 		let rec loop c =
 			match c.cl_super with
 			| None -> ()
@@ -1099,7 +1098,7 @@ let generate_class ctx c =
 	define_getset ctx false c;
 	ctx.local_types <- List.map snd c.cl_params;
 	let pack = open_block ctx in
-	print ctx "\tpublic %s%s%s %s " (final c.cl_meta) (match c.cl_dynamic with None -> "" | Some _ -> if c.cl_interface then "" else "dynamic ") (if c.cl_interface then "interface" else "class") (snd c.cl_path);
+	print ctx "\tpublic %s%s%s %s " (if c.cl_final then " final " else "") "" (if c.cl_interface then "interface" else "class") (snd c.cl_path);
 	(match c.cl_super with
 	| None -> ()
 	| Some (csup,_) -> print ctx "extends %s " (s_path ctx true csup.cl_path c.cl_pos));
@@ -1210,7 +1209,7 @@ let generate_enum ctx e =
 		print ctx "public static var __meta__ : * = ";
 		gen_expr ctx e;
 		newline ctx);
-	print ctx "public static var __constructs__ : Array = [%s];" (String.concat "," (List.map (fun s -> "\"" ^ Ast.s_escape s ^ "\"") e.e_names));
+	print ctx "public static var __constructs__ : Array = [%s];" (String.concat "," (List.map (fun s -> "\"" ^ StringHelper.s_escape s ^ "\"") e.e_names));
 	cl();
 	newline ctx;
 	print ctx "}";

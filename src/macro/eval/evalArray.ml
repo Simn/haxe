@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -26,13 +26,9 @@ let create values = {
 }
 
 let array_join a f sep =
-	let buf = Rope.Buffer.create 0 in
-	let last = Array.length a - 1 in
-	Array.iteri (fun i v ->
-		Rope.Buffer.add_rope buf (f v);
-		if i <> last then Rope.Buffer.add_rope buf sep;
-	) a;
-	Rope.Buffer.contents buf
+	let l = Array.map f a in
+	let l = Array.to_list l in
+	EvalString.join sep l
 
 let to_list a = Array.to_list (Array.sub a.avalues 0 a.alength)
 

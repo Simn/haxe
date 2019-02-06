@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -34,11 +34,13 @@ package js.html;
 @:native("HTMLTextAreaElement")
 extern class TextAreaElement extends Element
 {
+	var autocomplete : String;
 	var autofocus : Bool;
 	var cols : Int;
 	var disabled : Bool;
 	var form(default,null) : FormElement;
 	var maxLength : Int;
+	var minLength : Int;
 	var name : String;
 	var placeholder : String;
 	var readOnly : Bool;
@@ -52,11 +54,13 @@ extern class TextAreaElement extends Element
 	var willValidate(default,null) : Bool;
 	var validity(default,null) : ValidityState;
 	var validationMessage(default,null) : String;
+	var labels(default,null) : NodeList;
 	var selectionStart : Int;
 	var selectionEnd : Int;
 	var selectionDirection : String;
 	
 	function checkValidity() : Bool;
+	function reportValidity() : Bool;
 	function setCustomValidity( error : String ) : Void;
 	function select() : Void;
 	/** @throws DOMError */

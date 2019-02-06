@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -122,10 +122,10 @@ extern class SpeechRecognition extends EventTarget
 	
 	/** @throws DOMError */
 	function new() : Void;
-	/** @throws DOMError */
 	
 	/**
 		Starts the speech recognition service listening to incoming audio with intent to recognize grammars associated with the current `SpeechRecognition`.
+		@throws DOMError
 	**/
 	function start( ?stream : MediaStream ) : Void;
 	

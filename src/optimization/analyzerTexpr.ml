@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -105,10 +105,9 @@ let target_handles_unops com = match com.platform with
 	| Lua | Python -> false
 	| _ -> true
 
-let target_handles_assign_ops com = match com.platform with
-	(* Technically PHP can handle assign ops, but unfortunately x += y is not always
-	   equivalent to x = x + y in case y has side-effects. *)
-	| Lua | Php -> false
+let target_handles_assign_ops com e2 = match com.platform with
+	| Php -> not (has_side_effect e2)
+	| Lua -> false
 	| Cpp when not (Common.defined com Define.Cppia) -> false
 	| _ -> true
 
@@ -149,30 +148,6 @@ let r = Str.regexp "^\\([A-Za-z0-9_]\\)+$"
 let is_unbound_call_that_might_have_side_effects s el = match s,el with
 	| "__js__",[{eexpr = TConst (TString s)}] when Str.string_match r s 0 -> false
 	| _ -> true
-
-let is_ref_type = function
-	| TType({t_path = ["cs"],("Ref" | "Out")},_) -> true
-	| TType({t_path = path},_) when path = Genphp7.ref_type_path -> true
-	| TType({t_path = ["cpp"],("Reference")},_) -> true
-	| TAbstract({a_path=["hl";"types"],"Ref"},_) -> true
-	| _ -> false
-
-let rec is_asvar_type t =
-	let check meta =
-		AnalyzerConfig.has_analyzer_option meta "as_var"
-	in
-	match t with
-	| TInst(c,_) -> check c.cl_meta
-	| TEnum(en,_) -> check en.e_meta
-	| TType(t,tl) -> check t.t_meta || (is_asvar_type (apply_params t.t_params tl t.t_type))
-	| TAbstract(a,_) -> check a.a_meta
-	| TLazy f -> is_asvar_type (lazy_type f)
-	| TMono r ->
-		(match !r with
-		| Some t -> is_asvar_type t
-		| _ -> false)
-	| _ ->
-		false
 
 let type_change_ok com t1 t2 =
 	if t1 == t2 then
@@ -553,7 +528,7 @@ module InterferenceReport = struct
 		let s_hashtbl f h =
 			String.concat ", " (Hashtbl.fold (fun k _ acc -> (f k) :: acc) h [])
 		in
-		Type.Printer.s_record_fields "\t" [
+		Type.Printer.s_record_fields "" [
 			"ir_var_reads",s_hashtbl string_of_int ir.ir_var_reads;
 			"ir_var_writes",s_hashtbl string_of_int ir.ir_var_writes;
 			"ir_field_reads",s_hashtbl (fun x -> x) ir.ir_field_reads;
@@ -645,14 +620,14 @@ module Fusion = struct
 		| OpArrow ->
 			false
 
-	let use_assign_op com op e1 e2 =
+	let use_assign_op com op e1 e2 e3 =
 		let skip e = match com.platform with
 			| Eval -> Texpr.skip e
 			| _ -> e
 		in
 		let e1 = skip e1 in
 		let e2 = skip e2 in
-		is_assign_op op && target_handles_assign_ops com && Texpr.equal e1 e2 && not (has_side_effect e1) && match com.platform with
+		is_assign_op op && target_handles_assign_ops com e3 && Texpr.equal e1 e2 && not (has_side_effect e1) && match com.platform with
 			| Cs when is_null e1.etype || is_null e2.etype -> false (* C# hates OpAssignOp on Null<T> *)
 			| _ -> true
 
@@ -716,13 +691,13 @@ module Fusion = struct
 			let b = num_uses <= 1 &&
 			        num_writes = 0 &&
 			        can_be_used_as_value &&
-					not (is_asvar_type v.v_type) &&
+					not (ExtType.has_variable_semantics v.v_type) &&
 			        (is_compiler_generated || config.optimize && config.fusion && config.user_var_fusion && not has_type_params)
 			in
 			if config.fusion_debug then begin
-				print_endline (Printf.sprintf "FUSION\n\tvar %s<%i> = %s" v.v_name v.v_id (s_expr_pretty e));
-				print_endline (Printf.sprintf "\tcan_be_fused:%b: num_uses:%i <= 1 && num_writes:%i = 0 && can_be_used_as_value:%b && (is_compiler_generated:%b || config.optimize:%b && config.fusion:%b && config.user_var_fusion:%b)"
-					b num_uses num_writes can_be_used_as_value is_compiler_generated config.optimize config.fusion config.user_var_fusion)
+				print_endline (Printf.sprintf "\nFUSION: %s\n\tvar %s<%i> = %s" (if b then "true" else "false") v.v_name v.v_id (s_expr_pretty e));
+				print_endline (Printf.sprintf "CONDITION:\n\tnum_uses:%i <= 1 && num_writes:%i = 0 && can_be_used_as_value:%b && (is_compiler_generated:%b || config.optimize:%b && config.fusion:%b && config.user_var_fusion:%b)"
+					num_uses num_writes can_be_used_as_value is_compiler_generated config.optimize config.fusion config.user_var_fusion)
 			end;
 			b
 		in
@@ -802,8 +777,8 @@ module Fusion = struct
 				let found = ref false in
 				let blocked = ref false in
 				let ir = InterferenceReport.from_texpr e1 in
-				if config.fusion_debug then print_endline (Printf.sprintf "\tInterferenceReport: %s\n\t%s"
-					 (InterferenceReport.to_string ir) (Type.s_expr_pretty true "\t" false (s_type (print_context())) (mk (TBlock el) t_dynamic null_pos)));
+				if config.fusion_debug then print_endline (Printf.sprintf "INTERFERENCE: %s\nINTO: %s"
+					 (InterferenceReport.to_string ir) (Type.s_expr_pretty true "" false (s_type (print_context())) (mk (TBlock el) t_dynamic null_pos)));
 				(* This function walks the AST in order of evaluation and tries to find an occurrence of v1. If successful, that occurrence is
 				   replaced with e1. If there's an interference "on the way" the replacement is canceled. *)
 				let rec replace e =
@@ -814,7 +789,7 @@ module Fusion = struct
 						blocked := old;
 						e
 					in
-					let handle_el el =
+					let handle_el' el =
 						(* This mess deals with the fact that the order of evaluation is undefined for call
 							arguments on these targets. Even if we find a replacement, we pretend that we
 							didn't in order to find possible interferences in later call arguments. *)
@@ -829,7 +804,7 @@ module Fusion = struct
 						found := !really_found;
 						el
 					in
-					let handle_el = if not (target_handles_side_effect_order com) then handle_el else List.map replace in
+					let handle_el = if not (target_handles_side_effect_order com) then handle_el' else List.map replace in
 					let handle_call e2 el = match com.platform with
 						| Neko ->
 							(* Neko has this reversed at the moment (issue #4787) *)
@@ -868,7 +843,7 @@ module Fusion = struct
 							found := true;
 							if type_change_ok com v1.v_type e1.etype then e1 else mk (TCast(e1,None)) v1.v_type e.epos
 						| TLocal v ->
-							if has_var_write ir v || ((v.v_capture || is_ref_type v.v_type) && (has_state_write ir)) then raise Exit;
+							if has_var_write ir v || ((v.v_capture || ExtType.has_reference_semantics v.v_type) && (has_state_write ir)) then raise Exit;
 							e
 						| TBinop(OpAssign,({eexpr = TLocal v} as e1),e2) ->
 							let e2 = replace e2 in
@@ -950,7 +925,8 @@ module Fusion = struct
 							if not !found && (((has_state_read ir || has_any_field_read ir)) || has_state_write ir || has_any_field_write ir) then raise Exit;
 							{e with eexpr = TCall(e1,el)}
 						| TObjectDecl fl ->
-							let el = handle_el (List.map snd fl) in
+							(* The C# generator has trouble with evaluation order in structures (#7531). *)
+							let el = (match com.platform with Cs -> handle_el' | _ -> handle_el) (List.map snd fl) in
 							if not !found && (has_state_write ir || has_any_field_write ir) then raise Exit;
 							{e with eexpr = TObjectDecl (List.map2 (fun (s,_) e -> s,e) fl el)}
 						| TArrayDecl el ->
@@ -1013,7 +989,8 @@ module Fusion = struct
 				begin try
 					let e2,f = match e2.eexpr with
 						| TReturn (Some e2) -> e2,(fun e -> {e2 with eexpr = TReturn (Some e)})
-						| TBinop(OpAssign,e21,e22) -> e22,(fun e -> {e2 with eexpr = TBinop(OpAssign,e21,e)})
+						(* This is not sound if e21 contains the variable (issue #7704) *)
+						(* | TBinop(OpAssign,e21,e22) -> e22,(fun e -> {e2 with eexpr = TBinop(OpAssign,e21,e)}) *)
 						| TVar(v,Some e2) -> e2,(fun e -> {e2 with eexpr = TVar(v,Some e)})
 						| _ -> raise Exit
 					in
@@ -1041,7 +1018,7 @@ module Fusion = struct
 				with Exit ->
 					fuse (e1 :: acc) (e2 :: el)
 				end
-			| {eexpr = TBinop(OpAssign,e1,{eexpr = TBinop(op,e2,e3)})} as e :: el when use_assign_op com op e1 e2 ->
+			| {eexpr = TBinop(OpAssign,e1,{eexpr = TBinop(op,e2,e3)})} as e :: el when use_assign_op com op e1 e2 e3 ->
 				let rec loop e = match e.eexpr with
 					| TLocal v -> state#dec_reads v;
 					| _ -> Type.iter loop e
@@ -1143,8 +1120,9 @@ module Cleanup = struct
 			| TField({eexpr = TTypeExpr _},_) ->
 				e
 			| TTypeExpr (TClassDecl c) ->
-				List.iter (fun cf -> if not (Meta.has Meta.MaybeUsed cf.cf_meta) then cf.cf_meta <- (Meta.MaybeUsed,[],cf.cf_pos) :: cf.cf_meta;) c.cl_ordered_statics;
 				e
+			| TMeta((Meta.Ast,_,_),e1) when (match e1.eexpr with TSwitch _ -> false | _ -> true) ->
+				loop e1
 			| _ ->
 				Type.map_expr loop e
 		in
@@ -1223,7 +1201,7 @@ module Purity = struct
 		let rec check_write e1 =
 			begin match e1.eexpr with
 				| TLocal v ->
-					if is_ref_type v.v_type then taint_raise node; (* Writing to a ref type means impurity. *)
+					if ExtType.has_reference_semantics v.v_type then taint_raise node; (* Writing to a ref type means impurity. *)
 					() (* Writing to locals does not violate purity. *)
 				| TField({eexpr = TConst TThis},_) when is_ctor ->
 					() (* A constructor can write to its own fields without violating purity. *)

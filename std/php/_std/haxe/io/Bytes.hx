@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -147,10 +147,11 @@ class Bytes {
 		setInt32(pos + 4, v.high);
 	}
 
-	public inline function getString( pos : Int, len : Int ) : String {
+	public inline function getString( pos : Int, len : Int, ?encoding : Encoding ) : String {
 		if( pos < 0 || len < 0 || pos + len > length ) {
 			throw Error.OutsideBounds;
 		} else {
+			//no need to handle encoding, because PHP strings are binary safe.
 			return b.getString(pos, len);
 		}
 	}
@@ -177,11 +178,18 @@ class Bytes {
 		return new Bytes(length, BytesData.alloc(length));
 	}
 
-	public static inline function ofString( s : String ) : Bytes {
-		return new Bytes(s.length, s);
+	public static inline function ofString( s : String, ?encoding : Encoding ) : Bytes {
+		return new Bytes(php.Global.strlen(s), s);
 	}
 
 	public static inline function ofData( b : BytesData ) : Bytes {
+		return new Bytes(b.length, b);
+	}
+	
+	public static function ofHex( s : String ) : Bytes {
+		var len = s.length;
+		if ( (len & 1) != 0 ) throw "Not a hex string (odd number of digits)";
+		var b : String = php.Global.hex2bin(s);
 		return new Bytes(b.length, b);
 	}
 
