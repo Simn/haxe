@@ -100,14 +100,13 @@ class DisplayTestContext {
 			source.path + "@" + displayPart,
 		];
 		var stdin = source.content;
-		var proc = new sys.io.Process("haxe", args);
+		var proc = new eval.vm.Process("haxe", args);
 		proc.stdin.writeString(stdin);
 		proc.stdin.close();
 		var stderr = proc.stderr.readAll();
 		var stdout = proc.stdout.readAll();
-		var exit = proc.exitCode();
-		proc.close();
-		var success = exit == 0;
+		var exit = proc.close();
+		var success = exit.kind == WEXITED && exit.code == 0;
 		var s = stderr.toString();
 		if (!success || s == "") {
 			throw new HaxeInvocationException(s, fieldName, args, stdin);

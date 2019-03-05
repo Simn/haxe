@@ -160,6 +160,7 @@ and vinstance_kind =
 	| IOutChannel of out_channel (* FileOutput *)
 	| ISocket of Unix.file_descr
 	| IThread of Thread.t
+	| IOCamlProcess of (out_channel * in_channel * in_channel) * int (* pid *)
 	| IZip of vzlib (* Compress/Uncompress *)
 	| ITypeDecl of Type.module_type
 	| ILazyType of (Type.tlazy ref) * (unit -> value)

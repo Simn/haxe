@@ -1671,6 +1671,38 @@ module StdNativeProcess = struct
 	)
 end
 
+module StdProcess = struct
+	let this vthis = match vthis with
+		| VInstance {ikind=IOCamlProcess(proc,pid)} -> proc,pid
+		| _ -> unexpected_value vthis "eval.vm.Process"
+
+	let close_pipes (stdin,stdout,stderr) =
+		close_out stdin;
+		close_in stdout;
+		close_in stderr
+
+	let close = vifun0 (fun vthis ->
+		let proc,pid = this vthis in
+		let _,ret = Unix.waitpid [] pid in
+		let kind,code = match ret with
+		| WEXITED i -> 0,i
+		| WSIGNALED i -> 1,i
+		| WSTOPPED i -> 2,i
+		in
+		encode_obj_s [
+			"kind",vint kind;
+			"code",vint code
+		]
+	)
+
+	let kill = vifun0 (fun vthis ->
+		let (proc,pid) = this vthis in
+		Unix.kill pid Sys.sigkill;
+		close_pipes proc;
+		vnull
+	)
+end
+
 module StdReflect = struct
 
 	let r_get_ = create_ascii "get_"
@@ -3013,6 +3045,37 @@ let init_constructors builtins =
 				in
 				encode_instance key_eval_vm_Thread ~kind:(IThread (Thread.create f ()))
 			| _ -> assert false
+		);
+	add key_eval_vm_Process
+		(fun vl -> match vl with
+			| [cmd;args] ->
+				let open Unix in
+				let cmd = decode_string cmd in
+				let args = match args with
+					| VNull -> [||]
+					| VArray va -> (Array.map decode_string (Array.sub va.avalues 0 va.alength))
+					| _ -> unexpected_value args "array"
+				in
+				let args = Array.append [|cmd|] args in
+				let cloexec = true in
+				let stdin,stdin' = pipe ~cloexec () in
+				let stdout',stdout = pipe ~cloexec () in
+				let stderr',stderr = pipe ~cloexec () in
+				let pid = create_process cmd args stdin stdout stderr in
+				close stdin;
+				close stdout;
+				close stderr;
+				let stdin = out_channel_of_descr stdin' in
+				let stdout = in_channel_of_descr stdout' in
+				let stderr = in_channel_of_descr stderr' in
+				let v = encode_instance key_eval_vm_Process ~kind:(IOCamlProcess((stdin,stdout,stderr),pid)) in
+				set_field v key_stdout (encode_instance key_sys_io_FileInput ~kind:(IInChannel(stdout,ref false)));
+				set_field v key_stderr (encode_instance key_sys_io_FileInput ~kind:(IInChannel(stderr,ref false)));
+				set_field v key_stdin (encode_instance key_sys_io_FileOutput ~kind:(IOutChannel stdin));
+				set_field v key_pid (vint pid);
+				v
+			| _ ->
+				assert false
 		)
 
 let init_empty_constructors builtins =
@@ -3261,6 +3324,9 @@ let init_standard_library builtins =
 		"readStdout",StdNativeProcess.readStdout;
 		"closeStdin",StdNativeProcess.closeStdin;
 		"writeStdin",StdNativeProcess.writeStdin;
+	];
+	init_fields builtins (["eval";"vm"],"Process") [] [
+		"close",StdProcess.close;
 	];
 	init_fields builtins ([],"Reflect") [
 		"callMethod",StdReflect.callMethod;
