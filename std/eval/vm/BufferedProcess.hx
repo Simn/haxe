@@ -35,6 +35,8 @@ class BufferedProcess {
 	var process:sys.io.Process;
 	var stdoutBuffer:BytesBuffer;
 	var stderrBuffer:BytesBuffer;
+	var stdoutThread:Thread;
+	var stderrThread:Thread;
 
 	/**
 		Creates a new process that executes `command` with the given `arguments`. If
@@ -55,14 +57,14 @@ class BufferedProcess {
 			process.stdin.close();
 		}
 
-		new Thread(function() {
+		stderrThread = new Thread(function() {
 			while (process.running) {
 				stderrBuffer.add(process.stderr.readAll());
 			}
 			process.stderr.close();
 		});
 
-		new Thread(function() {
+		stdoutThread = new Thread(function() {
 			while (process.running) {
 				stdoutBuffer.add(process.stdout.readAll());
 			}
@@ -76,6 +78,8 @@ class BufferedProcess {
 	**/
 	public function close() {
 		process.close();
+		Thread.join(stdoutThread);
+		Thread.join(stderrThread);
 		return {
 			exit: process.exitCode(),
 			stdout: stdoutBuffer.getBytes(),
