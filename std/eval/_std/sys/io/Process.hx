@@ -45,10 +45,12 @@ class Process {
 
 	public function exitCode(?block:Bool = true):Int {
 		if (block) {
-			close();
+			wait();
 		}
 		return code;
 	}
 
 	extern public function kill():Void;
+
+	extern function wait():Void;
 }

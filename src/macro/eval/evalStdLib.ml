@@ -1628,18 +1628,22 @@ module StdProcess = struct
 		close_in stdout;
 		close_in stderr
 
+	let do_wait vthis pid =
+		let _,ret = Unix.waitpid [] pid in
+		set_field vthis key_running vfalse;
+		begin match ret with
+		| WEXITED i -> set_field vthis key_code (vint i)
+		| WSIGNALED i -> ()
+		| WSTOPPED i -> ()
+		end
+
 	let close = vifun0 (fun vthis ->
 		let proc,pid = this vthis in
 		if not (is_true (field vthis key_running)) then
 			vnull
 		else begin
-			let _,ret = Unix.waitpid [] pid in
-			set_field vthis key_running vfalse;
-			begin match ret with
-			| WEXITED i -> set_field vthis key_code (vint i)
-			| WSIGNALED i -> ()
-			| WSTOPPED i -> ()
-			end;
+			do_wait vthis pid;
+			close_pipes proc;
 			vnull
 		end
 	)
@@ -1649,6 +1653,12 @@ module StdProcess = struct
 		Unix.kill pid Sys.sigkill;
 		close_pipes proc;
 		set_field vthis key_running vfalse;
+		vnull
+	)
+
+	let wait = vifun0 (fun vthis ->
+		let (proc,pid) = this vthis in
+		do_wait vthis pid;
 		vnull
 	)
 end
@@ -3255,6 +3265,7 @@ let init_standard_library builtins =
 	init_fields builtins (["sys";"io"],"Process") [] [
 		"close",StdProcess.close;
 		"kill",StdProcess.kill;
+		"wait",StdProcess.wait;
 	];
 	init_fields builtins ([],"Reflect") [
 		"callMethod",StdReflect.callMethod;

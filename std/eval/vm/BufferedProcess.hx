@@ -77,11 +77,12 @@ class BufferedProcess {
 		the contents of stdout and stderr.
 	**/
 	public function close() {
-		process.close();
+		var exitCode = process.exitCode();
 		Thread.join(stdoutThread);
 		Thread.join(stderrThread);
+		process.close();
 		return {
-			exit: process.exitCode(),
+			exit: exitCode,
 			stdout: stdoutBuffer.getBytes(),
 			stderr: stderrBuffer.getBytes()
 		}

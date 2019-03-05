@@ -76,10 +76,11 @@ class Main {
 	}
 
 	static function runCommand(command:String, args:Array<String>, expectFailure:Bool, expectStderr:String) {
-		var proc = new eval.vm.BufferedProcess(command, args);
-		var result = proc.close();
-		var success = result.exit == 0;
-		var success = switch [success, expectFailure] {
+		var proc = new sys.io.Process(command, args);
+		var stdout = proc.stdout.readAll();
+		var exit = proc.exitCode();
+		var success = exit == 0;
+		var result = switch [success, expectFailure] {
 			case [true, false]:
 				true;
 			case [true, true]:
@@ -88,28 +89,28 @@ class Main {
 			case [false, true]:
 				true;
 			case [false, false]:
-				var stderr = result.stderr.toString();
+				var stderr = proc.stderr.readAll().toString();
 				Sys.print(stderr);
 				false;
 		}
 
-		if (result.stdout.length > 0) {
-			Sys.println(result.stdout);
+		if (stdout.length > 0) {
+			Sys.println(stdout);
 		}
 
-		if (success && expectStderr != null)
+		if (result && expectStderr != null)
 		{
-			var stderr = result.stderr.toString().replace("\r\n", "\n").trim();
+			var stderr = proc.stderr.readAll().toString().replace("\r\n", "\n").trim();
 			if (stderr != expectStderr.trim())
 			{
 				Sys.println("Actual stderr output doesn't match the expected one");
 				Sys.println('Expected:\n"$expectStderr"');
 				Sys.println('Actual:\n"$stderr"');
-				success = false;
+				result = false;
 			}
 		}
 		proc.close();
-		return success;
+		return result;
 
 	}
 }
