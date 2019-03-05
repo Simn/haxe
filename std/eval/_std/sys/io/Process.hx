@@ -43,7 +43,7 @@ class Process {
 		return pid;
 	}
 
-	public function exitCode(?block:Bool):Int {
+	public function exitCode(?block:Bool = true):Int {
 		if (block) {
 			close();
 		}

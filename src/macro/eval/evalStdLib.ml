@@ -2967,7 +2967,7 @@ let init_constructors builtins =
 		(fun vl -> match vl with
 			| [f] ->
 				let ctx = get_ctx() in
-				if ctx.is_macro then exc_string "Creating threads in macros is not supported";
+				(* if ctx.is_macro then exc_string "Creating threads in macros is not supported"; *)
 				let f () =
 					let id = Thread.id (Thread.self()) in
 					let new_eval = {env = null_env} in
