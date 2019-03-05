@@ -3060,6 +3060,8 @@ let init_constructors builtins =
 				let stdin,stdin' = pipe () in
 				let stdout',stdout = pipe () in
 				let stderr',stderr = pipe () in
+				(* Stupid workaround for ~cloexec failing on travis linux OCaml for whatever reason *)
+				List.iter Unix.set_close_on_exec [stdin;stdin';stdout;stdout';stderr;stderr'];
 				let pid = create_process cmd args stdin stdout stderr in
 				close stdin;
 				close stdout;
