@@ -27,9 +27,9 @@ import haxe.io.Output;
 
 @:coreApi
 class Process {
-	public var stdout(default, null):haxe.io.Input;
-	public var stderr(default, null):haxe.io.Input;
-	public var stdin(default, null):haxe.io.Output;
+	@:ifFeature("sys.io.Process.*") public var stdout(default, null):haxe.io.Input;
+	@:ifFeature("sys.io.Process.*") public var stderr(default, null):haxe.io.Input;
+	@:ifFeature("sys.io.Process.*") public var stdin(default, null):haxe.io.Output;
 
 	@:ifFeature("sys.io.Process.*") var running:Bool;
 	@:ifFeature("sys.io.Process.*") var pid:Int;
