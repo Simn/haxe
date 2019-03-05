@@ -194,6 +194,13 @@ class Boot {
 	}
 
 	/**
+		Check if provided value is an anonymous object
+	**/
+	public static inline function isAnon(v:Any) : Bool {
+		return Std.is(v, HxAnon);
+	}
+
+	/**
 		Returns Class<HxClass>
 	**/
 	public static inline function getHxClass() : HxClass {
@@ -911,9 +918,7 @@ private class HxAnon extends StdClass {
 
 	@:phpMagic
 	function __call( name:String, args:NativeArray ) : Dynamic {
-		var method = Syntax.field(this, name);
-		Syntax.keepVar(method);
-		return method(Syntax.splat(args));
+		return Syntax.code("($this->{0})(...{1})", name, args);
 	}
 }
 

@@ -742,9 +742,12 @@ class TestStrict {
 		}
 	}
 
-	static public function localNamedFunction_shouldPass() {
+	var foo:Null<String>;
+	public function localNamedFunction_shouldPass() {
 		function cb() {
-			cb();
+			if(foo != null) {
+				cb();
+			}
 		}
 	}
 
@@ -837,6 +840,16 @@ class TestStrict {
 
 	static function return_assignNonNullable_shouldPass(?n:String):String {
 		return n = 'hello';
+	}
+
+	static function stringConcat_shouldPass(?a:String) {
+		'hello, ' + a;
+		a += 'hello';
+	}
+
+	static function stringConcat_twoNullables_shouldFail(?a:String, ?b:String) {
+		shouldFail(a + b);
+		shouldFail(a += b);
 	}
 }
 
