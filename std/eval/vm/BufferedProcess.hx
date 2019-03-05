@@ -59,12 +59,14 @@ class BufferedProcess {
 			while (process.running) {
 				stderrBuffer.add(process.stderr.readAll());
 			}
+			process.stderr.close();
 		});
 
 		new Thread(function() {
 			while (process.running) {
 				stdoutBuffer.add(process.stdout.readAll());
 			}
+			process.stdout.close();
 		});
 	}
 
