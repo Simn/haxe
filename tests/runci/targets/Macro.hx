@@ -11,8 +11,8 @@ class Macro {
 		runCommand("haxe", ["compile-macro.hxml"].concat(args));
 
 		// TODO: enable this again at some point
-		// changeDirectory(displayDir);
-		// runCommand("haxe", ["build.hxml"]);
+		changeDirectory(displayDir);
+		runCommand("haxe", ["build.hxml"]);
 
 		changeDirectory(sourcemapsDir);
 		runCommand("haxe", ["run.hxml"]);
