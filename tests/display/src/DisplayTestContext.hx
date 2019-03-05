@@ -1,3 +1,4 @@
+import haxe.io.Bytes;
 using StringTools;
 import Types;
 
@@ -99,17 +100,12 @@ class DisplayTestContext {
 			"--display",
 			source.path + "@" + displayPart,
 		];
-		var stdin = source.content;
-		var proc = new eval.vm.Process("haxe", args);
-		proc.stdin.writeString(stdin);
-		proc.stdin.close();
-		var stderr = proc.stderr.readAll();
-		var stdout = proc.stdout.readAll();
-		var exit = proc.close();
-		var success = exit.kind == WEXITED && exit.code == 0;
-		var s = stderr.toString();
+		var proc = new eval.vm.Process.BufferedProcess("haxe", args, Bytes.ofString(source.content));
+		var result = proc.close();
+		var success = result.exit.kind == WEXITED && result.exit.code == 0;
+		var s = result.stderr.toString();
 		if (!success || s == "") {
-			throw new HaxeInvocationException(s, fieldName, args, stdin);
+			throw new HaxeInvocationException(s, fieldName, args, source.content);
 		}
 		return s;
 	}

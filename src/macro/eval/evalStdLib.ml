@@ -1684,6 +1684,7 @@ module StdProcess = struct
 	let close = vifun0 (fun vthis ->
 		let proc,pid = this vthis in
 		let _,ret = Unix.waitpid [] pid in
+		set_field vthis key_running vfalse;
 		let kind,code = match ret with
 		| WEXITED i -> 0,i
 		| WSIGNALED i -> 1,i
@@ -1699,6 +1700,7 @@ module StdProcess = struct
 		let (proc,pid) = this vthis in
 		Unix.kill pid Sys.sigkill;
 		close_pipes proc;
+		set_field vthis key_running vfalse;
 		vnull
 	)
 end
@@ -3071,6 +3073,7 @@ let init_constructors builtins =
 				set_field v key_stderr (encode_instance key_sys_io_FileInput ~kind:(IInChannel(stderr,ref false)));
 				set_field v key_stdin (encode_instance key_sys_io_FileOutput ~kind:(IOutChannel stdin));
 				set_field v key_pid (vint pid);
+				set_field v key_running vtrue;
 				v
 			| _ ->
 				assert false
