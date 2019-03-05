@@ -155,12 +155,11 @@ and vinstance_kind =
 	| IBuffer of vstring_buffer(* StringBuf *)
 	| IPos of pos
 	| IUtf8 of UTF8.Buf.buf
-	| IProcess of Process.process
 	| IInChannel of in_channel * bool ref (* FileInput *)
 	| IOutChannel of out_channel (* FileOutput *)
 	| ISocket of Unix.file_descr
 	| IThread of Thread.t
-	| IOCamlProcess of (out_channel * in_channel * in_channel) * int (* pid *)
+	| IProcess of (out_channel * in_channel * in_channel) * int (* pid *)
 	| IZip of vzlib (* Compress/Uncompress *)
 	| ITypeDecl of Type.module_type
 	| ILazyType of (Type.tlazy ref) * (unit -> value)

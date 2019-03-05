@@ -100,9 +100,9 @@ class DisplayTestContext {
 			"--display",
 			source.path + "@" + displayPart,
 		];
-		var proc = new eval.vm.Process.BufferedProcess("haxe", args, Bytes.ofString(source.content));
+		var proc = new eval.vm.BufferedProcess("haxe", args, Bytes.ofString(source.content));
 		var result = proc.close();
-		var success = result.exit.kind == WEXITED && result.exit.code == 0;
+		var success = result.exit == 0;
 		var s = result.stderr.toString();
 		if (!success || s == "") {
 			throw new HaxeInvocationException(s, fieldName, args, source.content);

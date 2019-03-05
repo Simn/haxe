@@ -19,80 +19,11 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package sys.io;
 
-private extern class NativeProcess {
-	function new (cmd:String, ?args:Array<String>):Void;
-
-	function close():Void;
-	function exitCode():Int;
-	function getPid():Int;
-	function kill():Void;
-
-	function readStderr(bytes:haxe.io.Bytes, pos:Int, len:Int):Int;
-	function readStdout(bytes:haxe.io.Bytes, pos:Int, len:Int):Int;
-
-	function closeStdin():Void;
-	function writeStdin(bytes:haxe.io.Bytes, pos:Int, len:Int):Int;
-}
-
-private class Stdin extends haxe.io.Output {
-	var proc:NativeProcess;
-	var buf:haxe.io.Bytes;
-
-	public function new(proc:NativeProcess) {
-		this.proc = proc;
-		buf = haxe.io.Bytes.alloc(1);
-	}
-
-	public override function close() {
-		super.close();
-		proc.closeStdin();
-	}
-
-	public override function writeByte(c:Int) {
-		buf.set(0,c);
-		writeBytes(buf,0,1);
-	}
-
-	public override function writeBytes(buf:haxe.io.Bytes, pos:Int, len:Int) {
-		try {
-			return proc.writeStdin(buf, pos, len);
-		} catch( e:Dynamic ) {
-			throw new haxe.io.Eof();
-		}
-	}
-}
-
-private class Stdout extends haxe.io.Input {
-	var proc:NativeProcess;
-	var out:Bool;
-	var buf:haxe.io.Bytes;
-
-	public function new(proc:NativeProcess, out:Bool) {
-		this.proc = proc;
-		this.out = out;
-		buf = haxe.io.Bytes.alloc(1);
-	}
-
-	public override function readByte() {
-		if(readBytes(buf,0,1) == 0)
-			throw haxe.io.Error.Blocked;
-		return buf.get(0);
-	}
-
-	public override function readBytes(bytes:haxe.io.Bytes, pos:Int, len:Int):Int {
-		try {
-			if (out) {
-				return proc.readStdout(bytes, pos, len);
-			} else {
-				return proc.readStderr(bytes, pos, len);
-			}
-		} catch( e:Dynamic ) {
-			throw new haxe.io.Eof();
-		}
-	}
-}
+import haxe.io.Input;
+import haxe.io.Output;
 
 @:coreApi
 class Process {
@@ -100,32 +31,24 @@ class Process {
 	public var stderr(default, null):haxe.io.Input;
 	public var stdin(default, null):haxe.io.Output;
 
-	var proc:NativeProcess;
+	@:ifFeature("sys.io.Process.*") var running:Bool;
+	@:ifFeature("sys.io.Process.*") var pid:Int;
+	@:ifFeature("sys.io.Process.*") var code:Int;
 
-	public function new(cmd:String, ?args:Array<String>, ?detached:Bool):Void {
-		if (detached) {
-			throw "Detached process is not supported on this platform";
+	extern public function new(cmd:String, ?args:Array<String>, ?detached:Bool):Void;
+
+	extern public function close():Void;
+
+	public function getPid():Int {
+		return pid;
+	}
+
+	public function exitCode(?block:Bool):Int {
+		if (block) {
+			close();
 		}
-		proc = new NativeProcess(cmd, args);
-		stdout = new Stdout(proc, true);
-		stderr = new Stdout(proc, false);
-		stdin = new Stdin(proc);
+		return code;
 	}
 
-	public inline function getPid():Int {
-		return proc.getPid();
-	}
-
-	public function exitCode(block:Bool = true):Null<Int> {
-		if( block == false ) throw "Non blocking exitCode() not supported on this platform";
-		return proc.exitCode();
-	}
-
-	public inline function close():Void {
-		proc.close();
-	}
-
-	public inline function kill():Void {
-		proc.kill();
-	}
+	extern public function kill():Void;
 }

@@ -1618,62 +1618,9 @@ module StdMd5 = struct
 	)
 end
 
-module StdNativeProcess = struct
-
-	let this vthis = match vthis with
-		| VInstance {ikind=IProcess proc} -> proc
-		| _ -> unexpected_value vthis "NativeProcess"
-
-	let call f vthis bytes pos len =
-		let this = this vthis in
-		let bytes = decode_bytes bytes in
-		let pos = decode_int pos in
-		let len = decode_int len in
-		f this (Bytes.unsafe_to_string bytes) pos len
-
-	let process_catch f vthis =
-		try f (this vthis)
-		with Failure msg -> exc_string msg
-
-	let close = vifun0 (fun vthis ->
-		process_catch Process.close vthis;
-		vnull
-	)
-
-	let exitCode = vifun0 (fun vthis ->
-		vint (process_catch Process.exit vthis)
-	)
-
-	let getPid = vifun0 (fun vthis ->
-		vint (process_catch Process.pid vthis)
-	)
-
-	let kill = vifun0 (fun vthis ->
-		process_catch Process.kill vthis;
-		vnull
-	)
-
-	let readStderr = vifun3 (fun vthis bytes pos len ->
-		try vint (call Process.read_stderr vthis bytes pos len) with _ -> exc_string "Could not read stderr"
-	)
-
-	let readStdout = vifun3 (fun vthis bytes pos len ->
-		try vint (call Process.read_stdout vthis bytes pos len) with _ -> exc_string "Could not read stdout"
-	)
-
-	let closeStdin = vifun0 (fun vthis ->
-		process_catch Process.close_stdin vthis;
-		vnull
-	)
-
-	let writeStdin = vifun3 (fun vthis bytes pos len ->
-		vint (call Process.write_stdin vthis bytes pos len)
-	)
-end
-
 module StdProcess = struct
 	let this vthis = match vthis with
-		| VInstance {ikind=IOCamlProcess(proc,pid)} -> proc,pid
+		| VInstance {ikind=IProcess(proc,pid)} -> proc,pid
 		| _ -> unexpected_value vthis "eval.vm.Process"
 
 	let close_pipes (stdin,stdout,stderr) =
@@ -1683,17 +1630,18 @@ module StdProcess = struct
 
 	let close = vifun0 (fun vthis ->
 		let proc,pid = this vthis in
-		let _,ret = Unix.waitpid [] pid in
-		set_field vthis key_running vfalse;
-		let kind,code = match ret with
-		| WEXITED i -> 0,i
-		| WSIGNALED i -> 1,i
-		| WSTOPPED i -> 2,i
-		in
-		encode_obj_s [
-			"kind",vint kind;
-			"code",vint code
-		]
+		if not (is_true (field vthis key_running)) then
+			vnull
+		else begin
+			let _,ret = Unix.waitpid [] pid in
+			set_field vthis key_running vfalse;
+			begin match ret with
+			| WEXITED i -> set_field vthis key_code (vint i)
+			| WSIGNALED i -> ()
+			| WSTOPPED i -> ()
+			end;
+			vnull
+		end
 	)
 
 	let kill = vifun0 (fun vthis ->
@@ -2995,18 +2943,6 @@ let init_constructors builtins =
 			| _ ->
 				assert false
 		);
-	add key_sys_io__Process_NativeProcess
-		(fun vl -> match vl with
-			| [cmd;args] ->
-				let cmd = decode_string cmd in
-				let args = match args with
-					| VNull -> None
-					| VArray va -> Some (Array.map decode_string va.avalues)
-					| _ -> unexpected_value args "array"
-				in
-				encode_instance key_sys_io__Process_NativeProcess ~kind:(IProcess (try Process.run cmd args with Failure msg -> exc_string msg))
-			| _ -> assert false
-		);
 	add key_sys_net__Socket_NativeSocket
 		(fun _ ->
 			encode_instance key_sys_net__Socket_NativeSocket ~kind:(ISocket ((Unix.socket Unix.PF_INET Unix.SOCK_STREAM) 0))
@@ -3045,9 +2981,9 @@ let init_constructors builtins =
 				encode_instance key_eval_vm_Thread ~kind:(IThread (Thread.create f ()))
 			| _ -> assert false
 		);
-	add key_eval_vm_Process
+	add key_sys_io_Process
 		(fun vl -> match vl with
-			| [cmd;args] ->
+			| [cmd;args;detached] ->
 				let open Unix in
 				let cmd = decode_string cmd in
 				let args = match args with
@@ -3068,7 +3004,7 @@ let init_constructors builtins =
 				let stdin = out_channel_of_descr stdin' in
 				let stdout = in_channel_of_descr stdout' in
 				let stderr = in_channel_of_descr stderr' in
-				let v = encode_instance key_eval_vm_Process ~kind:(IOCamlProcess((stdin,stdout,stderr),pid)) in
+				let v = encode_instance key_sys_io_Process ~kind:(IProcess((stdin,stdout,stderr),pid)) in
 				set_field v key_stdout (encode_instance key_sys_io_FileInput ~kind:(IInChannel(stdout,ref false)));
 				set_field v key_stderr (encode_instance key_sys_io_FileInput ~kind:(IInChannel(stderr,ref false)));
 				set_field v key_stdin (encode_instance key_sys_io_FileOutput ~kind:(IOutChannel stdin));
@@ -3316,18 +3252,9 @@ let init_standard_library builtins =
 		"encode",StdMd5.encode;
 		"make",StdMd5.make;
 	] [];
-	init_fields builtins (["sys";"io";"_Process"],"NativeProcess") [ ] [
-		"close",StdNativeProcess.close;
-		"exitCode",StdNativeProcess.exitCode;
-		"getPid",StdNativeProcess.getPid;
-		"kill",StdNativeProcess.kill;
-		"readStderr",StdNativeProcess.readStderr;
-		"readStdout",StdNativeProcess.readStdout;
-		"closeStdin",StdNativeProcess.closeStdin;
-		"writeStdin",StdNativeProcess.writeStdin;
-	];
-	init_fields builtins (["eval";"vm"],"Process") [] [
+	init_fields builtins (["sys";"io"],"Process") [] [
 		"close",StdProcess.close;
+		"kill",StdProcess.kill;
 	];
 	init_fields builtins ([],"Reflect") [
 		"callMethod",StdReflect.callMethod;
