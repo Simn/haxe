@@ -3057,10 +3057,9 @@ let init_constructors builtins =
 					| _ -> unexpected_value args "array"
 				in
 				let args = Array.append [|cmd|] args in
-				let cloexec = true in
-				let stdin,stdin' = pipe ~cloexec () in
-				let stdout',stdout = pipe ~cloexec () in
-				let stderr',stderr = pipe ~cloexec () in
+				let stdin,stdin' = pipe () in
+				let stdout',stdout = pipe () in
+				let stderr',stderr = pipe () in
 				let pid = create_process cmd args stdin stdout stderr in
 				close stdin;
 				close stdout;
