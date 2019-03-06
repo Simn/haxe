@@ -1,4 +1,3 @@
-import haxe.io.Bytes;
 using StringTools;
 import Types;
 
