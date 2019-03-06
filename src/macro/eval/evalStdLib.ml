@@ -3003,7 +3003,7 @@ let init_constructors builtins =
 				in
 				let cmd,args = if Array.length args = 0 then begin
 					if Sys.win32 then begin
-						let exe = Option.default "cmd.exe" (Sys.getenv_opt "COMSPEC") in
+						let exe = try Sys.getenv "COMSPEC" with Not_found -> "cmd.exe" in
 						exe,[|exe;"/C";cmd|]
 					end else
 						"/bin/sh",[|"-c";cmd|]
