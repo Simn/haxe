@@ -100,12 +100,18 @@ class DisplayTestContext {
 			"--display",
 			source.path + "@" + displayPart,
 		];
-		var proc = new eval.vm.BufferedProcess("haxe", args, Bytes.ofString(source.content));
-		var result = proc.close();
-		var success = result.exit == 0;
-		var s = result.stderr.toString();
+		var stdin = source.content;
+		var proc = new sys.io.Process("haxe", args);
+		proc.stdin.writeString(stdin);
+		proc.stdin.close();
+		var stderr = proc.stderr.readAll();
+		var stdout = proc.stdout.readAll();
+		var exit = proc.exitCode();
+		proc.close();
+		var success = exit == 0;
+		var s = stderr.toString();
 		if (!success || s == "") {
-			throw new HaxeInvocationException(s, fieldName, args, source.content);
+			throw new HaxeInvocationException(s, fieldName, args, stdin);
 		}
 		return s;
 	}

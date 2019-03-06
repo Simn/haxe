@@ -3015,7 +3015,7 @@ let init_constructors builtins =
 				let stderr',stderr = pipe () in
 				(* Stupid workaround for ~cloexec failing on travis linux OCaml for whatever reason *)
 				List.iter Unix.set_close_on_exec [stdin;stdin';stdout;stdout';stderr;stderr'];
-				let pid = create_process cmd args stdin stdout stderr in
+				let pid = try create_process cmd args stdin stdout stderr with Unix.Unix_error(err,cmd,args) -> exc_string (Printf.sprintf "%s(%s, %s)" (Unix.error_message err) cmd args) in
 				close stdin;
 				close stdout;
 				close stderr;
