@@ -3001,7 +3001,15 @@ let init_constructors builtins =
 					| VArray va -> (Array.map decode_string (Array.sub va.avalues 0 va.alength))
 					| _ -> unexpected_value args "array"
 				in
-				let args = Array.append [|cmd|] args in
+				let cmd,args = if Array.length args = 0 then begin
+					if Sys.win32 then begin
+						let exe = Option.default "cmd.exe" (Sys.getenv_opt "COMSPEC") in
+						exe,[|exe;"/C";cmd|]
+					end else
+						"/bin/sh",[|"-c";cmd|]
+				end else
+					cmd,Array.append [|cmd|] args
+				in
 				let stdin,stdin' = pipe () in
 				let stdout',stdout = pipe () in
 				let stderr',stderr = pipe () in
