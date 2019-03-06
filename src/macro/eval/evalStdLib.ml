@@ -1639,11 +1639,11 @@ module StdProcess = struct
 
 	let close = vifun0 (fun vthis ->
 		let proc,pid = this vthis in
+		close_pipes proc;
 		if not (is_true (field vthis key_running)) then
 			vnull
 		else begin
 			do_wait vthis pid;
-			close_pipes proc;
 			vnull
 		end
 	)
