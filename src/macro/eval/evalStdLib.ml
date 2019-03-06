@@ -3006,7 +3006,7 @@ let init_constructors builtins =
 						let exe = try Sys.getenv "COMSPEC" with Not_found -> "cmd.exe" in
 						exe,[|exe;"/C";cmd|]
 					end else
-						"/bin/sh",[|"-c";cmd|]
+						"/bin/sh",[|"/bin/sh";"-c";cmd|]
 				end else
 					cmd,Array.append [|cmd|] args
 				in
