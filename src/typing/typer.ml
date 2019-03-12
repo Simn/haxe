@@ -2369,7 +2369,7 @@ and type_expr ctx (e,p) (with_type:WithType.t) =
 	| EConst (String s) when s <> "" && Lexer.is_fmt_string p ->
 		type_expr ctx (format_string ctx s p) with_type
 	| EConst c ->
-		Texpr.type_constant ctx.com.basic c p
+		Texpr.type_constant ctx.com.basic c with_type p
 	| EBinop (op,e1,e2) ->
 		type_binop ctx op e1 e2 false with_type p
 	| EBlock [] when with_type <> WithType.NoValue ->

@@ -306,7 +306,7 @@ module Pattern = struct
 				e
 			| EConst((Ident ("false" | "true") | Int _ | String _ | Float _) as ct) ->
 				let p = pos e in
-				let e = Texpr.type_constant ctx.com.basic ct p in
+				let e = Texpr.type_constant ctx.com.basic ct (WithType.with_type t) p in
 				unify_expected e.etype;
 				let ct = match e.eexpr with TConst ct -> ct | _ -> assert false in
 				PatConstructor(con_const ct p,[])

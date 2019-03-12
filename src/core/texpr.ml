@@ -307,7 +307,7 @@ let rec constructor_side_effects e =
 		with Exit ->
 			true
 
-let type_constant basic c p =
+let type_constant basic c with_type p =
 	match c with
 	| Int s ->
 		if String.length s > 10 && String.sub s 0 2 = "0x" then error "Invalid hexadecimal integer" p;
@@ -321,16 +321,16 @@ let type_constant basic c p =
 	| Ident t -> error ("Invalid constant :  " ^ t) p
 	| Regexp _ -> error "Invalid constant" p
 
-let rec type_constant_value basic (e,p) =
+let rec type_constant_value basic with_type (e,p) =
 	match e with
 	| EConst c ->
-		type_constant basic c p
+		type_constant basic c with_type p
 	| EParenthesis e ->
-		type_constant_value basic e
+		type_constant_value basic with_type e
 	| EObjectDecl el ->
-		mk (TObjectDecl (List.map (fun (k,e) -> k,type_constant_value basic e) el)) (TAnon { a_fields = PMap.empty; a_status = ref Closed }) p
+		mk (TObjectDecl (List.map (fun (k,e) -> k,type_constant_value basic WithType.value e) el)) (TAnon { a_fields = PMap.empty; a_status = ref Closed }) p
 	| EArrayDecl el ->
-		mk (TArrayDecl (List.map (type_constant_value basic) el)) (basic.tarray t_dynamic) p
+		mk (TArrayDecl (List.map (type_constant_value basic WithType.value) el)) (basic.tarray t_dynamic) p
 	| _ ->
 		error "Constant value expected" p
 
@@ -375,7 +375,7 @@ let build_metadata api t =
 		mk (TObjectDecl (List.map (fun (f,el,p) ->
 			if Hashtbl.mem h f then error ("Duplicate metadata '" ^ f ^ "'") p;
 			Hashtbl.add h f ();
-			(f,null_pos,NoQuotes), mk (match el with [] -> TConst TNull | _ -> TArrayDecl (List.map (type_constant_value api) el)) (api.tarray t_dynamic) p
+			(f,null_pos,NoQuotes), mk (match el with [] -> TConst TNull | _ -> TArrayDecl (List.map (type_constant_value api WithType.value) el)) (api.tarray t_dynamic) p
 		) ml)) t_dynamic p
 	in
 	let make_meta l =

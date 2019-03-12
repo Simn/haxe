@@ -349,7 +349,7 @@ let rec type_field ?(resume=false) ctx e i p mode =
 					with Unify_error l ->
 						display_error ctx "Field resolve has an invalid type" f.cf_pos;
 						display_error ctx (error_msg (Unify [Cannot_unify(tfield,texpect)])) f.cf_pos);
-					AKExpr (make_call ctx (mk (TField (e,FInstance (c,params,f))) tfield p) [Texpr.type_constant ctx.com.basic (String i) p] t p)
+					AKExpr (make_call ctx (mk (TField (e,FInstance (c,params,f))) tfield p) [Texpr.type_constant ctx.com.basic (String i) WithType.value p] t p)
 				end else
 					AKExpr (mk (TField (e,FDynamic i)) t p)
 			| None ->
