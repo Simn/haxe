@@ -1,6 +1,7 @@
 open Globals
 open Ast
 open Type
+open WithType
 open Error
 
 let equal_fa fa1 fa2 = match fa1,fa2 with
@@ -310,9 +311,16 @@ let rec constructor_side_effects e =
 let type_constant basic c with_type p =
 	match c with
 	| Int s ->
-		if String.length s > 10 && String.sub s 0 2 = "0x" then error "Invalid hexadecimal integer" p;
-		(try mk (TConst (TInt (Int32.of_string s))) basic.tint p
-		with _ -> mk (TConst (TFloat s)) basic.tfloat p)
+		let as_int () = mk (TConst (TInt (Int32.of_string s))) basic.tint p in
+		let as_float () = mk (TConst (TFloat s)) basic.tfloat p in
+		begin match with_type with
+		| WithType(t,_) when ExtType.is_float (follow t) ->
+			as_float()
+		| _ ->
+			if String.length s > 10 && String.sub s 0 2 = "0x" then error "Invalid hexadecimal integer" p;
+			try as_int()
+			with _ -> as_float()
+		end
 	| Float f -> mk (TConst (TFloat f)) basic.tfloat p
 	| String s -> mk (TConst (TString s)) basic.tstring p
 	| Ident "true" -> mk (TConst (TBool true)) basic.tbool p

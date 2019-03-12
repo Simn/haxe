@@ -2827,6 +2827,10 @@ module ExtType = struct
 		| TAbstract({a_path=[],"Void"},_) -> true
 		| _ -> false
 
+	let is_float = function
+		| TAbstract({a_path=[],"Float"},_) -> true
+		| _ -> false
+
 	type semantics =
 		| VariableSemantics
 		| ReferenceSemantics
