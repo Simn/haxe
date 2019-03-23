@@ -668,10 +668,7 @@ let init_module_type ctx context_init do_init (decl,p) =
 		e.e_names <- List.rev !names;
 		e.e_extern <- e.e_extern;
 		e.e_type.t_params <- e.e_params;
-		e.e_type.t_type <- TAnon {
-			a_fields = !fields;
-			a_status = ref (EnumStatics e);
-		};
+		e.e_type.t_type <- mk_anon_full !fields (ref (EnumStatics e));
 		if !is_flat then e.e_meta <- (Meta.FlatEnum,[],null_pos) :: e.e_meta;
 
 		if (ctx.com.platform = Java || ctx.com.platform = Cs) && not e.e_extern then

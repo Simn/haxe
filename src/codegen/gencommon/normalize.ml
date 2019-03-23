@@ -54,10 +54,7 @@ let rec filter_param t =
 	| TAbstract(a,tl) ->
 		TAbstract(a, List.map filter_param tl)
 	| TAnon a ->
-		TAnon {
-			a_fields = PMap.map (fun f -> { f with cf_type = filter_param f.cf_type }) a.a_fields;
-			a_status = a.a_status;
-		}
+		mk_anon_full (PMap.map (fun f -> { f with cf_type = filter_param f.cf_type }) a.a_fields) a.a_status
 	| TFun(args,ret) ->
 		TFun(List.map (fun (n,o,t) -> (n,o,filter_param t)) args, filter_param ret)
 	| TDynamic _ ->

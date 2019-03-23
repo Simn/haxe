@@ -129,6 +129,7 @@ and anon_status =
 and tanon = {
 	mutable a_fields : (string, tclass_field) PMap.t;
 	a_status : anon_status ref;
+	a_id : int;
 }
 
 and texpr_expr =
@@ -446,7 +447,18 @@ let mk_mono() = TMono (ref None)
 
 let rec t_dynamic = TDynamic t_dynamic
 
-let mk_anon fl = TAnon { a_fields = fl; a_status = ref Closed; }
+let mk_anon_structure =
+	let id = ref 0 in
+	(fun fl status ->
+		incr id;
+		{ a_fields = fl; a_status = status; a_id = !id }
+	)
+
+let mk_anon_full fl status =
+	TAnon (mk_anon_structure fl status)
+
+let mk_anon fl =
+	mk_anon_full fl (ref Closed)
 
 (* We use this for display purposes because otherwise we never see the Dynamic type that
    is defined in StdTypes.hx. This is set each time a typer is created, but this is fine
@@ -621,10 +633,7 @@ let map loop t =
 				a.a_fields <- fields;
 				t
 			| _ ->
-				TAnon {
-					a_fields = fields;
-					a_status = a.a_status;
-				}
+				mk_anon_full fields a.a_status;
 		end
 	| TLazy f ->
 		let ft = lazy_type f in
@@ -707,10 +716,7 @@ let apply_params cparams params t =
 					a.a_fields <- fields;
 					t
 				| _ ->
-					TAnon {
-						a_fields = fields;
-						a_status = a.a_status;
-					}
+					mk_anon_full fields a.a_status
 			end
 		| TLazy f ->
 			let ft = lazy_type f in
@@ -2925,10 +2931,7 @@ let class_module_type c = {
 	t_doc = None;
 	t_pos = c.cl_pos;
 	t_name_pos = null_pos;
-	t_type = TAnon {
-		a_fields = c.cl_statics;
-		a_status = ref (Statics c);
-	};
+	t_type = mk_anon_full c.cl_statics (ref (Statics c));
 	t_private = true;
 	t_params = [];
 	t_using = [];
@@ -2954,10 +2957,7 @@ let abstract_module_type a tl = {
 	t_doc = None;
 	t_pos = a.a_pos;
 	t_name_pos = null_pos;
-	t_type = TAnon {
-		a_fields = PMap.empty;
-		a_status = ref (AbstractStatics a);
-	};
+	t_type = mk_anon_full PMap.empty (ref (AbstractStatics a));
 	t_private = true;
 	t_params = [];
 	t_using = [];
