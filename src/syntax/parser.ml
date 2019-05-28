@@ -100,10 +100,17 @@ let decl_flag_to_abstract_flag (flag,p) = match flag with
 	| DExtern -> AbExtern
 	| DFinal -> error (Custom "final on abstracts is not allowed") p
 
+let parsing_macro_cond = ref false
+
 module TokenCache = struct
 	let cache = ref (DynArray.create ())
-	let add (token : (token * pos)) = DynArray.add (!cache) token
-	let get index = DynArray.get (!cache) index
+
+	let add (token : (token * pos)) =
+		DynArray.add (!cache) (token,!parsing_macro_cond)
+
+	let rec get index =
+		DynArray.get (!cache) index
+
 	let clear () =
 		let old_cache = !cache in
 		cache := DynArray.create ();
@@ -112,7 +119,12 @@ end
 
 let last_token s =
 	let n = Stream.count s in
-	TokenCache.get (if n = 0 then 0 else n - 1)
+	let rec loop n =
+		let token,is_macro_token = TokenCache.get (if n = 0 then 0 else n - 1) in
+		if is_macro_token then loop (n - 1)
+		else token
+	in
+	loop n
 
 let last_pos s = pos (last_token s)
 

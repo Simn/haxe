@@ -114,11 +114,11 @@ let parse ctx code file =
 	in_macro := Define.defined ctx Define.Macro;
 	Lexer.skip_header code;
 
-	let sraw = Stream.from (fun _ -> Some (Lexer.token code)) in
+	let sraw = ref (Obj.magic()) in
 	let rec next_token() = process_token (Lexer.token code)
 
 	and process_token tk =
-		match fst tk with
+		if !parsing_macro_cond then tk else match fst tk with
 		| Comment s ->
 			(* if encloses_resume (pos tk) then syntax_completion SCComment (pos tk); *)
 			let tk = next_token() in
@@ -157,7 +157,7 @@ let parse ctx code file =
 			tk
 
 	and enter_macro p =
-		let tk, e = parse_macro_cond sraw in
+		let tk, e = parse_macro_cond !sraw in
 		let tk = (match tk with None -> Lexer.token code | Some tk -> tk) in
 		if is_true (eval ctx e) then begin
 			mstack := p :: !mstack;
@@ -179,7 +179,7 @@ let parse ctx code file =
 		| Sharp "if" ->
 			skip_tokens_loop p test (skip_tokens p false)
 		| Eof ->
-			syntax_error Unclosed_conditional ~pos:(Some p) sraw tk
+			syntax_error Unclosed_conditional ~pos:(Some p) !sraw tk
 		| _ ->
 			skip_tokens p test
 
@@ -191,9 +191,10 @@ let parse ctx code file =
 		TokenCache.add t;
 		Some t
 	) in
+	sraw := s;
 	try
 		let l = parse_file s in
-		(match !mstack with p :: _ -> syntax_error Unclosed_conditional ~pos:(Some p) sraw () | _ -> ());
+		(match !mstack with p :: _ -> syntax_error Unclosed_conditional ~pos:(Some p) !sraw () | _ -> ());
 		let was_display_file = !in_display_file in
 		restore();
 		Lexer.restore old;

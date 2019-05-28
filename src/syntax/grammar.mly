@@ -106,8 +106,6 @@ let semicolon s =
 		| [< s >] ->
 			syntax_error Missing_semicolon s (next_pos s)
 
-let parsing_macro_cond = ref false
-
 let rec	parse_file s =
 	last_doc := None;
 	match s with parser
