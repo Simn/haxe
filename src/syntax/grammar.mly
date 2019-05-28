@@ -1498,7 +1498,7 @@ let parse_macro_ident t p s =
 let rec parse_macro_cond s =
 	parsing_macro_cond := true;
 	try
-		let cond = (match s with parser
+		let cond = match s with parser
 			| [< '(Const (Ident t),p) >] ->
 				parse_macro_ident t p s
 			| [< '(Const (String s),p) >] ->
@@ -1512,7 +1512,10 @@ let rec parse_macro_cond s =
 			| [< '(Unop op,p); tk, e = parse_macro_cond >] ->
 				tk, make_unop op e p
 			| [< '(POpen,p1); (e,p) = expr; '(PClose,_) >] ->
-				None, (EParenthesis(validate_macro_cond s (e,p)),p1)) in
+				None, (EParenthesis(validate_macro_cond s (e,p)),p1)
+			| [< >] ->
+				serror()
+		in
 		parsing_macro_cond := false;
 		cond
 	with e ->
