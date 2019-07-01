@@ -24,6 +24,22 @@ type object_decl_kind =
 	| ODKWithClass of tclass * tparams
 	| ODKPlain
 
+module TypeableExpr = struct
+	type t = Ast.expr * (typer -> Ast.expr -> WithType.t -> texpr) option
+
+	let create e f = (e,Some f)
+
+	let create_default e = (e,None)
+
+	let ast te = fst te
+
+	let pos te = pos (ast te)
+
+	let do_type te ctx with_type = match snd te with
+		| None -> type_expr ctx (ast te) with_type
+		| Some f -> f ctx (ast te) with_type
+end
+
 let build_call_ref : (typer -> access_kind -> expr list -> WithType.t -> pos -> texpr) ref = ref (fun _ _ _ _ _ -> assert false)
 
 let relative_path ctx file =

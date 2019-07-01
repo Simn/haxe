@@ -1391,6 +1391,8 @@ and handle_efield ctx e p mode =
 
 and type_access ctx e p mode =
 	match e with
+	| EDisplay(e1,dk) ->
+		AKExpr (TyperDisplay.handle_edisplay ctx (TypeableExpr.create e1 (fun ctx e _ -> acc_get ctx (type_access ctx (fst e) p mode) p)) dk WithType.value)
 	| EConst (Ident s) ->
 		type_ident ctx s p mode
 	| EField (e1,"new") ->
@@ -1868,7 +1870,7 @@ and type_try ctx e1 catches with_type p =
 		let e = type_expr ctx e_ast with_type in
 		(* If the catch position is the display position it means we get completion on the catch keyword or some
 		   punctuation. Otherwise we wouldn't reach this point. *)
-		if ctx.is_display_file && DisplayPosition.display_position#enclosed_in pc then ignore(TyperDisplay.display_expr ctx e_ast e DKMarked with_type pc);
+		if ctx.is_display_file && DisplayPosition.display_position#enclosed_in pc then ignore(TyperDisplay.display_expr ctx (TypeableExpr.create_default e_ast) e DKMarked with_type pc);
 		v.v_type <- t2;
 		locals();
 		if PMap.mem name ctx.locals then error ("Local variable " ^ name ^ " is preventing usage of this type here") e.epos;
@@ -2362,7 +2364,7 @@ and type_call ctx e el (with_type:WithType.t) inline p =
 		else
 			e
 	| (EDisplay((EConst (Ident "super"),_ as e1),dk),_),_ ->
-		TyperDisplay.handle_display ctx (ECall(e1,el),p) dk with_type
+		TyperDisplay.handle_display ctx (TypeableExpr.create_default (ECall(e1,el),p)) dk with_type
 	| (EConst (Ident "super"),sp) , el ->
 		if ctx.curfun <> FunConstructor then error "Cannot call super constructor outside class constructor" p;
 		let el, t = (match ctx.curclass.cl_super with
@@ -2505,7 +2507,7 @@ and type_expr ctx (e,p) (with_type:WithType.t) =
 	| ECast (e, Some t) ->
 		type_cast ctx e t p
 	| EDisplay (e,dk) ->
-		TyperDisplay.handle_edisplay ctx e dk with_type
+		TyperDisplay.handle_edisplay ctx (TypeableExpr.create_default e) dk with_type
 	| EDisplayNew t ->
 		assert false
 	| ECheckType (e,t) ->

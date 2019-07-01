@@ -450,7 +450,7 @@ let type_for_loop ctx handle_display it e2 p =
 	let e2 = Expr.ensure_block e2 in
 	let check_display (i,pi,dko) = match dko with
 		| None -> ()
-		| Some dk -> ignore(handle_display ctx (EConst(Ident i.v_name),i.v_pos) dk (WithType.with_type i.v_type))
+		| Some dk -> ignore(handle_display ctx (TypeableExpr.create_default (EConst(Ident i.v_name),i.v_pos)) dk (WithType.with_type i.v_type))
 	in
 	match ik with
 	| IKNormal(i,pi,dko) ->

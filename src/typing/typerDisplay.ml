@@ -160,9 +160,9 @@ let display_dollar_type ctx p make_type =
 		error "Unsupported method" p
 	end
 
-let rec handle_signature_display ctx e_ast with_type =
+let rec handle_signature_display ctx te with_type =
 	ctx.in_display <- true;
-	let p = pos e_ast in
+	let p = TypeableExpr.pos te in
 	let handle_call tl el p0 =
 		let rec follow_with_callable (t,doc,values) = match follow t with
 			| TAbstract(a,tl) when Meta.has Meta.Callable a.a_meta -> follow_with_callable (Abstract.get_underlying_type a tl,doc,values)
@@ -219,7 +219,7 @@ let rec handle_signature_display ctx e_ast with_type =
 		| _ ->
 			[]
 	in
-	match fst e_ast with
+	match fst (TypeableExpr.ast te) with
 		| ECall(e1,el) ->
 			let def () =
 				try
@@ -282,7 +282,7 @@ let rec handle_signature_display ctx e_ast with_type =
 			end
 		| _ -> error "Call expected" p
 
-and display_expr ctx e_ast e dk with_type p =
+and display_expr ctx (te : TypeableExpr.t) e dk with_type p =
 	let get_super_constructor () = match ctx.curclass.cl_super with
 		| None -> error "Current class does not have a super" p
 		| Some (c,params) ->
@@ -293,7 +293,7 @@ and display_expr ctx e_ast e dk with_type p =
 	| DMResolve _ | DMPackage ->
 		assert false
 	| DMSignature ->
-		handle_signature_display ctx e_ast with_type
+		handle_signature_display ctx te with_type
 	| DMHover ->
 		let item = completion_item_of_expr ctx e in
 		raise_hover item (Some with_type) e.epos
@@ -396,15 +396,15 @@ and display_expr ctx e_ast e dk with_type p =
 			let item = completion_item_of_expr ctx e1 in
 			raise_fields fields (CRField(item,e1.epos,None,None)) (Some {e.epos with pmin = e.epos.pmax - l;})
 		in
-		begin match fst e_ast,e.eexpr with
+		begin match fst (TypeableExpr.ast te),e.eexpr with
 			| EField(e1,s),TField(e2,_) ->
 				display_fields e1 e2 (String.length s)
 			| _ ->
-				if dk = DKDot then display_fields e_ast e 0
+				if dk = DKDot then display_fields (TypeableExpr.ast te) e 0
 				else raise_toplevel ctx dk with_type None p
 		end
 	| DMDefault | DMNone | DMModuleSymbols _ | DMDiagnostics _ | DMStatistics ->
-		let fields = DisplayFields.collect ctx e_ast e dk with_type p in
+		let fields = DisplayFields.collect ctx (TypeableExpr.ast te) e dk with_type p in
 		let item = completion_item_of_expr ctx e in
 		let iterator = try
 			let it = (ForLoop.IterationKind.of_texpr ~resume:true ctx e (fun _ -> false) e.epos) in
@@ -429,15 +429,15 @@ and display_expr ctx e_ast e dk with_type p =
 		in
 		raise_fields fields (CRField(item,e.epos,iterator,keyValueIterator)) None
 
-let handle_structure_display ctx e fields origin =
-	let p = pos e in
+let handle_structure_display ctx (te : TypeableExpr.t) fields origin =
+	let p = TypeableExpr.pos te in
 	let fields = PMap.foldi (fun _ cf acc -> cf :: acc) fields [] in
 	let fields = List.sort (fun cf1 cf2 -> -compare cf1.cf_pos.pmin cf2.cf_pos.pmin) fields in
 	let tpair ?(values=PMap.empty) t =
 		let ct = DisplayEmitter.completion_type_of_type ctx ~values t in
 		(t,ct)
 	in
-	match fst e with
+	match fst (TypeableExpr.ast te) with
 	| EObjectDecl fl ->
 		let fields = List.fold_left (fun acc cf ->
 			if Expr.field_mem_assoc cf.cf_name fl then acc
@@ -452,7 +452,7 @@ let handle_structure_display ctx e fields origin =
 	| _ ->
 		error "Expected object expression" p
 
-let handle_display ctx e_ast dk with_type =
+let handle_display ctx (te : TypeableExpr.t) dk with_type =
 	let old = ctx.in_display,ctx.in_call_args in
 	ctx.in_display <- true;
 	ctx.in_call_args <- false;
@@ -460,14 +460,14 @@ let handle_display ctx e_ast dk with_type =
 		let ct = DisplayEmitter.completion_type_of_type ctx t in
 		(t,ct)
 	in
-	let e = match e_ast,with_type with
+	let e = match TypeableExpr.ast te,with_type with
 	| (EConst (Ident "$type"),p),_ ->
 		display_dollar_type ctx p tpair
 	| (EConst (Ident "trace"),_),_ ->
 		let doc = Some "Print given arguments" in
 		let arg = ["value",false,t_dynamic] in
 		let ret = ctx.com.basic.tvoid in
-		let p = pos e_ast in
+		let p = pos (TypeableExpr.ast te) in
 		begin match ctx.com.display.dms_kind with
 		| DMSignature ->
 			raise_signatures [(convert_function_signature ctx PMap.empty (arg,ret),doc)] 0 0 SKCall
@@ -482,7 +482,7 @@ let handle_display ctx e_ast dk with_type =
 	| (EConst (Ident "_"),p),WithType.WithType(t,_) ->
 		mk (TConst TNull) t p (* This is "probably" a bind skip, let's just use the expected type *)
 	| (_,p),_ -> try
-		type_expr ctx e_ast with_type
+		TypeableExpr.do_type te ctx with_type
 	with Error (Unknown_ident n,_) when ctx.com.display.dms_kind = DMDefault ->
         if dk = DKDot && ctx.com.json_out = None then raise (Parser.TypePath ([n],None,false,p))
 		else raise_toplevel ctx dk with_type (Some p) p
@@ -493,7 +493,7 @@ let handle_display ctx e_ast dk with_type =
 			raise err
 		end else
 			raise_toplevel ctx dk with_type (Some p) p
-	| DisplayException(DisplayFields Some(l,CRTypeHint,p)) when (match fst e_ast with ENew _ -> true | _ -> false) ->
+	| DisplayException(DisplayFields Some(l,CRTypeHint,p)) when (match fst (TypeableExpr.ast te) with ENew _ -> true | _ -> false) ->
 		let timer = Timer.timer ["display";"toplevel";"filter ctors"] in
 		ctx.pass <- PBuildClass;
 		let l = List.filter (fun item ->
@@ -561,11 +561,11 @@ let handle_display ctx e_ast dk with_type =
 	end;
 	ctx.in_display <- fst old;
 	ctx.in_call_args <- snd old;
-	display_expr ctx e_ast e dk with_type p
+	display_expr ctx te e dk with_type p
 
-let handle_edisplay ctx e dk with_type =
+let handle_edisplay ctx (te : TypeableExpr.t) dk with_type =
 	match dk,ctx.com.display.dms_kind with
-	| DKCall,(DMSignature | DMDefault) -> handle_signature_display ctx e with_type
+	| DKCall,(DMSignature | DMDefault) -> handle_signature_display ctx te with_type
 	| DKStructure,DMDefault ->
 		begin match with_type with
 			| WithType.WithType(t,_) ->
@@ -575,19 +575,19 @@ let handle_edisplay ctx e dk with_type =
 							| TType(td,_) -> Self (TTypeDecl td)
 							| _ -> AnonymousStructure an
 						in
-						handle_structure_display ctx e an.a_fields origin
+						handle_structure_display ctx te an.a_fields origin
 					| TInst(c,tl) when Meta.has Meta.StructInit c.cl_meta ->
 						let fields = PMap.map (fun cf -> {cf with cf_type = apply_params c.cl_params tl cf.cf_type}) c.cl_fields in
-						handle_structure_display ctx e fields (Self (TClassDecl c))
-					| _ -> handle_display ctx e dk with_type
+						handle_structure_display ctx te fields (Self (TClassDecl c))
+					| _ -> handle_display ctx te dk with_type
 				end
 			| _ ->
-				handle_display ctx e dk with_type
+				handle_display ctx te dk with_type
 		end
 	| DKPattern outermost,DMDefault ->
 		begin try
-			handle_display ctx e dk with_type
+			handle_display ctx te dk with_type
 		with DisplayException(DisplayFields Some(l,CRToplevel _,p)) ->
 			raise_fields l (CRPattern ((get_expected_type ctx with_type),outermost)) p
 		end
-	| _ -> handle_display ctx e dk with_type
+	| _ -> handle_display ctx te dk with_type
