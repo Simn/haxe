@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -28,7 +28,7 @@ open Gencommon
 	not via reflection and not to be called instantly
 
 	dependencies:
-		must run after DynamicFieldAccess, so any TAnon { Statics / EnumStatics } will be changed to the corresponding TTypeExpr
+		must run after DynamicFieldAccess, so any TAnon { ClassStatics / EnumStatics } will be changed to the corresponding TTypeExpr
 *)
 let name = "filter_closures"
 let priority = solve_deps name [DAfter DynamicFieldAccess.priority]

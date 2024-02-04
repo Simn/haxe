@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -39,7 +39,7 @@ let priority = solve_deps name []
 let configure gen =
 	let run md =
 		match md with
-		| TClassDecl ({ cl_interface = true } as cl) ->
+		| TClassDecl cl when (has_class_flag cl CInterface) ->
 			let to_add = ref [] in
 			let fields = List.filter (fun cf ->
 				match cf.cf_kind with
@@ -71,7 +71,7 @@ let configure gen =
 			cl.cl_ordered_fields <- fields;
 
 			List.iter (fun cf ->
-				match field_access gen (TInst(cl,List.map snd cl.cl_params)) cf.cf_name with
+				match field_access gen (TInst(cl,extract_param_types cl.cl_params)) cf.cf_name with
 				| FNotFound | FDynamicField _ ->
 					cl.cl_ordered_fields <- cf :: cl.cl_ordered_fields;
 					cl.cl_fields <- PMap.add cf.cf_name cf cl.cl_fields

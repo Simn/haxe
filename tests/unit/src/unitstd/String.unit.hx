@@ -54,6 +54,7 @@ s.charCodeAt( -1) == null;
 
 // indexOf
 var s = "foo1bar";
+s.indexOf("") == 0;
 s.indexOf("f") == 0;
 s.indexOf("o") == 1;
 s.indexOf("1") == 3;
@@ -69,12 +70,20 @@ s.indexOf("oo") == 1;
 //s.indexOf("bart") == -1;
 //s.indexOf("r", -1) == -1;
 //s.indexOf("r", -10) == -1;
+s.indexOf("", 2) == 2;
+s.indexOf("", 200) == s.length;
 s.indexOf("o", 1) == 1;
 s.indexOf("o", 2) == 2;
 s.indexOf("o", 3) == -1;
+//s.indexOf("", -10) == 0;
+//s.indexOf("", 7) == 7; // see #8117
+//s.indexOf("", 8) == -1; // see #8117
+s.indexOf("r", 7) == -1;
+s.indexOf("r", 8) == -1;
 
 // lastIndexOf
 var s = "foofoofoobarbar";
+s.lastIndexOf("") == s.length;
 s.lastIndexOf("r") == 14;
 s.lastIndexOf("a") == 13;
 s.lastIndexOf("b") == 12;
@@ -83,10 +92,14 @@ s.lastIndexOf("foo") == 6;
 s.lastIndexOf("foofoo") == 3;
 s.lastIndexOf("f") == 6;
 s.lastIndexOf("barb") == 9;
+s.lastIndexOf("barb", 12) == 9;
+s.lastIndexOf("barb", 13) == 9;
 s.lastIndexOf("z") == -1;
 //s.lastIndexOf(null) == -1;
 //s.lastIndexOf(null, 1) == -1;
 //s.lastIndexOf(null, 14) == -1;
+s.lastIndexOf("", 2) == 2;
+s.lastIndexOf("", 200) == s.length;
 s.lastIndexOf("r", 14) == 14;
 s.lastIndexOf("r", 13) == 11;
 s.lastIndexOf("a", 14) == 13;
@@ -96,6 +109,8 @@ s.lastIndexOf("bar", 12) == 12;
 s.lastIndexOf("bar", 11) == 9;
 s.lastIndexOf("bar", 9) == 9;
 s.lastIndexOf("bar", 8) == -1;
+s.lastIndexOf("a", s.length) == 13;
+s.lastIndexOf("a", s.length + 9000) == 13;
 
 // split
 var s = "xfooxfooxxbarxbarxx";
@@ -143,9 +158,6 @@ s.substring(2, -1) == "xf";
 s.substring(0) == "xfooxfooxxbarxbarxx";
 s.substring(1) == "fooxfooxxbarxbarxx";
 s.substring(2) == "ooxfooxxbarxbarxx";
-s.substring(0, -1) == "";
-s.substring(1, -1) == "x";
-s.substring(2, -1) == "xf";
 s.substring(20, 0) == "xfooxfooxxbarxbarxx";
 s.substring(0, 100) == "xfooxfooxxbarxbarxx";
 s.substring(100, 120) == "";
@@ -160,3 +172,24 @@ String.fromCharCode(65) == "A";
 // ensure int strings compared as strings, not parsed ints (issue #3734)
 ("3" > "11") == true;
 (" 3" < "3") == true;
+
+// string comparison (see #8332)
+("a" < "b") == true;
+("a" <= "b") == true;
+("a" > "b") == false;
+("a" >= "b") == false;
+
+#if target.unicode
+("𠜎zя" > "abя") == true;
+("𠜎zя" >= "abя") == true;
+("𠜎zя" < "abя") == false;
+("𠜎zя" <= "abя") == false;
+
+#if target.utf16
+// since U+10002 in UTF16 is D800 DC02
+("\u{FF61}" < "\u{10002}") == false;
+#else
+("\u{FF61}" < "\u{10002}") == true;
+#end
+
+#end

@@ -3,6 +3,7 @@ package unit;
 import haxe.macro.Expr;
 import haxe.macro.Context.*;
 import haxe.macro.TypeTools.*;
+import haxe.macro.MacroStringTools.*;
 
 class HelperMacros {
 	static public macro function getCompilationDate() {
@@ -47,11 +48,16 @@ class HelperMacros {
 		return { pos: currentPos(), expr: haxe.macro.Expr.ExprDef.EConst(haxe.macro.Expr.Constant.CIdent(result)) };
 	}
 
+	@:access(haxe.macro.Error.childErrors)
 	static public macro function typeErrorText(e:haxe.macro.Expr) {
 		var result = try {
 			typeof(e);
 			null;
-		} catch (e:haxe.macro.Expr.Error) e.message;
+		} catch (e:haxe.macro.Expr.Error) {
+			var msg = e.message;
+			if (e.childErrors != null) for (c in e.childErrors) msg += "\n" + c.message;
+			msg;
+		}
 		return {
 			pos: currentPos(),
 			expr: if (result == null)
@@ -74,7 +80,7 @@ class HelperMacros {
 		var result = try {
 			typeof(e);
 			"no error";
-		} catch (e:Dynamic) Std.string(e.message);
+		} catch (e:haxe.Exception) Std.string(e.message);
 		return macro $v{result};
 	}
 
@@ -82,5 +88,29 @@ class HelperMacros {
 		var e = parse(s, currentPos());
 		var s2 = new haxe.macro.Printer().printExpr(e);
 		return macro eq($v{s}, $v{s2});
+	}
+
+	static public macro function pipeMarkupLiteral(e:Expr) {
+		function loop(e:Expr) {
+			return switch (e) {
+				case macro @:markup $v{(s:String)}:
+					formatString(s, e.pos);
+				case macro $b{el}:
+					el = el.map(loop);
+					macro $a{el}.join("");
+				case _:
+					error("Markup literal expected", e.pos);
+			}
+		}
+		return loop(e);
+	}
+
+	static public macro function pipeMarkupLiteralUnprocessed(e:Expr) {
+		return switch (e) {
+			case macro @:markup $v{(s:String)}:
+				macro $v{s};
+			case _:
+				error("Markup literal expected", e.pos);
+		}
 	}
 }

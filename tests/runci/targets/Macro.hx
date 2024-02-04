@@ -1,29 +1,58 @@
 package runci.targets;
 
-import sys.FileSystem;
 import runci.System.*;
 import runci.Config.*;
-import runci.targets.Cs.*;
-import runci.targets.Python.*;
 
 class Macro {
 	static public function run(args:Array<String>) {
-		runCommand("haxe", ["compile-macro.hxml"].concat(args));
+		runCommand("haxe", ["compile-macro.hxml", "--hxb", "bin/hxb/eval.zip"].concat(args));
+		runCommand("haxe", ["compile-macro.hxml", "--hxb-lib", "bin/hxb/eval.zip"].concat(args));
 
 		changeDirectory(displayDir);
-		runCommand("haxe", ["build.hxml"]);
+		haxelibInstallGit("Simn", "haxeserver");
+		runCommand("haxe", ["build.hxml", "-D", "display.protocol=xml"]);
+		runCommand("haxe", ["build.hxml", "-D", "display.protocol=jsonrpc"]);
 
 		changeDirectory(sourcemapsDir);
 		runCommand("haxe", ["run.hxml"]);
 
-		changeDirectory(miscDir);
-		getCsDependencies();
-		getPythonDependencies();
+		changeDirectory(nullSafetyDir);
+		infoMsg("No-target null safety:");
+		runCommand("haxe", ["test.hxml"]);
+		infoMsg("Js-es6 null safety:");
+		runCommand("haxe", ["test-js-es6.hxml"]);
+
+		changeDirectory(getMiscSubDir());
 		runCommand("haxe", ["compile.hxml"]);
 
+		changeDirectory(getMiscSubDir("resolution"));
+		runCommand("haxe", ["run.hxml"]);
+
 		changeDirectory(sysDir);
-		haxelibInstall("utest");
-		runCommand("haxe", ["compile-macro.hxml"]);
-		runCommand("haxe", ["compile-each.hxml", "--run", "Main"]);
+		runSysTest("haxe", ["compile-macro.hxml"].concat(args));
+
+		switch Sys.systemName() {
+			case 'Linux':
+				changeDirectory(getMiscSubDir('compiler_loops'));
+				runCommand("haxe", ["run.hxml"]);
+			case _: // TODO
+		}
+
+		changeDirectory(threadsDir);
+		runCommand("haxe", ["build.hxml", "--interp"]);
+
+		deleteDirectoryRecursively(partyDir);
+		runCommand("mkdir", [partyDir]);
+		changeDirectory(partyDir);
+		party();
+	}
+
+	static function party() {
+		runCommand("git", ["clone", "https://github.com/haxetink/tink_core", "tink_core"]);
+		changeDirectory("tink_core");
+		runCommand("haxelib", ["newrepo"]);
+		runCommand("haxelib", ["install", "tests.hxml", "--always"]);
+		runCommand("haxelib", ["dev", "tink_core", "."]);
+		runCommand("haxe", ["tests.hxml", "-w", "-WDeprecated", "--interp", "--macro", "addMetadata('@:exclude','Futures','testDelay')"]);
 	}
 }

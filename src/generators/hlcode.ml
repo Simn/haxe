@@ -1,5 +1,5 @@
 (*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -46,6 +46,9 @@ type ttype =
 	| HAbstract of string * string index
 	| HEnum of enum_proto
 	| HNull of ttype
+	| HMethod of ttype list * ttype
+	| HStruct of class_proto
+	| HPacked of ttype
 
 and class_proto = {
 	pname : string;
@@ -198,6 +201,8 @@ type opcode =
 	| ORefData of reg * reg
 	| ORefOffset of reg * reg * reg
 	| ONop of string
+	| OPrefetch of reg * field index * int
+    | OAsm of int * int * reg
 
 type fundecl = {
 	fpath : string * string;
@@ -215,6 +220,7 @@ type code = {
 	strings : string array;
 	ints : int32 array;
 	floats : float array;
+	bytes : bytes array;
 	(* types : ttype array // only in bytecode, rebuilt on save() *)
 	globals : ttype array;
 	natives : (string index * string index * ttype * functable index) array;
@@ -252,9 +258,12 @@ let list_mapi f l =
 *)
 let is_nullable t =
 	match t with
-	| HBytes | HDyn | HFun _ | HObj _ | HArray | HVirtual _ | HDynObj | HAbstract _ | HEnum _ | HNull _ | HRef _ -> true
-	| HUI8 | HUI16 | HI32 | HI64 | HF32 | HF64 | HBool | HVoid | HType -> false
+	| HBytes | HDyn | HFun _ | HObj _ | HArray | HVirtual _ | HDynObj | HAbstract _ | HEnum _ | HNull _ | HRef _ | HType | HMethod _ | HStruct _ -> true
+	| HUI8 | HUI16 | HI32 | HI64 | HF32 | HF64 | HBool | HVoid | HPacked _ -> false
 
+let is_struct = function
+	| HStruct _ | HPacked _ -> true
+	| _ -> false
 
 let is_int = function
 	| HUI8 | HUI16 | HI32 | HI64 -> true
@@ -280,8 +289,10 @@ let rec tsame t1 t2 =
 	if t1 == t2 then true else
 	match t1, t2 with
 	| HFun (args1,ret1), HFun (args2,ret2) when List.length args1 = List.length args2 -> List.for_all2 tsame args1 args2 && tsame ret2 ret1
+	| HMethod (args1,ret1), HMethod (args2,ret2) when List.length args1 = List.length args2 -> List.for_all2 tsame args1 args2 && tsame ret2 ret1
 	| HObj p1, HObj p2 -> p1 == p2
 	| HEnum e1, HEnum e2 -> e1 == e2
+	| HStruct p1, HStruct p2 -> p1 == p2
 	| HAbstract (_,a1), HAbstract (_,a2) -> a1 == a2
 	| HVirtual v1, HVirtual v2 ->
 		if v1 == v2 then true else
@@ -318,6 +329,14 @@ let rec safe_cast t1 t2 =
 			p.pname = p2.pname || (match p.psuper with None -> false | Some p -> loop p)
 		in
 		loop p1
+	| HStruct p1, HStruct p2 ->
+		(* allow subtyping *)
+		let rec loop p =
+			p.pname = p2.pname || (match p.psuper with None -> false | Some p -> loop p)
+		in
+		loop p1
+	| HPacked t1, HStruct _ ->
+		safe_cast t1 t2
 	| HFun (args1,t1), HFun (args2,t2) when List.length args1 = List.length args2 ->
 		List.for_all2 (fun t1 t2 -> safe_cast t2 t1 || (t1 = HDyn && is_dynamic t2)) args1 args2 && safe_cast t1 t2
 	| _ ->
@@ -334,27 +353,6 @@ let hl_hash b =
 			Int32.rem !h 0x1FFFFF7Bl
 	in
 	loop 0
-
-let utf16_add buf c =
-	let add c =
-		Buffer.add_char buf (char_of_int (c land 0xFF));
-		Buffer.add_char buf (char_of_int (c lsr 8));
-	in
-	if c >= 0 && c < 0x10000 then begin
-		if c >= 0xD800 && c <= 0xDFFF then failwith ("Invalid unicode char " ^ string_of_int c);
-		add c;
-	end else if c < 0x110000 then begin
-		let c = c - 0x10000 in
-		add ((c asr 10) + 0xD800);
-		add ((c land 1023) + 0xDC00);
-	end else
-		failwith ("Invalid unicode char " ^ string_of_int c)
-
-let utf8_to_utf16 str =
-	let b = Buffer.create (String.length str * 2) in
-	(try UTF8.iter (fun c -> utf16_add b (UChar.code c)) str with Invalid_argument _ | UChar.Out_of_range -> ()); (* if malformed *)
-	utf16_add b 0;
-	Buffer.contents b
 
 let rec get_index name p =
 	try
@@ -389,16 +387,19 @@ let gather_types (code:code) =
 	let types = ref PMap.empty in
 	let arr = DynArray.create() in
 	let rec get_type t =
-		(match t with HObj { psuper = Some p } -> get_type (HObj p) | _ -> ());
+		(match t with
+		| HObj { psuper = Some p } -> get_type (HObj p)
+		| HStruct { psuper = Some p } -> get_type (HStruct p)
+		| _ -> ());
 		if PMap.mem t !types then () else
 		let index = DynArray.length arr in
 		DynArray.add arr t;
 		types := PMap.add t index !types;
 		match t with
-		| HFun (args, ret) ->
+		| HFun (args, ret) | HMethod (args, ret) ->
 			List.iter get_type args;
 			get_type ret
-		| HObj p ->
+		| HObj p | HStruct p ->
 			Array.iter (fun (_,n,t) -> get_type t) p.pfields
 		| HNull t | HRef t ->
 			get_type t
@@ -423,7 +424,7 @@ let gather_types (code:code) =
 	DynArray.to_array arr, !types
 
 let lookup_type types t =
-	try PMap.find t types with Not_found -> assert false
+	try PMap.find t types with Not_found -> Globals.die "" __LOC__
 
 (* --------------------------------------------------------------------------------------------------------------------- *)
 (* DUMP *)
@@ -441,11 +442,14 @@ let rec tstr ?(stack=[]) ?(detailed=false) t =
 	| HBytes -> "bytes"
 	| HDyn  -> "dyn"
 	| HFun (args,ret) -> "(" ^ String.concat "," (List.map (tstr ~stack ~detailed) args) ^ "):" ^ tstr ~stack ~detailed ret
-	| HObj o when not detailed -> "#" ^ o.pname
-	| HObj o ->
+	| HMethod (args,ret) -> "method:(" ^ String.concat "," (List.map (tstr ~stack ~detailed) args) ^ "):" ^ tstr ~stack ~detailed ret
+	| HObj o when not detailed -> o.pname
+	| HStruct s when not detailed -> "@" ^ s.pname
+	| HObj o | HStruct o ->
 		let fields = "{" ^ String.concat "," (List.map (fun(s,_,t) -> s ^ " : " ^ tstr ~detailed:false t) (Array.to_list o.pfields)) ^ "}" in
 		let proto = "{"  ^ String.concat "," (List.map (fun p -> (match p.fvirtual with None -> "" | Some _ -> "virtual ") ^ p.fname ^ "@" ^  string_of_int p.fmethod) (Array.to_list o.pproto)) ^ "}" in
-		"#" ^ o.pname ^ "[" ^ (match o.psuper with None -> "" | Some p -> ">" ^ p.pname ^ " ") ^ "fields=" ^ fields ^ " proto=" ^ proto ^ "]"
+		let str = o.pname ^ "[" ^ (match o.psuper with None -> "" | Some p -> ">" ^ p.pname ^ " ") ^ "fields=" ^ fields ^ " proto=" ^ proto ^ "]" in
+		(match t with HObj o -> str | _ -> "@" ^ str)
 	| HArray ->
 		"array"
 	| HType ->
@@ -466,6 +470,7 @@ let rec tstr ?(stack=[]) ?(detailed=false) t =
 	| HEnum e ->
 		"enum(" ^ e.ename ^ ")"
 	| HNull t -> "null(" ^ tstr t ^ ")"
+	| HPacked t -> "packed(" ^ tstr t ^ ")"
 
 let ostr fstr o =
 	match o with
@@ -569,6 +574,19 @@ let ostr fstr o =
 	| ORefData (r,d) -> Printf.sprintf "refdata %d, %d" r d
 	| ORefOffset (r,r2,off) -> Printf.sprintf "refoffset %d, %d, %d" r r2 off
 	| ONop s -> if s = "" then "nop" else "nop " ^ s
+	| OPrefetch (r,f,mode) -> Printf.sprintf "prefetch %d[%d] %d" r f mode
+	| OAsm (mode, value, reg) ->
+		match mode with
+		| 0 when reg = 0 ->
+			Printf.sprintf "asm %.2X" value
+		| 1 when reg = 0 ->
+			Printf.sprintf "asm scratch R%d" value
+		| 2 ->
+			Printf.sprintf "asm R%d := %d" value (reg - 1)
+		| 3 ->
+			Printf.sprintf "asm %d := R%d" (reg - 1) value
+		| _ ->
+			Printf.sprintf "asm[%d] %d%s" mode value (if reg = 0 then "" else ", " ^ string_of_int (reg-1))
 
 let fundecl_name f = if snd f.fpath = "" then "fun$" ^ (string_of_int f.findex) else (fst f.fpath) ^ "." ^ (snd f.fpath)
 
@@ -602,6 +620,10 @@ let dump pr code =
 	Array.iteri (fun i s ->
 		pr ("	@" ^ string_of_int i ^ " : " ^ String.escaped s);
 	) code.strings;
+	pr (string_of_int (Array.length code.bytes) ^ " bytes");
+	Array.iteri (fun i s ->
+		pr ("	@" ^ string_of_int i ^ " : " ^ string_of_int (Bytes.length s));
+	) code.bytes;
 	pr (string_of_int (Array.length code.ints) ^ " ints");
 	Array.iteri (fun i v ->
 		pr ("	@" ^ string_of_int i ^ " : " ^ Int32.to_string v);

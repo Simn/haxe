@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -39,7 +39,7 @@ let run_filter com types =
 			is_hxgen (TAbstractDecl a)
 		| TClassDecl cl ->
 			let rec is_hxgen_class (c,_) =
-				if c.cl_extern then begin
+				if (has_class_flag c CExtern) then begin
 					if Meta.has Meta.HxGen c.cl_meta then
 						true
 					else

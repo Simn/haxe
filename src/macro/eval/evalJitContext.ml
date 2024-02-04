@@ -1,6 +1,9 @@
 open Type
 open EvalContext
-open EvalEmitter
+
+type varacc =
+	| Local of int
+	| Env of int
 
 (*
 	JitContext keeps track of allocated local variables and closures. Scopes can be pushed
@@ -14,7 +17,7 @@ type t = {
 	(* The scope stack. *)
 	mutable scopes : scope list;
 	(* The captured variables declared in this context. Maps variable IDs to capture slots. *)
-	mutable captures : (int,int) Hashtbl.t;
+	mutable captures : (int,int * bool) Hashtbl.t;
 	(* The current number of locals. *)
 	mutable num_locals : int;
 	(* The maximum number of locals. *)
@@ -25,7 +28,16 @@ type t = {
 	mutable has_nonfinal_return : bool;
 	(* The name of capture variables. Maps local slots to variable names. Only filled in debug mode. *)
 	mutable capture_infos : (int,var_info) Hashtbl.t;
+	(* Variables which are accessed but not declared in this scope. *)
+	mutable captures_outside_scope : tvar list;
 }
+
+let var_info_of_var var =
+	{
+		vi_name = var.v_name;
+		vi_pos = var.v_pos;
+		vi_generated = (match var.v_kind with VUser _ -> false | _ -> true)
+	}
 
 (* Creates a new context *)
 let create ctx = {
@@ -37,6 +49,7 @@ let create ctx = {
 	num_closures = 0;
 	has_nonfinal_return = false;
 	capture_infos = Hashtbl.create 0;
+	captures_outside_scope = []
 }
 
 (* Returns the number of locals in [scope]. *)
@@ -60,7 +73,7 @@ let pop_scope jit = match jit.scopes with
 		jit.scopes <- tl;
 		jit.num_locals <- jit.num_locals - (num_locals scope);
 	| [] ->
-		assert false
+		Globals.die "" __LOC__
 
 (* Increases number of locals and updates maximum number of locals if necessary *)
 let increase_num_locals jit =
@@ -68,17 +81,17 @@ let increase_num_locals jit =
 	if jit.num_locals > jit.max_num_locals then jit.max_num_locals <- jit.num_locals
 
 (* Adds capture variable [var] to context [jit]. *)
-let add_capture jit var =
+let add_capture jit var declared =
 	let i = Hashtbl.length jit.captures in
-	Hashtbl.add jit.captures var.v_id i;
+	Hashtbl.add jit.captures var.v_id (i,declared);
 	if jit.ctx.debug.support_debugger then begin
-		Hashtbl.replace jit.capture_infos i var.v_name
+		Hashtbl.replace jit.capture_infos i (var_info_of_var var)
 	end;
 	i
 
 (* Adds variable [var] to the current top scope of context [jit]. *)
 let add_local jit var = match jit.scopes with
-	| [] -> assert false
+	| [] -> Globals.die "" __LOC__
 	| scope :: _ ->
 		let i = Hashtbl.length scope.locals in
 		Hashtbl.add scope.locals var.v_id i;
@@ -86,7 +99,7 @@ let add_local jit var = match jit.scopes with
 		let slot = scope.local_offset + i in
 		if jit.ctx.debug.support_debugger then begin
 			Hashtbl.replace scope.local_ids var.v_name var.v_id;
-			Hashtbl.replace scope.local_infos i var.v_name
+			Hashtbl.replace scope.local_infos i (var_info_of_var var)
 		end;
 		slot
 
@@ -97,7 +110,7 @@ let add_local jit var = match jit.scopes with
 	Returns either [Env slot] if the variable is captured or [Local slot] otherwise.
 *)
 let declare_local jit var =
-	if var.v_capture then Env (add_capture jit var)
+	if has_var_flag var VCaptured then Env (add_capture jit var true)
 	else Local (add_local jit var)
 
 (*
@@ -108,18 +121,18 @@ let declare_local jit var =
 *)
 let declare_arg jit var =
 	let varacc = add_local jit var in
-	if var.v_capture then add_capture jit var,Some varacc else varacc,None
+	if has_var_flag var VCaptured then add_capture jit var true,Some varacc else varacc,None
 
 (* Declares a variable for `this` in context [jit]. *)
 let declare_local_this jit = match jit.scopes with
-	| [] -> assert false
+	| [] -> Globals.die "" __LOC__
 	| scope :: _ ->
 		let i = Hashtbl.length scope.locals in
 		Hashtbl.add scope.locals 0 i;
 		increase_num_locals jit;
 		if jit.ctx.debug.support_debugger then begin
 			Hashtbl.replace scope.local_ids "this" 0;
-			Hashtbl.replace scope.local_infos 0 "this"
+			Hashtbl.replace scope.local_infos 0 { vi_name = "this"; vi_pos = Globals.null_pos; vi_generated = false }
 		end;
 		Local i
 
@@ -140,5 +153,8 @@ let get_slot jit vid p =
 	with Not_found -> EvalMisc.throw_string "Unbound variable" p
 
 (* Gets the slot of captured variable id [vid] in context [jit]. *)
-let get_capture_slot jit vid =
-	Hashtbl.find jit.captures vid
+let get_capture_slot jit var =
+	try fst (Hashtbl.find jit.captures var.v_id)
+	with Not_found ->
+		jit.captures_outside_scope <- var :: jit.captures_outside_scope;
+		add_capture jit var false

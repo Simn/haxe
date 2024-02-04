@@ -1,4 +1,5 @@
 #if sys
+
 // bind & listen
 var s = new sys.net.Socket();
 var host = new sys.net.Host("127.0.0.1");
@@ -57,4 +58,7 @@ c.read() == "abc";
 
 c.close();
 s.close();
+
+#else
+1 == 1;
 #end

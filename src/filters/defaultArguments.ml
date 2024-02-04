@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -18,7 +18,6 @@
 *)
 open Common
 open Type
-open Codegen
 open Texpr.Builder
 
 (*
@@ -33,8 +32,7 @@ let gen_check basic t nullable_var const pos =
 		(is_null t1) <> (is_null t2)
 	in
 
-	let const_t = const_type basic const t in
-	let const = mk (TConst const) const_t pos in
+	let const_t = const.etype in
 	let const = if needs_cast t const_t then mk_cast const t pos else const in
 
 	let arg = make_local nullable_var pos in
@@ -45,10 +43,10 @@ let gen_check basic t nullable_var const pos =
 
 let add_opt com block pos (var,opt) =
 	match opt with
-	| None | Some TNull ->
+	| None | Some {eexpr = TConst TNull} ->
 		(var,opt)
-	| Some (TString str) ->
-		block := Texpr.set_default com.basic var (TString str) pos :: !block;
+	| Some ({eexpr = TConst (TString str)} as e) ->
+		block := Texpr.set_default com.basic var e pos :: !block;
 		(var, opt)
 	| Some const ->
 		let basic = com.basic in
@@ -62,6 +60,8 @@ let rec change_func com cl cf =
 	List.iter (change_func com cl) cf.cf_overloads;
 
 	match cf.cf_kind, follow cf.cf_type with
+	| _ when has_class_field_flag cf CfPostProcessed ->
+		()
 	| Var _, _ | Method MethDynamic, _ ->
 		()
 	| _, TFun(args, ret) ->
@@ -128,7 +128,7 @@ let rec change_func com cl cf =
 						in
 						let args = List.map replace_args args in
 						{ tf.tf_expr with eexpr = TBlock ((if !found then { super with eexpr = TCall (e1, args) } else super) :: !block @ tl) }
-					| _ -> assert false)
+					| _ -> Globals.die "" __LOC__)
 				with Not_found ->
 					Type.concat { tf.tf_expr with eexpr = TBlock !block; etype = basic.tvoid } tf.tf_expr
 			in
@@ -147,7 +147,7 @@ let rec change_func com cl cf =
 
 		| _ -> ());
 		(if !found then cf.cf_type <- TFun(!args, ret))
-	| _, _ -> assert false
+	| _, _ -> Globals.die "" __LOC__
 
 let run com md =
 	match md with

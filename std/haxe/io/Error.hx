@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,18 +19,25 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package haxe.io;
 
 /**
 	The possible IO errors that can occur
 **/
+#if eval
+@:keep
+#end
 enum Error {
 	/** The IO is set into nonblocking mode and some data cannot be read or written **/
 	Blocked;
+
 	/** An integer value is outside its allowed range **/
 	Overflow;
+
 	/** An operation on Bytes is outside of its valid range **/
 	OutsideBounds;
+
 	/** Other errors **/
-	Custom( e : Dynamic );
+	Custom(e:Dynamic);
 }

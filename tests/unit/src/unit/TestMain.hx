@@ -1,170 +1,154 @@
 package unit;
 
-import unit.Test.*;
 import haxe.ds.List;
+import unit.Test.*;
+import utest.Runner;
+import utest.ui.Report;
+
+final asyncWaits = new Array<haxe.PosInfos>();
+final asyncCache = new Array<() -> Void>();
 
 @:access(unit.Test)
-@:expose("unit.TestMain")
+#if js
+@:expose("unit.TestMain.main")
 @:keep
-class TestMain {
-
-	static var asyncWaits = new Array<haxe.PosInfos>();
-	static var asyncCache = new Array<Void -> Void>();
-
+#end
+function main() {
 	#if js
-	static function nodejsMain() {
-		main();
-		(untyped process).exit(Test.success ? 0 : 1);
+	if (js.Browser.supported) {
+		var oTrace = haxe.Log.trace;
+		var traceElement = js.Browser.document.getElementById("haxe:trace");
+		haxe.Log.trace = function(v, ?infos) {
+			oTrace(v, infos);
+			traceElement.innerHTML += infos.fileName + ":" + infos.lineNumber + ": " + StringTools.htmlEscape(v) + "<br/>";
+		}
 	}
 	#end
 
-	static function main() {
-		Test.startStamp = haxe.Timer.stamp();
+	var verbose = #if (cpp || neko || php) Sys.args().indexOf("-v") >= 0 #else false #end;
 
-		#if js
-		if (js.Browser.supported) {
-			var oTrace = haxe.Log.trace;
-			var traceElement = js.Browser.document.getElementById("haxe:trace");
-			haxe.Log.trace = function(v, ?infos) {
-				oTrace(v, infos);
-				traceElement.innerHTML += infos.fileName + ":" + infos.lineNumber + ": " + StringTools.htmlEscape(v) + "<br/>";
-			}
-		}
+	#if cs // "Turkey Test" - Issue #996
+	cs.system.threading.Thread.CurrentThread.CurrentCulture = new cs.system.globalization.CultureInfo('tr-TR');
+	cs.Lib.applyCultureChanges();
+	#end
+	TestMainNow.printNow();
+	trace("START");
+	#if flash
+	var tf:flash.text.TextField = untyped flash.Boot.getTrace();
+	tf.selectable = true;
+	tf.mouseEnabled = true;
+	#end
+	var classes = [
+		new TestOps(),
+		new TestBasetypes(),
+		new TestNumericSuffixes(),
+		new TestNumericSeparator(),
+		new TestExceptions(),
+		new TestBytes(),
+		new TestIO(),
+		new TestLocals(),
+		new TestLocalStatic(),
+		new TestEReg(),
+		new TestXML(),
+		new TestMisc(),
+		new TestJson(),
+		new TestResource(),
+		new TestInt64(),
+		new TestReflect(),
+		new TestSerialize(),
+		new TestSerializerCrossTarget(),
+		new TestMeta(),
+		new TestType(),
+		new TestOrder(),
+		new TestGADT(),
+		new TestGeneric(),
+		new TestArrowFunctions(),
+		new TestCasts(),
+		new TestSyntaxModule(),
+		new TestNull(),
+		new TestNullCoalescing(),
+		new TestNumericCasts(),
+		new TestHashMap(),
+		new TestRest(),
+		new TestArray(),
+		#if !no_pattern_matching
+		new TestMatch(),
 		#end
+		#if cs
+		new TestCSharp(),
+		#end
+		#if java
+		new TestJava(),
+		#end
+		#if lua
+		new TestLua(),
+		#end
+		#if python
+		new TestPython(),
+		#end
+		#if hl
+		new TestHL(),
+		#end
+		#if php
+		new TestPhp(),
+		#end
+		#if (java || cs)
+		new TestOverloads(),
+		#end
+		new TestOverloadsForEveryone(),
+		new TestInterface(),
+		new TestNaN(),
+		#if ((dce == "full") && !interp)
+		new TestDCE(),
+		#end
+		new TestMapComprehension(),
+		new TestMacro(),
+		new TestKeyValueIterator(),
+		new TestFieldVariance(),
+		new TestConstrainedMonomorphs(),
+		new TestDefaultTypeParameters(),
+		// new TestUnspecified(),
+	];
 
-		var verbose = #if ( cpp || neko || php ) Sys.args().indexOf("-v") >= 0 #else false #end;
-
-		#if cs //"Turkey Test" - Issue #996
-		cs.system.threading.Thread.CurrentThread.CurrentCulture = new cs.system.globalization.CultureInfo('tr-TR');
-		cs.Lib.applyCultureChanges();
-		#end
-		#if neko
-		if( neko.Web.isModNeko )
-			neko.Web.setHeader("Content-Type","text/plain");
-		#elseif php
-		if( php.Web.isModNeko )
-			php.Web.setHeader("Content-Type","text/plain");
-		#end
-		resetTimer();
-		#if !macro
-		trace("Generated at: " + HelperMacros.getCompilationDate());
-		#end
-		trace("START");
-		#if flash
-		var tf : flash.text.TextField = untyped flash.Boot.getTrace();
-		tf.selectable = true;
-		tf.mouseEnabled = true;
-		#end
-		var classes = [
-			new TestOps(),
-			new TestBasetypes(),
-			new TestBytes(),
-			new TestIO(),
-			new TestLocals(),
-			new TestEReg(),
-			new TestXML(),
-			new TestMisc(),
-			new TestJson(),
-			new TestResource(),
-			new TestInt64(),
-			new TestReflect(),
-			new TestSerialize(),
-			new TestSerializerCrossTarget(),
-			new TestMeta(),
-			new TestType(),
-			new TestOrder(),
-			new TestGADT(),
-			new TestGeneric(),
-			new TestArrowFunctions(),
-			new TestCasts(),
-			new TestSyntaxModule(),
-			#if !no_pattern_matching
-			new TestMatch(),
-			#end
-			new TestSpecification(),
-			#if cs
-			new TestCSharp(),
-			#end
-			#if java
-			new TestJava(),
-			#end
-			#if lua
-			new TestLua(),
-			#end
-			#if python
-			new TestPython(),
-			#end
-			#if hl
-			new TestHL(),
-			#end
-			#if php
-			new TestPhp(),
-			#end
-			#if (java || cs)
-			new TestOverloads(),
-			#end
-			new TestInterface(),
-			new TestNaN(),
-			#if ((dce == "full") && !interp && !as3)
-			new TestDCE(),
-			#end
-			new TestMapComprehension(),
-			new TestMacro(),
-			new TestArray(),
-			new TestKeyValueIterator(),
-			// #if ( (java || neko) && !macro && !interp)
-			// new TestThreads(),
-			// #end
-			//new TestUnspecified(),
-			//new TestRemoting(),
-		];
-
-
-		#if js
-		if (js.Browser.supported) {
-			classes.push(new TestJQuery());
-		}
-		#end
-
-		TestIssues.addIssueClasses("src/unit/issues", "unit.issues");
-		TestIssues.addIssueClasses("src/unit/hxcpp_issues", "unit.hxcpp_issues");
-		var current = null;
-		#if (!fail_eager)
-		try
-		#end
-		{
-			asyncWaits.push(null);
-			for( inst in classes ) {
-				current = Type.getClass(inst);
-			if (verbose)
-			   logVerbose("Class " + Std.string(current) );
-				for( f in Type.getInstanceFields(current) )
-					if( f.substr(0,4) == "test" ) {
-				  if (verbose)
-					 logVerbose("   " + f);
-						#if fail_eager
-						Reflect.callMethod(inst,Reflect.field(inst,f),[]);
-						#else
-						try {
-							Reflect.callMethod(inst,Reflect.field(inst,f),[]);
-						}
-						#if !as3
-						catch( e : Dynamic ) {
-							onError(e,"EXCEPTION",Type.getClassName(current)+"."+f);
-						}
-						#end
-						#end
-						reportInfos = null;
-					}
-			}
-			asyncWaits.remove(null);
-			checkDone();
-		}
-		#if (!as3 && !(fail_eager))
-		catch( e : Dynamic ) {
-			asyncWaits.remove(null);
-			onError(e,"ABORTED",Type.getClassName(current));
-		}
-		#end
+	for (specClass in unit.UnitBuilder.generateSpec("src/unitstd")) {
+		classes.push(specClass);
 	}
+	TestIssues.addIssueClasses("src/unit/issues", "unit.issues");
+	TestIssues.addIssueClasses("src/unit/hxcpp_issues", "unit.hxcpp_issues");
+
+	var runner = new Runner();
+	for (c in classes) {
+		runner.addCase(c);
+	}
+	var report = Report.create(runner);
+	report.displayHeader = AlwaysShowHeader;
+	report.displaySuccessResults = NeverShowSuccessResults;
+	var success = true;
+	runner.onProgress.add(function(e) {
+		for (a in e.result.assertations) {
+			switch a {
+				case Success(pos):
+				case Warning(msg):
+				case Ignore(reason):
+				case _:
+					success = false;
+			}
+		}
+		#if js
+		if (js.Browser.supported && e.totals == e.done) {
+			untyped js.Browser.window.success = success;
+		};
+		#end
+	});
+	#if sys
+	if (verbose)
+		runner.onTestStart.add(function(test) {
+			Sys.println(' $test...'); // TODO: need utest success state for this
+		});
+	#end
+	runner.run();
+
+	#if (flash && fdb)
+	flash.Lib.fscommand("quit");
+	#end
 }

@@ -3,7 +3,7 @@ package net;
 import sys.net.*;
 import utest.Assert;
 
-class TestSocket {
+class TestSocket extends utest.Test {
 	var registeredSockets:Array<Socket> = [];
 
 	public function register<T:Socket>(socket:T):T {
@@ -11,7 +11,7 @@ class TestSocket {
 		return socket;
 	}
 
-	public function tearDown() {
+	public function teardown() {
 		for(socket in registeredSockets) {
 			if(socket == null) continue;
 			socket.close();
@@ -19,11 +19,11 @@ class TestSocket {
 		registeredSockets = [];
 	}
 
-	public function new() { }
-
+	#if !js // bind is not implemented on nodejs
 	public function testBind() {
 		var socket = register(new Socket());
 		socket.bind(new Host('localhost'), 34567);
 		Assert.pass();
 	}
+	#end
 }

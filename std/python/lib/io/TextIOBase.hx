@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package python.lib.io;
 
 import haxe.extern.EitherType;
@@ -27,36 +28,29 @@ import python.lib.io.IOBase;
 
 @:pythonImport("io", "TextIOBase")
 extern class TextIOBase extends IOBase implements ITextIOBase {
+	var encoding:String;
+	var error:String;
+	var newlines:Null<EitherType<String, Tuple<String>>>;
 
-	public var encoding:String;
-	public var error:String;
-	public var newlines:Null<EitherType<String, Tuple<String>>>;
+	function detach():BufferedIOBase;
 
-	public function detach ():BufferedIOBase;
+	function write(s:String):Int;
 
-	public function write (s:String):Int;
+	function read(n:Int):String;
 
-	public function read (n:Int):String;
-
-	public var buffer:BufferedIOBase;
-
+	var buffer:BufferedIOBase;
 }
 
 @:remove extern interface ITextIOBase extends IIOBase {
+	var encoding:String;
+	var error:String;
+	var newlines:Null<EitherType<String, Tuple<String>>>;
 
-	public var encoding:String;
-	public var error:String;
-	public var newlines:Null<EitherType<String, Tuple<String>>>;
+	var buffer:BufferedIOBase;
 
-	public var buffer:BufferedIOBase;
+	function detach():BufferedIOBase;
 
-	public function detach ():BufferedIOBase;
+	function write(s:String):Int;
 
-	public function write (s:String):Int;
-
-	public function read (n:Int):String;
-
-
-
-
+	function read(n:Int):String;
 }

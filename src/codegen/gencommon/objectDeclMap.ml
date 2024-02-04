@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -30,7 +30,7 @@ let configure gen map_fn =
 		match e.eexpr with
 		| TObjectDecl odecl ->
 			let e = Type.map_expr run e in
-			(match e.eexpr with TObjectDecl odecl -> map_fn e odecl | _ -> assert false)
+			(match e.eexpr with TObjectDecl odecl -> map_fn e odecl | _ -> Globals.die "" __LOC__)
 		| _ ->
 			Type.map_expr run e
 	in

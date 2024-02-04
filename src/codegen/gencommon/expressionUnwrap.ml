@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -157,7 +157,7 @@ let rec expr_stat_map fn (expr:texpr) =
 		| TBinop ( (OpAssign as op), left_e, right_e )
 		| TBinop ( (OpAssignOp _ as op), left_e, right_e ) ->
 			{ expr with eexpr = TBinop(op, fn left_e, fn right_e) }
-		| TParenthesis _ -> assert false
+		| TParenthesis _ -> Globals.die "" __LOC__
 		| TCall(left_e, params) ->
 			{ expr with eexpr = TCall(fn left_e, List.map fn params) }
 		| TNew(cl, tparams, params) ->
@@ -170,8 +170,12 @@ let rec expr_stat_map fn (expr:texpr) =
 			{ expr with eexpr = TIf(fn cond, eif, eelse) }
 		| TWhile(cond, block, flag) ->
 			{ expr with eexpr = TWhile(fn cond, block, flag) }
-		| TSwitch(cond, el_block_l, default) ->
-			{ expr with eexpr = TSwitch( fn cond, List.map (fun (el,block) -> (List.map fn el, block)) el_block_l, default ) }
+		| TSwitch switch ->
+			let switch = { switch with
+				switch_subject = fn switch.switch_subject;
+				switch_cases = List.map (fun case -> {case with case_patterns = List.map fn case.case_patterns}) switch.switch_cases;
+			} in
+			{ expr with eexpr = TSwitch switch }
 		| TReturn(eopt) ->
 			{ expr with eexpr = TReturn(Option.map fn eopt) }
 		| TThrow (texpr) ->
@@ -184,7 +188,7 @@ let rec expr_stat_map fn (expr:texpr) =
 		| TBlock _ -> expr (* there is no expected expression here. Only statements *)
 		| TMeta(m,e) ->
 			{ expr with eexpr = TMeta(m,expr_stat_map fn e) }
-		| _ -> assert false (* we only expect valid statements here. other expressions aren't valid statements *)
+		| _ -> Globals.die "" __LOC__ (* we only expect valid statements here. other expressions aren't valid statements *)
 
 let is_expr = function | Expression _ -> true | _ -> false
 
@@ -292,8 +296,8 @@ and expr_kind expr =
 		| TObjectDecl (sel) ->
 			aggregate true (List.map snd sel)
 		| TCast (e,_) ->
-			aggregate true [e]
-		| _ -> trace (debug_expr expr); assert false (* should have been read as Statement by shallow_expr_type *)
+			aggregate false [e]
+		| _ -> trace (debug_expr expr); Globals.die "" __LOC__ (* should have been read as Statement by shallow_expr_type *)
 
 let get_kinds (statement:texpr) =
 	let kinds = ref [] in
@@ -361,8 +365,12 @@ let rec apply_assign assign_fun right =
 	match right.eexpr with
 		| TBlock el ->
 			{ right with eexpr = TBlock(apply_assign_block assign_fun el) }
-		| TSwitch (cond, elblock_l, default) ->
-			{ right with eexpr = TSwitch(cond, List.map (fun (el,block) -> (el, mk_get_block assign_fun block)) elblock_l, Option.map (mk_get_block assign_fun) default) }
+		| TSwitch switch ->
+			let switch = { switch with
+				switch_cases = List.map (fun case -> {case with case_expr = mk_get_block assign_fun case.case_expr}) switch.switch_cases;
+				switch_default = Option.map (mk_get_block assign_fun) switch.switch_default;
+			} in
+			{ right with eexpr = TSwitch switch }
 		| TTry (block, catches) ->
 			{ right with eexpr = TTry(mk_get_block assign_fun block, List.map (fun (v,block) -> (v,mk_get_block assign_fun block) ) catches) }
 		| TIf (cond,eif,eelse) ->
@@ -381,7 +389,7 @@ let rec apply_assign assign_fun right =
 			match follow right.etype with
 				| TAbstract ({ a_path = ([], "Void") },[]) ->
 					right
-				| _ -> trace (debug_expr right); assert false (* a statement is required *)
+				| _ -> trace (debug_expr right); Globals.die "" __LOC__ (* a statement is required *)
 
 let short_circuit_op_unwrap com add_statement expr :texpr =
 	let do_not expr =
@@ -413,7 +421,7 @@ let short_circuit_op_unwrap com add_statement expr :texpr =
 				add_statement tvars;
 
 				({ expr with eexpr = TBinop(op, left, local) }, [ do_not left, { right with eexpr = TBinop(OpAssign, local, right) } ])
-			| _ when acc = [] -> assert false
+			| _ when acc = [] -> Globals.die "" __LOC__
 			| _ ->
 				let var = mk_temp "boolv" expr.etype in
 				let tvars = { expr with eexpr = TVar(var, Some( { expr with etype = com.basic.tbool } )); etype = com.basic.tvoid } in
@@ -444,7 +452,7 @@ let short_circuit_op_unwrap com add_statement expr :texpr =
 						epos = assign.epos;
 					},
 				None); etype = com.basic.tvoid; epos = assign.epos }
-			| [] -> assert false
+			| [] -> Globals.die "" __LOC__
 	in
 
 	add_statement (loop local_assign_list);
@@ -478,7 +486,7 @@ let try_call_unwrap_statement com handle_cast problematic_expression_unwrap (add
 		match expr_kind left with
 			| KExprWithStatement ->
 				problematic_expression_unwrap add_statement left KExprWithStatement
-			| KStatement -> assert false (* doesn't make sense a KStatement as a left side expression *)
+			| KStatement -> Globals.die "" __LOC__ (* doesn't make sense a KStatement as a left side expression *)
 			| _ -> left
 	in
 
@@ -606,7 +614,7 @@ let configure gen =
 												problematic_expression_unwrap process_statement e hd
 											end else
 												e
-										| [] -> assert false
+										| [] -> Globals.die "" __LOC__
 								) e in
 
 								new_block := (traverse new_e) :: !new_block
@@ -621,8 +629,12 @@ let configure gen =
 			{ e with eexpr = TBlock block }
 		| TTry (block, catches) ->
 			{ e with eexpr = TTry(traverse (mk_block block), List.map (fun (v,block) -> (v, traverse (mk_block block))) catches) }
-		| TSwitch (cond,el_e_l, default) ->
-			{ e with eexpr = TSwitch(cond, List.map (fun (el,e) -> (el, traverse (mk_block e))) el_e_l, Option.map (fun e -> traverse (mk_block e)) default) }
+		| TSwitch switch ->
+			let switch = { switch with
+				switch_cases = List.map (fun case -> {case with case_expr = traverse (mk_block case.case_expr)}) switch.switch_cases;
+				switch_default = Option.map (fun e -> traverse (mk_block e)) switch.switch_default;
+			} in
+			{ e with eexpr = TSwitch switch }
 		| TWhile (cond,block,flag) ->
 			{e with eexpr = TWhile(cond,traverse (mk_block block), flag) }
 		| TIf (cond, eif, eelse) ->

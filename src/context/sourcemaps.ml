@@ -1,7 +1,5 @@
-
+open Extlib_leftovers
 open Globals
-open Ast
-open Lexer
 open Common
 
 (**
@@ -131,7 +129,7 @@ class sourcemap_writer (generated_file:string) =
 			"],\n");
 		if Common.defined com Define.SourceMapContent then begin
 			output_string channel ("\"sourcesContent\":[" ^
-				(String.concat "," (List.map (fun s -> try "\"" ^ Ast.s_escape (Std.input_file ~bin:true s) ^ "\"" with _ -> "null") sources)) ^
+				(String.concat "," (List.map (fun s -> try "\"" ^ StringHelper.s_escape (Std.input_file ~bin:true s) ^ "\"" with _ -> "null") sources)) ^
 				"],\n");
 		end;
 		output_string channel "\"names\":[],\n";
@@ -234,7 +232,7 @@ class sourcemap_builder (generated_file:string) =
 			match node with
 				| Some ({ smn_data = SMNil } as node) -> current <- node
 				| Some node -> loop node.smn_left
-				| None -> assert false
+				| None -> die "" __LOC__
 		in
 		loop (Some current)
 	(**
@@ -245,7 +243,7 @@ class sourcemap_builder (generated_file:string) =
 			match node.smn_right with
 				| Some { smn_data = SMNil } -> current <- node
 				| Some node -> loop node
-				| None -> assert false
+				| None -> die "" __LOC__
 		in
 		loop current
 	(**

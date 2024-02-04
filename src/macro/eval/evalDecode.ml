@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -50,16 +50,20 @@ let decode_varray v = match v with
 	| _ -> unexpected_value v "array"
 
 let decode_string v = match v with
-	| VString(r,s) -> Lazy.force s
+	| VString s -> s.sstring
 	| _ -> unexpected_value v "string"
 
-let decode_rope v = match v with
-	| VString(s,_) -> s
+let decode_vstring v = match v with
+	| VString s -> s
 	| _ -> unexpected_value v "string"
 
-let decode_rope_string v = match v with
-	| VString(r,s) -> r,s
-	| _ -> unexpected_value v "string"
+let decode_native_string v = match v with
+	| VNativeString s -> s
+	| _ -> unexpected_value v "native string"
+
+let decode_handle v = match v with
+	| VHandle h -> h
+	| _ -> unexpected_value v "handle"
 
 let decode_bytes v = match v with
 	| VInstance {ikind=IBytes s} -> s
@@ -106,7 +110,7 @@ let decode_pos v = match v with
 	| VInstance {ikind=IPos p} -> p
 	| _ -> raise MacroApi.Invalid_expr (* maybe_decode_pos relies on this being raised *)
 
-let rec decode_ref v : 'a = match v with
+let decode_ref v : 'a = match v with
 	| VInstance {ikind=IRef r} -> Obj.obj r
 	| _ -> unexpected_value v "unsafe"
 
@@ -114,3 +118,13 @@ let num = function
 	| VInt32 i -> Int32.to_float i
 	| VFloat f -> f
 	| v -> unexpected_value v "number"
+
+let decode_option decode_value v =
+	match decode_enum v with
+	| 0, [v] -> Some (decode_value v)
+	| 1, [] -> None
+	| _ -> unexpected_value v "haxe.ds.Option"
+
+let decode_optional decode_value v =
+	if v = VNull then None
+	else Some (decode_value v)

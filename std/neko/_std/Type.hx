@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -34,7 +34,7 @@ enum ValueType {
 
 @:coreApi class Type {
 
-	public static function getClass<T>( o : T ) : Class<T> untyped {
+	public static function getClass<T>( o : T ) : Null<Class<T>> untyped {
 		if( __dollar__typeof(o) != __dollar__tobject )
 			return null;
 		var p = __dollar__objgetproto(o);

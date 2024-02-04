@@ -6,8 +6,8 @@ abstract W(Int) from Int {
 
 class TestArrowFunctions extends Test {
 
-	var f0_0: Void -> Int;
-	var f0_1: Void -> W;
+	var f0_0: () -> Int;
+	var f0_1: () -> W;
 
 	var f1_0: Int->Int;
 	var f1_1: ?Int->Int;
@@ -35,11 +35,6 @@ class TestArrowFunctions extends Test {
 	var maybe : Void -> Bool;
 
 	function testSyntax(){
-
-		// skipping hl for now due to variance errors:
-		// Don't know how to cast ref(i32) to null(i32) see issue #6210
-		#if !as3
-
 		maybe = () -> Math.random() > 0.5;
 
 		v0 = (123);
@@ -49,8 +44,8 @@ class TestArrowFunctions extends Test {
 		f0_0 = () -> 1;
 
 		f0_0 = (() -> 1);
-		f0_0 = (() -> 1:Void->Int);
-		f0_0 = cast (() -> 1:Void->Int);
+		f0_0 = (() -> 1:()->Int);
+		f0_0 = cast (() -> 1:()->Int);
 
 		v0 = f0_0();
 
@@ -92,7 +87,7 @@ class TestArrowFunctions extends Test {
 		f3_1 = (?a:Int, b:String) -> a + b.length;
 		f3_2 = (a:Int, ?b:Int) -> a + b;
 
-		#if !(flash || hl) // Cannot skip not nullable argument
+		#if !flash // Cannot skip not nullable argument
 		f3_1 = function (a=1, b:String) return a + b.length;
 		eq(f3_1("--"),3);
 
@@ -147,9 +142,5 @@ class TestArrowFunctions extends Test {
 		map = [1 => a -> a + a, 2 => a -> a + a, 3 => a -> a + a];
 
 		obj = { f : a -> a + a };
-
-		#end
-
 	}
-
 }

@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -16,9 +16,8 @@
 	along with this program; if not, write to the Free Software
 	Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *)
-
+open Extlib_leftovers
 open Globals
-open EvalHash
 
 type cmp =
 	| CEq
@@ -26,21 +25,60 @@ type cmp =
 	| CInf
 	| CUndef
 
-type vstring = Rope.t * string Lazy.t
+type vstring = {
+	(* The bytes representation of the string. This is only evaluated if we
+	   need it for something like random access. *)
+	sstring : UTF8.t;
+	(* The length of the string. *)
+	slength : int;
+	(* The current (character * byte) offsets. *)
+	mutable soffsets : (int ref * int ref) list;
+}
 
-module StringHashtbl = Hashtbl.Make(struct
-	type t = vstring
-	let equal (r1,s1) (r2,s2) = r1 == r2 || Lazy.force s1 = Lazy.force s2
-	let hash (_,s) = Hashtbl.hash (Lazy.force s)
-end)
+type vstring_buffer = {
+	        bbuffer : Buffer.t;
+	mutable blength : int;
+}
 
-module IntHashtbl = Hashtbl.Make(struct type t = int let equal = (=) let hash = Hashtbl.hash end)
+let vstring_equal s1 s2 =
+	s1 == s2 || s1.sstring = s2.sstring
+
+module StringHashtbl = struct
+	type 'value t = (vstring * 'value) StringMap.t ref
+
+	let add this key v = this := StringMap.add key.sstring (key,v) !this
+	let copy this = ref !this
+	let create () = ref StringMap.empty
+	let find this key = StringMap.find key.sstring !this
+	let fold f this acc = StringMap.fold f !this acc
+	let is_empty this = StringMap.is_empty !this
+	let iter f this = StringMap.iter f !this
+	let mem this key = StringMap.mem key.sstring !this
+	let remove this key = this := StringMap.remove key.sstring !this
+	let clear this = this := StringMap.empty
+end
+
+module IntHashtbl = struct
+	type 'value t = (int, 'value) Hashtbl.t
+
+	let add this key v = Hashtbl.replace this key v
+	let copy this = Hashtbl.copy this
+	let create () = Hashtbl.create 0
+	let find this key = Hashtbl.find this key
+	let fold f this acc = Hashtbl.fold f this acc
+	let is_empty this = Hashtbl.length this = 0
+	let iter f this = Hashtbl.iter f this
+	let mem this key = Hashtbl.mem this key
+	let remove this key = Hashtbl.remove this key
+	let clear this = Hashtbl.clear this
+end
 
 type vregex = {
-	r : Pcre.regexp;
+	r : Pcre2.regexp;
+	r_rex_string : vstring;
 	r_global : bool;
 	mutable r_string : string;
-	mutable r_groups : Pcre.substrings array;
+	mutable r_groups : Pcre2.substrings array;
 }
 
 type vzlib = {
@@ -50,9 +88,43 @@ type vzlib = {
 
 type vprototype_kind =
 	| PClass of int list
-	| PEnum of string list
+	| PEnum of (string * int list) list
 	| PInstance
 	| PObject
+
+type vhandle =
+	| HLoop of Luv.Loop.t
+	| HIdle of Luv.Idle.t
+	| HTimer of Luv.Timer.t
+	| HAsync of Luv.Async.t
+	| HBuffer of Luv.Buffer.t
+	| HSockAddr of Luv.Sockaddr.t
+	| HTcp of Luv.TCP.t
+	| HUdp of Luv.UDP.t
+	| HPipe of Luv.Pipe.t
+	| HTty of Luv.TTY.t
+	| HFile of Luv.File.t
+	| HDir of Luv.File.Dir.t
+	| HSignal of Luv.Signal.t
+	| HProcess of Luv.Process.t
+	| HRedirection of Luv.Process.redirection
+	| HAddrRequest of Luv.DNS.Addr_info.Request.t
+	| HNameRequest of Luv.DNS.Name_info.Request.t
+	| HFileRequest of Luv.File.Request.t
+	| HRandomRequest of Luv.Random.Request.t
+	| HThreadPoolRequest of Luv.Thread_pool.Request.t
+	| HFileModeNumeric of Luv.File.Mode.numeric
+	| HFsEvent of Luv.FS_event.t
+	| HThread of Luv.Thread.t
+	| HOnce of Luv.Once.t
+	| HMutex of Luv.Mutex.t
+	| HRwLock of Luv.Rwlock.t
+	| HSemaphore of Luv.Semaphore.t
+	| HCondition of Luv.Condition.t
+	| HBarrier of Luv.Barrier.t
+	| HFsPoll of Luv.FS_poll.t
+	| HPrepare of Luv.Prepare.t
+	| HCheck of Luv.Check.t
 
 type value =
 	| VNull
@@ -70,22 +142,26 @@ type value =
 	| VFunction of vfunc * bool
 	| VFieldClosure of value * vfunc
 	| VLazy of (unit -> value) ref
+	| VNativeString of string
+	| VHandle of vhandle
+	| VInt64 of Signed.Int64.t
+	| VUInt64 of Unsigned.UInt64.t
 
 and vfunc = value list -> value
 
 and vobject = {
 	(* The fields of the object known when it is created. *)
-	ofields : value array;
+	mutable ofields : value array;
 	(* The prototype of the object. *)
-	oproto : vprototype;
-	(* Extra fields that were added after the object was created. *)
-	mutable oextra : value IntMap.t;
-	(* Map of fields (in ofields) that were deleted via Reflect.deleteField *)
-	mutable oremoved : bool IntMap.t;
+	mutable oproto : vobject_proto;
 }
 
+and vobject_proto =
+	| OProto of vprototype
+	| ODictionary of value IntMap.t
+
 and vprototype = {
-	(* The path of the prototype. Using rev_hash_s on this gives the original dot path. *)
+	(* The path of the prototype. Using rev_hash on this gives the original dot path. *)
 	ppath : int;
 	(* The fields of the prototype itself (static fields). *)
 	pfields : value array;
@@ -114,18 +190,29 @@ and vinstance_kind =
 	| IIntMap of value IntHashtbl.t
 	| IObjectMap of (value,value) Hashtbl.t
 	| IOutput of Buffer.t (* BytesBuffer *)
-	| IBuffer of Rope.Buffer.t (* StringBuf *)
+	| IBuffer of vstring_buffer(* StringBuf *)
 	| IPos of pos
 	| IUtf8 of UTF8.Buf.buf
 	| IProcess of Process.process
 	| IInChannel of in_channel * bool ref (* FileInput *)
 	| IOutChannel of out_channel (* FileOutput *)
 	| ISocket of Unix.file_descr
-	| IThread of Thread.t
+	| IThread of vthread
+	| IMutex of vmutex
+	| ILock of vlock
+	| ITls of int
+	| IDeque of vdeque
 	| IZip of vzlib (* Compress/Uncompress *)
 	| ITypeDecl of Type.module_type
 	| ILazyType of (Type.tlazy ref) * (unit -> value)
 	| IRef of Obj.t
+	(* SSL *)
+	| IMbedtlsConfig of Mbedtls.mbedtls_ssl_config
+	| IMbedtlsCtrDrbg of Mbedtls.mbedtls_ctr_drbg_context
+	| IMbedtlsEntropy of Mbedtls.mbedtls_entropy_context
+	| IMbedtlsPkContext of Mbedtls.mbedtls_pk_context
+	| IMbedtlsSsl of Mbedtls.mbedtls_ssl_context
+	| IMbedtlsX509Crt of Mbedtls.mbedtls_x509_crt
 	| INormal
 
 and vinstance = {
@@ -154,6 +241,69 @@ and venum_value = {
 	enpos : pos option;
 }
 
+and vthread = {
+	mutable tthread : Thread.t;
+	tdeque : vdeque;
+	mutable tevents : value;
+	mutable tstorage : value IntMap.t;
+}
+
+and vdeque = {
+	mutable dvalues : value list;
+	dmutex : Mutex.t;
+}
+
+and vmutex = {
+	mmutex : Mutex.t;
+	mutable mowner : (int * int) option; (* thread ID * same thread lock count *)
+}
+
+and vlock = {
+	ldeque : vdeque;
+}
+
+let same_handle h1 h2 =
+	match h1, h2 with
+	| HLoop h1, HLoop h2 -> h1 == h2
+	| HIdle h1, HIdle h2 -> h1 == h2
+	| HTimer h1, HTimer h2 -> h1 == h2
+	| HAsync h1, HAsync h2 -> h1 == h2
+	| HBuffer h1, HBuffer h2 -> h1 == h2
+	| HSockAddr h1, HSockAddr h2 -> h1 == h2
+	| HTcp h1, HTcp h2 -> h1 == h2
+	| HPipe h1, HPipe h2 -> h1 == h2
+	| HTty h1, HTty h2 -> h1 == h2
+	| HFile h1, HFile h2 -> h1 == h2
+	| HDir h1, HDir h2 -> h1 == h2
+	| HUdp h1, HUdp h2 -> h1 == h2
+	| HSignal h1, HSignal h2 -> h1 == h2
+	| HProcess h1, HProcess h2 -> h1 == h2
+	| HRedirection h1, HRedirection h2 -> h1 == h2
+	| HFileRequest h1, HFileRequest h2 -> h1 == h2
+	| HNameRequest h1, HNameRequest h2 -> h1 == h2
+	| HAddrRequest h1, HAddrRequest h2 -> h1 == h2
+	| HRandomRequest h1, HRandomRequest h2 -> h1 == h2
+	| HThreadPoolRequest h1, HThreadPoolRequest h2 -> h1 == h2
+	| HFileModeNumeric h1, HFileModeNumeric h2 -> h1 == h2
+	| HFsEvent h1, HFsEvent h2 -> h1 == h2
+	| HThread h1, HThread h2 -> Luv.Thread.equal h1 h2
+	| HOnce h1, HOnce h2 -> h1 == h2
+	| HMutex h1, HMutex h2 -> h1 == h2
+	| HRwLock h1, HRwLock h2 -> h1 == h2
+	| HSemaphore h1, HSemaphore h2 -> h1 == h2
+	| HCondition h1, HCondition h2 -> h1 == h2
+	| HBarrier h1, HBarrier h2 -> h1 == h2
+	| HFsPoll h1, HFsPoll h2 -> h1 == h2
+	| HPrepare h1, HPrepare h2 -> h1 == h2
+	| HCheck h1, HCheck h2 -> h1 == h2
+	| HBuffer _,_ | HAsync _,_ | HTimer _, _ | HLoop _, _ | HIdle _, _ | HSockAddr _, _
+	| HTcp _, _ | HPipe _, _ | HTty _, _ | HFile _, _ | HUdp _, _ | HSignal _, _
+	| HProcess _, _ | HRedirection _, _| HFileRequest _, _ | HAddrRequest _, _
+	| HNameRequest _, _ | HRandomRequest _, _ | HThreadPoolRequest _, _
+	| HFileModeNumeric _, _ | HDir _, _ | HFsEvent _, _ | HThread _, _ | HOnce _, _
+	| HMutex _, _ | HRwLock _, _ | HSemaphore _, _ | HCondition _, _ | HBarrier _, _
+	| HFsPoll _, _ | HPrepare _, _ | HCheck _, _ -> false
+
 let rec equals a b = match a,b with
 	| VTrue,VTrue
 	| VFalse,VFalse
@@ -165,11 +315,13 @@ let rec equals a b = match a,b with
 	| VEnumValue a,VEnumValue b -> a == b || a.eindex = b.eindex && Array.length a.eargs = 0 && Array.length b.eargs = 0 && a.epath = b.epath
 	| VObject vo1,VObject vo2 -> vo1 == vo2
 	| VInstance vi1,VInstance vi2 -> vi1 == vi2
-	| VString(r1,s1),VString(r2,s2) -> r1 == r2 || Lazy.force s1 = Lazy.force s2
+	| VString s1,VString s2 -> vstring_equal s1 s2
 	| VArray va1,VArray va2 -> va1 == va2
 	| VVector vv1,VVector vv2 -> vv1 == vv2
 	| VFunction(vf1,_),VFunction(vf2,_) -> vf1 == vf2
 	| VPrototype proto1,VPrototype proto2 -> proto1.ppath = proto2.ppath
+	| VNativeString s1,VNativeString s2 -> s1 = s2
+	| VHandle h1,VHandle h2 -> same_handle h1 h2
 	| VLazy f1,_ -> equals (!f1()) b
 	| _,VLazy f2 -> equals a (!f2())
 	| _ -> a == b
@@ -196,6 +348,7 @@ let vint i = VInt32 (Int32.of_int i)
 let vint32 i = VInt32 i
 let vfloat f = VFloat f
 let venum_value e = VEnumValue e
+let vnative_string s = VNativeString s
 
 let s_expr_pretty e = (Type.s_expr_pretty false "" false (Type.s_type (Type.print_context())) e)
 

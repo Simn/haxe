@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -26,7 +26,7 @@ let add_abstract_params = function
 			function
 			| ({ cf_name = "_new" } as cf) ->
 				cf.cf_params <- cf.cf_params @ a.a_params
-			| cf when Meta.has Meta.Impl cf.cf_meta ->
+			| cf when has_class_field_flag cf CfImpl ->
 				(match cf.cf_expr with
 				| Some({ eexpr = TFunction({ tf_args = (v, _) :: _ }) }) when Meta.has Meta.This v.v_meta ->
 					cf.cf_params <- cf.cf_params @ a.a_params

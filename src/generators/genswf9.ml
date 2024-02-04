@@ -1,6 +1,6 @@
 (*
 	The Haxe Compiler
-	Copyright (C) 2005-2018  Haxe Foundation
+	Copyright (C) 2005-2019  Haxe Foundation
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -16,13 +16,15 @@
 	along with this program; if not, write to the Free Software
 	Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *)
-
+open Extlib_leftovers
 open Globals
 open Ast
 open Type
+open Error
 open As3
 open As3hl
 open Common
+open FlashProps
 
 type read = Read
 type write = Unused__ | Write
@@ -85,6 +87,22 @@ type context = {
 	boot : path;
 	swf_protected : bool;
 	need_ctor_skip : bool;
+	(*
+		Takes an argument list of `call(arg1, arg2, ...)` and if there is a trailing argument `...rest` then returns
+		```
+		if(rest.length == 0) call(arg1, arg2)
+		else if(rest.length == 1) call(arg1, arg2, rest[0])
+		else if(rest.length == 2) call(arg1, arg2, rest[0], rest[1])
+		<... up to 20 rest args ...>
+		else throw "Too many rest arguments"
+		```
+		otherwise returns `None`
+	*)
+	handle_spread_args : basic_types ->
+						texpr list (* arguments *) ->
+						t (* call result type *) ->
+						(texpr list -> texpr) (* a function which takes an argument list and should return a call expression *) ->
+						texpr option;
 	mutable cur_class : tclass;
 	mutable debug : bool;
 	mutable last_line : int;
@@ -184,7 +202,7 @@ let type_path ctx path =
 let rec follow_basic t =
 	match t with
 	| TMono r ->
-		(match !r with
+		(match r.tm_type with
 		| Some t -> follow_basic t
 		| _ -> t)
 	| TLazy f ->
@@ -199,12 +217,11 @@ let rec follow_basic t =
 		| TAbstract ({ a_path = ([],"Bool") },[])
 		| TInst ({ cl_path = (["haxe"],"Int32") },[]) -> t
 		| t -> t)
-	| TType ({ t_path = ["flash";"utils"],"Object" },[])
 	| TType ({ t_path = ["flash";"utils"],"Function" },[])
 	| TType ({ t_path = [],"UInt" },[]) ->
 		t
 	| TType (t,tl) ->
-		follow_basic (apply_params t.t_params tl t.t_type)
+		follow_basic (apply_typedef t tl)
 	| TAbstract (a,pl) when not (Meta.has Meta.CoreType a.a_meta) ->
 		follow_basic (apply_params a.a_params pl a.a_this)
 	| _ -> t
@@ -222,14 +239,16 @@ let rec type_id ctx t =
 		| _ -> def())
 	| TInst (c,_) ->
 		(match c.cl_kind with
-		| KTypeParameter l ->
-			(match l with
+		| KTypeParameter ttp ->
+			(match get_constraints ttp with
 			| [t] -> type_id ctx t
 			| _ -> type_path ctx ([],"Object"))
 		| _ ->
 			type_path ctx c.cl_path)
 	| TAbstract ({ a_path = [],"Null"},_) ->
 		HMPath ([],"Object")
+	| TAbstract ({ a_path = ["flash"],"AnyType"},_) ->
+		HMAny
 	| TAbstract (a,_) when Meta.has Meta.CoreType a.a_meta ->
 		type_path ctx a.a_path
 	| TFun _ | TType ({ t_path = ["flash";"utils"],"Function" },[]) ->
@@ -239,18 +258,13 @@ let rec type_id ctx t =
 	| TEnum ({ e_path = ["flash"],"XmlType"; e_extern = true },_) ->
 		HMPath ([],"String")
 	| TEnum (e,_) ->
-		let rec loop = function
-			| [] -> type_path ctx e.e_path
-			| (Meta.FakeEnum,[Ast.EConst (Ast.Ident n),_],_) :: _ -> type_path ctx ([],n)
-			| _ :: l -> loop l
-		in
-		loop e.e_meta
+		type_path ctx e.e_path
 	| _ ->
 		HMPath ([],"Object")
 
 let type_opt ctx t =
 	match follow_basic t with
-	| TDynamic _ | TMono _ -> None
+	| TDynamic _ | TMono _ | TAbstract ({a_path = [],"Void"},_) -> None
 	| _ -> Some (type_id ctx t)
 
 let type_void ctx t =
@@ -268,29 +282,21 @@ let classify ctx t =
 		KBool
 	| TAbstract ({ a_path = [],"Void" },_) | TEnum ({ e_path = [],"Void" },_) ->
 		KDynamic
+	| TAbstract ({ a_path = ["flash"],"AnyType" },_) ->
+		KDynamic
 	| TEnum ({ e_path = ["flash"],"XmlType"; e_extern = true },_) ->
 		KType (HMPath ([],"String"))
 	| TEnum (e,_) ->
-		let rec loop = function
-			| [] -> KType (type_id ctx t)
-			| (Meta.FakeEnum,[Ast.EConst (Ident n),_],_) :: _ ->
-				(match n with
-				| "Int" -> KInt
-				| "UInt" -> KUInt
-				| "String" -> KType (HMPath ([],"String"))
-				| _ -> assert false)
-			| _ :: l -> loop l
-		in
-		loop e.e_meta
+		KType (type_id ctx t)
 	| TAbstract ({ a_path = [],"UInt" },_) | TType ({ t_path = [],"UInt" },_) ->
 		KUInt
 	| TFun _ | TType ({ t_path = ["flash";"utils"],"Function" },[]) ->
 		KType (HMPath ([],"Function"))
 	| TAnon a ->
 		(match !(a.a_status) with
-		| Statics _ -> KNone
+		| ClassStatics _ -> KNone
 		| _ -> KDynamic)
-	| TType ({ t_path = ["flash";"utils"],"Object" },[]) ->
+	| TAbstract ({ a_path = ["flash";"utils"],"Object" },[]) ->
 		KType (HMPath ([],"Object"))
 	| TInst _ | TAbstract _ ->
 		KType (type_id ctx t)
@@ -299,7 +305,7 @@ let classify ctx t =
 	| TDynamic _ ->
 		KDynamic
 	| TLazy _ ->
-		assert false
+		die "" __LOC__
 
 (* some field identifiers might cause issues with SWC *)
 let reserved i =
@@ -313,13 +319,41 @@ let ident i =
 let as3 p =
 	HMName (p,HNNamespace "http://adobe.com/AS3/2006/builtin")
 
-let property ctx p t =
+let make_class_ns c =
+	match c.cl_path with
+	| [], n -> n
+	| p, n -> String.concat "." p ^ ":" ^ n
+
+let is_cf_protected cf = Meta.has Meta.Protected cf.cf_meta
+
+let ns_access cf =
+	try
+		let (_,params,_) = Meta.get Meta.Ns cf.cf_meta in
+		match params with
+		| [(EConst (String(ns,_)),_)] ->
+			Some (HMName (cf.cf_name, HNNamespace ns))
+		| [(EConst (String(ns,_)),_); (EConst (Ident "internal"),_)] ->
+			Some (HMName (cf.cf_name, HNInternal (Some ns)))
+		| _ -> die "" __LOC__
+	with Not_found ->
+		None
+
+let property ctx fa t =
+	match Option.map_default ns_access None (extract_field fa) with
+	| Some n -> n, None, false
+	| None ->
+	match fa with
+	| FStatic (c, cf) when is_cf_protected cf ->
+		HMName (reserved cf.cf_name, HNStaticProtected (Some (make_class_ns c))), None, false
+	| _ ->
+	let p = field_name fa in
 	match follow t with
 	| TInst ({ cl_path = [],"Array" },_) ->
 		(match p with
 		| "length" -> ident p, Some KInt, false (* UInt in the spec *)
 		| "map" | "filter" when Common.defined ctx.com Define.NoFlashOverride -> ident (p ^ "HX"), None, true
-		| "copy" | "insert" | "remove" | "iterator" | "toString" | "map" | "filter" | "resize" -> ident p , None, true
+		| "copy" | "insert" | "contains" | "remove" | "iterator" | "keyValueIterator"
+		| "toString" | "map" | "filter" | "resize" -> ident p , None, true
 		| _ -> as3 p, None, false);
 	| TInst ({ cl_path = ["flash"],"Vector" },_) ->
 		(match p with
@@ -340,14 +374,14 @@ let property ctx p t =
 		| _ -> ident p, None, false)
 	| TAnon a ->
 		(match !(a.a_status) with
-		| Statics { cl_path = [], "Math" } ->
+		| ClassStatics { cl_path = [], "Math" } ->
 			(match p with
 			| "POSITIVE_INFINITY" | "NEGATIVE_INFINITY" | "NaN" -> ident p, Some KFloat, false
 			| "floor" | "ceil" | "round" when ctx.for_call -> ident p, Some KInt, false
 			| "ffloor" | "fceil" | "fround" -> ident (String.sub p 1 (String.length p - 1)), None, false
 			| _ -> ident p, None, false)
 		| _ -> ident p, None, false)
-	| TInst ({ cl_interface = true } as c,_) ->
+	| TInst (c,_) when (has_class_flag c CInterface) ->
 		(* lookup the interface in which the field was actually declared *)
 		let rec loop c =
 			try
@@ -364,13 +398,26 @@ let property ctx p t =
 		in
 		(try
 			let c = loop c in
-			let ns = HMName (reserved p, HNNamespace (match c.cl_path with [],n -> n | l,n -> String.concat "." l ^ ":" ^ n)) in
+			let ns = HMName (reserved p, HNNamespace (make_class_ns c)) in
 			ns, None, false
 		with Not_found | Exit ->
 			ident p, None, false)
 
 	| _ ->
 		ident p, None, false
+
+let this_property fa =
+	match fa with
+	| FInstance (c,_,cf) | FClosure (Some (c,_),cf) ->
+		if is_cf_protected cf then
+			HMName (reserved cf.cf_name, HNProtected (make_class_ns c))
+		else begin
+			match ns_access cf with
+			| Some n -> n
+			| None -> ident (field_name fa)
+		end
+	| _ ->
+		ident (field_name fa)
 
 let default_infos() =
 	{
@@ -417,7 +464,7 @@ let coerce ctx t =
 		| KBool -> HToBool
 		| KType t -> HCast t
 		| KDynamic -> HAsAny
-		| KNone -> assert false
+		| KNone -> die "" __LOC__
 	)
 
 let set_reg ctx r =
@@ -447,7 +494,7 @@ let pop ctx n =
 			loop (n - 1)
 		end
 	in
-	if n < 0 then assert false;
+	if n < 0 then die "" __LOC__;
 	let old = ctx.infos.istack in
 	loop n;
 	ctx.infos.istack <- old
@@ -472,7 +519,7 @@ let rename_block_var ctx v =
 let define_local ctx ?(init=false) v p =
 	let name = v.v_name in
 	let t = v.v_type in
-	let l = (if v.v_capture then begin
+	let l = (if has_var_flag v VCaptured then begin
 			let topt = type_opt ctx t in
 			if List.exists (fun (_,x,_) -> name = x) ctx.block_vars || is_member ctx name then rename_block_var ctx v;
 			let pos = List.length ctx.block_vars + 1 in
@@ -511,8 +558,8 @@ let rec setvar ctx (acc : write access) kret =
 			set_reg_dup ctx r
 		else
 			set_reg ctx r;
-	| VGlobal _ | VId _ | VCast _ | VArray | VScope _ when kret <> None ->
-		let r = alloc_reg ctx (match kret with None -> assert false | Some k -> k) in
+	| VGlobal _ | VId _ | VCast _ | VArray | VScope _ | VSuper _ when kret <> None ->
+		let r = alloc_reg ctx (match kret with None -> die "" __LOC__ | Some k -> k) in
 		set_reg_dup ctx r;
 		setvar ctx acc None;
 		write ctx (HReg r.rid);
@@ -568,7 +615,7 @@ let open_block ctx retval =
 	let old_regs = DynArray.map (fun r -> r.rused) ctx.infos.iregs in
 	let old_locals = ctx.locals in
 	(fun() ->
-		if ctx.infos.istack <> old_stack + (if retval then 1 else 0) then assert false;
+		if ctx.infos.istack <> old_stack + (if retval then 1 else 0) then die "" __LOC__;
 		let rcount = DynArray.length old_regs + 1 in
 		DynArray.iter (fun r ->
 			if r.rid < rcount then
@@ -599,7 +646,7 @@ let begin_switch ctx =
 		constructs := (tag,ctx.infos.ipos) :: !constructs;
 	in
 	let fend() =
-		let cases = Array.create (!max + 1) 1 in
+		let cases = Array.make (!max + 1) 1 in
 		List.iter (fun (tag,pos) -> Array.set cases tag (pos - switch_pos)) !constructs;
 		DynArray.set ctx.code switch_index (HSwitch (1,Array.to_list cases));
 		branch();
@@ -628,7 +675,7 @@ let to_utf8 str =
 	with
 		UTF8.Malformed_code ->
 			let b = UTF8.Buf.create 0 in
-			String.iter (fun c -> UTF8.Buf.add_char b (UChar.of_char c)) str;
+			String.iter (fun c -> UTF8.Buf.add_char b (UCharExt.of_char c)) str;
 			UTF8.Buf.contents b
 
 let gen_constant ctx c t p =
@@ -653,7 +700,7 @@ let gen_constant ctx c t p =
 	| TThis ->
 		write ctx HThis
 	| TSuper ->
-		assert false
+		die "" __LOC__
 
 let end_fun ctx args dparams tret =
 	{
@@ -671,6 +718,9 @@ let end_fun ctx args dparams tret =
 		hlmt_uses_dxns = false;
 		hlmt_function = None;
 	}
+
+let gen_expr_ref = ref (fun _ _ _ -> die "" __LOC__)
+let gen_expr ctx e retval = (!gen_expr_ref) ctx e retval
 
 let begin_fun ctx args tret el stat p =
 	let old_locals = ctx.locals in
@@ -708,18 +758,18 @@ let begin_fun ctx args tret el stat p =
 		let v = (match classify ctx t, c with
 		| _, None -> HVNone
 		| (KInt | KFloat | KUInt | KBool) as kind, Some c ->
-			(match c with
-			| TInt i -> if kind = KUInt then HVUInt i else HVInt i
-			| TFloat s -> HVFloat (float_of_string s)
-			| TBool b -> HVBool b
-			| TNull -> abort ("In Flash9, null can't be used as basic type " ^ s_type (print_context()) t) p
-			| _ -> assert false)
-		| _, Some TNull -> HVNone
+			(match c.eexpr with
+			| TConst (TInt i) -> if kind = KUInt then HVUInt i else HVInt i
+			| TConst (TFloat s) -> HVFloat (float_of_string s)
+			| TConst (TBool b) -> HVBool b
+			| TConst TNull -> abort ("In Flash9, null can't be used as basic type " ^ s_type (print_context()) t) p
+			| _ -> die "" __LOC__)
+		| _, Some {eexpr = TConst TNull} -> HVNone
 		| k, Some c ->
 			write ctx (HReg r.rid);
 			write ctx HNull;
 			let j = jump ctx J3Neq in
-			gen_constant ctx c t p;
+			gen_expr ctx true c;
 			coerce ctx k;
 			write ctx (HSetReg r.rid);
 			j();
@@ -729,12 +779,13 @@ let begin_fun ctx args tret el stat p =
 		| None -> if c <> None then dparams := Some [v]
 		| Some l -> dparams := Some (v :: l)
 	in
-
 	let args, varargs = (match List.rev args with
 		| (({ v_name = "__arguments__"; v_type = t } as v),_) :: l ->
 			(match follow t with
 			| TInst ({ cl_path = ([],"Array") },_) -> List.rev l, Some (v,true)
 			| _ -> List.rev l, Some(v,false))
+		| (v,_) :: l when ExtType.is_rest (Type.follow v.v_type) ->
+			List.rev l, Some (v,true)
 		| _ ->
 			args, None
 	) in
@@ -849,7 +900,7 @@ let begin_loop ctx =
 	ctx.breaks <- [];
 	ctx.continues <- [];
 	(fun cont_pos ->
-		if ctx.infos.istack <> ctx.infos.iloop then assert false;
+		if ctx.infos.istack <> ctx.infos.iloop then die "" __LOC__;
 		List.iter (fun j -> j()) ctx.breaks;
 		List.iter (fun j -> j cont_pos) ctx.continues;
 		ctx.infos.iloop <- old_loop;
@@ -867,18 +918,13 @@ let pop_value ctx retval =
 	   branch value *)
 	if retval then ctx.infos.istack <- ctx.infos.istack - 1
 
-let gen_expr_ref = ref (fun _ _ _ -> assert false)
-let gen_expr ctx e retval = (!gen_expr_ref) ctx e retval
-
-let rec gen_access ctx e (forset : 'a) : 'a access =
+let gen_access ctx e (forset : 'a) : 'a access =
 	match e.eexpr with
 	| TLocal v ->
 		gen_local_access ctx v e.epos forset
-	| TField ({ eexpr = TConst TSuper } as e1,f) ->
-		let f = field_name f in
-		let id, _, _ = property ctx f e1.etype in
+	| TField ({ eexpr = TConst TSuper },f) ->
 		write ctx HThis;
-		VSuper id
+		VSuper (this_property f)
 	| TEnumParameter (e1,_,i) ->
 		gen_expr ctx true e1;
 		write ctx (HGetProp (ident "params"));
@@ -888,13 +934,17 @@ let rec gen_access ctx e (forset : 'a) : 'a access =
 		gen_expr ctx true e1;
 		VId (ident "index")
 	| TField (e1,fa) ->
-		let f = field_name fa in
-		let id, k, closure = property ctx f e1.etype in
+		let id, k, closure =
+			match e1.eexpr with
+			| TConst (TThis | TSuper) when not ctx.in_static ->
+				let id = this_property fa in
+				write ctx (HFindProp id);
+				id, None, false
+			| _ ->
+				gen_expr ctx true e1;
+				property ctx fa e1.etype
+		in
 		if closure && not ctx.for_call then abort "In Flash9, this method cannot be accessed this way : please define a local function" e1.epos;
-		(match e1.eexpr with
-		| TConst (TThis|TSuper) when not ctx.in_static ->
-			write ctx (HFindProp id)
-		| _ -> gen_expr ctx true e1);
 		(match k with
 		| Some t -> VCast (id,t)
 		| None ->
@@ -902,20 +952,23 @@ let rec gen_access ctx e (forset : 'a) : 'a access =
 		| _ , TFun _ when not ctx.for_call -> VCast(id,classify ctx e.etype)
 		| TEnum _, _ -> VId id
 		| TInst (_,tl), et ->
-			let is_type_parameter_field = match fa with
+			let requires_cast = match fa with
+				| FInstance(c,_,{cf_kind = Var _}) when (has_class_flag c CInterface) ->
+					(* we have to cast var access on interfaces *)
+					true
 				| FInstance(_,_,cf) ->
+					(* if the return type is one of the type-parameters, then we need to cast it *)
 					(match follow cf.cf_type with TInst({cl_kind = KTypeParameter _},_) -> true | _ -> false)
 				| _ ->
 					List.exists (fun t -> follow t == et) tl
 			in
-			(* if the return type is one of the type-parameters, then we need to cast it *)
-			if is_type_parameter_field then
+			if requires_cast then
 				VCast (id, classify ctx e.etype)
 			else if Codegen.is_volatile e.etype then
 				VVolatile (id,None)
 			else
 				VId id
-		| TAnon a, _ when (match !(a.a_status) with Statics _ | EnumStatics _ -> true | _ -> false) ->
+		| TAnon a, _ when (match !(a.a_status) with ClassStatics _ | EnumStatics _ -> true | _ -> false) ->
 			if Codegen.is_volatile e.etype then
 				VVolatile (id,None)
 			else
@@ -1003,6 +1056,8 @@ let rec gen_type ctx t =
 		write ctx (HGetLex t);
 		List.iter (gen_type ctx) tl;
 		write ctx (HApplyType (List.length tl));
+	| HMAny ->
+		write ctx (HNull)
 	| _ ->
 		write ctx (HGetLex t)
 
@@ -1012,7 +1067,7 @@ let rec gen_expr_content ctx retval e =
 		gen_constant ctx c e.etype e.epos
 	| TThrow e ->
 		ctx.infos.icond <- true;
-		if has_feature ctx.com "haxe.CallStack.exceptionStack" then begin
+		if has_feature ctx.com "haxe.CallStack.exceptionStack" && not (ExceptionFunctions.is_haxe_exception e.etype) then begin
 			getvar ctx (VGlobal (type_path ctx (["flash"],"Boot")));
 			let id = type_path ctx (["flash";"errors"],"Error") in
 			write ctx (HFindPropStrict id);
@@ -1075,7 +1130,12 @@ let rec gen_expr_content ctx retval e =
 	| TBinop (op,e1,e2) ->
 		gen_binop ctx retval op e1 e2 e.etype e.epos
 	| TCall (f,el) ->
-		gen_call ctx retval f el e.etype
+		(match ctx.handle_spread_args ctx.com.basic el e.etype (fun el -> { e with eexpr = TCall(f,el) }) with
+		| Some e ->
+			gen_expr ctx retval e
+		| None ->
+			gen_call ctx retval f el e.etype
+		)
 	| TNew ({ cl_path = [],"Array" },_,[]) ->
 		(* it seems that [] is 4 time faster than new Array() *)
 		write ctx (HArray 0)
@@ -1084,17 +1144,22 @@ let rec gen_expr_content ctx retval e =
 		write ctx HThrow;
 		no_value ctx retval
 	| TNew (c,tl,pl) ->
-		let id = type_id ctx (TInst (c,tl)) in
-		(match id with
-		| HMParams _ ->
-			gen_type ctx id;
-			List.iter (gen_expr ctx true) pl;
-			write ctx (HConstruct (List.length pl))
-		| _ ->
-			write ctx (HFindPropStrict id);
-			List.iter (gen_expr ctx true) pl;
-			write ctx (HConstructProperty (id,List.length pl))
-		);
+		(match ctx.handle_spread_args ctx.com.basic pl e.etype (fun pl -> { e with eexpr = TNew(c,tl,pl) }) with
+		| Some e ->
+			gen_expr ctx retval e
+		| None ->
+			let id = type_id ctx (TInst (c,tl)) in
+			(match id with
+			| HMParams _ ->
+				gen_type ctx id;
+				List.iter (gen_expr ctx true) pl;
+				write ctx (HConstruct (List.length pl))
+			| _ ->
+				write ctx (HFindPropStrict id);
+				List.iter (gen_expr ctx true) pl;
+				write ctx (HConstructProperty (id,List.length pl))
+			);
+		)
 	| TFunction f ->
 		write ctx (HFunction (generate_function ctx f true))
 	| TIf (e0,e1,e2) ->
@@ -1123,7 +1188,7 @@ let rec gen_expr_content ctx retval e =
 		gen_expr ctx false e;
 		if flag = NormalWhile then jstart();
 		let continue_pos = ctx.infos.ipos in
-		let _ = jump_expr_gen ctx econd true (fun j -> loop j; (fun() -> ())) in
+		let _j = jump_expr_gen ctx econd true (fun j -> loop j; (fun() -> ())) in
 		branch();
 		end_loop continue_pos;
 		if retval then write ctx HNull
@@ -1158,7 +1223,7 @@ let rec gen_expr_content ctx retval e =
 					write ctx HScope);
 				(* store the exception into local var, using a tmp register if needed *)
 				define_local ctx v e.epos;
-				let r = (match snd (try PMap.find v.v_id ctx.locals with Not_found -> assert false) with
+				let r = (match snd (try PMap.find v.v_id ctx.locals with Not_found -> die "" __LOC__) with
 					| LReg _ -> None
 					| _ ->
 						let r = alloc_reg ctx (classify ctx t) in
@@ -1176,7 +1241,7 @@ let rec gen_expr_content ctx retval e =
 					| _ -> Type.iter call_loop e
 				in
 				let has_call = (try call_loop e; false with Exit -> true) in
-				if has_call && has_feature ctx.com "haxe.CallStack.exceptionStack" then begin
+				if has_call && has_feature ctx.com "haxe.CallStack.exceptionStack" && not (ExceptionFunctions.is_haxe_exception v.v_type) then begin
 					getvar ctx (gen_local_access ctx v e.epos Read);
 					write ctx (HAsType (type_path ctx (["flash";"errors"],"Error")));
 					let j = jump ctx J3False in
@@ -1234,7 +1299,7 @@ let rec gen_expr_content ctx retval e =
 		write ctx (HJump (J3Always,0));
 		ctx.continues <- (fun target -> DynArray.set ctx.code op (HJump (J3Always,target - p))) :: ctx.continues;
 		no_value ctx retval
-	| TSwitch (e0,el,eo) ->
+	| TSwitch {switch_subject = e0;switch_cases = cases;switch_default = eo} ->
 		let t = classify ctx e.etype in
 		(try
 			let t0 = classify ctx e0.etype in
@@ -1246,9 +1311,9 @@ let rec gen_expr_content ctx retval e =
 				| TParenthesis e | TBlock [e] | TMeta (_,e) -> get_int e
 				| _ -> raise Not_found
 			in
-			List.iter (fun (vl,_) -> List.iter (fun v ->
+			List.iter (fun case -> List.iter (fun v ->
 				try ignore (get_int v) with _ -> raise Exit
-			) vl) el;
+			) case.case_patterns ) cases;
 			gen_expr ctx true e0;
 			if t0 <> KInt then write ctx HToInt;
 			let switch, case = begin_switch ctx in
@@ -1261,14 +1326,14 @@ let rec gen_expr_content ctx retval e =
 			| Some e ->
 				gen_expr ctx retval e;
 				if retval && classify ctx e.etype <> t then coerce ctx t);
-			let jends = List.map (fun (vl,e) ->
+			let jends = List.map (fun {case_patterns = vl;case_expr = e} ->
 				let j = jump ctx J3Always in
 				List.iter (fun v -> case (get_int v)) vl;
 				pop_value ctx retval;
 				gen_expr ctx retval e;
 				if retval && classify ctx e.etype <> t then coerce ctx t;
 				j
-			) el in
+			) cases in
 			List.iter (fun j -> j()) jends;
 			switch();
 		with Exit ->
@@ -1277,11 +1342,11 @@ let rec gen_expr_content ctx retval e =
 		set_reg ctx r;
 		let branch = begin_branch ctx in
 		let prev = ref (fun () -> ()) in
-		let jend = List.map (fun (vl,e) ->
+		let jend = List.map (fun {case_patterns = vl;case_expr = e} ->
 			(!prev)();
 			let rec loop = function
 				| [] ->
-					assert false
+					die "" __LOC__
 				| [v] ->
 					write ctx (HReg r.rid);
 					gen_expr ctx true v;
@@ -1298,7 +1363,7 @@ let rec gen_expr_content ctx retval e =
 			pop_value ctx retval;
 			if retval && classify ctx e.etype <> t then coerce ctx t;
 			jump ctx J3Always
-		) el in
+		) cases in
 		(!prev)();
 		free_reg ctx r;
 		(match eo with
@@ -1335,7 +1400,7 @@ let rec gen_expr_content ctx retval e =
 				(* manual cast *)
 				let tid = (match gen_access ctx (mk (TTypeExpr t) t_dynamic e.epos) Read with
 					| VGlobal id -> id
-					| _ -> assert false
+					| _ -> die "" __LOC__
 				) in
 				match classify ctx e.etype with
 				| KType n when (match n with HMPath ([],"String") -> false | _ -> true) ->
@@ -1362,14 +1427,33 @@ let rec gen_expr_content ctx retval e =
 		end
 	| TIdent s ->
 		abort ("Unbound variable " ^ s) e.epos
+and args_as_array ctx mandatory_args spread_arg p =
+	match mandatory_args with
+	| [] ->
+		spread_arg
+	| _ ->
+		let p = punion_el p mandatory_args in
+		let array = mk (TArrayDecl mandatory_args) (ctx.com.basic.tarray t_dynamic) p in
+		let concat = mk (TField (array,FDynamic "concat")) t_dynamic spread_arg.epos in
+		mk (TCall (concat,[spread_arg])) (ctx.com.basic.tarray t_dynamic) (punion p spread_arg.epos)
 
 and gen_call ctx retval e el r =
+	match List.rev el with
+	(* generate a call with `...rest` as `callee.apply(null, [param1, param2].concat(rest))` *)
+	| { eexpr = TUnop (Spread, Prefix, rest) } :: el_rev ->
+		let null = mk (TConst TNull) t_dynamic null_pos
+		and t_array_dyn = ctx.com.basic.tarray t_dynamic in
+		let t = TFun (["thisArg",false,t_dynamic; "argArray",false,t_array_dyn],r) in
+		let apply = mk (TField (e,FDynamic "apply")) t e.epos in
+		gen_call ctx retval apply [null; args_as_array ctx (List.rev el_rev) rest e.epos] r
+	(* normal call without `...rest` *)
+	| _ ->
 	match e.eexpr , el with
 	| TIdent "__is__", [e;t] ->
 		gen_expr ctx true e;
 		gen_expr ctx true t;
 		write ctx (HOp A3OIs)
-	| TField (_,FStatic ({ cl_path = [],"Std" },{ cf_name = "is" })),[e;{ eexpr = TTypeExpr (TClassDecl _) } as t] ->
+	| TField (_,FStatic ({ cl_path = [],"Std" },{ cf_name = ("is" | "isOfType") })),[e;{ eexpr = TTypeExpr (TClassDecl _) } as t] ->
 		(* fast inlining of Std.is with known values *)
 		gen_expr ctx true e;
 		gen_expr ctx true t;
@@ -1467,7 +1551,7 @@ and gen_call ctx retval e el r =
 			| 2l -> A3OMemSet32
 			| 3l -> A3OMemSetFloat
 			| 4l -> A3OMemSetDouble
-			| _ -> assert false
+			| _ -> die "" __LOC__
 		))
 	| TIdent "__vmem_get__", [{ eexpr = TConst (TInt code) };e] ->
 		gen_expr ctx true e;
@@ -1477,7 +1561,7 @@ and gen_call ctx retval e el r =
 			| 2l -> A3OMemGet32
 			| 3l -> A3OMemGetFloat
 			| 4l -> A3OMemGetDouble
-			| _ -> assert false
+			| _ -> die "" __LOC__
 		))
 	| TIdent "__vmem_sign__", [{ eexpr = TConst (TInt code) };e] ->
 		gen_expr ctx true e;
@@ -1485,8 +1569,11 @@ and gen_call ctx retval e el r =
 			| 0l -> A3OSign1
 			| 1l -> A3OSign8
 			| 2l -> A3OSign16
-			| _ -> assert false
+			| _ -> die "" __LOC__
 		))
+	| TIdent "__vector__", [] ->
+		let t = match r with TAbstract ({a_path = [],"Class"}, [vt]) -> vt | _ -> die "" __LOC__ in
+		gen_type ctx (type_id ctx t)
 	| TIdent "__vector__", [ep] ->
 		gen_type ctx (type_id ctx r);
 		write ctx HGetGlobalScope;
@@ -1498,32 +1585,73 @@ and gen_call ctx retval e el r =
 			write ctx (HFindPropStrict id);
 			List.iter (gen_expr ctx true) el;
 			write ctx (HCallProperty (id,List.length el));
-		| _ -> assert false)
+		| _ -> die "" __LOC__)
 	| TConst TSuper , _ ->
 		write ctx HThis;
 		List.iter (gen_expr ctx true) el;
 		write ctx (HConstructSuper (List.length el));
-	| TField ({ eexpr = TConst TSuper },f) , _ ->
-		let id = ident (field_name f) in
+	| TField (e1,f) , _ ->
+		begin
+			let default () = gen_field_call ctx retval e1 f el r in
+			let mk_prop_acccess prop_cl prop_tl prop_cf = mk (TField (e1, FInstance (prop_cl, prop_tl, prop_cf))) prop_cf.cf_type e.epos in
+			let mk_static_acccess cl prop_cf = mk (TField (e1, FStatic (cl, prop_cf))) prop_cf.cf_type e.epos in
+			match f, el with
+			| FInstance (cl, tl, cf), [] ->
+				(match is_extern_instance_accessor ~isget:true cl tl cf with
+				| Some (prop_cl, prop_tl, prop_cf) ->
+					let efield = mk_prop_acccess prop_cl prop_tl prop_cf in
+					getvar ctx (gen_access ctx efield Read)
+				| None ->
+					default ())
+
+			| FInstance (cl, tl, cf), [evalue] ->
+				(match is_extern_instance_accessor ~isget:false cl tl cf with
+				| Some (prop_cl, prop_tl, prop_cf) ->
+					let efield = mk_prop_acccess prop_cl prop_tl prop_cf in
+					gen_assign ctx efield evalue retval
+				| None ->
+					default ())
+
+			| FStatic (cl, cf), [] ->
+				(match is_extern_static_accessor ~isget:true cl cf with
+				| Some prop_cf ->
+					let efield = mk_static_acccess cl prop_cf in
+					getvar ctx (gen_access ctx efield Read)
+				| None ->
+					default ())
+
+			| FStatic (cl, cf), [evalue] ->
+				(match is_extern_static_accessor ~isget:false cl cf with
+				| Some prop_cf ->
+					let efield = mk_static_acccess cl prop_cf in
+					gen_assign ctx efield evalue retval
+				| None ->
+					default ())
+
+			| _ ->
+				default ()
+		end
+	| _ ->
+		gen_expr ctx true e;
+		write ctx HGetGlobalScope;
+		List.iter (gen_expr ctx true) el;
+		write ctx (HCallStack (List.length el));
+		coerce ctx (classify ctx r)
+
+and gen_field_call ctx retval eobj f el r =
+	match eobj with
+	| { eexpr = TConst TSuper } ->
+		let id = this_property f in
 		write ctx (HFindPropStrict id);
 		List.iter (gen_expr ctx true) el;
-		write ctx (HCallSuper (id,List.length el));
-		coerce ctx (classify ctx r);
-	| TField ({ eexpr = TConst TThis },f) , _ when not ctx.in_static ->
-		let id = ident (field_name f) in
-		write ctx (HFindProp id);
-		List.iter (gen_expr ctx true) el;
 		if retval then begin
-			write ctx (HCallProperty (id,List.length el));
+			write ctx (HCallSuper (id,List.length el));
 			coerce ctx (classify ctx r);
 		end else
-			write ctx (HCallPropVoid (id,List.length el))
-	| TField (e1,f) , _ ->
-		let old = ctx.for_call in
-		ctx.for_call <- true;
-		gen_expr ctx true e1;
-		let id , _, _ = property ctx (field_name f) e1.etype in
-		ctx.for_call <- old;
+			write ctx (HCallSuperVoid (id,List.length el))
+	| { eexpr = TConst TThis } when not ctx.in_static ->
+		let id = this_property f in
+		write ctx (HFindProp id); (* not sure why we don't use HFindPropStrict here too *)
 		List.iter (gen_expr ctx true) el;
 		if retval then begin
 			write ctx (HCallProperty (id,List.length el));
@@ -1531,11 +1659,17 @@ and gen_call ctx retval e el r =
 		end else
 			write ctx (HCallPropVoid (id,List.length el))
 	| _ ->
-		gen_expr ctx true e;
-		write ctx HGetGlobalScope;
+		let old = ctx.for_call in
+		ctx.for_call <- true;
+		gen_expr ctx true eobj;
+		let id , _, _ = property ctx f eobj.etype in
+		ctx.for_call <- old;
 		List.iter (gen_expr ctx true) el;
-		write ctx (HCallStack (List.length el));
-		coerce ctx (classify ctx r)
+		if retval then begin
+			write ctx (HCallProperty (id,List.length el));
+			coerce ctx (classify ctx r);
+		end else
+			write ctx (HCallPropVoid (id,List.length el))
 
 and gen_unop ctx retval op flag e =
 	let k = classify ctx e.etype in
@@ -1549,6 +1683,8 @@ and gen_unop ctx retval op flag e =
 	| NegBits ->
 		gen_expr ctx true e;
 		write ctx (HOp A3OBitNot);
+	| Spread ->
+		die ~p:e.epos "Unhandled spread operator" __LOC__
 	| Increment
 	| Decrement ->
 		let incr = (op = Increment) in
@@ -1587,6 +1723,11 @@ and check_binop ctx e1 e2 =
 	| _ -> false) in
 	if invalid then abort "Comparison of Int and UInt might lead to unexpected results" (punion e1.epos e2.epos);
 
+and gen_assign ctx lhs rhs retval =
+	let acc = gen_access ctx lhs Write in
+	gen_expr ctx true rhs;
+	setvar ctx acc (if retval then Some (classify ctx lhs.etype) else None)
+
 and gen_binop ctx retval op e1 e2 t p =
 	let write_op op =
 		let iop = (match op with
@@ -1607,7 +1748,7 @@ and gen_binop ctx retval op e1 e2 t p =
 			| OpShr -> A3OShr
 			| OpUShr -> A3OUShr
 			| OpMod -> A3OMod
-			| _ -> assert false
+			| _ -> die "" __LOC__
 		) in
 		match iop with
 		| Some iop ->
@@ -1637,14 +1778,12 @@ and gen_binop ctx retval op e1 e2 t p =
 		| None ->
 			gen_op A3OEq
 		| Some c ->
-			let f = FStatic (c,try PMap.find "compare" c.cl_statics with Not_found -> assert false) in
+			let f = FStatic (c,try PMap.find "compare" c.cl_statics with Not_found -> die "" __LOC__) in
 			gen_expr ctx true (mk (TCall (mk (TField (mk (TTypeExpr (TClassDecl c)) t_dynamic p,f)) t_dynamic p,[e1;e2])) ctx.com.basic.tbool p);
 	in
 	match op with
 	| OpAssign ->
-		let acc = gen_access ctx e1 Write in
-		gen_expr ctx true e2;
-		setvar ctx acc (if retval then Some (classify ctx e1.etype) else None)
+		gen_assign ctx e1 e2 retval
 	| OpBoolAnd ->
 		write ctx HFalse;
 		let j = jump_expr ctx e1 false in
@@ -1691,8 +1830,8 @@ and gen_binop ctx retval op e1 e2 t p =
 		gen_op A3OLt
 	| OpLte ->
 		gen_op A3OLte
-	| OpInterval | OpArrow | OpIn ->
-		assert false
+	| OpInterval | OpArrow | OpIn | OpNullCoal ->
+		die "" __LOC__
 
 and gen_expr ctx retval e =
 	let old = ctx.infos.istack in
@@ -1777,10 +1916,10 @@ let generate_construct ctx fdata c =
 	let cargs = if not ctx.need_ctor_skip then fdata.tf_args else List.map (fun (v,c) ->
 		let c = (match c with Some _ -> c | None ->
 			Some (match classify ctx v.v_type with
-			| KInt | KUInt -> TInt 0l
-			| KFloat -> TFloat "0"
-			| KBool -> TBool false
-			| KType _ | KDynamic | KNone -> TNull)
+			| KInt | KUInt -> mk (TConst (TInt 0l)) ctx.com.basic.tint v.v_pos
+			| KFloat -> mk (TConst (TFloat "0")) ctx.com.basic.tfloat v.v_pos
+			| KBool -> mk (TConst (TBool false)) ctx.com.basic.tbool v.v_pos
+			| KType _ | KDynamic | KNone -> mk (TConst TNull) t_dynamic v.v_pos)
 		) in
 		v,c
 	) fdata.tf_args in
@@ -1837,13 +1976,13 @@ let generate_class_statics ctx c const =
 	) c.cl_ordered_statics
 
 let need_init ctx c =
-	not ctx.swc && not c.cl_extern && List.exists (fun f -> match f.cf_expr with Some e -> not (is_const e) | _ -> false) c.cl_ordered_statics
+	not ctx.swc && not (has_class_flag c CExtern) && List.exists (fun f -> match f.cf_expr with Some e -> not (is_const e) | _ -> false) c.cl_ordered_statics
 
 let generate_extern_inits ctx =
 	List.iter (fun t ->
 		match t with
-		| TClassDecl c when c.cl_extern ->
-			(match c.cl_init with
+		| TClassDecl c when (has_class_flag c CExtern) ->
+			(match TClass.get_cl_init c with
 			| None -> ()
 			| Some e -> gen_expr ctx false e);
 		| _ -> ()
@@ -1868,7 +2007,7 @@ let generate_inits ctx =
 			j()
 		| _ -> ()
 	) ctx.com.types;
-	(match ctx.com.main with
+	(match ctx.com.main.main_expr with
 	| None -> ()
 	| Some e -> gen_expr ctx false e);
 	write ctx HRetVoid;
@@ -1876,7 +2015,7 @@ let generate_inits ctx =
 
 let generate_class_init ctx c hc =
 	write ctx HGetGlobalScope;
-	if c.cl_interface then
+	if (has_class_flag c CInterface) then
 		write ctx HNull
 	else begin
 		let path = (match c.cl_super with None -> ([],"Object") | Some (sup,_) -> sup.cl_path) in
@@ -1893,10 +2032,10 @@ let generate_class_init ctx c hc =
 			write ctx (HInitProp (ident f.cf_name));
 		| _ -> ()
 	) c.cl_ordered_statics;
-	if not c.cl_interface then write ctx HPopScope;
+	if not (has_class_flag c CInterface) then write ctx HPopScope;
 	write ctx (HInitProp (type_path ctx c.cl_path));
 	if ctx.swc && c.cl_path = ctx.boot then generate_extern_inits ctx;
-	(match c.cl_init with
+	(match TClass.get_cl_init c with
 	| None -> ()
 	| Some e ->
 		gen_expr ctx false e;
@@ -1947,8 +2086,8 @@ let extract_meta meta =
 		| (Meta.Meta,[ECall ((EConst (Ident n),_),args),_],_) :: l ->
 			let mk_arg (a,p) =
 				match a with
-				| EConst (String s) -> (None, s)
-				| EBinop (OpAssign,(EConst (Ident n),_),(EConst (String s),_)) -> (Some n, s)
+				| EConst (String(s,_)) -> (None, s)
+				| EBinop (OpAssign,(EConst (Ident n),_),(EConst (String(s,_)),_)) -> (Some n, s)
 				| _ -> abort "Invalid meta definition" p
 			in
 			{ hlmeta_name = n; hlmeta_data = Array.of_list (List.map mk_arg args) } :: loop l
@@ -1978,7 +2117,7 @@ let generate_field_kind ctx f c stat =
 				PMap.exists name c.cl_fields || loop c name
 		in
 		(match f.cf_kind with
-		| Method MethDynamic when List.memq f c.cl_overrides ->
+		| Method MethDynamic when has_class_field_flag f CfOverride ->
 			None
 		| Var _ | Method MethDynamic ->
 			Some (HFVar {
@@ -1989,14 +2128,18 @@ let generate_field_kind ctx f c stat =
 		| _ ->
 			let name, kind = method_kind() in
 			let m = generate_method ctx fdata stat f.cf_meta in
+			let is_override = not stat && (
+				if kind = MK3Normal then has_class_field_flag f CfOverride
+				else (loop c name || loop c f.cf_name)
+			) in
 			Some (HFMethod {
 				hlm_type = m;
-				hlm_final = stat || f.cf_final;
-				hlm_override = not stat && (loop c name || loop c f.cf_name);
+				hlm_final = stat || (has_class_field_flag f CfFinal);
+				hlm_override = is_override;
 				hlm_kind = kind;
 			})
 		);
-	| _ when c.cl_interface && not stat ->
+	| _ when (has_class_flag c CInterface || has_class_field_flag f CfAbstract) && not stat ->
 		(match follow f.cf_type, f.cf_kind with
 		| TFun (args,tret), Method (MethNormal | MethInline) ->
 			let dparams = ref None in
@@ -2047,12 +2190,268 @@ let check_constructor ctx c f =
 	with Exit ->
 		()
 
+let has_protected_meta = Meta.Custom ":has_protected"
+let mark_has_protected c = c.cl_meta <- (has_protected_meta,[],null_pos) :: c.cl_meta
+
+let find_first_nonextern_accessor_implementor cl name =
+	let rec loop cl cl_found =
+		match cl.cl_super with
+		| None -> cl_found
+		| Some (c, _) when (has_class_flag c CExtern) -> cl_found
+		| Some (cl_super, _) ->
+			let has_field = PMap.exists name cl_super.cl_fields in
+			let cl_found = if has_field then cl_super else cl_found in
+			loop cl_super cl_found
+	in
+	loop cl cl
+
+let maybe_gen_instance_accessor ctx cl tl accessor_cf acc alloc_slot kind f_impl f_iface =
+	match find_property_for_accessor ~isget:(kind = MK3Getter) cl tl accessor_cf.cf_name with
+	| Some (_, _, prop_cf) ->
+		let accessor_cl = find_first_nonextern_accessor_implementor cl accessor_cf.cf_name in
+		if accessor_cl == cl then begin
+			let was_override = has_class_field_flag accessor_cf CfOverride in
+			if was_override then remove_class_field_flag accessor_cf CfOverride;
+			let name, mtype =
+				if (has_class_flag cl CInterface) then begin
+					let (args,tret) = f_iface prop_cf in
+					let mtype = end_fun ctx args None tret in
+					HMName (reserved prop_cf.cf_name, HNNamespace (make_class_ns cl)), mtype
+				end else begin
+					let func = f_impl prop_cf in
+					let mtype = generate_method ctx func false accessor_cf.cf_meta in
+					ident prop_cf.cf_name, mtype
+				end
+			in
+
+			let getter = {
+				hlf_name = name;
+				hlf_slot = alloc_slot ();
+				hlf_kind = HFMethod {
+					hlm_type = mtype;
+					hlm_final = has_class_field_flag accessor_cf CfFinal;
+					hlm_override = was_override;
+					hlm_kind = kind;
+				};
+				hlf_metas = None;
+			} in
+			getter :: acc
+		end else
+			acc
+	| None ->
+		acc
+
+let mk_instance_getter_func c tl accessor_cl accessor_tl accessor_cf prop_cf =
+	{
+		tf_args = [];
+		tf_type = prop_cf.cf_type;
+		tf_expr = begin
+			let ethis = mk (TConst TThis) (TInst (c, tl)) null_pos in
+			let efield = mk (TField (ethis, FInstance (accessor_cl, accessor_tl, accessor_cf))) accessor_cf.cf_type null_pos in
+			let ecall = mk (TCall (efield, [])) prop_cf.cf_type null_pos in
+			mk (TReturn (Some ecall)) t_dynamic null_pos;
+		end
+	}
+
+let maybe_gen_instance_getter ctx c f acc alloc_slot =
+	let tl = extract_param_types c.cl_params in
+	maybe_gen_instance_accessor ctx c tl f acc alloc_slot MK3Getter
+		(mk_instance_getter_func c tl c tl f)
+		(fun prop_cf -> ([],prop_cf.cf_type))
+
+let mk_varg t = alloc_var (VUser TVOArgument) "value" t null_pos
+
+let mk_instance_setter_func com c tl accessor_cl accessor_tl accessor_cf prop_cf =
+	let varg = mk_varg prop_cf.cf_type in
+	{
+		tf_args = [(varg,None)];
+		tf_type = com.basic.tvoid;
+		tf_expr = begin
+			let ethis = mk (TConst TThis) (TInst (c, tl)) null_pos in
+			let efield = mk (TField (ethis, FInstance (accessor_cl, accessor_tl, accessor_cf))) accessor_cf.cf_type null_pos in
+			let earg = mk (TLocal varg) prop_cf.cf_type null_pos in
+			mk (TCall (efield, [earg])) prop_cf.cf_type null_pos
+		end
+	}
+
+let maybe_gen_instance_setter ctx c f acc alloc_slot =
+	let tl = extract_param_types c.cl_params in
+	maybe_gen_instance_accessor ctx c tl f acc alloc_slot MK3Setter
+		(mk_instance_setter_func ctx.com c tl c tl f)
+		(fun prop_cf -> ([(mk_varg prop_cf.cf_type,None)],ctx.com.basic.tvoid))
+
+
+let maybe_gen_static_accessor ctx cl accessor_cf acc alloc_slot kind f_impl =
+	match find_static_property_for_accessor ~isget:(kind = MK3Getter) cl accessor_cf.cf_name with
+	| Some prop_cf ->
+		let func = f_impl prop_cf in
+		let getter = {
+			hlf_name = ident prop_cf.cf_name;
+			hlf_slot = alloc_slot ();
+			hlf_kind = HFMethod {
+				hlm_type = generate_method ctx func true accessor_cf.cf_meta;
+				hlm_final = true;
+				hlm_override = false;
+				hlm_kind = kind;
+			};
+			hlf_metas = None;
+		} in
+		getter :: acc
+	| None ->
+		acc
+
+let maybe_gen_static_getter ctx c f acc alloc_slot =
+	maybe_gen_static_accessor ctx c f acc alloc_slot MK3Getter (fun prop_cf -> {
+		tf_args = [];
+		tf_type = prop_cf.cf_type;
+		tf_expr = begin
+			let ethis = Texpr.Builder.make_static_this c null_pos in
+			let efield = mk (TField (ethis, FStatic (c, f))) f.cf_type null_pos in
+			let ecall = mk (TCall (efield, [])) prop_cf.cf_type null_pos in
+			mk (TReturn (Some ecall)) t_dynamic null_pos;
+		end
+	})
+
+let maybe_gen_static_setter ctx c f acc alloc_slot =
+	maybe_gen_static_accessor ctx c f acc alloc_slot MK3Setter (fun prop_cf ->
+		let varg = alloc_var (VUser TVOArgument) "value" prop_cf.cf_type null_pos in
+		{
+			tf_args = [(varg,None)];
+			tf_type = ctx.com.basic.tvoid;
+			tf_expr = begin
+				let ethis = Texpr.Builder.make_static_this c null_pos in
+				let efield = mk (TField (ethis, FStatic (c, f))) f.cf_type null_pos in
+				let earg = mk (TLocal varg) prop_cf.cf_type null_pos in
+				mk (TCall (efield, [earg])) prop_cf.cf_type null_pos
+			end
+		}
+	)
+
+let realize_required_accessors ctx cl =
+	let is_implemented_by_super ci =
+		Option.map_default (fun (csup,_) ->
+			(* heavily stripped-down version from Type.unify *)
+			let rec loop c  =
+				c == ci
+				||
+				Option.map_default (fun (cs,_) -> loop cs) false c.cl_super
+				||
+				List.exists (fun (cs,_) -> loop cs) c.cl_implements
+			in
+			loop csup
+		) false cl.cl_super
+	in
+	let interface_props =
+		begin
+		let h = Hashtbl.create 0 in
+		let rec collect cl =
+			let loop (ci,_) =
+				if not (is_implemented_by_super ci) then begin
+					List.iter (fun cf ->
+						match cf.cf_kind with
+						| Var { v_read = (AccCall | AccNever) as read; v_write = (AccCall | AccNever) as write } ->
+							begin try
+								let read', write', native = Hashtbl.find h cf.cf_name in
+								let read = if read = AccNever then read' else true in
+								let write = if write = AccNever then write' else true in
+								Hashtbl.replace h cf.cf_name (read, write, native)
+							with Not_found ->
+								Hashtbl.add h cf.cf_name (read = AccCall, write = AccCall, if is_flash_property cf then Some ci else None)
+							end
+						| _ -> ()
+					) ci.cl_ordered_fields;
+					collect ci;
+				end
+			in
+			List.iter loop cl.cl_implements;
+		in
+		collect cl;
+		h
+		end
+	in
+
+	let rec has_nonextern_field cl name =
+		if PMap.exists name cl.cl_fields then true
+		else match cl.cl_super with
+		| Some (csup, _) when not (has_class_flag csup CExtern) -> has_nonextern_field csup name
+		| _ -> false
+	in
+
+	let tl = extract_param_types cl.cl_params in
+	let fields = ref [] in
+	Hashtbl.iter (fun name (read, write, native) ->
+		match Type.class_field cl tl name with
+		| Some (actual_cl, actual_tl), _, cf ->
+			Option.may (fun iface ->
+				if not (is_flash_property cf) then
+					abort (Printf.sprintf "Interface %s requires property %s to be marked with @:flash.property" (s_type_path iface.cl_path) cf.cf_name) cf.cf_pos
+			) native;
+			if (has_class_flag actual_cl CExtern) then begin
+				let mk_field_access () =
+					let ethis = mk (TConst TThis) (TInst (cl,tl)) null_pos in
+					mk (TField (ethis, FInstance (actual_cl, actual_tl, cf))) cf.cf_type null_pos
+				in
+				if read then begin
+					let getter_name = "get_" ^ name in
+					if not (has_nonextern_field cl getter_name) then begin
+						let getter_func = {
+							tf_args = [];
+							tf_type = cf.cf_type;
+							tf_expr = mk (TReturn (Some (mk_field_access ()))) t_dynamic null_pos;
+						} in
+						let getter = {
+							hlf_name = ident getter_name;
+							hlf_slot = 0;
+							hlf_kind = HFMethod {
+								hlm_type = generate_method ctx getter_func false [];
+								hlm_final = false;
+								hlm_override = false;
+								hlm_kind = MK3Normal;
+							};
+							hlf_metas = None;
+						} in
+						fields := getter :: !fields;
+					end
+				end;
+				if write then begin
+					let setter_name = "set_" ^ name in
+					if not (has_nonextern_field cl setter_name) then begin
+						let varg = alloc_var (VUser TVOArgument) "value" cf.cf_type null_pos in
+						let setter_func = {
+							tf_args = [(varg,None)];
+							tf_type = cf.cf_type;
+							tf_expr = begin
+								let efield = mk_field_access () in
+								let earg = mk (TLocal varg) varg.v_type null_pos in
+								let eassign = mk (TBinop (OpAssign, efield, earg)) cf.cf_type null_pos in
+								mk (TReturn (Some eassign)) t_dynamic null_pos;
+							end;
+						} in
+						let setter = {
+							hlf_name = ident setter_name;
+							hlf_slot = 0;
+							hlf_kind = HFMethod {
+								hlm_type = generate_method ctx setter_func false [];
+								hlm_final = false;
+								hlm_override = false;
+								hlm_kind = MK3Normal;
+							};
+							hlf_metas = None;
+						} in
+						fields := setter :: !fields;
+					end
+				end;
+			end
+		| _ -> die "" __LOC__
+	) interface_props;
+	!fields
+
 let generate_class ctx c =
 	let name = type_path ctx c.cl_path in
 	ctx.cur_class <- c;
 	let cid , cnargs = (match c.cl_constructor with
 		| None ->
-			if c.cl_interface then
+			if (has_class_flag c CInterface) then
 				{ (empty_method ctx null_pos) with hlmt_function = None }, 0
 			else
 				generate_construct ctx {
@@ -2072,14 +2471,14 @@ let generate_class ctx c =
 				check_constructor ctx c fdata;
 				old();
 				m
-			| _ -> assert false
+			| _ -> die "" __LOC__
 	) in
 	let has_protected = ref None in
 	let make_name f stat =
 		let rec find_meta c =
 			try
 				let f = PMap.find f.cf_name (if stat then c.cl_statics else c.cl_fields) in
-				if List.memq f c.cl_overrides then raise Not_found;
+				if has_class_field_flag f CfOverride then raise Not_found;
 				f.cf_meta
 			with Not_found ->
 				match c.cl_super with
@@ -2088,38 +2487,96 @@ let generate_class ctx c =
 				| Some (c,_) -> find_meta c
 		in
 		let protect() =
-			let p = (match c.cl_path with [], n -> n | p, n -> String.concat "." p ^ ":" ^ n) in
+			let p = make_class_ns c in
 			has_protected := Some p;
 			HMName (f.cf_name,HNProtected p)
 		in
 		let rec loop_meta = function
 			| [] ->
-				if not f.cf_public && ctx.swf_protected then
+				if not (has_class_field_flag f CfPublic) && ctx.swf_protected then
 					protect()
 				else
 					ident f.cf_name
 			| x :: l ->
 				match x with
 				| ((Meta.Getter | Meta.Setter),[EConst (Ident f),_],_) -> ident f
-				| (Meta.Ns,[EConst (String ns),_],_) -> HMName (f.cf_name,HNNamespace ns)
+				| (Meta.Ns,[EConst (String(ns,_)),_],_) -> HMName (f.cf_name,HNNamespace ns)
 				| (Meta.Protected,[],_) -> protect()
 				| _ -> loop_meta l
 		in
-		if c.cl_interface then
-			HMName (reserved f.cf_name, HNNamespace (match c.cl_path with [],n -> n | l,n -> String.concat "." l ^ ":" ^ n))
+		if (has_class_flag c CInterface) then
+			HMName (reserved f.cf_name, HNNamespace (make_class_ns c))
 		else
 			loop_meta (find_meta c)
 	in
-	let generate_prop f acc alloc_slot =
+	let generate_prop stat f acc alloc_slot =
 		match f.cf_kind with
-		| Method _ -> acc
-		| Var v ->
-			(* let p = f.cf_pos in *)
-			(* let ethis = mk (TConst TThis) (TInst (c,[])) p in *)
-			acc
+		| Method _ when is_getter_name f.cf_name ->
+			if not stat then
+				maybe_gen_instance_getter ctx c f acc alloc_slot
+			else
+				maybe_gen_static_getter ctx c f acc alloc_slot
+		| Method _ when is_setter_name f.cf_name ->
+			if not stat then
+				maybe_gen_instance_setter ctx c f acc alloc_slot
+			else
+				maybe_gen_static_setter ctx c f acc alloc_slot
+		| Var { v_read = (AccCall | AccNever) as read; v_write = (AccCall | AccNever) as write } when not (has_class_flag c CInterface) && not (Meta.has Meta.IsVar f.cf_meta) ->
+			(* if the accessor methods were defined in super classes, we still need to generate native getter/setter *)
+			let acc =
+				if read = AccCall then begin
+					try
+						begin
+						let tl = extract_param_types c.cl_params in
+						match Type.class_field c tl ("get_" ^ f.cf_name) with
+						| Some (actual_cl, actual_tl), _, getter_cf when actual_cl != c ->
+							let func = mk_instance_getter_func c tl actual_cl actual_tl getter_cf f in
+							{
+								hlf_name = ident f.cf_name;
+								hlf_slot = alloc_slot ();
+								hlf_kind = HFMethod {
+									hlm_type = generate_method ctx func false [];
+									hlm_final = false;
+									hlm_override = false;
+									hlm_kind = MK3Getter;
+								};
+								hlf_metas = None;
+							} :: acc
+						| _ ->
+							acc
+						end
+					with Not_found ->
+						acc
+				end else acc
+			in
+			if write = AccCall then begin
+				try
+					begin
+					let tl = extract_param_types c.cl_params in
+					match Type.class_field c tl ("set_" ^ f.cf_name) with
+					| Some (actual_cl, actual_tl), _, setter_cf when actual_cl != c ->
+						let func = mk_instance_setter_func ctx.com c tl actual_cl actual_tl setter_cf f in
+						{
+							hlf_name = ident f.cf_name;
+							hlf_slot = alloc_slot ();
+							hlf_kind = HFMethod {
+								hlm_type = generate_method ctx func false [];
+								hlm_final = false;
+								hlm_override = false;
+								hlm_kind = MK3Setter;
+							};
+							hlf_metas = None;
+						} :: acc
+					| _ ->
+						acc
+					end
+				with Not_found ->
+					acc
+			end else acc
+		| Method _ | Var _ -> acc
 	in
 	let fields = PMap.fold (fun f acc ->
-		let acc = generate_prop f acc (fun() -> 0) in
+		let acc = generate_prop false f acc (fun() -> 0) in
 		match generate_field_kind ctx f c false with
 		| None -> acc
 		| Some k ->
@@ -2131,12 +2588,12 @@ let generate_class ctx c =
 			} :: acc
 	) c.cl_fields [] in
 	let fields = if c.cl_path <> ctx.boot then fields else begin
+		let cf = {
+			(mk_field "init" ~public:(ctx.swc && ctx.swf_protected) (TFun ([],t_dynamic)) c.cl_pos null_pos) with
+			cf_kind = Method MethNormal;
+		} in
 		{
-			hlf_name = make_name {
-				(mk_field "init" (TFun ([],t_dynamic)) c.cl_pos null_pos) with
-				cf_public = ctx.swc && ctx.swf_protected;
-				cf_kind = Method MethNormal;
-			} false;
+			hlf_name = make_name cf false;
 			hlf_slot = 0;
 			hlf_kind = (HFMethod {
 				hlm_type = generate_inits ctx;
@@ -2147,14 +2604,15 @@ let generate_class ctx c =
 			hlf_metas = None;
 		} :: fields
 	end in
+	let fields = if not (has_class_flag c CInterface) then fields @ realize_required_accessors ctx c else fields in
 	let st_field_count = ref 0 in
 	let st_meth_count = ref 0 in
 	let statics = List.rev (List.fold_left (fun acc f ->
-		let acc = generate_prop f acc (fun() -> incr st_meth_count; !st_meth_count) in
+		let acc = generate_prop true f acc (fun() -> incr st_meth_count; !st_meth_count) in
 		match generate_field_kind ctx f c true with
 		| None -> acc
 		| Some k ->
-			let count = (match k with HFMethod _ -> st_meth_count | HFVar _ -> st_field_count | _ -> assert false) in
+			let count = (match k with HFMethod _ -> st_meth_count | HFVar _ -> st_field_count | _ -> die "" __LOC__) in
 			incr count;
 			{
 				hlf_name = make_name f true;
@@ -2172,21 +2630,39 @@ let generate_class ctx c =
 		} :: statics
 	in
 	let rec is_dynamic c =
-		if c.cl_dynamic <> None || c.cl_array_access <> None then true
+		if c.cl_array_access <> None then true
 		else match c.cl_super with
 		| None -> false
 		| Some (c,_) -> is_dynamic c
 	in
+	if !has_protected <> None then
+		mark_has_protected c (* class has its own protected methods - add meta for the child classes *)
+	else Option.may (fun (csup,_) -> (* child has no own protected methods, check whether parent was marked with the meta *)
+		if Meta.has has_protected_meta csup.cl_meta then begin
+			has_protected := Some (make_class_ns c);
+			mark_has_protected c (* also mark this class with the meta for further child classes *)
+		end else if (has_class_flag csup CExtern) then begin
+			let rec loop csup =
+				if List.exists is_cf_protected csup.cl_ordered_fields then begin
+					has_protected := Some (make_class_ns c);
+					mark_has_protected c; (* also mark this class with the meta for further child classes *)
+					mark_has_protected csup; (* ALSO mark the extern class for faster future checks *)
+				end else
+					Option.may (fun (csup,_) -> loop csup) csup.cl_super;
+			in
+			loop csup
+		end
+	) c.cl_super;
 	{
 		hlc_index = 0;
 		hlc_name = name;
-		hlc_super = (if c.cl_interface then None else Some (type_path ctx (match c.cl_super with None -> [],"Object" | Some (c,_) -> c.cl_path)));
+		hlc_super = (if (has_class_flag c CInterface) then None else Some (type_path ctx (match c.cl_super with None -> [],"Object" | Some (c,_) -> c.cl_path)));
 		hlc_sealed = not (is_dynamic c);
-		hlc_final = c.cl_final;
-		hlc_interface = c.cl_interface;
+		hlc_final = has_class_flag c CFinal;
+		hlc_interface = (has_class_flag c CInterface);
 		hlc_namespace = (match !has_protected with None -> None | Some p -> Some (HNProtected p));
 		hlc_implements = Array.of_list (List.map (fun (c,_) ->
-			if not c.cl_interface then abort "Can't implement class in Flash9" c.cl_pos;
+			if not (has_class_flag c CInterface) then abort "Can't implement class in Flash9" c.cl_pos;
 			let pack, name = real_path c.cl_path in
 			HMMultiName (Some name,[HNPublic (Some (String.concat "." pack))])
 		) c.cl_implements);
@@ -2230,7 +2706,7 @@ let generate_enum ctx e meta =
 			hlf_slot = !st_count;
 			hlf_kind = (match f.ef_type with
 				| TFun (args,_) ->
-					let fdata = begin_fun ctx (List.map (fun (a,opt,t) -> alloc_var VGenerated a t e.e_pos, (if opt then Some TNull else None)) args) (TEnum (e,[])) [] true f.ef_pos in
+					let fdata = begin_fun ctx (List.map (fun (a,opt,t) -> alloc_var VGenerated a t e.e_pos, (if opt then Some (mk (TConst TNull) t_dynamic null_pos) else None)) args) (TEnum (e,[])) [] true f.ef_pos in
 					write ctx (HFindPropStrict name_id);
 					write ctx (HString f.ef_name);
 					write ctx (HInt f.ef_index);
@@ -2308,7 +2784,7 @@ let rec generate_type ctx t =
 	match t with
 	| TClassDecl c ->
 		if c.cl_path = (["flash";"_Boot"],"RealBoot") then c.cl_path <- ctx.boot;
-		if c.cl_extern && (c.cl_path <> ([],"Dynamic") || Meta.has Meta.RealPath c.cl_meta) then
+		if (has_class_flag c CExtern) && (c.cl_path <> ([],"Dynamic") || Meta.has Meta.RealPath c.cl_meta) then
 			None
 		else
 			let debug = do_debug ctx c.cl_meta in
@@ -2352,12 +2828,47 @@ let generate_resource ctx name =
 	let t = TClassDecl c in
 	match generate_type ctx t with
 	| Some (m,f) -> (t,m,f)
-	| None -> assert false
+	| None -> die "" __LOC__
 
 let generate com boot_name =
 	let ctx = {
 		com = com;
 		need_ctor_skip = Common.has_feature com "Type.createEmptyInstance";
+		handle_spread_args = (fun basic args t_result args_to_expr ->
+			match List.rev args with
+			| { eexpr = TUnop (Spread,Prefix,rest) } :: args_rev ->
+				let t_rest_item = match Type.follow rest.etype with TAbstract (_,[t]) -> t | _ -> die "" __LOC__ in
+				let t_array_dyn = basic.tarray t_dynamic in
+				let c_array = match t_array_dyn with TInst (c,_) -> c | _ -> die "" __LOC__ in
+				let length =
+					let faccess =
+						try
+							let cf = PMap.find "length" c_array.cl_fields in
+							FInstance (c_array,[t_dynamic],cf)
+						with Not_found ->
+							FDynamic "length"
+					in
+					mk (TField (rest,faccess)) basic.tint rest.epos
+				in
+				let const n = mk (TConst (TInt (Int32.of_int n))) basic.tint rest.epos in
+				let check n =
+					mk (TBinop (OpEq, length, const n)) basic.tbool rest.epos
+				in
+				let rec nargs n acc =
+					if n < 0 then acc
+					else nargs (n - 1) ((mk (TArray (rest, const n)) t_rest_item rest.epos) :: acc)
+				in
+				let rec loop n e_else =
+					let args = (nargs (n - 1) args_rev) in
+					let e = mk (TIf (check n, args_to_expr args, Some e_else)) t_result rest.epos in
+					if n = 0 then e
+					else loop (n - 1) e
+				in
+				let msg = mk (TConst (TString "Too many rest arguments")) basic.tstring rest.epos in
+				Some (loop 20 (mk (TThrow msg) t_dynamic rest.epos))
+			| _ ->
+				None
+		);
 		debug = com.Common.debug;
 		cur_class = null_class;
 		boot = ([],boot_name);
@@ -2377,7 +2888,7 @@ let generate com boot_name =
 		try_scope_reg = None;
 		for_call = false;
 	} in
-	let types = if ctx.swc && com.main_class = None then
+	let types = if ctx.swc && com.main.main_class = None then
 		(*
 			make sure that both Boot and RealBoot are the first two classes in the SWC
 			this way initializing RealBoot will also run externs __init__ blocks before

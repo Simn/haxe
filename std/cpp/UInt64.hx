@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2018 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,6 +19,22 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
- package cpp;
 
-@:coreType @:notNull @:runtimeValue abstract UInt64 from Int to Int {}
+package cpp;
+
+@:coreType @:notNull @:runtimeValue abstract UInt64 from Int {
+
+	/**
+		Destructively cast to Int
+	**/
+	public inline function toInt():Int {
+		return cast this;
+	}
+
+	@:to
+	@:deprecated("Implicit cast from UInt64 to Int (32 bits) is deprecated. Use .toInt() or explicitly cast instead.")
+	inline function implicitToInt(): Int {
+		return toInt();
+	}
+
+}

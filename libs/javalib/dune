@@ -1,0 +1,13 @@
+(include_subdirs no)
+
+(env
+	(_
+		(flags (-w -50))
+	)
+)
+
+(library
+	(name javalib)
+	(libraries extlib)
+	(wrapped false)
+)
