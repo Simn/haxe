@@ -19,7 +19,8 @@
 
 open Ast
 open Type
-open Common
+open SafeCom
+open AnalyzerTypes
 open OptimizerTexpr
 open Globals
 
@@ -108,11 +109,11 @@ let target_handles_unops com = match com.platform with
 let target_handles_assign_ops com e2 = match com.platform with
 	| Php -> not (has_side_effect e2)
 	| Lua -> false
-	| Cpp when not (Common.defined com Define.Cppia) -> false
+	| Cpp when not (Define.defined com.defines Define.Cppia) -> false
 	| _ -> true
 
 let target_handles_side_effect_order com = match com.platform with
-	| Cpp -> Common.defined com Define.Cppia
+	| Cpp -> Define.defined com.defines Define.Cppia
 	| Php -> false
 	| _ -> true
 
@@ -129,7 +130,7 @@ let can_be_used_as_value com e =
 	in
 	try
 		begin match com.platform,e.eexpr with
-			| (Cs | Cpp | Java | Flash | Lua),TConst TNull -> raise Exit
+			| (Cpp | Jvm | Flash | Lua),TConst TNull -> raise Exit
 			| _ -> ()
 		end;
 		loop e;
@@ -183,7 +184,7 @@ let type_change_ok com t1 t2 =
 		t1 == t2 || match follow t1,follow t2 with
 			| TDynamic _,_ | _,TDynamic _ -> false
 			| _ ->
-				if com.config.pf_static && is_nullable_or_whatever t1 <> is_nullable_or_whatever t2 then false
+				if com.platform_config.pf_static && is_nullable_or_whatever t1 <> is_nullable_or_whatever t2 then false
 				else type_iseq t1 t2
 	end
 
@@ -204,7 +205,6 @@ let dynarray_mapi f d =
 	- Postfix increment/decrement operations are rewritten to a TBlock with OpAssign and OpAdd/OpSub
 	- `do {} while(true)` is rewritten to `while(true) {}`
 	- TWhile expressions are rewritten to `while (true)` with appropriate conditional TBreak
-	- TFor is rewritten to TWhile
 *)
 module TexprFilter = struct
 	let apply com e =
@@ -242,7 +242,7 @@ module TexprFilter = struct
 			let rec map_continue e = match e.eexpr with
 				| TContinue ->
 					Texpr.duplicate_tvars e_identity (e_if (Some e))
-				| TWhile _ | TFor _ ->
+				| TWhile _ ->
 					e
 				| _ ->
 					Type.map_expr map_continue e
@@ -252,9 +252,6 @@ module TexprFilter = struct
 			let e_block = if flag = NormalWhile then Type.concat e_if e2 else Type.concat e2 e_if in
 			let e_true = mk (TConst (TBool true)) com.basic.tbool p in
 			let e = mk (TWhile(Texpr.Builder.mk_parent e_true,e_block,NormalWhile)) e.etype p in
-			loop e
-		| TFor(v,e1,e2) ->
-			let e = Texpr.for_remap com.basic v e1 e2 e.epos in
 			loop e
 		| _ ->
 			Type.map_expr loop e
@@ -515,9 +512,7 @@ module Fusion = struct
 		in
 		let e1 = skip e1 in
 		let e2 = skip e2 in
-		is_assign_op op && target_handles_assign_ops com e3 && Texpr.equal e1 e2 && not (has_side_effect e1) && match com.platform with
-			| Cs when is_null e1.etype || is_null e2.etype -> false (* C# hates OpAssignOp on Null<T> *)
-			| _ -> true
+		is_assign_op op && target_handles_assign_ops com e3 && Texpr.equal e1 e2 && not (has_side_effect e1)
 
 	let handle_assigned_local actx v1 e1 el =
 		let config = actx.AnalyzerTypes.config in
@@ -674,8 +669,9 @@ module Fusion = struct
 					if not !found && (((has_state_read ir || has_any_field_read ir)) || has_state_write ir || has_any_field_write ir) then raise Exit;
 					{e with eexpr = TCall(e1,el)}
 				| TObjectDecl fl ->
+					(* TODO can something be cleaned up here? *)
 					(* The C# generator has trouble with evaluation order in structures (#7531). *)
-					let el = (match com.platform with Cs -> handle_el' | _ -> handle_el) (List.map snd fl) in
+					let el = handle_el (List.map snd fl) in
 					if not !found && (has_state_write ir || has_any_field_write ir) then raise Exit;
 					{e with eexpr = TObjectDecl (List.map2 (fun (s,_) e -> s,e) fl el)}
 				| TArrayDecl el ->
@@ -791,7 +787,7 @@ module Fusion = struct
 			let num_uses = state#get_reads v in
 			let num_writes = state#get_writes v in
 			let can_be_used_as_value = can_be_used_as_value com e in
-			let is_compiler_generated = match v.v_kind with VUser _ | VInlined -> false | _ -> true in
+			let is_compiler_generated = match v.v_kind with VUser _ | VInlined | VInlinedConstructorVariable _ -> false | _ -> true in
 			let has_type_params = match v.v_extra with Some ve when ve.v_params <> [] -> true | _ -> false in
 			let rec is_impure_extern e = match e.eexpr with
 				| TField(ef,(FStatic(cl,cf) | FInstance(cl,_,cf))) when has_class_flag cl CExtern ->
@@ -832,7 +828,7 @@ module Fusion = struct
 				can_be_used_as_value com e1 &&
 				not (ExtType.is_void e1.etype) &&
 				(match com.platform with
-					| Cpp when not (Common.defined com Define.Cppia) -> false
+					| Cpp when not (Define.defined com.defines Define.Cppia) -> false
 					| _ -> true)
 				->
 				begin try
@@ -904,7 +900,7 @@ module Fusion = struct
 							if !found then raise Exit;
 							found := true;
 							{e with eexpr = TUnop(op,Postfix,e)}
-						| TIf _ | TSwitch _ | TTry _ | TWhile _ | TFor _ ->
+						| TIf _ | TSwitch _ | TTry _ | TWhile _ ->
 							raise Exit
 						| _ ->
 							Type.map_expr replace e
@@ -1015,7 +1011,7 @@ module Cleanup = struct
 			| _,TConst (TBool false) -> optimize_binop {e with eexpr = TBinop(OpBoolAnd,e1,e2)} OpBoolAnd e1 e2
 			| _,TBlock [] -> {e with eexpr = TIf(e1,e2,None)}
 			| _ -> match (Texpr.skip e2).eexpr with
-				| TBlock [] when com.platform <> Cs ->
+				| TBlock [] ->
 					let e1' = mk (TUnop(Not,Prefix,e1)) e1.etype e1.epos in
 					let e1' = optimize_unop e1' Not Prefix e1 in
 					{e with eexpr = TIf(e1',e3,None)}
@@ -1163,7 +1159,7 @@ module Purity = struct
 		taint node;
 		raise Exit
 
-	let apply_to_field com is_ctor is_static c cf =
+	let apply_to_field is_ctor is_static c cf =
 		let node = get_node c cf in
 		let check_field c cf =
 			let node' = get_node c cf in
@@ -1239,27 +1235,28 @@ module Purity = struct
 					with Exit ->
 						()
 
-	let apply_to_class com c =
-		List.iter (apply_to_field com false false c) c.cl_ordered_fields;
-		List.iter (apply_to_field com false true c) c.cl_ordered_statics;
-		(match c.cl_constructor with Some cf -> apply_to_field com true false c cf | None -> ())
+	let apply_to_class c =
+		List.iter (apply_to_field false false c) c.cl_ordered_fields;
+		List.iter (apply_to_field false true c) c.cl_ordered_statics;
+		(match c.cl_constructor with Some cf -> apply_to_field true false c cf | None -> ())
 
-	let infer com =
+	let infer types =
 		Hashtbl.clear node_lut;
-		List.iter (fun mt -> match mt with
+		Array.iter (fun mt -> match mt with
 			| TClassDecl c ->
 				begin try
-					apply_to_class com c
+					apply_to_class c
 				with Purity_conflict(impure,p) ->
-					com.error "Impure field overrides/implements field which was explicitly marked as @:pure" impure.pn_field.cf_pos;
-					Error.raise_typing_error ~depth:1 (Error.compl_msg "Pure field is here") p;
+					Error.raise_typing_error_ext (Error.make_error (Custom "Impure field overrides/implements field which was explicitly marked as @:pure") ~sub:[
+						Error.make_error ~depth:1 (Custom (Error.compl_msg "Pure field is here")) p
+					] impure.pn_field.cf_pos)
 				end
 			| _ -> ()
-		) com.types;
+		) types;
 		Hashtbl.iter (fun _ node ->
 			match node.pn_purity with
 			| Pure | MaybePure when not (List.exists (fun (m,_,_) -> m = Meta.Pure) node.pn_field.cf_meta) ->
-				node.pn_field.cf_meta <- (Meta.Pure,[EConst(Ident "inferredPure"),node.pn_field.cf_pos],node.pn_field.cf_pos) :: node.pn_field.cf_meta
+				node.pn_field.cf_meta <- (Meta.Pure,[EConst(Ident "inferredPure"),mk_zero_range_pos node.pn_field.cf_pos],mk_zero_range_pos node.pn_field.cf_pos) :: node.pn_field.cf_meta
 			| _ -> ()
 		) node_lut;
 end

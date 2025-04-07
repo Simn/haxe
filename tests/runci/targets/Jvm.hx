@@ -4,11 +4,17 @@ import runci.System.*;
 import runci.Config.*;
 
 class Jvm {
+	static public function getJavaDependencies() {
+		haxelibInstallGit("HaxeFoundation", "hxjava", true);
+		haxelibInstallGit("HaxeFoundation", "format", "jvm", "--always");
+		runCommand("javac", ["-version"]);
+	}
+
 	static final miscJavaDir = getMiscSubDir('java');
 
 	static public function run(args:Array<String>) {
 		deleteDirectoryRecursively("bin/jvm");
-		Java.getJavaDependencies();
+		getJavaDependencies();
 
 		runCommand("haxe", ["compile-java-native.hxml"]);
 
@@ -26,6 +32,8 @@ class Jvm {
 			runCommand("haxe", ["compile-jvm-only.hxml", "--hxb-lib", "bin/hxb/jvm.zip"].concat(args));
 			runCommand("java", ["-jar", "bin/unit.jar"]);
 		}
+
+		Display.maybeRunDisplayTests(Jvm);
 
 		changeDirectory(miscJavaDir);
 		runCommand("haxe", ["run.hxml"]);

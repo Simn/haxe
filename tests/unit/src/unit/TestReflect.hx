@@ -225,8 +225,8 @@ class TestReflect extends Test {
 		eq( i.intValue, 55 );
 		var i = Type.createEmptyInstance(MyClass);
 		t( (i is MyClass) );
-		eq( i.get(), #if (flash || cpp || java || cs || hl) 0 #else null #end );
-		eq( i.intValue, #if (flash || cpp || java || cs || hl) 0 #else null #end );
+		eq( i.get(), #if (flash || cpp || jvm || hl) 0 #else null #end );
+		eq( i.intValue, #if (flash || cpp || jvm || hl) 0 #else null #end );
 		var e : MyEnum = Type.createEnum(MyEnum,__unprotect__("A"));
 		eq( e, MyEnum.A );
 		var e : MyEnum = Type.createEnum(MyEnum,__unprotect__("C"),[55,"hello"]);
@@ -325,4 +325,19 @@ class TestReflect extends Test {
 		eq( Reflect.getProperty(ClassWithProp, "STAT_X"), 16 );
 	}
 
+	function testEnumConstructor() {
+		// Reflect.field
+		var Some:(Dynamic) -> haxe.ds.Option<Dynamic> = Reflect.field(haxe.ds.Option, "Some");
+		utest.Assert.same(Some("Hello"), Some("Hello"));
+		utest.Assert.same(Reflect.callMethod(null, Some, ["Hello"]), Some("Hello"));
+		var None:haxe.ds.Option<Dynamic> = Reflect.field(haxe.ds.Option, "None");
+		utest.Assert.same(None, None);
+
+		// Reflect.getProperty
+		var Some:(Dynamic) -> haxe.ds.Option<Dynamic> = Reflect.getProperty(haxe.ds.Option, "Some");
+		utest.Assert.same(Some("Hello"), Some("Hello"));
+		utest.Assert.same(Reflect.callMethod(null, Some, ["Hello"]), Some("Hello"));
+		var None:haxe.ds.Option<Dynamic> = Reflect.getProperty(haxe.ds.Option, "None");
+		utest.Assert.same(None, None);
+	}
 }

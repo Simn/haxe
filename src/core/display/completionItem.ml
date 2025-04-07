@@ -126,11 +126,11 @@ module CompletionModuleType = struct
 				name = fst d.d_name;
 				module_name = module_name;
 				pos = p;
-				is_private = List.mem EPrivate d.d_flags;
+				is_private = List.mem TDPrivate d.d_flags;
 				params = d.d_params;
 				meta = d.d_meta;
 				doc = d.d_doc;
-				is_extern = List.mem EExtern d.d_flags;
+				is_extern = List.mem TDExtern d.d_flags;
 				is_final = false;
 				is_abstract = false;
 				kind = kind;
@@ -182,14 +182,11 @@ module CompletionModuleType = struct
 			raise Exit
 
 	let of_module_type mt =
-		let actor a = match a.a_impl with
-			| None -> No
-			| Some c ->
-				try
-					let cf = PMap.find "_new" c.cl_statics in
-					if (has_class_flag c CExtern) || (has_class_field_flag cf CfPublic) then Yes else YesButPrivate
-				with Not_found ->
-					No
+		let actor a = match a.a_impl,a.a_constructor with
+			| Some c,Some cf ->
+				if (has_class_flag c CExtern) || (has_class_field_flag cf CfPublic) then Yes else YesButPrivate
+			| _ ->
+				No
 		in
 		let ctor c =
 			try
@@ -203,7 +200,7 @@ module CompletionModuleType = struct
 			| TClassDecl c ->
 				(has_class_flag c CExtern),has_class_flag c CFinal,has_class_flag c CAbstract,(if (has_class_flag c CInterface) then Interface else Class),ctor c
 			| TEnumDecl en ->
-				en.e_extern,false,false,Enum,No
+				(has_enum_flag en EnExtern),false,false,Enum,No
 			| TTypeDecl td ->
 				let kind,ctor = match follow td.t_type with
 					| TAnon _ -> Struct,No

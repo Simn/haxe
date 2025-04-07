@@ -1,15 +1,14 @@
 open Globals
 open Common
 open CompilationCache
-open Timer
 open Type
-open Typecore
 open DisplayProcessingGlobals
 open Ipaddr
 open Json
 open CompilationContext
 open MessageReporting
 open HxbData
+open TypeloadCacheHook
 
 exception Dirty of module_skip_reason
 exception ServerError of string
@@ -54,16 +53,16 @@ let parse_file cs com (rfile : ClassPaths.resolved_file) p =
 		TypeloadParse.parse_file_from_string com file p stdin
 	| _ ->
 		let ftime = file_time ffile in
-		let data = Std.finally (Timer.timer ["server";"parser cache"]) (fun () ->
+		let data = Std.finally (Timer.start_timer com.timer_ctx ["server";"parser cache"]) (fun () ->
 			try
 				let cfile = cc#find_file fkey in
 				if cfile.c_time <> ftime then raise Not_found;
-				Parser.ParseSuccess((cfile.c_package,cfile.c_decls),false,cfile.c_pdi)
+				Parser.ParseSuccess((cfile.c_package,cfile.c_decls),cfile.c_pdi)
 			with Not_found ->
 				let parse_result = TypeloadParse.parse_file com rfile p in
 				let info,is_unusual = match parse_result with
 					| ParseError(_,_,_) -> "not cached, has parse error",true
-					| ParseSuccess(data,is_display_file,pdi) ->
+					| ParseSuccess(data,pdi) ->
 						if is_display_file then begin
 							if pdi.pd_errors <> [] then
 								"not cached, is display file with parse errors",true
@@ -76,7 +75,7 @@ let parse_file cs com (rfile : ClassPaths.resolved_file) p =
 							(* We assume that when not in display mode it's okay to cache stuff that has #if display
 							checks. The reasoning is that non-display mode has more information than display mode. *)
 							if com.display.dms_full_typing then raise Not_found;
-							let ident = Hashtbl.find Parser.special_identifier_files fkey in
+							let ident = ThreadSafeHashtbl.find com.parser_state.special_identifier_files fkey in
 							Printf.sprintf "not cached, using \"%s\" define" ident,true
 						with Not_found ->
 							cc#cache_file fkey (ClassPaths.create_resolved_file ffile rfile.class_path) ftime data pdi;
@@ -113,10 +112,9 @@ module Communication = struct
 				end;
 				flush stdout;
 			);
-			exit = (fun code ->
+			exit = (fun timer_ctx code ->
 				if code = 0 then begin
-					Timer.close_times();
-					if !Timer.measure_times then Timer.report_times (fun s -> self.write_err (s ^ "\n"));
+					if timer_ctx.measure_times = Yes then Timer.report_times timer_ctx (fun s -> self.write_err (s ^ "\n"));
 				end;
 				exit code;
 			);
@@ -141,15 +139,13 @@ module Communication = struct
 
 					sctx.was_compilation <- ctx.com.display.dms_full_typing;
 					if has_error ctx then begin
-						measure_times := false;
+						ctx.timer_ctx.measure_times <- No;
 						write "\x02\n"
-					end else begin
-						Timer.close_times();
-						if !Timer.measure_times then Timer.report_times (fun s -> self.write_err (s ^ "\n"));
-					end
+					end else
+						if ctx.timer_ctx.measure_times = Yes then Timer.report_times ctx.timer_ctx (fun s -> self.write_err (s ^ "\n"));
 				)
 			);
-			exit = (fun i ->
+			exit = (fun timer_ctx i ->
 				()
 			);
 			is_server = true;
@@ -162,10 +158,8 @@ let stat dir =
 	(Unix.stat (Path.remove_trailing_slash dir)).Unix.st_mtime
 
 (* Gets a list of changed directories for the current compilation. *)
-let get_changed_directories sctx (ctx : Typecore.typer) =
-	let t = Timer.timer ["server";"module cache";"changed dirs"] in
+let get_changed_directories sctx com =
 	let cs = sctx.cs in
-	let com = ctx.Typecore.com in
 	let sign = Define.get_signature com.defines in
 	let dirs = try
 		(* First, check if we already have determined changed directories for current compilation. *)
@@ -224,21 +218,29 @@ let get_changed_directories sctx (ctx : Typecore.typer) =
 		Hashtbl.add sctx.changed_directories sign dirs;
 		dirs
 	in
-	t();
 	dirs
+
+let get_changed_directories sctx com =
+	Timer.time com.Common.timer_ctx ["server";"module cache";"changed dirs"] (get_changed_directories sctx) com
+
+let full_typing com m_extra =
+	com.is_macro_context
+	|| com.display.dms_full_typing
+	|| Define.defined com.defines Define.DisableHxbCache
+	|| Define.defined com.defines Define.DisableHxbOptimizations
+	|| DisplayPosition.display_position#is_in_file (Path.UniqueKey.lazy_key m_extra.m_file)
 
 (* Checks if module [m] can be reused from the cache and returns None in that case. Otherwise, returns
    [Some m'] where [m'] is the module responsible for [m] not being reusable. *)
-let check_module sctx ctx m_path m_extra p =
-	let com = ctx.Typecore.com in
+let check_module sctx com m_path m_extra p =
 	let cc = CommonCache.get_cache com in
 	let content_changed m_path file =
-		let fkey = ctx.com.file_keys#get file in
+		let fkey = com.file_keys#get file in
 		try
 			let cfile = cc#find_file fkey in
 			(* We must use the module path here because the file path is absolute and would cause
 				positions in the parsed declarations to differ. *)
-			let new_data = TypeloadParse.parse_module ctx m_path p in
+			let new_data = TypeloadParse.parse_module com m_path p in
 			cfile.c_decls <> snd new_data
 		with Not_found ->
 			true
@@ -259,7 +261,7 @@ let check_module sctx ctx m_path m_extra p =
 	let unknown_state_modules = ref [] in
 	let rec check m_path m_extra =
 		let check_module_path () =
-			let directories = get_changed_directories sctx ctx in
+			let directories = get_changed_directories sctx com in
 			match m_extra.m_kind with
 			| MFake | MImport -> () (* don't get classpath *)
 			| MExtern ->
@@ -285,21 +287,15 @@ let check_module sctx ctx m_path m_extra p =
 			| MMacro when com.is_macro_context ->
 				check_module_shadowing directories m_path m_extra
 			| MMacro ->
-				(*
-					Creating another context while the previous one is incomplete means we have an infinite loop in the compiler.
-					Most likely because of circular dependencies in base modules (e.g. `StdTypes` or `String`)
-					Prevents spending another 5 hours for debugging.
-					@see https://github.com/HaxeFoundation/haxe/issues/8174
-				*)
-				if not ctx.g.complete && ctx.com.is_macro_context then
-					raise (ServerError ("Infinite loop in Haxe server detected. "
-						^ "Probably caused by shadowing a module of the standard library. "
-						^ "Make sure shadowed module does not pull macro context."));
-				let mctx = MacroContext.get_macro_context ctx in
-				check_module_shadowing (get_changed_directories sctx mctx) m_path m_extra
+				begin match com.get_macros() with
+					| None ->
+						()
+					| Some mcom ->
+						check_module_shadowing (get_changed_directories sctx mcom) m_path m_extra
+				end
 		in
 		let has_policy policy = List.mem policy m_extra.m_check_policy || match policy with
-			| NoCheckShadowing | NoCheckFileTimeModification when !ServerConfig.do_not_check_modules && !Parser.display_mode <> DMNone -> true
+			| NoFileSystemCheck when !ServerConfig.do_not_check_modules && com.display.dms_kind <> DMNone -> true
 			| _ -> false
 		in
 		let check_file () =
@@ -309,7 +305,7 @@ let check_module sctx ctx m_path m_extra p =
 					ServerMessage.unchanged_content com "" file;
 				end else begin
 					ServerMessage.not_cached com "" m_path;
-					if m_extra.m_kind = MFake then Hashtbl.remove Typecore.fake_modules (Path.UniqueKey.lazy_key m_extra.m_file);
+					if m_extra.m_kind = MFake then Hashtbl.remove com.fake_modules (Path.UniqueKey.lazy_key m_extra.m_file);
 					raise (Dirty (FileChanged file))
 				end
 			end
@@ -329,13 +325,13 @@ let check_module sctx ctx m_path m_extra p =
 				match check mpath m2_extra with
 				| None -> ()
 				| Some reason -> raise (Dirty (DependencyDirty(mpath,reason)))
-			) m_extra.m_deps;
+			) m_extra.m_deps
 		in
 		let check () =
 			try
-				if not (has_policy NoCheckShadowing) then check_module_path();
-				if not (has_policy NoCheckFileTimeModification) || Path.file_extension (Path.UniqueKey.lazy_path m_extra.m_file) <> "hx" then check_file();
-				if not (has_policy NoCheckDependencies) then check_dependencies();
+				check_module_path();
+				if not (has_policy NoFileSystemCheck) || Path.file_extension (Path.UniqueKey.lazy_path m_extra.m_file) <> "hx" then check_file();
+				if full_typing com m_extra then check_dependencies();
 				None
 			with
 			| Dirty reason ->
@@ -394,9 +390,24 @@ let check_module sctx ctx m_path m_extra p =
 	end;
 	state
 
+let get_hxb_module com cc path =
+	try
+		let mc = cc#get_hxb_module path in
+		if not (full_typing com mc.mc_extra) then begin
+			mc.mc_extra.m_cache_state <- MSGood;
+			BinaryModule mc
+		end else
+			begin match mc.mc_extra.m_cache_state with
+				| MSBad reason -> BadModule reason
+				| _ -> BinaryModule mc
+			end
+	with Not_found ->
+		NoModule
+
 class hxb_reader_api_server
-	(ctx : Typecore.typer)
+	(com : Common.context)
 	(cc : context_cache)
+	(delay : TyperPass.typer_pass -> (unit -> unit) -> unit)
 = object(self)
 
 	method make_module (path : path) (file : string) =
@@ -406,11 +417,13 @@ class hxb_reader_api_server
 			m_path = path;
 			m_types = [];
 			m_statics = None;
-			m_extra = mc.mc_extra
+			(* Creating a new m_extra because if we keep the same reference, display requests *)
+			(* can alter it with bad data (for example adding dependencies that are not cached) *)
+			m_extra = { mc.mc_extra with m_deps = mc.mc_extra.m_deps; m_display_deps = None }
 		}
 
 	method add_module (m : module_def) =
-		ctx.com.module_lut#add m.m_path m
+		com.module_lut#add m.m_path m
 
 	method resolve_type (pack : string list) (mname : string) (tname : string) =
 		let path = (pack,mname) in
@@ -422,45 +435,44 @@ class hxb_reader_api_server
 		| GoodModule m ->
 			m
 		| BinaryModule mc ->
-			let reader = new HxbReader.hxb_reader path ctx.com.hxb_reader_stats in
+			let reader = new HxbReader.hxb_reader path com.hxb_reader_stats (if Common.defined com Define.HxbTimes then Some com.timer_ctx else None) in
+			let full_restore = full_typing com mc.mc_extra in
 			let f_next chunks until =
-				let t_hxb = Timer.timer ["server";"module cache";"hxb read"] in
-				let r = reader#read_chunks_until (self :> HxbReaderApi.hxb_reader_api) chunks until in
-				t_hxb();
-				r
+				let macro = if com.is_macro_context then " (macro)" else "" in
+				let f  = reader#read_chunks_until (self :> HxbReaderApi.hxb_reader_api) chunks until in
+				Timer.time com.timer_ctx ["server";"module cache";"hxb read" ^ macro;"until " ^ (string_of_chunk_kind until)] f full_restore
 			in
-			let m,chunks = f_next mc.mc_chunks EOF in
+
+			let m,chunks = f_next mc.mc_chunks EOT in
 
 			(* We try to avoid reading expressions as much as possible, so we only do this for
 				 our current display file if we're in display mode. *)
-			let is_display_file = DisplayPosition.display_position#is_in_file (Path.UniqueKey.lazy_key m.m_extra.m_file) in
-			if is_display_file || ctx.com.display.dms_full_typing then ignore(f_next chunks EOM);
+			if full_restore then ignore(f_next chunks EOM)
+			else delay PConnectField (fun () -> ignore(f_next chunks EOF));
 			m
 		| BadModule reason ->
-			die (Printf.sprintf "Unexpected BadModule %s" (s_type_path path)) __LOC__
+			die (Printf.sprintf "Unexpected BadModule %s (%s)" (s_type_path path) (Printer.s_module_skip_reason reason)) __LOC__
 		| NoModule ->
 			die (Printf.sprintf "Unexpected NoModule %s" (s_type_path path)) __LOC__
 
 	method find_module (m_path : path) =
 		try
-			GoodModule (ctx.com.module_lut#find m_path)
-		with Not_found -> try
-			let mc = cc#get_hxb_module m_path in
-			begin match mc.mc_extra.m_cache_state with
-				| MSBad reason -> BadModule reason
-				| _ -> BinaryModule mc
-			end
-		with Not_found ->
-			NoModule
+			GoodModule (com.module_lut#find m_path)
+		with Not_found -> get_hxb_module com cc m_path
 
 	method basic_types =
-		ctx.com.basic
+		com.basic
 
 	method get_var_id (i : int) =
 		i
 
 	method read_expression_eagerly (cf : tclass_field) =
-		ctx.com.display.dms_full_typing
+		com.is_macro_context || com.display.dms_full_typing || Define.defined com.defines Define.DisableHxbOptimizations
+
+	method make_lazy_type t f =
+		let r = make_unforced_lazy t f "server-api" in
+		delay PForce (fun () -> ignore(lazy_type r));
+		TLazy r
 end
 
 let handle_cache_bound_objects com cbol =
@@ -475,12 +487,11 @@ let handle_cache_bound_objects com cbol =
 
 (* Adds module [m] and all its dependencies (recursively) from the cache to the current compilation
    context. *)
-let rec add_modules sctx ctx (m : module_def) (from_binary : bool) (p : pos) =
-	let com = ctx.Typecore.com in
+let rec add_modules sctx com delay (m : module_def) (from_binary : bool) (p : pos) =
 	let own_sign = CommonCache.get_cache_sign com in
 	let rec add_modules tabs m0 m =
-		if m.m_extra.m_added < ctx.com.compilation_step then begin
-			m.m_extra.m_added <- ctx.com.compilation_step;
+		if m.m_extra.m_added < com.compilation_step then begin
+			m.m_extra.m_added <- com.compilation_step;
 			(match m0.m_extra.m_kind, m.m_extra.m_kind with
 			| MCode, MMacro | MMacro, MCode ->
 				(* this was just a dependency to check : do not add to the context *)
@@ -495,13 +506,14 @@ let rec add_modules sctx ctx (m : module_def) (from_binary : bool) (p : pos) =
 				if not from_binary || m != m then
 					com.module_lut#add m.m_path m;
 				handle_cache_bound_objects com m.m_extra.m_cache_bound_objects;
+				let full_restore = full_typing com m.m_extra in
 				PMap.iter (fun _ mdep ->
 					let mpath = mdep.md_path in
 					if mdep.md_sign = own_sign then begin
 						let m2 = try
 							com.module_lut#find mpath
 						with Not_found ->
-							match type_module sctx ctx mpath p with
+							match type_module sctx com delay mpath p with
 							| GoodModule m ->
 								m
 							| BinaryModule mc ->
@@ -513,7 +525,7 @@ let rec add_modules sctx ctx (m : module_def) (from_binary : bool) (p : pos) =
 						in
 						add_modules (tabs ^ "  ") m0 m2
 					end
-				) m.m_extra.m_deps
+				) (if full_restore then m.m_extra.m_deps else Option.default m.m_extra.m_deps m.m_extra.m_display_deps)
 			)
 		end
 	in
@@ -521,48 +533,35 @@ let rec add_modules sctx ctx (m : module_def) (from_binary : bool) (p : pos) =
 
 (* Looks up the module referred to by [mpath] in the cache. If it exists, a check is made to
    determine if it's still valid. If this function returns None, the module is re-typed. *)
-and type_module sctx (ctx:Typecore.typer) mpath p =
-	let t = Timer.timer ["server";"module cache"] in
-	let com = ctx.Typecore.com in
+and type_module sctx com delay mpath p =
+	let t = Timer.start_timer com.timer_ctx ["server";"module cache"] in
 	let cc = CommonCache.get_cache com in
 	let skip m_path reason =
 		ServerMessage.skipping_dep com "" (m_path,(Printer.s_module_skip_reason reason));
 		BadModule reason
 	in
 	let add_modules from_binary m =
-		let tadd = Timer.timer ["server";"module cache";"add modules"] in
-		add_modules sctx ctx m from_binary p;
-		tadd();
+		Timer.time com.timer_ctx ["server";"module cache";"add modules"] (add_modules sctx com delay m from_binary) p;
 		GoodModule m
 	in
-	let check_module sctx ctx m_path m_extra p =
-		let tcheck = Timer.timer ["server";"module cache";"check"] in
-		let r = check_module sctx ctx mpath m_extra p in
-		tcheck();
-		r
+	let check_module sctx m_path m_extra p =
+		Timer.time com.timer_ctx ["server";"module cache";"check"] (check_module sctx com mpath m_extra) p
 	in
-	let find_module_in_cache ctx cc m_path p =
+	let find_module_in_cache cc m_path p =
 		try
 			let m = cc#find_module m_path in
 			begin match m.m_extra.m_cache_state with
 				| MSBad reason -> BadModule reason
 				| _ -> GoodModule m
 			end;
-		with Not_found -> try
-			let mc = cc#get_hxb_module m_path in
-			begin match mc.mc_extra.m_cache_state with
-				| MSBad reason -> BadModule reason
-				| _ -> BinaryModule mc
-			end
-		with Not_found ->
-			NoModule
+		with Not_found -> get_hxb_module com cc m_path
 	in
 	(* Should not raise anything! *)
-	let m = match find_module_in_cache ctx cc mpath p with
+	let m = match find_module_in_cache cc mpath p with
 		| GoodModule m ->
 			(* "Good" here is an assumption, it only means that the module wasn't explicitly invalidated
 			   in the cache. The true cache state will be known after check_module. *)
-			begin match check_module sctx ctx mpath m.m_extra p with
+			begin match check_module sctx mpath m.m_extra p with
 				| None ->
 					add_modules false m;
 				| Some reason ->
@@ -571,21 +570,29 @@ and type_module sctx (ctx:Typecore.typer) mpath p =
 		| BinaryModule mc ->
 			(* Similarly, we only know that a binary module wasn't explicitly tainted. Decode it only after
 			   checking dependencies. This means that the actual decoding never has any reason to fail. *)
-			begin match check_module sctx ctx mpath mc.mc_extra p with
+			begin match check_module sctx mpath mc.mc_extra p with
 				| None ->
-					let reader = new HxbReader.hxb_reader mpath com.hxb_reader_stats in
-					let api = (new hxb_reader_api_server ctx cc :> HxbReaderApi.hxb_reader_api) in
-					let f_next chunks until =
-						let t_hxb = Timer.timer ["server";"module cache";"hxb read"] in
-						let r = reader#read_chunks_until api chunks until in
-						t_hxb();
-						r
+					let reader = new HxbReader.hxb_reader mpath com.hxb_reader_stats (if Common.defined com Define.HxbTimes then Some com.timer_ctx else None) in
+					let full_restore = full_typing com mc.mc_extra in
+					let api = match com.hxb_reader_api with
+						| Some api ->
+							api
+						| None ->
+							let api = (new hxb_reader_api_server com cc delay :> HxbReaderApi.hxb_reader_api) in
+							com.hxb_reader_api <- Some api;
+							api
 					in
-					let m,chunks = f_next mc.mc_chunks EOF in
+					let f_next chunks until =
+						let macro = if com.is_macro_context then " (macro)" else "" in
+						Timer.time com.timer_ctx ["server";"module cache";"hxb read" ^ macro;"until " ^ (string_of_chunk_kind until)] (reader#read_chunks_until api chunks until) full_restore
+					in
+
+					let m,chunks = f_next mc.mc_chunks EOT in
+
 					(* We try to avoid reading expressions as much as possible, so we only do this for
 					   our current display file if we're in display mode. *)
-					let is_display_file = DisplayPosition.display_position#is_in_file (Path.UniqueKey.lazy_key m.m_extra.m_file) in
-					if is_display_file || ctx.com.display.dms_full_typing then ignore(f_next chunks EOM);
+					if full_restore then ignore(f_next chunks EOM)
+					else delay PConnectField (fun () -> ignore(f_next chunks EOF));
 					add_modules true m;
 				| Some reason ->
 					skip mpath reason
@@ -626,6 +633,7 @@ let after_save sctx ctx =
 		maybe_cache_context sctx ctx.com
 
 let after_compilation sctx ctx =
+	sctx.cs#clear_temp_cache;
 	()
 
 let mk_length_prefixed_communication allow_nonblock chin chout =
@@ -759,12 +767,12 @@ let do_connect ip port args =
 	if !has_error then exit 1
 
 let enable_cache_mode sctx =
-	TypeloadModule.type_module_hook := type_module sctx;
+	type_module_hook := type_module sctx;
 	ServerCompilationContext.ensure_macro_setup sctx;
 	TypeloadParse.parse_hook := parse_file sctx.cs
 
 let rec process sctx comm args =
-	let t0 = get_time() in
+	let t0 = Extc.time() in
 	ServerMessage.arguments args;
 	reset sctx;
 	let api = {
@@ -787,7 +795,7 @@ let rec process sctx comm args =
 	} in
 	Compiler.HighLevel.entry api comm args;
 	run_delays sctx;
-	ServerMessage.stats stats (get_time() -. t0)
+	ServerMessage.stats stats (Extc.time() -. t0)
 
 (* The server main loop. Waits for the [accept] call to then process the sent compilation
    parameters through [process_params]. *)

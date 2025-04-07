@@ -121,11 +121,17 @@ class Js {
 		changeDirectory(optDir);
 		runCommand("haxe", ["run.hxml"]);
 
-		runci.targets.Java.getJavaDependencies(); // this is awkward
+		runci.targets.Jvm.getJavaDependencies(); // this is awkward
 		haxelibInstallGit("Simn", "haxeserver");
 		changeDirectory(serverDir);
 		runCommand("haxe", ["build.hxml"]);
 		runCommand("node", ["test.js"]);
+		runCommand("haxe", ["build.hxml", "-D", "disable-hxb-optimizations"]);
+		runCommand("node", ["test.js"]);
+		runCommand("haxe", ["build.hxml", "-D", "disable-hxb-cache"]);
+		runCommand("node", ["test.js"]);
+
+		Display.maybeRunDisplayTests(Js);
 
 		changeDirectory(sysDir);
 		installNpmPackages(["deasync"]);
