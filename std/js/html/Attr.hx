@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,33 +20,63 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\Attr.webidl. Do not edit!
+
 package js.html;
 
-/** <p>This type represents a DOM&nbsp;element's attribute as an object. In most DOM methods, you will probably directly retrieve the attribute as a string (e.g., <code><a rel="custom" href="https://developer.mozilla.org/en/DOM/Element.getAttribute">Element.getAttribute()</a></code>
-, but certain functions (e.g., <code><a rel="custom" href="https://developer.mozilla.org/en/DOM/Element.getAttributeNode">Element.getAttributeNode()</a></code>
-)&nbsp;or means of iterating give <code>Attr</code> types.</p>
-<div class="warning"><strong>Warning:</strong> In DOM Core 1, 2 and 3, Attr inherited from Node. This is no longer the case in <a class="external" rel="external" href="http://www.w3.org/TR/dom/" title="http://www.w3.org/TR/dom/" target="_blank">DOM4</a>. In order to bring the implementation of <code>Attr</code> up to specification, work is underway to change it to no longer inherit from <code><a rel="custom" href="/api/js/html/Node">Node</a></code>
-. You should not be using any <code><a rel="custom" href="/api/js/html/Node">Node</a></code>
- properties or methods on <code>Attr</code> objects. Starting in Gecko 7.0 (Firefox 7.0 / Thunderbird 7.0 / SeaMonkey 2.4)
-, the ones that are going to be removed output warning messages to the console. You should revise your code accordingly. See <a rel="custom" href="https://developer.mozilla.org/en/DOM/Attr#Deprecated_properties_and_methods">Deprecated properties and methods</a> for a complete list.</div><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/Attr">MDN</a>. */
+/**
+	This type represents a DOM element's attribute as an object. In most DOM methods, you will probably directly retrieve the attribute as a string (e.g., `Element.getAttribute()`, but certain functions (e.g., `Element.getAttributeNode()`) or means of iterating give `Attr` types.
+
+	Documentation [Attr](https://developer.mozilla.org/en-US/docs/Web/API/Attr) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/Attr$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/Attr>
+**/
 @:native("Attr")
-extern class Attr extends Node
-{
-	/** Indicates whether the attribute is an "ID attribute". An "ID attribute" being an attribute which value is expected to be unique across a DOM Document. In HTML DOM, "id" is the only ID attribute, but XML documents could define others. Whether or not an attribute is unique is often determined by a DTD or other schema description. */
-	var isId(default,null) : Bool;
-
-	/** The attribute's name. */
-	var name(default,null) : String;
-
-	/** This property has been deprecated and will be removed in the future. Since you can only get Attr objects from elements, you should already know th */
-	var ownerElement(default,null) : Element;
-
-	/** This property has been deprecated and will be removed in the future; it now always returns <code>true</code>. */
-	var specified(default,null) : Bool;
-
-	/** The attribute's value. Setter throws DOMException. */
+extern class Attr extends Node {
+	
+	/**
+		A `DOMString` representing the local part of the qualified name of the attribute.
+	**/
+	var localName(default,null) : String;
+	
+	/**
+		The attribute's value.
+	**/
 	var value : String;
-
+	
+	/**
+		The attribute's name.
+	**/
+	var name(default,null) : String;
+	
+	/**
+		A `DOMString` representing the namespace URI of the attribute, or `null` if there is no namespace.
+	**/
+	var namespaceURI(default,null) : String;
+	
+	/**
+		A `DOMString` representing the namespace prefix of the attribute, or `null` if no prefix is specified.
+	**/
+	var prefix(default,null) : String;
+	
+	/**
+		This property always returns `true`. Originally, it returned `true `if the attribute was explicitly specified in the source code or by a script, and `false` if its value came from the default one defined in the document's DTD.
+	**/
+	var specified(default,null) : Bool;
+	
+	/**
+		
+			The element holding the attribute.
+		
+			
+			Note: DOM Level 4 removed this property. The assumption was that since you get an `Attr` object from an `Element`, you should already know the associated element.
+		
+			As that doesn't hold true in cases like `Attr` objects being returned by `Document.evaluate`, the DOM Living Standard reintroduced the property.
+		
+			Gecko outputs a deprecation note starting from Gecko 7.0 `7.0`. This note was removed again in Gecko 49.0 `49.0`.
+			
+			
+	**/
+	var ownerElement(default,null) : Element;
+	
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,33 +20,38 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGEllipseElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGEllipseElement</code> interface provides access to the properties of <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/ellipse">&lt;ellipse&gt;</a></code>
- elements, as well as methods to manipulate them.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGEllipseElement">MDN</a>. */
+/**
+	The `SVGEllipseElement` interface provides access to the properties of `ellipse` elements.
+
+	Documentation [SVGEllipseElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGEllipseElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGEllipseElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGEllipseElement>
+**/
 @:native("SVGEllipseElement")
-extern class EllipseElement extends Element
-{
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/cx">cx</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/ellipse">&lt;ellipse&gt;</a></code>
- element. */
+extern class EllipseElement extends GeometryElement {
+	
+	/**
+		This property returns a `SVGAnimatedLength` reflecting the `cx` attribute of the given `ellipse` element.
+	**/
 	var cx(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/cy">cy</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/ellipse">&lt;ellipse&gt;</a></code>
- element. */
+	
+	/**
+		This property returns a `SVGAnimatedLength` reflecting the `cy` attribute of the given `ellipse` element.
+	**/
 	var cy(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/rx">rx</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/ellipse">&lt;ellipse&gt;</a></code>
- element. */
+	
+	/**
+		This property returns a `SVGAnimatedLength` reflecting the `rx` attribute of the given `ellipse` element.
+	**/
 	var rx(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/ry">ry</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/ellipse">&lt;ellipse&gt;</a></code>
- element. */
+	
+	/**
+		This property returns a `SVGAnimatedLength` reflecting the `ry` attribute of the given `ellipse` element.
+	**/
 	var ry(default,null) : AnimatedLength;
-
+	
 }

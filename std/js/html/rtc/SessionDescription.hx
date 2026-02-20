@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,18 +20,35 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\RTCSessionDescription.webidl. Do not edit!
+
 package js.html.rtc;
 
+/**
+	The `RTCSessionDescription` interface describes one end of a connection—or potential connection—and how it's configured. Each `RTCSessionDescription` consists of a description `type` indicating which part of the offer/answer negotiation process it describes and of the SDP descriptor of the session.
+
+	Documentation [RTCSessionDescription](https://developer.mozilla.org/en-US/docs/Web/API/RTCSessionDescription) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/RTCSessionDescription$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/RTCSessionDescription>
+**/
 @:native("RTCSessionDescription")
-extern class SessionDescription
-{
-	/** Setter throws DOMException. */
+extern class SessionDescription {
+	
+	/**
+		An enum of type ``RTCSdpType`` describing the session description's type.
+	**/
+	var type : SdpType;
+	
+	/**
+		A `DOMString` containing the `SDP` describing the session.
+	**/
 	var sdp : String;
-
-	/** Setter throws DOMException. */
-	var type : String;
-
-	function new( dictionary : Dynamic ) : Void;
-
+	
+	/** @throws DOMError */
+	function new( ?descriptionInitDict : SessionDescriptionInit ) : Void;
+	
+	/**
+		Returns a `JSON` description of the object. The values of both properties, `RTCSessionDescription.type` and `RTCSessionDescription.sdp`, are contained in the generated JSON.
+	**/
+	function toJSON() : Dynamic;
 }

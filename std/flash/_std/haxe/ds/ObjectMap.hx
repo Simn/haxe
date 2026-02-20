@@ -1,63 +1,90 @@
+/*
+ * Copyright (C)2005-2019 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+
 package haxe.ds;
 
 @:coreApi
-class ObjectMap<K:{},V> extends flash.utils.Dictionary implements haxe.Constraints.IMap<K,V> {
-
+class ObjectMap<K:{}, V> extends flash.utils.Dictionary implements haxe.Constraints.IMap<K, V> {
 	public function new() {
 		super(false);
 	}
 
-	public inline function get( key : K ) : Null<V> {
+	public inline function get(key:K):Null<V> {
 		return untyped this[key];
 	}
 
-	public inline function set( key : K, value : V ):Void {
+	public inline function set(key:K, value:V):Void {
 		untyped this[key] = value;
 	}
 
-	public inline function exists( key : K ) : Bool {
+	public inline function exists(key:K):Bool {
 		return untyped this[key] != null;
 	}
 
-	public function remove( key : K ):Bool {
+	public function remove(key:K):Bool {
 		var has = exists(key);
 		untyped __delete__(this, key);
 		return has;
 	}
 
-	#if as3
-
- 	public function keys() : Iterator<K> {
-		return untyped __keys__(this).iterator();
- 	}
-
- 	public function iterator() : Iterator<V> {
-		var ret = [];
-		for (i in keys())
-			ret.push(get(i));
-		return ret.iterator();
- 	}
-	#else
-
-	public function keys() : Iterator<K> {
+	public function keys():Iterator<K> {
 		return NativePropertyIterator.iterator(this);
 	}
 
-	public function iterator() : Iterator<V> {
+	public function iterator():Iterator<V> {
 		return NativeValueIterator.iterator(this);
 	}
 
-	#end
+	@:runtime public inline function keyValueIterator():KeyValueIterator<K, V> {
+		return new haxe.iterators.MapKeyValueIterator(this);
+	}
 
-	public function toString() : String {
-		var s = "";
+	public function copy():ObjectMap<K, V> {
+		var copied = new ObjectMap();
+		for (key in keys())
+			copied.set(key, get(key));
+		return copied;
+	}
+
+	public function toString():String {
+		var s = "[";
 		var it = keys();
-		for( i in it ) {
+		for (i in it) {
 			s += (s == "" ? "" : ",") + Std.string(i);
 			s += " => ";
 			s += Std.string(get(i));
 		}
-		return s + "}";
+		return s + "]";
+	}
+
+	public function clear():Void {
+		for (i in keys())
+			untyped __delete__(this, i);
+	}
+	
+	public function size():Int {
+		var s = 0;
+		for(_ in keys()) s++;
+		return s;
 	}
 }
 

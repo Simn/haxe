@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,55 +20,83 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLOutputElement.webidl. Do not edit!
+
 package js.html;
 
+/**
+	The `HTMLOutputElement` interface provides properties and methods (beyond those inherited from `HTMLElement`) for manipulating the layout and presentation of `output` elements.
+
+	Documentation [HTMLOutputElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLOutputElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLOutputElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLOutputElement>
+**/
 @:native("HTMLOutputElement")
-extern class OutputElement extends Element
-{
-	/** The default value of the element, initially the empty string. */
-	var defaultValue : String;
-
-	/** Indicates the control's form owner, reflecting the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/output#attr-form">form</a></code>
-&nbsp;HTML&nbsp;attribute if it is defined. */
+extern class OutputElement extends Element {
+	
+	/**
+		A `DOMTokenList` reflecting the `for` HTML attribute, containing a list of IDs of other elements in the same document that contribute to (or otherwise affect) the calculated `value`.
+	**/
+	var htmlFor(default,null) : DOMTokenList;
+	
+	/**
+		An `HTMLFormElement` indicating the form associated with the control, reflecting the `form` HTML attribute if it is defined.
+	**/
 	var form(default,null) : FormElement;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/output#attr-for">for</a></code>
- HTML attribute, containing a list of IDs of other elements in the same document that contribute to (or otherwise affect) the calculated <strong>value</strong>. */
-	var htmlFor : DOMSettableTokenList;
-
-	/** A list of label elements associated with this output element. */
-	var labels(default,null) : NodeList;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/output#attr-name">name</a></code>
- HTML attribute, containing the name for the control that is submitted with form data. */
+	
+	/**
+		A `DOMString` reflecting the `name` HTML attribute, containing the name for the control that is submitted with form data.
+	**/
 	var name : String;
-
-	/** Must be the string <code>output</code>. */
+	
+	/**
+		The `DOMString` `"output"`.
+	**/
 	var type(default,null) : String;
-
-	/** A localized message that describes the validation constraints that the control does not satisfy (if any). This is the empty string if the control is not a candidate for constraint validation (<strong>willValidate</strong> is false), or it satisfies its constraints. */
-	var validationMessage(default,null) : String;
-
-	/** The validity states that this element is in. */
-	var validity(default,null) : ValidityState;
-
-	/** The value of the contents of the elements. Behaves like the <strong><a title="En/DOM/Node.textContent" rel="internal" href="https://developer.mozilla.org/En/DOM/Node.textContent">textContent</a></strong> property. */
+	
+	/**
+		A `DOMString` representing the default value of the element, initially the empty string.
+	**/
+	var defaultValue : String;
+	
+	/**
+		A `DOMString` representing the value of the contents of the elements. Behaves like the `Node.textContent` property.
+	**/
 	var value : String;
-
-	/** <p>      in Gecko 2.0. Indicates whether the element is a candidate for constraint validation. It is false if any conditions bar it from constraint validation. (See <a rel="external" href="https://bugzilla.mozilla.org/show_bug.cgi?id=604673" class="external" title="">
-bug 604673</a>
-.)</p> <p>The standard behavior is to always return false because <code>output</code> objects are never candidates for constraint validation.</p> */
+	
+	/**
+		A `Boolean` indicating whether the element is a candidate for constraint validation.
+	**/
 	var willValidate(default,null) : Bool;
-
+	
+	/**
+		A `ValidityState` representing the validity states that this element is in.
+	**/
+	var validity(default,null) : ValidityState;
+	
+	/**
+		A `DOMString` representing a localized message that describes the validation constraints that the control does not satisfy (if any). This is the empty string if the control is not a candidate for constraint validation (`willValidate` is `false`), or it satisfies its constraints.
+	**/
+	var validationMessage(default,null) : String;
+	
+	/**
+		A `NodeList` of `label` elements associated with the element.
+	**/
+	var labels(default,null) : NodeList;
+	
+	
+	/**
+		Checks the validity of the element and returns a `Boolean` holding the check result.
+	**/
 	function checkValidity() : Bool;
-
+	
+	/**
+		Triggers an `invalid` event and evaluates its result. if the result is `true`, then the problems with the constraints of this element are reported to the user. When the problem is reported, the user agent may focus the element and change the scrolling position of the document or perform some other action that brings the element to the user's attention. User agents may report more than one constraint violation if this element suffers from multiple problems at once. If the element is not rendered, then the user agent may report the error for the running script instead of notifying the user.
+	**/
+	function reportValidity() : Bool;
+	
+	/**
+		Sets a custom validity message for the element. If this message is not the empty string, then the element is suffering from a custom validity error, and does not validate.
+	**/
 	function setCustomValidity( error : String ) : Void;
-
 }

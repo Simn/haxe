@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,28 +20,44 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGFEColorMatrixElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** This filter changes colors based on a transformation matrix. Every pixel's color value (represented by an [R,G,B,A] vector) is <a title="http://en.wikipedia.org/wiki/Matrix_multiplication" class=" external" rel="external" href="http://en.wikipedia.org/wiki/Matrix_multiplication" target="_blank">matrix multiplated</a> to create a new color.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/SVG/Element/feColorMatrix">MDN</a>. */
+/**
+	The `SVGFEColorMatrixElement` interface corresponds to the `feColorMatrix` element.
+
+	Documentation [SVGFEColorMatrixElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGFEColorMatrixElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGFEColorMatrixElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGFEColorMatrixElement>
+**/
 @:native("SVGFEColorMatrixElement")
-extern class FEColorMatrixElement extends Element
-{
-	static inline var SVG_FECOLORMATRIX_TYPE_HUEROTATE : Int = 3;
-
-	static inline var SVG_FECOLORMATRIX_TYPE_LUMINANCETOALPHA : Int = 4;
-
-	static inline var SVG_FECOLORMATRIX_TYPE_MATRIX : Int = 1;
-
-	static inline var SVG_FECOLORMATRIX_TYPE_SATURATE : Int = 2;
-
+extern class FEColorMatrixElement extends Element {
 	static inline var SVG_FECOLORMATRIX_TYPE_UNKNOWN : Int = 0;
-
+	static inline var SVG_FECOLORMATRIX_TYPE_MATRIX : Int = 1;
+	static inline var SVG_FECOLORMATRIX_TYPE_SATURATE : Int = 2;
+	static inline var SVG_FECOLORMATRIX_TYPE_HUEROTATE : Int = 3;
+	static inline var SVG_FECOLORMATRIX_TYPE_LUMINANCETOALPHA : Int = 4;
+	
+	
+	/**
+		An `SVGAnimatedString` corresponding to the `in` attribute of the given element.
+	**/
 	var in1(default,null) : AnimatedString;
-
+	
+	/**
+		An `SVGAnimatedEnumeration` corresponding to the `type` attribute of the given element. It takes one of the `SVG_FECOLORMATRIX_TYPE_*` constants defined on this interface.
+	**/
 	var type(default,null) : AnimatedEnumeration;
-
+	
+	/**
+		An `SVGAnimatedNumberList` corresponding to the `values` attribute of the given element.
+	**/
 	var values(default,null) : AnimatedNumberList;
-
+	var x(default,null) : AnimatedLength;
+	var y(default,null) : AnimatedLength;
+	var width(default,null) : AnimatedLength;
+	var height(default,null) : AnimatedLength;
+	var result(default,null) : AnimatedString;
+	
 }

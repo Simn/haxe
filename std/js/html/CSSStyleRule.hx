@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,19 +20,28 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\CSSStyleRule.webidl. Do not edit!
+
 package js.html;
 
-/** An object representing a single CSS style rule. <code>CSSStyleRule</code> implements the <code><a rel="custom" href="https://developer.mozilla.org/en/DOM/CSSRule">CSSRule</a></code>
- interface.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/CSSStyleRule">MDN</a>. */
+/**
+	`CSSStyleRule` represents a single CSS style rule. It implements the `CSSRule` interface with a type value of `1` (`CSSRule.STYLE_RULE`).
+
+	Documentation [CSSStyleRule](https://developer.mozilla.org/en-US/docs/Web/API/CSSStyleRule) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/CSSStyleRule$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/CSSStyleRule>
+**/
 @:native("CSSStyleRule")
-extern class CSSStyleRule extends CSSRule
-{
-	/** Gets/sets the textual representation of the selector for this rule, e.g. <code>"h1,h2"</code>. */
+extern class CSSStyleRule extends CSSRule {
+	
+	/**
+		Gets the textual representation of the selector for this rule, e.g. `"h1,h2"`.
+	**/
 	var selectorText : String;
-
-	/** Returns the <code><a title="en/DOM/CSSStyleDeclaration" rel="internal" href="https://developer.mozilla.org/en/DOM/CSSStyleDeclaration">CSSStyleDeclaration</a></code> object for the rule. <strong>Read only.</strong> */
+	
+	/**
+		Returns the `CSSStyleDeclaration` object for the rule.
+	**/
 	var style(default,null) : CSSStyleDeclaration;
-
+	
 }

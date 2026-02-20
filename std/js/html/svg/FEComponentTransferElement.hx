@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,18 +20,28 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGFEComponentTransferElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The color of each pixel is modified by changing each channel (R, G, B, and A) to the result of what the children <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/feFuncR">&lt;feFuncR&gt;</a></code>
-, <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/feFuncB">&lt;feFuncB&gt;</a></code>
-, <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/feFuncG">&lt;feFuncG&gt;</a></code>
-, and <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/feFuncA">&lt;feFuncA&gt;</a></code>
- return.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/SVG/Element/feComponentTransfer">MDN</a>. */
-@:native("SVGFEComponentTransferElement")
-extern class FEComponentTransferElement extends Element
-{
-	var in1(default,null) : AnimatedString;
+/**
+	The `SVGFEComponentTransferElement` interface corresponds to the `feComponentTransfer` element.
 
+	Documentation [SVGFEComponentTransferElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGFEComponentTransferElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGFEComponentTransferElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGFEComponentTransferElement>
+**/
+@:native("SVGFEComponentTransferElement")
+extern class FEComponentTransferElement extends Element {
+	
+	/**
+		An `SVGAnimatedString` corresponding to the `in` attribute of the given element.
+	**/
+	var in1(default,null) : AnimatedString;
+	var x(default,null) : AnimatedLength;
+	var y(default,null) : AnimatedLength;
+	var width(default,null) : AnimatedLength;
+	var height(default,null) : AnimatedLength;
+	var result(default,null) : AnimatedString;
+	
 }

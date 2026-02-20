@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,80 +19,141 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
+import php.*;
+import haxe.iterators.StringIterator;
+import haxe.iterators.StringKeyValueIterator;
+
 @:coreApi class StringTools {
-
-	public inline static function urlEncode( s : String ) : String untyped {
-		return __call__("rawurlencode", s);
+	public inline static function urlEncode(s:String):String {
+		return Global.rawurlencode(s);
 	}
 
-	public inline static function urlDecode( s : String ) : String untyped {
-		return __call__("urldecode", s);
+	public inline static function urlDecode(s:String):String {
+		return Global.urldecode(s);
 	}
 
-	public static function htmlEscape( s : String, ?quotes : Bool ) : String {
-		s = s.split("&").join("&amp;").split("<").join("&lt;").split(">").join("&gt;");
-		return quotes ? s.split('"').join("&quot;").split("'").join("&#039;") : s;
+	public inline static function htmlEscape(s:String, quotes:Bool = false):String {
+		return Global.htmlspecialchars(s, (quotes ? Const.ENT_QUOTES | Const.ENT_HTML401 : Const.ENT_NOQUOTES));
 	}
 
-	public inline static function htmlUnescape( s : String ) : String {
-		return untyped __call__("htmlspecialchars_decode", s ,__php__("ENT_QUOTES"));
+	public inline static function htmlUnescape(s:String):String {
+		return Global.htmlspecialchars_decode(s, Const.ENT_QUOTES);
 	}
 
-	public static function startsWith( s : String, start : String ) : Bool {
-		return( s.length >= start.length && s.substr(0,start.length) == start );
+	public inline static function contains(s:String, value:String):Bool {
+		return s.indexOf(value) != -1;
 	}
 
-	public static function endsWith( s : String, end : String ) : Bool {
-		var elen = end.length;
-		var slen = s.length;
-		return( slen >= elen && s.substr(slen-elen,elen) == end );
+	public static function startsWith(s:String, start:String):Bool {
+		return start == '' || Global.substr(s, 0, Global.strlen(start)) == start;
 	}
 
-	public static function isSpace( s : String, pos : Int ) : Bool {
-		var c = s.charCodeAt( pos );
+	public static function endsWith(s:String, end:String):Bool {
+		return end == '' || Global.substr(s, -Global.strlen(end)) == end;
+	}
+
+	public static function isSpace(s:String, pos:Int):Bool {
+		var c = s.charCodeAt(pos);
 		return (c >= 9 && c <= 13) || c == 32;
 	}
 
-	public inline static function ltrim( s : String ) : String {
-		return untyped __call__("ltrim", s);
+	public inline static function ltrim(s:String):String {
+		return Global.ltrim(s);
 	}
 
-	public inline static function rtrim( s : String ) : String {
-		return untyped __call__("rtrim", s);
+	public inline static function rtrim(s:String):String {
+		return Global.rtrim(s);
 	}
 
-	public inline static function trim( s : String ) : String {
-		return untyped __call__("trim", s);
+	public inline static function trim(s:String):String {
+		return Global.trim(s);
 	}
 
-	public inline static function rpad( s : String, c : String, l : Int ) : String {
-		return c.length == 0 || s.length >= l ? s : untyped __call__("str_pad", s, Math.ceil((l-s.length) / c.length) * c.length + s.length , c, __php__("STR_PAD_RIGHT"));
+	public static function rpad(s:String, c:String, l:Int):String {
+		var cLength = c.length;
+		var sLength = s.length;
+		if (cLength == 0 || sLength >= l)
+			return s;
+		var padLength = l - sLength;
+		var padCount = Syntax.int(padLength / cLength);
+		if (padCount > 0) {
+			var result = Global.str_pad(s, Global.strlen(s) + padCount * Global.strlen(c), c, Const.STR_PAD_RIGHT);
+			return (padCount * cLength >= padLength) ? result : Syntax.concat(result, c);
+		} else {
+			return Syntax.concat(s, c);
+		}
 	}
 
-	public inline static function lpad( s : String, c : String, l : Int ) : String {
-		return c.length == 0 || s.length >= l ? s : untyped __call__("str_pad", s, Math.ceil((l-s.length) / c.length) * c.length + s.length , c, __php__("STR_PAD_LEFT"));
+	public static function lpad(s:String, c:String, l:Int):String {
+		var cLength = c.length;
+		var sLength = s.length;
+		if (cLength == 0 || sLength >= l)
+			return s;
+		var padLength = l - sLength;
+		var padCount = Syntax.int(padLength / cLength);
+		if (padCount > 0) {
+			var result = Global.str_pad(s, Global.strlen(s) + padCount * Global.strlen(c), c, Const.STR_PAD_LEFT);
+			return (padCount * cLength >= padLength) ? result : Syntax.concat(c, result);
+		} else {
+			return Syntax.concat(c, s);
+		}
 	}
 
-	public inline static function replace( s : String, sub : String, by : String ) : String {
-		return untyped sub=="" ? __call__("implode", __call__("str_split ", s) , by) : __call__("str_replace", sub, by, s);
+	public static function replace(s:String, sub:String, by:String):String {
+		if (sub == '') {
+			return Global.implode(by, Global.preg_split('//u', s, -1, Const.PREG_SPLIT_NO_EMPTY));
+		}
+		return Global.str_replace(sub, by, s);
 	}
 
-	public static function hex( n : Int, ?digits : Int ) : String {
-		var s : String = untyped __call__("dechex", n),
-			len = 8;
-		if (s.length > (null == digits ? len : (len = digits > len ? digits : len)))
+	public static function hex(n:Int, ?digits:Int):String {
+		var s = Global.dechex(n);
+		var len = 8;
+		if (Global.strlen(s) > (null == digits ? len : (len = digits > len ? digits : len)))
 			s = s.substr(-len);
-		else if ( digits != null )
+		else if (digits != null)
 			s = lpad(s, '0', digits);
 		return s.toUpperCase();
 	}
 
-	public static inline function fastCodeAt( s : String, index : Int ) : Int {
-		return untyped s.cca(index);
+	public static function fastCodeAt(s:String, index:Int):Int {
+		var char:NativeString = (index == 0 ? s : Global.mb_substr(s, index, 1));
+		if (char == '')
+			return 0;
+		return Boot.unsafeOrd(char);
 	}
 
-	public static inline function isEof( c : Int ) : Bool {
-		return untyped __physeq__(c, 0);
+	public static function unsafeCodeAt(s:String, index:Int):Int {
+		var char:NativeString = (index == 0 ? s : Global.mb_substr(s, index, 1));
+		return Boot.unsafeOrd(char);
 	}
 
+	public static inline function iterator(s:String):StringIterator {
+		return new StringIterator(s);
+	}
+
+	public static inline function keyValueIterator(s:String):StringKeyValueIterator {
+		return new StringKeyValueIterator(s);
+	}
+
+	@:noUsing public static inline function isEof(c:Int):Bool {
+		return c == 0;
+	}
+
+	@:noCompletion
+	@:deprecated('StringTools.quoteUnixArg() is deprecated. Use haxe.SysTools.quoteUnixArg() instead.')
+	public static function quoteUnixArg(argument:String):String {
+		return inline haxe.SysTools.quoteUnixArg(argument);
+	}
+
+	@:noCompletion
+	@:deprecated('StringTools.winMetaCharacters is deprecated. Use haxe.SysTools.winMetaCharacters instead.')
+	public static var winMetaCharacters:Array<Int> = cast haxe.SysTools.winMetaCharacters;
+
+	@:noCompletion
+	@:deprecated('StringTools.quoteWinArg() is deprecated. Use haxe.SysTools.quoteWinArg() instead.')
+	public static function quoteWinArg(argument:String, escapeMetaCharacters:Bool):String {
+		return inline haxe.SysTools.quoteWinArg(argument, escapeMetaCharacters);
+	}
 }

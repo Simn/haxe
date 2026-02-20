@@ -2,8 +2,8 @@ package flash.sampler;
 
 extern class ClassFactory {
 	function new() : Void;
-	static var DeleteObjectSampleClass : Class<Dynamic>;
-	static var NewObjectSampleClass : Class<Dynamic>;
-	static var SampleClass : Class<Dynamic>;
-	static var StackFrameClass : Class<Dynamic>;
+	static final DeleteObjectSampleClass : Class<Dynamic>;
+	static final NewObjectSampleClass : Class<Dynamic>;
+	static final SampleClass : Class<Dynamic>;
+	static final StackFrameClass : Class<Dynamic>;
 }

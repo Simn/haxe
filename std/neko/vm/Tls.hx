@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,28 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package neko.vm;
 
-class Tls<T> {
-
-	var t : Dynamic;
-	public var value(get,set) : T;
-
-	public function new() {
-		t = tls_create();
-	}
-
-	function get_value() : T {
-		return tls_get(t);
-	}
-
-	function set_value( v : T ) {
-		tls_set(t,v);
-		return v;
-	}
-
-	static var tls_create = neko.Lib.load("std","tls_create",0);
-	static var tls_get = neko.Lib.load("std","tls_get",1);
-	static var tls_set = neko.Lib.load("std","tls_set",2);
-
-}
+@:deprecated typedef Tls<T> = sys.thread.Tls<T>;

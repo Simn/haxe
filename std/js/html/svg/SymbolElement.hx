@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,13 +20,24 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGSymbolElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGSymbolElement</code> interface corresponds to the <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/symbol">&lt;symbol&gt;</a></code>
- element.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGSymbolElement">MDN</a>. */
+/**
+	The `SVGSymbolElement` interface corresponds to the `symbol` element.
+
+	Documentation [SVGSymbolElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGSymbolElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGSymbolElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGSymbolElement>
+**/
 @:native("SVGSymbolElement")
-extern class SymbolElement extends Element
-{
+extern class SymbolElement extends Element {
+	var viewBox(default,null) : AnimatedRect;
+	var preserveAspectRatio(default,null) : AnimatedPreserveAspectRatio;
+	var requiredFeatures(default,null) : StringList;
+	var requiredExtensions(default,null) : StringList;
+	var systemLanguage(default,null) : StringList;
+	
+	function hasExtension( extension : String ) : Bool;
 }

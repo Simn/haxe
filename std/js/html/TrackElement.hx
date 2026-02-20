@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,48 +20,89 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLTrackElement.webidl. Do not edit!
+
 package js.html;
 
-/** <p>The <code>track</code>&nbsp;element is used as a child of the media elements—<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/audio">&lt;audio&gt;</a></code>
- and <code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/video">&lt;video&gt;</a></code>
-—and does not represent anything on its own. It lets you specify timed text tracks (or time-based data).</p>
-<p>The type of data that <code> track</code> adds to the media is set in the <code>kind</code> attribute, which can take values of <code>subtitles</code>, <code>captions</code>, <code>descriptions</code>, <code>chapters</code> or <code>metadata</code>. The element points to a source file containing timed text that the browser exposes when the user requests additional data. </p><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/HTML/Element/track">MDN</a>. */
+/**
+	The `HTMLTrackElement`
+
+	Documentation [HTMLTrackElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLTrackElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLTrackElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLTrackElement>
+**/
 @:native("HTMLTrackElement")
-extern class TrackElement extends Element
-{
-	static inline var ERROR : Int = 3;
-
-	static inline var LOADED : Int = 2;
-
-	static inline var LOADING : Int = 1;
-
+extern class TrackElement extends Element {
 	static inline var NONE : Int = 0;
-
-	/** This attribute indicates that the track should be enabled unless the user's preferences indicate that another track is more appropriate. This may only be used on one <code>track</code> element per media element. */
-	var default_(get,set) : Bool;
-	private inline function get_default_() : Bool {
-		return untyped this["default"];
-	}
-	private inline function set_default_(x : Bool) : Bool {
-		return untyped this["default"] = x;
-	}
-
-	/** Kind of text track. The following keywords are allowed: <ul> <li>subtitles: A transcription or translation of the dialogue.</li> <li>captions: A transcription or translation of the dialogue or other sound effects. Suitable for users who are deaf or when the sound is muted.</li> <li>descriptions: Textual descriptions of the video content. Suitable for users who are blind.</li> <li>chapters: Chapter titles, intended to be used when the user is navigating the media resource.</li> <li>metadata: Tracks used by script. Not visible to the user.</li> </ul> */
+	static inline var LOADING : Int = 1;
+	static inline var LOADED : Int = 2;
+	static inline var ERROR : Int = 3;
+	
+	
+	/**
+		Is a `DOMString` that reflects the `kind` HTML attribute, indicating how the text track is meant to be used. Possible values are: subtitles, captions, descriptions, chapters, metadata.
+	**/
 	var kind : String;
-
-	/** A user-readable title of the text track Used by the browser when listing available text tracks. */
-	var label : String;
-
-	var readyState(default,null) : Int;
-
-	/** Address of the track. Must be a valid URL. This attribute must be defined. */
+	
+	/**
+		Is a `DOMString` that reflects the `src` HTML attribute, indicating the address of the text track data.
+	**/
 	var src : String;
-
-	/** Language of the track text data. */
+	
+	/**
+		Is a `DOMString` that reflects the `srclang` HTML attribute, indicating the language of the text track data.
+	**/
 	var srclang : String;
-
+	
+	/**
+		Is a `DOMString` that reflects the `label` HTML attribute, indicating a user-readable title for the track.
+	**/
+	var label : String;
+	
+	/**
+		Is a `Boolean` reflects the `default` HTML attribute, indicating that the track is to be enabled if the user's preferences do not indicate that another track would be more appropriate.
+	**/
+	@:native("default")
+	var default_ : Bool;
+	
+	/**
+		Returns  an <code>unsigned short</code> that show the readiness state of the track:
+		 <table class="standard-table">
+		  
+		   <tr>
+		    <td class="header">Constant</td>
+		    <td class="header">Value</td>
+		    <td class="header">Description</td>
+		   </tr>
+		   <tr>
+		    <td><code>NONE</code></td>
+		    <td>0</td>
+		    <td>Indicates that the text track's cues have not been obtained.</td>
+		   </tr>
+		   <tr>
+		    <td><code>LOADING</code></td>
+		    <td>1</td>
+		    <td>Indicates that the text track is loading and there have been no fatal errors encountered so far. Further cues might still be added to the track by the parser.</td>
+		   </tr>
+		   <tr>
+		    <td><code>LOADED</code></td>
+		    <td>2</td>
+		    <td>Indicates that the text track has been loaded with no fatal errors.</td>
+		   </tr>
+		   <tr>
+		    <td><code>ERROR</code></td>
+		    <td>3</td>
+		    <td>Indicates that the text track was enabled, but when the user agent attempted to obtain it, this failed in some way. Some or all of the cues are likely missing and will not be obtained.</td>
+		   </tr>
+		  
+		 </table>
+		 
+	**/
+	var readyState(default,null) : Int;
+	
+	/**
+		Returns `TextTrack` is the track element's text track data.
+	**/
 	var track(default,null) : TextTrack;
-
+	
 }

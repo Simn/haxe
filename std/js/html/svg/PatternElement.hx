@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,44 +20,56 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGPatternElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGPatternElement</code> interface corresponds to the <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/pattern">&lt;pattern&gt;</a></code>
- element.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGPatternElement">MDN</a>. */
+/**
+	The `SVGPatternElement` interface corresponds to the `pattern` element.
+
+	Documentation [SVGPatternElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGPatternElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGPatternElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGPatternElement>
+**/
 @:native("SVGPatternElement")
-extern class PatternElement extends Element
-{
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/height">height</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/pattern">&lt;pattern&gt;</a></code>
- element. */
-	var height(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/patternContentUnits" class="new">patternContentUnits</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/pattern">&lt;pattern&gt;</a></code>
- element. Takes one of the constants defined in <code><a rel="internal" href="https://developer.mozilla.org/Article_not_found?uri=en/DOM/SVGUnitTypes" class="new">SVGUnitTypes</a></code>
-. */
-	var patternContentUnits(default,null) : AnimatedEnumeration;
-
-	/** Corresponds to attribute 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/patternTransform" class="new">patternTransform</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/pattern">&lt;pattern&gt;</a></code>
- element. */
-	var patternTransform(default,null) : AnimatedTransformList;
-
-	/** Corresponds to attribute 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/patternUnits" class="new">patternUnits</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/pattern">&lt;pattern&gt;</a></code>
- element. Takes one of the constants defined in <code><a rel="internal" href="https://developer.mozilla.org/Article_not_found?uri=en/DOM/SVGUnitTypes" class="new">SVGUnitTypes</a></code>
-. */
+extern class PatternElement extends Element {
+	
+	/**
+		An `SVGAnimatedEnumeration` corresponding to the `patternUnits` attribute of the given `pattern` element. Takes one of the constants defined in `SVGUnitTypes`.
+	**/
 	var patternUnits(default,null) : AnimatedEnumeration;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/width">width</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/pattern">&lt;pattern&gt;</a></code>
- element. */
-	var width(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedEnumeration` corresponding to the `patternContentUnits` attribute of the given `pattern` element. Takes one of the constants defined in `SVGUnitTypes`.
+	**/
+	var patternContentUnits(default,null) : AnimatedEnumeration;
+	
+	/**
+		An `SVGAnimatedTransformList` corresponding to the `patternTransform` attribute of the given `pattern` element.
+	**/
+	var patternTransform(default,null) : AnimatedTransformList;
+	
+	/**
+		An `SVGAnimatedEnumeration` corresponding to the `x` attribute of the given `pattern` element.
+	**/
 	var x(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedEnumeration` corresponding to the `y` attribute of the given `pattern` element.
+	**/
 	var y(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedEnumeration` corresponding to the `width` attribute of the given `pattern` element.
+	**/
+	var width(default,null) : AnimatedLength;
+	
+	/**
+		An `SVGAnimatedEnumeration` corresponding to the `height` attribute of the given `pattern` element.
+	**/
+	var height(default,null) : AnimatedLength;
+	var viewBox(default,null) : AnimatedRect;
+	var preserveAspectRatio(default,null) : AnimatedPreserveAspectRatio;
+	var href(default,null) : AnimatedString;
+	
 }

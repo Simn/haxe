@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,22 +20,35 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\TimeRanges.webidl. Do not edit!
+
 package js.html;
 
-/** <p>The <code>TimeRanges</code> interface is used to represent a set of time ranges, primarily for the purpose of tracking which portions of media have been buffered when loading it for use by the <code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/audio">&lt;audio&gt;</a></code>
- and <code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/video">&lt;video&gt;</a></code>
-&nbsp;elements.</p>
-<p>A <code>TimeRanges</code> object includes one or more ranges of time, each specified by a starting and ending time offset. You reference each time range by using the <code>start()</code> and <code>end()</code> methods, passing the index number of the time range you want to retrieve.</p><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/TimeRanges">MDN</a>. */
+/**
+	The `TimeRanges` interface is used to represent a set of time ranges, primarily for the purpose of tracking which portions of media have been buffered when loading it for use by the `audio` and `video` elements.
+
+	Documentation [TimeRanges](https://developer.mozilla.org/en-US/docs/Web/API/TimeRanges) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/TimeRanges$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/TimeRanges>
+**/
 @:native("TimeRanges")
-extern class TimeRanges
-{
-	/** The number of time ranges represented by the time range object. <strong>Read only.</strong> */
+extern class TimeRanges {
+	
+	/**
+		Returns an `unsigned long` representing the number of time ranges represented by the time range object.
+	**/
 	var length(default,null) : Int;
-
-	function end( index : Int ) : Float;
-
+	
+	
+	/**
+		Returns the time for the start of the range with the specified index.
+		@throws DOMError
+	**/
 	function start( index : Int ) : Float;
-
+	
+	/**
+		Returns the time for the end of the specified range.
+		@throws DOMError
+	**/
+	function end( index : Int ) : Float;
 }

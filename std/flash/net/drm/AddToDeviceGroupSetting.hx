@@ -2,7 +2,7 @@ package flash.net.drm;
 
 extern class AddToDeviceGroupSetting {
 	function new() : Void;
-	static var ALLOW_SERVER : String;
-	static var FORCE_REFRESH : String;
-	static var LOCAL_ONLY : String;
+	static final ALLOW_SERVER : String;
+	static final FORCE_REFRESH : String;
+	static final LOCAL_ONLY : String;
 }

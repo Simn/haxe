@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,32 +20,45 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGImageElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGImageElement</code> interface corresponds to the <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/image">&lt;image&gt;</a></code>
- element.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGImageElement">MDN</a>. */
+/**
+	The `SVGImageElement` interface corresponds to the `image` element.
+
+	Documentation [SVGImageElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGImageElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGImageElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGImageElement>
+**/
 @:native("SVGImageElement")
-extern class ImageElement extends Element
-{
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/height">height</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/image">&lt;image&gt;</a></code>
- element. */
-	var height(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/preserveAspectRatio">preserveAspectRatio</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/image">&lt;image&gt;</a></code>
- element. */
-	var preserveAspectRatio(default,null) : AnimatedPreserveAspectRatio;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/width">width</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/image">&lt;image&gt;</a></code>
- element. */
-	var width(default,null) : AnimatedLength;
-
+extern class ImageElement extends GraphicsElement {
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `x` attribute of the given `image` element.
+	**/
 	var x(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `y` attribute of the given `image` element.
+	**/
 	var y(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `width` attribute of the given `image` element.
+	**/
+	var width(default,null) : AnimatedLength;
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `height` attribute of the given `image` element.
+	**/
+	var height(default,null) : AnimatedLength;
+	
+	/**
+		An `SVGAnimatedPreserveAspectRatio` corresponding to the `preserveAspectRatio` attribute of the given `image` element.
+	**/
+	var preserveAspectRatio(default,null) : AnimatedPreserveAspectRatio;
+	var decoding : String;
+	var href(default,null) : AnimatedString;
+	
 }

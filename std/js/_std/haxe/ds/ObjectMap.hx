@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2013 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of h software and associated documentation files (the "Software"),
@@ -22,30 +22,99 @@
 
 package haxe.ds;
 
+import js.Syntax;
+import js.Lib;
+
+#if (js_es >= 6)
 @:coreApi
-class ObjectMap<K:{ }, V> implements haxe.Constraints.IMap<K,V> {
+class ObjectMap<K:{}, V> implements haxe.Constraints.IMap<K, V> {
+	private var m:js.lib.Map<K, V>;
 
-	static var count = 0;
-
-	static inline function assignId(obj: { } ):Int {
-		return untyped obj.__id__ = ++count;
+	public inline function new():Void {
+		m = new js.lib.Map();
 	}
 
-	static inline function getId(obj: { } ):Int {
+	public inline function set(key:K, value:V):Void {
+		m.set(key, value);
+	}
+
+	public inline function get(key:K):Null<V> {
+		return m.get(key);
+	}
+
+	public inline function exists(key:K):Bool {
+		return m.has(key);
+	}
+
+	public inline function remove(key:K):Bool {
+		return m.delete(key);
+	}
+
+	public inline function keys():Iterator<K> {
+		return new js.lib.HaxeIterator(m.keys());
+	}
+
+	public inline function iterator():Iterator<V> {
+		return m.iterator();
+	}
+
+	public inline function keyValueIterator():KeyValueIterator<K, V> {
+		return m.keyValueIterator();
+	}
+
+	public inline function copy():ObjectMap<K, V> {
+		var copied = new ObjectMap();
+		copied.m = new js.lib.Map(m);
+		return copied;
+	}
+
+	public function toString():String {
+		var s = new StringBuf();
+		s.add("[");
+		var it = keyValueIterator();
+		for (i in it) {
+			s.add(Std.string(i.key));
+			s.add(" => ");
+			s.add(Std.string(i.value));
+			if (it.hasNext())
+				s.add(", ");
+		}
+		s.add("]");
+		return s.toString();
+	}
+
+	public inline function clear():Void {
+		m.clear();
+	}
+
+	public inline function size():Int {
+		return m.size;
+	}
+}
+#else
+@:coreApi
+class ObjectMap<K:{}, V> implements haxe.Constraints.IMap<K, V> {
+	static inline function assignId(obj:{}):Int {
+		return Syntax.code('({0}.__id__ = {1})', obj, Lib.getNextHaxeUID());
+	}
+
+	static inline function getId(obj:{}):Int {
 		return untyped obj.__id__;
 	}
 
-	var h : { };
+	var h:{__keys__:{}};
 
-	public function new() : Void {
-		h = { };
-		untyped h.__keys__ = { };
+	public function new():Void {
+		h = {__keys__: {}};
 	}
 
-	public function set(key:K, value:V):Void untyped {
-		var id : Int = untyped key.__id__ || assignId(key);
-		h[id] = value;
-		h.__keys__[id] = key;
+	public function set(key:K, value:V):Void {
+		var id = getId(key);
+		if(id == null) {
+			id = assignId(key);
+		}
+		Syntax.code('{0}[{1}] = {2}', h, id, value);
+		Syntax.code('{0}[{1}] = {2}', h.__keys__, id, key);
 	}
 
 	public inline function get(key:K):Null<V> {
@@ -56,46 +125,74 @@ class ObjectMap<K:{ }, V> implements haxe.Constraints.IMap<K,V> {
 		return untyped h.__keys__[getId(key)] != null;
 	}
 
-	public function remove( key : K ) : Bool {
+	public function remove(key:K):Bool {
 		var id = getId(key);
-		if ( untyped h.__keys__[id] == null ) return false;
-		untyped  __js__("delete")(h[id]);
-		untyped  __js__("delete")(h.__keys__[id]);
+		if (untyped h.__keys__[id] == null)
+			return false;
+		js.Syntax.delete(h, id);
+		js.Syntax.delete(h.__keys__, id);
 		return true;
 	}
 
-	public function keys() : Iterator<K> {
+	public function keys():Iterator<K> {
 		var a = [];
 		untyped {
-			__js__("for( var key in this.h.__keys__ ) {");
-				if( h.hasOwnProperty(key) )
-					a.push(h.__keys__[key]);
-			__js__("}");
+			js.Syntax.code("for( var key in this.h.__keys__ ) {");
+			if (h.hasOwnProperty(key))
+				a.push(h.__keys__[key]);
+			js.Syntax.code("}");
 		}
 		return a.iterator();
 	}
 
-	public function iterator() : Iterator<V> {
+	public function iterator():Iterator<V> {
 		return untyped {
-			ref : h,
-			it : keys(),
-			hasNext : function() { return __this__.it.hasNext(); },
-			next : function() { var i = __this__.it.next(); return __this__.ref[getId(i)]; }
+			ref: h,
+			it: keys(),
+			hasNext: function() {
+				return __this__.it.hasNext();
+			},
+			next: function() {
+				var i = __this__.it.next();
+				return __this__.ref[getId(i)];
+			}
 		};
 	}
 
-	public function toString() : String {
+	@:runtime public inline function keyValueIterator():KeyValueIterator<K, V> {
+		return new haxe.iterators.MapKeyValueIterator(this);
+	}
+
+	public function copy():ObjectMap<K, V> {
+		var copied = new ObjectMap();
+		for (key in keys())
+			copied.set(key, get(key));
+		return copied;
+	}
+
+	public function toString():String {
 		var s = new StringBuf();
-		s.add("{");
+		s.add("[");
 		var it = keys();
-		for( i in it ) {
+		for (i in it) {
 			s.add(Std.string(i));
 			s.add(" => ");
 			s.add(Std.string(get(i)));
-			if( it.hasNext() )
+			if (it.hasNext())
 				s.add(", ");
 		}
-		s.add("}");
+		s.add("]");
 		return s.toString();
 	}
+
+	public inline function clear():Void {
+		h = {__keys__: {}};
+	}
+
+	public inline function size():Int {
+		var s:Any = 0;
+		js.Syntax.code("for( var key in {0} ) if({0}.hasOwnProperty(key)) {1}++", h.__keys__, s);
+		return s;
+	}
 }
+#end

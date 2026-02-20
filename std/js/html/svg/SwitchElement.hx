@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,13 +20,17 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGSwitchElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGSwitchElement</code> interface corresponds to the <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/switch">&lt;switch&gt;</a></code>
- element.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGSwitchElement">MDN</a>. */
+/**
+	The `SVGSwitchElement` interface corresponds to the `switch` element.
+
+	Documentation [SVGSwitchElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGSwitchElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGSwitchElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGSwitchElement>
+**/
 @:native("SVGSwitchElement")
-extern class SwitchElement extends Element
-{
+extern class SwitchElement extends GraphicsElement {
 }

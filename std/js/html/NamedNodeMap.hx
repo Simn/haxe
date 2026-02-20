@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,28 +20,62 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\NamedNodeMap.webidl. Do not edit!
+
 package js.html;
 
-/** A collection of nodes returned by <a title="En/DOM/Element.attributes" class="internal" rel="internal" href="https://developer.mozilla.org/En/DOM/Node.attributes"><code>Element.attributes</code></a> (also potentially for <code><a title="En/DOM/DocumentType.entities" rel="internal" href="https://developer.mozilla.org/En/DOM/DocumentType.entities" class="new internal">DocumentType.entities</a></code>, <code><a title="En/DOM/DocumentType.notations" rel="internal" href="https://developer.mozilla.org/En/DOM/DocumentType.notations" class="new internal">DocumentType.notations</a></code>). <code>NamedNodeMap</code>s are not in any particular order (unlike <code><a title="En/DOM/NodeList" class="internal" rel="internal" href="/api/js/html/NodeList">NodeList</a></code>), although they may be accessed by an index as in an array (they may also be accessed with the <code>item</code>() method). A NamedNodeMap object are live and will thus be auto-updated if changes are made to their contents internally or elsewhere.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/NamedNodeMap">MDN</a>. */
+/**
+	The `NamedNodeMap` interface represents a collection of `Attr` objects. Objects inside a `NamedNodeMap` are not in any particular order, unlike `NodeList`, although they may be accessed by an index as in an array.
+
+	Documentation [NamedNodeMap](https://developer.mozilla.org/en-US/docs/Web/API/NamedNodeMap) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/NamedNodeMap$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/NamedNodeMap>
+**/
 @:native("NamedNodeMap")
-extern class NamedNodeMap implements ArrayAccess<Node>
-{
+extern class NamedNodeMap implements ArrayAccess<Attr> {
+	
+	/**
+		Returns the amount of objects in the map.
+	**/
 	var length(default,null) : Int;
-
-	function getNamedItem( name : String ) : Node;
-
-	function getNamedItemNS( ?namespaceURI : String, localName : String ) : Node;
-
-	function item( index : Int ) : Node;
-
-	function removeNamedItem( name : String ) : Node;
-
-	function removeNamedItemNS( ?namespaceURI : String, localName : String ) : Node;
-
-	function setNamedItem( node : Node ) : Node;
-
-	function setNamedItemNS( node : Node ) : Node;
-
+	
+	
+	/**
+		Returns a `Attr`, corresponding to the given name.
+	**/
+	function getNamedItem( name : String ) : Attr;
+	
+	/**
+		Replaces, or adds, the `Attr` identified in the map by the given name.
+		@throws DOMError
+	**/
+	function setNamedItem( arg : Attr ) : Attr;
+	
+	/**
+		Removes the `Attr` identified by the given map.
+		@throws DOMError
+	**/
+	function removeNamedItem( name : String ) : Attr;
+	
+	/**
+		Returns the `Attr` at the given index, or `null` if the index is higher or equal to the number of nodes.
+	**/
+	function item( index : Int ) : Attr;
+	
+	/**
+		Returns a `Attr` identified by a namespace and related local name.
+	**/
+	function getNamedItemNS( namespaceURI : String, localName : String ) : Attr;
+	
+	/**
+		Replaces, or adds, the `Attr` identified in the map by the given namespace and related local name.
+		@throws DOMError
+	**/
+	function setNamedItemNS( arg : Attr ) : Attr;
+	
+	/**
+		Removes the `Attr` identified by the given namespace and related local name.
+		@throws DOMError
+	**/
+	function removeNamedItemNS( namespaceURI : String, localName : String ) : Attr;
 }

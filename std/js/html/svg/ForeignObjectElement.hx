@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,27 +20,38 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGForeignObjectElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGForeignObjectElement</code> interface provides access to the properties of <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/foreignObject">&lt;foreignObject&gt;</a></code>
- elements, as well as methods to manipulate them.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGForeignObjectElement">MDN</a>. */
+/**
+	The `SVGForeignObjectElement` interface provides access to the properties of `foreignObject` elements, as well as methods to manipulate them.
+
+	Documentation [SVGForeignObjectElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGForeignObjectElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGForeignObjectElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGForeignObjectElement>
+**/
 @:native("SVGForeignObjectElement")
-extern class ForeignObjectElement extends Element
-{
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/height">height</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/foreignObject">&lt;foreignObject&gt;</a></code>
- element. */
-	var height(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/width">width</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/foreignObject">&lt;foreignObject&gt;</a></code>
- element. */
-	var width(default,null) : AnimatedLength;
-
+extern class ForeignObjectElement extends GraphicsElement {
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `x` attribute of the given `foreignObject` element.
+	**/
 	var x(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `x` attribute of the given `foreignObject` element.
+	**/
 	var y(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `width` attribute of the given `foreignObject` element.
+	**/
+	var width(default,null) : AnimatedLength;
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `height` attribute of the given `foreignObject` element.
+	**/
+	var height(default,null) : AnimatedLength;
+	
 }

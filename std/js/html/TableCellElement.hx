@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,67 +20,57 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLTableCellElement.webidl. Do not edit!
+
 package js.html;
 
-/** The <em>HTML Table Cell Element</em> (<code>&lt;td&gt;</code>) defines a cell that content data.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/HTML/Element/td">MDN</a>. */
+/**
+	The `HTMLTableCellElement` interface provides special properties and methods (beyond the regular `HTMLElement` interface it also has available to it by inheritance) for manipulating the layout and presentation of table cells, either header or data cells, in an HTML document.
+
+	Documentation [HTMLTableCellElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLTableCellElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLTableCellElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLTableCellElement>
+**/
 @:native("HTMLTableCellElement")
-extern class TableCellElement extends Element
-{
-	/** This attribute contains a short abbreviated description of the content of the cell. Some user-agents, such as speech readers, may present this description before the content itself. <div class="note"><strong>Note: </strong>Do not use this attribute as it is obsolete in the latest standard: instead either consider starting the cell content by an independent abbreviated content itself or use the abbreviated content as the cell content and use the long content as the description of the cell by putting it in the <strong>title</strong> attribute.</div> */
-	var abbr : String;
-
-	/** This enumerated attribute specifies how horizontal alignment of each cell content will be handled. Possible values are: <ul> <li><span>left</span>, aligning the content to the left of the cell</li> <li><span>center</span>, centering the content in the cell</li> <li><span>right</span>, aligning the content to the right of the cell</li> <li><span>justify</span>, inserting spaces into the textual content so that the content is justified in the cell</li> <li><span>char</span>, aligning the textual content on a special character with a minimal offset, defined by the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/td#attr-char">char</a></code>
- and 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/td#attr-charoff">charoff</a></code>
- attributes 
-<span class="unimplementedInlineTemplate">Unimplemented (see<a rel="external" href="https://bugzilla.mozilla.org/show_bug.cgi?id=2212" class="external" title="">
-bug 2212</a>
-)</span>
-.</li> </ul> <p>If this attribute is not set,&nbsp; the <span>left</span> value is assumed.</p> <div class="note"><strong>Note: </strong>Do not use this attribute as it is obsolete (not supported) in the latest standard. <ul> <li>To achieve the same effect as the <span>left</span>, <span>center</span>, <span>right</span> or <span>justify</span> values, use the CSS <code><a rel="custom" href="https://developer.mozilla.org/en/CSS/text-align">text-align</a></code>
- property on it.</li> <li>To achieve the same effect as the <span>char</span> value, in CSS3, you can use the value of the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/td#attr-char">char</a></code>
- as the value of the <code><a rel="custom" href="https://developer.mozilla.org/en/CSS/text-align">text-align</a></code>
- property 
-<span class="unimplementedInlineTemplate">Unimplemented</span>
-.</li> </ul> </div> */
-	var align : String;
-
-	/** This attribute contains a list of space-separated strings. Each string is the ID of a group of cells that this header applies to. <div class="note"><strong>Note: </strong>Do not use this attribute as it is obsolete in the latest standard: instead use the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/td#attr-scope">scope</a></code>
- attribute.</div> */
-	var axis : String;
-
-	var bgColor : String;
-
-	var cellIndex(default,null) : Int;
-
-	var ch : String;
-
-	var chOff : String;
-
+extern class TableCellElement extends Element {
+	
+	/**
+		An unsigned long integer indicating the number of columns this cell must span; this lets the cell occupy space across multiple columns of the table. It reflects the `colspan` attribute.
+	**/
 	var colSpan : Int;
-
-	/** This attributes a list of space-separated strings, each corresponding to the <strong>id</strong> attribute of the <code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/th">&lt;th&gt;</a></code>
- elements that applies to this element. */
-	var headers : String;
-
-	var height : String;
-
-	var noWrap : Bool;
-
+	
+	/**
+		An unsigned long integer indicating the number of rows this cell must span; this lets a cell occupy space across multiple rows of the table. It reflects the `rowspan` attribute.
+	**/
 	var rowSpan : Int;
-
+	
+	/**
+		Is a `DOMSettableTokenList` describing a list of `id` of `th` elements that represents headers associated with the cell. It reflects the `headers` attribute.
+	**/
+	var headers : String;
+	
+	/**
+		A long integer representing the cell's position in the `HTMLTableRowElement.cells` collection of the `tr` the cell is contained within. If the cell doesn't belong to a `tr`, it returns `-1`.
+	**/
+	var cellIndex(default,null) : Int;
+	
+	/**
+		A `DOMString` which can be used on `th` elements (not on `td`), specifying an alternative label for the header cell.. This alternate label can be used in other contexts, such as when describing the headers that apply to a data cell. This is used to offer a shorter term for use by screen readers in particular, and is a valuable accessibility tool. Usually the value of `abbr` is an abbreviation or acronym, but can be any text that's appropriate contextually.
+	**/
+	var abbr : String;
+	
+	/**
+		
+	**/
 	var scope : String;
-
-	var vAlign : String;
-
+	var align : String;
+	var axis : String;
+	var height : String;
 	var width : String;
-
+	var ch : String;
+	var chOff : String;
+	var noWrap : Bool;
+	var vAlign : String;
+	var bgColor : String;
+	
 }

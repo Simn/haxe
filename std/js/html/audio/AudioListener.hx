@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,20 +20,19 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\AudioListener.webidl. Do not edit!
+
 package js.html.audio;
 
+/**
+	It is important to note that there is only one listener per context and that it isn't an `AudioNode`.
+
+	Documentation [AudioListener](https://developer.mozilla.org/en-US/docs/Web/API/AudioListener) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/AudioListener$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/AudioListener>
+**/
 @:native("AudioListener")
-extern class AudioListener
-{
-	var dopplerFactor : Float;
-
-	var speedOfSound : Float;
-
-	function setOrientation( x : Float, y : Float, z : Float, xUp : Float, yUp : Float, zUp : Float ) : Void;
-
+extern class AudioListener {
 	function setPosition( x : Float, y : Float, z : Float ) : Void;
-
-	function setVelocity( x : Float, y : Float, z : Float ) : Void;
-
+	function setOrientation( x : Float, y : Float, z : Float, xUp : Float, yUp : Float, zUp : Float ) : Void;
 }

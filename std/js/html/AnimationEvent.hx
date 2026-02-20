@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,20 +20,35 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\AnimationEvent.webidl. Do not edit!
+
 package js.html;
 
-/** <code>AnimationEvent</code> objects provide information about events that occur related to <a rel="internal" href="/api/js/html/Animation" title="en/CSS/CSS_animations">CSS animations</a>.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/event/AnimationEvent">MDN</a>. */
+/**
+	The `AnimationEvent` interface represents events providing information related to animations.
+
+	Documentation [AnimationEvent](https://developer.mozilla.org/en-US/docs/Web/API/AnimationEvent) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/AnimationEvent$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/AnimationEvent>
+**/
 @:native("AnimationEvent")
-extern class AnimationEvent extends Event
-{
-	/** The name of the animation on which the animation event occurred. */
+extern class AnimationEvent extends Event {
+	
+	/**
+		Is a `DOMString` containing the value of the `animation-name` CSS property associated with the transition.
+	**/
 	var animationName(default,null) : String;
-
-	/** The amount of time, in seconds, the animation had been running at the time the event occurred. */
+	
+	/**
+		Is a `float` giving the amount of time the animation has been running, in seconds, when this event fired, excluding any time the animation was paused. For an `"animationstart"` event, `elapsedTime` is `0.0` unless there was a negative value for `animation-delay`, in which case the event will be fired with `elapsedTime` containing  `(-1 * `delay`)`.
+	**/
 	var elapsedTime(default,null) : Float;
-
-	function new( type : String, canBubble : Bool = true, cancelable : Bool = true ) : Void;
-
+	
+	/**
+		Is a `DOMString`, starting with `'::'`, containing the name of the pseudo-element the animation runs on. If the animation doesn't run on a pseudo-element but on the element, an empty string: `''``.`
+	**/
+	var pseudoElement(default,null) : String;
+	
+	/** @throws DOMError */
+	function new( type : String, ?eventInitDict : AnimationEventInit ) : Void;
 }

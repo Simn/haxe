@@ -1,8 +1,10 @@
 package flash.sampler;
 
-@:final extern class NewObjectSample extends Sample {
-	var id : Float;
-	var object(default,null) : Dynamic;
-	@:require(flash10_1) var size(default,null) : Float;
-	var type : Class<Dynamic>;
+extern final class NewObjectSample extends Sample {
+	final id : Float;
+	@:flash.property var object(get,never) : Dynamic;
+	@:flash.property @:require(flash10_1) var size(get,never) : Float;
+	final type : Class<Dynamic>;
+	private function get_object() : Dynamic;
+	private function get_size() : Float;
 }

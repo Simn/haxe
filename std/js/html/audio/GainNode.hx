@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,12 +20,25 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\GainNode.webidl. Do not edit!
+
 package js.html.audio;
 
-@:native("GainNode")
-extern class GainNode extends AudioNode
-{
-	var gain(default,null) : AudioGain;
+/**
+	The `GainNode` interface represents a change in volume. It is an `AudioNode` audio-processing module that causes a given gain to be applied to the input data before its propagation to the output. A `GainNode` always has exactly one input and one output, both with the same number of channels.
 
+	Documentation [GainNode](https://developer.mozilla.org/en-US/docs/Web/API/GainNode) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/GainNode$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/GainNode>
+**/
+@:native("GainNode")
+extern class GainNode extends AudioNode {
+	
+	/**
+		Is an a-rate `AudioParam` representing the amount of gain to apply. You have to set `AudioParam.value` or use the methods of `AudioParam` to change the effect of gain.
+	**/
+	var gain(default,null) : AudioParam;
+	
+	/** @throws DOMError */
+	function new( context : BaseAudioContext, ?options : GainOptions ) : Void;
 }

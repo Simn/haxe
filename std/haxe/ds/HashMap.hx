@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2013 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,30 +19,109 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package haxe.ds;
 
-abstract HashMap<K:{ function hashCode():Int; }, V >({keys:IntMap<K>, values:IntMap<V>}) {
-	public function new() {
-		this = { keys:new IntMap(), values: new IntMap() };
+import haxe.iterators.HashMapKeyValueIterator;
+
+/**
+	HashMap allows mapping of hashable objects to arbitrary values.
+
+	See `Map` for documentation details.
+
+	@see https://haxe.org/manual/std-Map.html
+**/
+abstract HashMap<K:{function hashCode():Int;}, V>(HashMapData<K, V>) {
+	/**
+		Creates a new HashMap.
+	**/
+	public inline function new() {
+		this = new HashMapData();
 	}
-	public inline function set(k:K, v:V) {
+
+	/**
+		See `Map.set`
+	**/
+	@:arrayAccess public inline function set(k:K, v:V) {
 		this.keys.set(k.hashCode(), k);
 		this.values.set(k.hashCode(), v);
 	}
-	public inline function get(k:K) {
+
+	/**
+		See `Map.get`
+	**/
+	@:arrayAccess public inline function get(k:K) {
 		return this.values.get(k.hashCode());
 	}
+
+	/**
+		See `Map.exists`
+	**/
 	public inline function exists(k:K) {
 		return this.values.exists(k.hashCode());
 	}
+
+	/**
+		See `Map.remove`
+	**/
 	public inline function remove(k:K) {
 		this.values.remove(k.hashCode());
 		return this.keys.remove(k.hashCode());
 	}
+
+	/**
+		See `Map.keys`
+	**/
 	public inline function keys() {
 		return this.keys.iterator();
 	}
+
+	/**
+		See `Map.copy`
+	**/
+	public function copy():HashMap<K, V> {
+		var copied = new HashMapData();
+		copied.keys = this.keys.copy();
+		copied.values = this.values.copy();
+		return cast copied;
+	}
+
+	/**
+		See `Map.iterator`
+	**/
 	public inline function iterator() {
 		return this.values.iterator();
+	}
+
+	/**
+		See `Map.keyValueIterator`
+	**/
+	public inline function keyValueIterator():HashMapKeyValueIterator<K, V> {
+		return new HashMapKeyValueIterator(cast this);
+	}
+
+	/**
+		See `Map.clear`
+	**/
+	public inline function clear():Void {
+		this.keys.clear();
+		this.values.clear();
+	}
+
+	/**
+		See `Map.size`
+	**/
+	public inline function size():Int {
+		return this.keys.size();
+	}
+}
+
+private class HashMapData<K:{function hashCode():Int;}, V> {
+	public var keys:IntMap<K>;
+	public var values:IntMap<V>;
+
+	public inline function new() {
+		keys = new IntMap();
+		values = new IntMap();
 	}
 }

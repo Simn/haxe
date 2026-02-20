@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,34 +20,43 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\Clipboard.webidl. Do not edit!
+
 package js.html;
 
-/** <div>
+import js.lib.Promise;
 
-<a rel="custom" href="http://mxr.mozilla.org/mozilla-central/source/widget/public/nsIClipboard.idl"><code>widget/public/nsIClipboard.idl</code></a><span><a rel="internal" href="https://developer.mozilla.org/en/Interfaces/About_Scriptable_Interfaces" title="en/Interfaces/About_Scriptable_Interfaces">Scriptable</a></span></div><span>This interface supports basic clipboard operations such as: setting, retrieving, emptying, matching and supporting clipboard data.</span><div>Inherits from: <code><a rel="custom" href="https://developer.mozilla.org/en/XPCOM_Interface_Reference/nsISupports">nsISupports</a></code>
-<span>Last changed in Gecko 1.8 (Firefox 1.5 / Thunderbird 1.5 / SeaMonkey 1.0)
-</span></div><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/XPCOM_Interface_Reference/nsIClipboard">MDN</a>. */
+/**
+	The `Clipboard` interface implements the Clipboard API, providing—if the user grants permission—both read and write access to the contents of the system clipboard.
+
+	Documentation [Clipboard](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/Clipboard>
+**/
 @:native("Clipboard")
-extern class Clipboard
-{
-	var dropEffect : String;
-
-	var effectAllowed : String;
-
-	var files(default,null) : FileList;
-
-	var items(default,null) : DataTransferItemList;
-
-	var types(default,null) : Array<Dynamic>;
-
-	function clearData( ?type : String ) : Void;
-
-	function getData( type : String ) : String;
-
-	function setData( type : String, data : String ) : Bool;
-
-	function setDragImage( image : ImageElement, x : Int, y : Int ) : Void;
-
+extern class Clipboard extends EventTarget {
+	
+	/**
+		Requests arbitrary data (such as images) from the clipboard, returning a `Promise`. When the data has been retrieved, the promise is resolved with a `DataTransfer` object that provides the data.
+		@throws DOMError
+	**/
+	function read() : Promise<DataTransfer>;
+	
+	/**
+		Requests text from the system clipboard; returns a `Promise` which is resolved with a `DOMString` containing the clipboard's text once it's available.
+		@throws DOMError
+	**/
+	function readText() : Promise<String>;
+	
+	/**
+		Writes arbitrary data to the system clipboard. This asynchronous operation signals that it's finished by resolving the returned `Promise`.
+		@throws DOMError
+	**/
+	function write( data : DataTransfer ) : Promise<Void>;
+	
+	/**
+		Writes text to the system clipboard, returning a `Promise` which is resolved once the text is fully copied into the clipboard.
+		@throws DOMError
+	**/
+	function writeText( data : String ) : Promise<Void>;
 }

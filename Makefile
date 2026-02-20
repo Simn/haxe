@@ -2,204 +2,251 @@
 #
 #  - use 'make' to build all
 #  - use 'make haxe' to build only the compiler (not the libraries)
-#  - if you want to build quickly, install 'ocamlopt.opt' and change OCAMLOPT=ocamlopt.top
+#  - if you want to build quickly, install 'ocamlopt.opt' and change OCAMLOPT=ocamlopt.opt
 #
 #  Windows users :
 #  - use 'make -f Makefile.win' to build for Windows
 #  - use 'make MSVC=1 -f Makefile.win' to build for Windows with OCaml/MSVC
 #
-.SUFFIXES : .ml .mli .cmo .cmi .cmx .mll .mly
+.SUFFIXES : .ml .mli .cmo .cmi .cmx .mly
 
-INSTALL_DIR=/usr
+INSTALL_DIR=/usr/local
 INSTALL_BIN_DIR=$(INSTALL_DIR)/bin
 INSTALL_LIB_DIR=$(INSTALL_DIR)/lib/haxe
+INSTALL_STD_DIR=$(INSTALL_DIR)/share/haxe/std
+PACKAGE_OUT_DIR=out
+INSTALLER_TMP_DIR=installer
+PACKAGE_SRC_EXTENSION=.tar.gz
 
-OUTPUT=haxe
+MAKEFILENAME?=Makefile
+PLATFORM?=unix
+
+DUNE_COMMAND=dune
+HAXE_OUTPUT=haxe
+HAXELIB_OUTPUT=haxelib
+PREBUILD_OUTPUT=prebuild
 EXTENSION=
-OCAMLOPT=ocamlopt
-OCAMLC=ocamlc
 LFLAGS=
+STATICLINK?=0
 
-CFLAGS= -g -I libs/extlib -I libs/extc -I libs/neko -I libs/javalib -I libs/ziplib -I libs/swflib -I libs/xml-light -I libs/ttflib -I libs/ilib -I libs/objsize
-
-LIBS=unix str libs/extlib/extLib libs/xml-light/xml-light libs/swflib/swflib \
-	libs/extc/extc libs/neko/neko libs/javalib/java libs/ziplib/zip \
-	libs/ttflib/ttf libs/ilib/il libs/objsize/objsize
-
-NATIVE_LIBS=-cclib libs/extc/extc_stubs.o -cclib -lz -cclib libs/objsize/c_objsize.o
-
-ifeq ($(BYTECODE),1)
-	TARGET_FLAG = bytecode
-	COMPILER = $(OCAMLC)
-	LIB_EXT = cma
-	MODULE_EXT = cmo
-	NATIVE_LIB_FLAG = -custom
+SYSTEM_NAME=Unknown
+ifeq ($(OS),Windows_NT)
+	SYSTEM_NAME=Windows
 else
-	TARGET_FLAG = native
-	COMPILER = $(OCAMLOPT)
-	LIB_EXT = cmxa
-	MODULE_EXT = cmx
+	UNAME_S := $(shell uname -s)
+	ifeq ($(UNAME_S),Linux)
+		SYSTEM_NAME=Linux
+	endif
+	ifeq ($(UNAME_S),Darwin)
+		SYSTEM_NAME=Mac
+	endif
 endif
 
-CC_CMD = $(COMPILER) $(CFLAGS) -c $<
+# Configuration
 
-CC_PARSER_CMD = $(COMPILER) -pp camlp4o $(CFLAGS) -c parser.ml
+ADD_REVISION?=0
 
-RELDIR=../../..
+BRANCH=$(shell git rev-parse --abbrev-ref HEAD)
+COMMIT_SHA=$(shell git rev-parse --short HEAD)
+COMMIT_DATE=$(shell \
+	if [ "$$(uname)" = "Darwin" ]; then \
+		date -u -r $$(git show -s --format=%ct HEAD) +%Y%m%d%H%M%S; \
+	else \
+		date -u -d @$$(git show -s --format=%ct HEAD) +%Y%m%d%H%M%S; \
+	fi \
+)
+PACKAGE_FILE_NAME=haxe_$(COMMIT_DATE)_$(COMMIT_SHA)
+HAXE_VERSION=$(shell $(CURDIR)/$(HAXE_OUTPUT) -version 2>&1 | awk '{print $$1;}')
+HAXE_VERSION_SHORT=$(shell echo "$(HAXE_VERSION)" | grep -oE "^[0-9]+\.[0-9]+\.[0-9]+")
 
-MODULES=ast type lexer common genxml parser typecore optimizer typeload \
-	codegen gencommon genas3 gencpp genjs genneko genphp genswf8 \
-	genswf9 genswf genjava gencs genpy interp dce filters typer matcher version main
+NEKO_VERSION=2.4.1
+NEKO_MAJOR_VERSION=$(shell echo "$(NEKO_VERSION)" | grep -oE "^[0-9]+")
+NEKO_VERSION_TAG=v$(shell echo "$(NEKO_VERSION)" | sed "s/\./-/g")
 
-ADD_REVISION=0
+all: haxe tools
 
-# using $(CURDIR) on Windows will not work since it might be a Cygwin path
+haxe:
+	dune build --profile release src/haxe.exe
+	cp -f _build/default/src/haxe.exe ./"$(HAXE_OUTPUT)"
+
+plugin: haxe
+	$(DUNE_COMMAND) build --profile release plugins/$(PLUGIN)/$(PLUGIN).cmxs
+	mkdir -p plugins/$(PLUGIN)/cmxs/$(SYSTEM_NAME)
+	cp -f _build/default/plugins/$(PLUGIN)/$(PLUGIN).cmxs plugins/$(PLUGIN)/cmxs/$(SYSTEM_NAME)/plugin.cmxs
+
+kill_exe_win:
 ifdef SYSTEMROOT
-	EXTENSION=.exe
-else
-	export HAXE_STD_PATH=$(CURDIR)/std
+	-@taskkill /F /IM haxe.exe 2>/dev/null
 endif
 
-ifneq ($(ADD_REVISION),0)
-	VERSION_EXTRA="let version_extra = Some \" (git build $(shell git rev-parse --abbrev-ref HEAD) @ $(shell git describe --always)) \""
+# Only use if you have only changed gencpp.ml
+quickcpp: build_src build_pass_4 copy_haxetoolkit
+
+CPP_OS := $(shell uname)
+ifeq ($(CPP_OS),Linux)
+copy_haxetoolkit:
+	sudo cp haxe /usr/bin/haxe
 else
-	VERSION_EXTRA="let version_extra = None"
+copy_haxetoolkit: /cygdrive/c/HaxeToolkit/haxe/haxe.exe
+/cygdrive/c/HaxeToolkit/haxe/haxe.exe:haxe.exe
+	cp $< $@
 endif
 
-all: libs haxe
+ifeq ($(SYSTEM_NAME),Mac)
+# This assumes that haxelib and neko will both be installed into INSTALL_DIR,
+# which is the case when installing using the mac installer package
+NEKO_LIB_PATH=$(INSTALL_DIR)/lib
+endif
 
-libs:
-	make -C libs/extlib OCAMLOPT=$(OCAMLOPT) OCAMLC=$(OCAMLC) $(TARGET_FLAG)
-	make -C libs/extc OCAMLOPT=$(OCAMLOPT) OCAMLC=$(OCAMLC) $(TARGET_FLAG)
-	make -C libs/neko OCAMLOPT=$(OCAMLOPT) OCAMLC=$(OCAMLC) $(TARGET_FLAG)
-	make -C libs/javalib OCAMLOPT=$(OCAMLOPT) OCAMLC=$(OCAMLC) $(TARGET_FLAG)
-	make -C libs/ilib OCAMLOPT=$(OCAMLOPT) OCAMLC=$(OCAMLC) $(TARGET_FLAG)
-	make -C libs/ziplib OCAMLOPT=$(OCAMLOPT) OCAMLC=$(OCAMLC) $(TARGET_FLAG)
-	make -C libs/swflib OCAMLOPT=$(OCAMLOPT) OCAMLC=$(OCAMLC) $(TARGET_FLAG)
-	make -C libs/xml-light OCAMLOPT=$(OCAMLOPT) OCAMLC=$(OCAMLC) $(TARGET_FLAG)
-	make -C libs/ttflib OCAMLOPT=$(OCAMLOPT) OCAMLC=$(OCAMLC) $(TARGET_FLAG)
-	make -C libs/objsize OCAMLOPT=$(OCAMLOPT) OCAMLC=$(OCAMLC) $(TARGET_FLAG)
+ifdef NEKO_LIB_PATH
+HAXELIB_LDFLAGS=-Wl,-rpath,$(NEKO_LIB_PATH)
+endif
 
-haxe: $(MODULES:=.$(MODULE_EXT))
-	$(COMPILER) -o $(OUTPUT) $(NATIVE_LIBS) $(NATIVE_LIB_FLAG) $(LFLAGS) $(LIBS:=.$(LIB_EXT)) $(MODULES:=.$(MODULE_EXT))
+haxelib_unix:
+	cd $(CURDIR)/extra/haxelib_src && \
+	HAXE_STD_PATH=$(CURDIR)/std $(CURDIR)/$(HAXE_OUTPUT) client.hxml && \
+	nekotools boot -c run.n
+	$(CC) $(CURDIR)/extra/haxelib_src/run.c -o $(HAXELIB_OUTPUT) -lneko $(HAXELIB_LDFLAGS)
 
-haxelib:
-	(cd $(CURDIR)/extra/haxelib_src && $(CURDIR)/$(OUTPUT) haxelib.hxml && nekotools boot bin/haxelib.n)
-	cp extra/haxelib_src/bin/haxelib$(EXTENSION) haxelib$(EXTENSION)
+# haxelib should depends on haxe, but we don't want to do that...
+ifeq ($(SYSTEM_NAME),Windows)
+haxelib: haxelib_$(PLATFORM)
+else
+haxelib: haxelib_unix
+endif
 
 tools: haxelib
 
-install:
-	-rm -f $(INSTALL_LIB_DIR)
-	-mkdir -p $(INSTALL_LIB_DIR)
-	rm -rf $(INSTALL_LIB_DIR)/std
-	cp -rf std $(INSTALL_LIB_DIR)/std
-	cp -rf extra $(INSTALL_LIB_DIR)
-	-mkdir -p $(INSTALL_LIB_DIR)/lib
-	rm -f $(INSTALL_BIN_DIR)/haxe
-	cp haxe $(INSTALL_LIB_DIR)
-	ln -s $(INSTALL_LIB_DIR)/haxe $(INSTALL_BIN_DIR)/haxe
-	chmod -R a+rx $(INSTALL_LIB_DIR)
-	chmod 777 $(INSTALL_LIB_DIR)/lib
-	# cp extra/haxelib_src/haxelib_script.sh $(INSTALL_DIR)/bin/haxelib
-	echo "#!/bin/sh" > $(INSTALL_BIN_DIR)/haxelib
-	echo "exec haxe -cp $(INSTALL_LIB_DIR)/extra/haxelib_src/src --run tools.haxelib.Main \"\$$@\"" >> $(INSTALL_BIN_DIR)/haxelib
-	chmod a+rx $(INSTALL_BIN_DIR)/haxe $(INSTALL_BIN_DIR)/haxelib
-
-# will install native version of the tools instead of script ones
-install_tools: tools
-	cp haxelib ${INSTALL_BIN_DIR}/haxelib
-	chmod a+rx $(INSTALL_BIN_DIR)/haxelib
+install: uninstall
+	mkdir -p "$(DESTDIR)$(INSTALL_BIN_DIR)"
+	cp $(HAXE_OUTPUT) $(HAXELIB_OUTPUT) "$(DESTDIR)$(INSTALL_BIN_DIR)"
+	mkdir -p "$(DESTDIR)$(INSTALL_STD_DIR)"
+	cp -r std/* "$(DESTDIR)$(INSTALL_STD_DIR)"
 
 uninstall:
-	rm -rf $(INSTALL_BIN_DIR)/haxe $(INSTALL_BIN_DIR)/haxelib $(INSTALL_LIB_DIR)
+	rm -rf $(DESTDIR)$(INSTALL_BIN_DIR)/$(HAXE_OUTPUT) $(DESTDIR)$(INSTALL_BIN_DIR)/$(HAXELIB_OUTPUT)
+	if [ -d "$(DESTDIR)$(INSTALL_LIB_DIR)/lib" ] && find "$(DESTDIR)$(INSTALL_LIB_DIR)/lib" -mindepth 1 -print -quit | grep -q .; then \
+		echo "The local haxelib repo at $(DESTDIR)$(INSTALL_LIB_DIR)/lib will not be removed. Remove it manually if you want."; \
+		find $(DESTDIR)$(INSTALL_LIB_DIR)/ ! -name 'lib' -mindepth 1 -maxdepth 1 -exec rm -rf {} +; \
+	else \
+		rm -rf $(DESTDIR)$(INSTALL_LIB_DIR); \
+	fi
+	rm -rf $(DESTDIR)$(INSTALL_STD_DIR)
 
-# Modules
+opam_install:
+	opam install ocamlfind dune --yes
 
-codegen.$(MODULE_EXT): optimizer.$(MODULE_EXT) typeload.$(MODULE_EXT) typecore.$(MODULE_EXT) type.$(MODULE_EXT) genxml.$(MODULE_EXT) common.$(MODULE_EXT) ast.$(MODULE_EXT)
+haxe_deps:
+	opam pin add haxe . --no-action
+	opam install haxe --deps-only --yes
 
-common.$(MODULE_EXT): type.$(MODULE_EXT) ast.$(MODULE_EXT)
+# Package
 
-dce.$(MODULE_EXT): ast.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) type.$(MODULE_EXT)
+package_env: opam_install haxe_deps
 
-filters.$(MODULE_EXT): ast.$(MODULE_EXT) common.$(MODULE_EXT) type.$(MODULE_EXT) dce.$(MODULE_EXT) codegen.$(MODULE_EXT) typecore.$(MODULE_EXT)
+package_src:
+	mkdir -p $(PACKAGE_OUT_DIR)
+	# use git-archive-all since we have submodules
+	# https://github.com/Kentzo/git-archive-all
+	curl -s https://raw.githubusercontent.com/Kentzo/git-archive-all/1.15/git_archive_all.py -o extra/git_archive_all.py
+	python extra/git_archive_all.py $(PACKAGE_OUT_DIR)/$(PACKAGE_FILE_NAME)_src$(PACKAGE_SRC_EXTENSION)
 
-genas3.$(MODULE_EXT): type.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT)
+package_unix:
+	mkdir -p $(PACKAGE_OUT_DIR)
+	rm -rf $(PACKAGE_FILE_NAME) $(PACKAGE_FILE_NAME).tar.gz
+	# Copy the package contents to $(PACKAGE_FILE_NAME)
+	mkdir -p $(PACKAGE_FILE_NAME)
+	cp -r $(HAXE_OUTPUT) $(HAXELIB_OUTPUT) std extra/CONTRIB.txt extra/CHANGES.txt $(PACKAGE_FILE_NAME)
+	cp LICENSE $(PACKAGE_FILE_NAME)/LICENSE.txt
+	# archive
+	tar -zcf $(PACKAGE_OUT_DIR)/$(PACKAGE_FILE_NAME)_bin.tar.gz $(PACKAGE_FILE_NAME)
+	rm -r $(PACKAGE_FILE_NAME)
 
-gencommon.$(MODULE_EXT): type.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT)
+package_bin: package_$(PLATFORM)
 
-gencpp.$(MODULE_EXT): type.$(MODULE_EXT) lexer.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT)
+xmldoc:
+	cd extra && \
+	$(CURDIR)/$(HAXELIB_OUTPUT) newrepo && \
+	$(CURDIR)/$(HAXELIB_OUTPUT) git hxcpp  https://github.com/HaxeFoundation/hxcpp   && \
+	$(CURDIR)/$(HAXELIB_OUTPUT) git hxjava https://github.com/HaxeFoundation/hxjava  && \
+	PATH="$(CURDIR):$(PATH)" $(CURDIR)/$(HAXE_OUTPUT) doc.hxml
 
-gencs.$(MODULE_EXT): type.$(MODULE_EXT) lexer.$(MODULE_EXT) gencommon.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT)
+$(INSTALLER_TMP_DIR):
+	mkdir -p $(INSTALLER_TMP_DIR)
 
-genjava.$(MODULE_EXT): type.$(MODULE_EXT) gencommon.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT)
+# Can be 'universal', 'arm64', or 'x86_64'
+ifndef PACKAGE_INSTALLER_MAC_ARCH
+PACKAGE_INSTALLER_MAC_ARCH:=$(shell uname -m)
+endif
 
-genjs.$(MODULE_EXT): type.$(MODULE_EXT) optimizer.$(MODULE_EXT) lexer.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT)
+$(INSTALLER_TMP_DIR)/neko-osx.tar.gz: $(INSTALLER_TMP_DIR)
+	NEKO_ARCH_SUFFIX=$$(if [ "$(PACKAGE_INSTALLER_MAC_ARCH)" = "x86_64" ]; then \
+		echo 64; \
+	else \
+		echo "-$(PACKAGE_INSTALLER_MAC_ARCH)"; \
+	fi); \
+	wget -nv https://github.com/HaxeFoundation/neko/releases/download/$(NEKO_VERSION_TAG)/neko-$(NEKO_VERSION)-osx$$NEKO_ARCH_SUFFIX.tar.gz -O installer/neko-osx.tar.gz
 
-genneko.$(MODULE_EXT): type.$(MODULE_EXT) lexer.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT)
+# Installer
 
-genphp.$(MODULE_EXT): type.$(MODULE_EXT) lexer.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT)
-
-genpy.$(MODULE_EXT): type.$(MODULE_EXT) lexer.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT)
-
-genswf.$(MODULE_EXT): type.$(MODULE_EXT) genswf9.$(MODULE_EXT) genswf8.$(MODULE_EXT) common.$(MODULE_EXT) ast.$(MODULE_EXT)
-
-genswf8.$(MODULE_EXT): type.$(MODULE_EXT) lexer.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT)
-
-genswf9.$(MODULE_EXT): type.$(MODULE_EXT) lexer.$(MODULE_EXT) genswf8.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT)
-
-genxml.$(MODULE_EXT): type.$(MODULE_EXT) lexer.$(MODULE_EXT) common.$(MODULE_EXT) ast.$(MODULE_EXT)
-
-interp.$(MODULE_EXT): typecore.$(MODULE_EXT) type.$(MODULE_EXT) lexer.$(MODULE_EXT) genneko.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT) genswf.$(MODULE_EXT) genjava.$(MODULE_EXT) gencs.$(MODULE_EXT) parser.$(MODULE_EXT)
-
-matcher.$(MODULE_EXT): optimizer.$(MODULE_EXT) codegen.$(MODULE_EXT) typecore.$(MODULE_EXT) type.$(MODULE_EXT) typer.$(MODULE_EXT) common.$(MODULE_EXT) ast.$(MODULE_EXT)
-
-main.$(MODULE_EXT): filters.$(MODULE_EXT) matcher.$(MODULE_EXT) typer.$(MODULE_EXT) typeload.$(MODULE_EXT) typecore.$(MODULE_EXT) type.$(MODULE_EXT) parser.$(MODULE_EXT) optimizer.$(MODULE_EXT) lexer.$(MODULE_EXT) interp.$(MODULE_EXT) genxml.$(MODULE_EXT) genswf.$(MODULE_EXT) genphp.$(MODULE_EXT) genneko.$(MODULE_EXT) genjs.$(MODULE_EXT) gencpp.$(MODULE_EXT) genas3.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT) gencommon.$(MODULE_EXT) genjava.$(MODULE_EXT) gencs.$(MODULE_EXT) genpy.$(MODULE_EXT) version.$(MODULE_EXT)
-
-optimizer.$(MODULE_EXT): typecore.$(MODULE_EXT) type.$(MODULE_EXT) parser.$(MODULE_EXT) common.$(MODULE_EXT) ast.$(MODULE_EXT)
-
-parser.$(MODULE_EXT): parser.ml lexer.$(MODULE_EXT) common.$(MODULE_EXT) ast.$(MODULE_EXT)
-	$(CC_PARSER_CMD)
-
-type.$(MODULE_EXT): ast.$(MODULE_EXT)
-
-typecore.$(MODULE_EXT): type.$(MODULE_EXT) common.$(MODULE_EXT) ast.$(MODULE_EXT)
-
-typeload.$(MODULE_EXT): typecore.$(MODULE_EXT) type.$(MODULE_EXT) parser.$(MODULE_EXT) optimizer.$(MODULE_EXT) lexer.$(MODULE_EXT) common.$(MODULE_EXT) ast.$(MODULE_EXT)
-
-typer.$(MODULE_EXT): typeload.$(MODULE_EXT) typecore.$(MODULE_EXT) type.$(MODULE_EXT) parser.$(MODULE_EXT) optimizer.$(MODULE_EXT) lexer.$(MODULE_EXT) interp.$(MODULE_EXT) genneko.$(MODULE_EXT) genjs.$(MODULE_EXT) common.$(MODULE_EXT) codegen.$(MODULE_EXT) ast.$(MODULE_EXT) filters.$(MODULE_EXT)
-
-lexer.$(MODULE_EXT): lexer.ml
-
-lexer.$(MODULE_EXT): ast.$(MODULE_EXT)
-
-ast.$(MODULE_EXT):
-
-version.$(MODULE_EXT):
-	echo $(VERSION_EXTRA) > version.ml
-	$(COMPILER) $(CFLAGS) -c version.ml
+package_installer_mac: $(INSTALLER_TMP_DIR)/neko-osx.tar.gz package_unix
+	$(eval OUTFILE := $(shell pwd)/$(PACKAGE_OUT_DIR)/$(PACKAGE_FILE_NAME)_installer.tar.gz)
+	$(eval PACKFILE := $(shell pwd)/$(PACKAGE_OUT_DIR)/$(PACKAGE_FILE_NAME)_bin.tar.gz)
+	$(eval VERSION := $(shell $(CURDIR)/$(HAXE_OUTPUT) -version 2>&1))
+	bash -c "rm -rf $(INSTALLER_TMP_DIR)/{resources,pkg,tgz,haxe.tar.gz}"
+	mkdir $(INSTALLER_TMP_DIR)/resources
+	# neko - unpack to change the dir name
+	cd $(INSTALLER_TMP_DIR)/resources && tar -zxvf ../neko-osx.tar.gz
+	mv $(INSTALLER_TMP_DIR)/resources/neko* $(INSTALLER_TMP_DIR)/resources/neko
+	cd $(INSTALLER_TMP_DIR)/resources && tar -zcvf neko.tar.gz neko
+	# haxe - unpack to change the dir name
+	cd $(INSTALLER_TMP_DIR)/resources && tar -zxvf $(PACKFILE)
+	mv $(INSTALLER_TMP_DIR)/resources/haxe* $(INSTALLER_TMP_DIR)/resources/haxe
+	cd $(INSTALLER_TMP_DIR)/resources && tar -zcvf haxe.tar.gz haxe
+	# scripts
+	cp -rf extra/mac-installer/scripts $(INSTALLER_TMP_DIR)/resources
+	sed -i '' 's/%%NEKO_VERSION%%/$(NEKO_VERSION)/g' $(INSTALLER_TMP_DIR)/resources/scripts/neko-postinstall.sh
+	sed -i '' 's/%%NEKO_MAJOR_VERSION%%/$(NEKO_MAJOR_VERSION)/g' $(INSTALLER_TMP_DIR)/resources/scripts/neko-postinstall.sh
+	cd $(INSTALLER_TMP_DIR)/resources && tar -zcvf scripts.tar.gz scripts
+	# installer structure
+	cp -rf extra/mac-installer/pkg $(INSTALLER_TMP_DIR)
+	mkdir $(INSTALLER_TMP_DIR)/tgz; mv $(INSTALLER_TMP_DIR)/resources/*.tar.gz $(INSTALLER_TMP_DIR)/tgz
+	cd $(INSTALLER_TMP_DIR)/tgz; find . | cpio -o --format odc | gzip -c > ../pkg/files.pkg/Payload
+	cd $(INSTALLER_TMP_DIR)/pkg/files.pkg && bash -c "INSTKB=$$(du -sk ../../tgz | awk '{print $$1;}'); \
+	du -sk ../../tgz; \
+	echo $$INSTKB ; \
+	INSTKBH=`expr $$INSTKB - 4`; \
+	echo $$INSTKBH ;\
+	sed -i '' 's/%%INSTKB%%/$$INSTKBH/g' PackageInfo ;\
+	sed -i '' 's/%%VERSION%%/$(VERSION)/g' PackageInfo ;\
+	sed -i '' 's/%%VERSTRING%%/$(VERSION)/g' PackageInfo ;\
+	sed -i '' 's/%%VERLONG%%/$(VERSION)/g' PackageInfo ;\
+	sed -i '' 's/%%NEKOVER%%/$(NEKO_VERSION)/g' PackageInfo ;\
+	cd .. ;\
+	sed -i '' 's/%%VERSION%%/$(VERSION)/g' Distribution ;\
+	sed -i '' 's/%%VERSTRING%%/$(VERSION)/g' Distribution ;\
+	sed -i '' 's/%%VERLONG%%/$(VERSION)/g' Distribution ;\
+	sed -i '' 's/%%NEKOVER%%/$(NEKO_VERSION)/g' Distribution ;\
+	sed -i '' 's/%%INSTKB%%/$$INSTKBH/g' Distribution"
+	# repackage
+	cd $(INSTALLER_TMP_DIR)/pkg; xar --compression none -cf ../$(PACKAGE_FILE_NAME).pkg *
+	# tar
+	cd $(INSTALLER_TMP_DIR); tar -zcvf $(OUTFILE) $(PACKAGE_FILE_NAME).pkg
 
 # Clean
 
-clean: clean_libs clean_haxe clean_tools
-
-clean_libs:
-	make -C libs/extlib clean
-	make -C libs/extc clean
-	make -C libs/neko clean
-	make -C libs/ziplib clean
-	make -C libs/javalib clean
-	make -C libs/ilib clean
-	make -C libs/swflib clean
-	make -C libs/xml-light clean
-	make -C libs/ttflib clean
-	make -C libs/objsize clean
+clean: clean_haxe clean_tools clean_package
 
 clean_haxe:
-	rm -f $(MODULES:=.obj) $(MODULES:=.o) $(MODULES:=.cmx) $(MODULES:=.cmi) $(MODULES:=.cmo) lexer.ml $(OUTPUT)
+	rm -f -r _build $(HAXE_OUTPUT) $(PREBUILD_OUTPUT)
 
 clean_tools:
-	rm -f $(OUTPUT) haxelib
+	rm -f $(HAXE_OUTPUT) $(PREBUILD_OUTPUT) $(HAXELIB_OUTPUT)
+
+clean_package:
+	rm -rf $(PACKAGE_OUT_DIR)
+
+FORCE:
 
 # SUFFIXES
 
@@ -209,7 +256,7 @@ clean_tools:
 .ml.cmo:
 	$(CC_CMD)
 
-.mll.ml:
-	ocamllex $<
+.PHONY: haxe haxelib
 
-.PHONY: haxe libs version.cmx version.cmo haxelib
+# our "all:" target doens't work in parallel mode
+.NOTPARALLEL:

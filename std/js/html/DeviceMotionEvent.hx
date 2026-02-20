@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,26 +20,41 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\DeviceMotionEvent.webidl. Do not edit!
+
 package js.html;
 
-/** A <code>DeviceMotionEvent</code> object describes an event that indicates the amount of physical motion of the device that has occurred, and is fired at a set interval (rather than in response to motion). It provides information about the rate of rotation, as well as acceleration along all three axes.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/DeviceMotionEvent">MDN</a>. */
+/**
+	The `DeviceMotionEvent` provides web developers with information about the speed of changes for the device's position and orientation.
+
+	Documentation [DeviceMotionEvent](https://developer.mozilla.org/en-US/docs/Web/API/DeviceMotionEvent) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/DeviceMotionEvent$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/DeviceMotionEvent>
+**/
 @:native("DeviceMotionEvent")
-extern class DeviceMotionEvent extends Event
-{
-	/** The acceleration of the device. This value has taken into account the effect of gravity and removed it from the figures. This value may not exist if the hardware doesn't know how to remove gravity from the acceleration data. <strong>Read only.</strong> */
+extern class DeviceMotionEvent extends Event {
+	
+	/**
+		An object giving the acceleration of the device on the three axis X, Y and Z. Acceleration is expressed in m/s2.
+	**/
 	var acceleration(default,null) : DeviceAcceleration;
-
-	/** The acceleration of the device. This value includes the effect of gravity, and may be the only value available on devices that don't have a gyroscope to allow them to properly remove gravity from the data. <strong>Read only.</strong> */
+	
+	/**
+		An object giving the acceleration of the device on the three axis X, Y and Z with the effect of gravity. Acceleration is expressed in m/s2.
+	**/
 	var accelerationIncludingGravity(default,null) : DeviceAcceleration;
-
-	/** The interval, in milliseconds, at which the <code>DeviceMotionEvent</code> is fired. The next event will be fired in approximately this amount of time. */
-	var interval(default,null) : Float;
-
-	/** The rates of rotation of the device about all three axes. <strong>Read only.</strong> */
+	
+	/**
+		An object giving the rate of change of the device's orientation on the three orientation axis alpha, beta and gamma. Rotation rate is expressed in degrees per seconds.
+	**/
 	var rotationRate(default,null) : DeviceRotationRate;
-
-	function initDeviceMotionEvent( type : String, bubbles : Bool, cancelable : Bool, acceleration : DeviceAcceleration, accelerationIncludingGravity : DeviceAcceleration, rotationRate : DeviceRotationRate, interval : Float ) : Void;
-
+	
+	/**
+		A number representing the interval of time, in milliseconds, at which data is obtained from the device.
+	**/
+	var interval(default,null) : Float;
+	
+	/** @throws DOMError */
+	function new( type : String, ?eventInitDict : DeviceMotionEventInit ) : Void;
+	function initDeviceMotionEvent( type : String, canBubble : Bool = false, cancelable : Bool = false, ?acceleration : DeviceAccelerationInit, ?accelerationIncludingGravity : DeviceAccelerationInit, ?rotationRate : DeviceRotationRateInit, ?interval : Float ) : Void;
 }

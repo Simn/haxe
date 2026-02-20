@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,20 +20,43 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SpeechGrammarList.webidl. Do not edit!
+
 package js.html;
 
+/**
+	The `SpeechGrammarList` interface of the Web Speech API represents a list of `SpeechGrammar` objects containing words or patterns of words that we want the recognition service to recognize.
+
+	Documentation [SpeechGrammarList](https://developer.mozilla.org/en-US/docs/Web/API/SpeechGrammarList) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SpeechGrammarList$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SpeechGrammarList>
+**/
 @:native("SpeechGrammarList")
-extern class SpeechGrammarList implements ArrayAccess<SpeechGrammar>
-{
+extern class SpeechGrammarList implements ArrayAccess<SpeechGrammar> {
+	
+	/**
+		Returns the number of `SpeechGrammar` objects contained in the `SpeechGrammarList`.
+	**/
 	var length(default,null) : Int;
-
+	
+	/** @throws DOMError */
 	function new() : Void;
-
-	function addFromString( string : String, ?weight : Float ) : Void;
-
-	function addFromUri( src : String, ?weight : Float ) : Void;
-
+	
+	/**
+		Standard getter — allows individual `SpeechGrammar` objects to be retrieved from the `SpeechGrammarList` using array syntax.
+		@throws DOMError
+	**/
 	function item( index : Int ) : SpeechGrammar;
-
+	
+	/**
+		Takes a grammar present at a specific URI and adds it to the `SpeechGrammarList` as a new `SpeechGrammar` object.
+		@throws DOMError
+	**/
+	function addFromURI( src : String, ?weight : Float ) : Void;
+	
+	/**
+		Takes a grammar present in a specific `DOMString` within the code base (e.g. stored in a variable) and adds it to the `SpeechGrammarList` as a new `SpeechGrammar` object.
+		@throws DOMError
+	**/
+	function addFromString( string : String, ?weight : Float ) : Void;
 }

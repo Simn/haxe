@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,143 +20,127 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-import python.internal.AnonObject;
-import python.internal.StringImpl;
-import python.internal.ArrayImpl;
-
-import python.lib.Builtin;
-import python.lib.Inspect;
+import python.Boot.handleKeywords;
+import python.Boot;
 import python.Syntax;
 import python.VarArgs;
+import python.internal.AnonObject;
+import python.internal.ArrayImpl;
+import python.internal.MethodClosure;
+import python.internal.StringImpl;
+import python.internal.UBuiltins;
+import python.lib.Inspect;
 
 @:access(python.Boot)
 @:coreApi
 class Reflect {
-
-
-	static inline function handleKeywords(name:String):String {
-		return python.Boot.handleKeywords(name);
+	public static inline function hasField(o:Dynamic, field:String):Bool {
+		return Boot.hasField(o, field);
 	}
 
-	static function unhandleKeywords(name:String):String {
-		return python.Boot.unhandleKeywords(name);
+	@:ifFeature("dynamic_read", "anon_optional_read")
+	public static function field(o:Dynamic, field:String):Dynamic {
+		return Boot.field(o, field);
 	}
 
-	public static function hasField( o : Dynamic, field : String ) : Bool
-	{
-		var field = handleKeywords(field);
-		return Builtin.hasattr(o, field);
+	@:ifFeature("dynamic_write", "anon_optional_write")
+	public static inline function setField(o:Dynamic, field:String, value:Dynamic):Void {
+		UBuiltins.setattr(o, handleKeywords(field), value);
 	}
 
-	static inline function isString (o:Dynamic):Bool {
-		return Builtin.isinstance(o, String);
-	}
-	static inline function isArray (o:Dynamic):Bool {
-		return Builtin.isinstance(o, Array);
-	}
-	@:access(python.Boot)
-	@:keep public static function field( o : Dynamic, field : String ) : Dynamic
-	{
-		return python.Boot.field(o, field);
-	}
-
-	@:keep public static function setField( o : Dynamic, field : String, value : Dynamic ) : Void
-	{
-		var field = handleKeywords(field);
-		return Builtin.setattr(o,field,value);
-	}
-
-	public static function getProperty( o : Dynamic, field : String ) : Dynamic
-	{
-		var field = handleKeywords(field);
-		var tmp = null;
-		if (o == null) {
+	public static function getProperty(o:Dynamic, field:String):Dynamic {
+		if (o == null)
 			return null;
-		} else {
-			tmp = Reflect.field(o, "get_" + field);
-			if (tmp != null && Builtin.callable(tmp)) {
-				return tmp();
-			} else {
-				return Reflect.field(o, field);
-			}
-		}
+
+		field = handleKeywords(field);
+		if (Boot.isAnonObject(o))
+			return Reflect.field(o, field);
+		var tmp = Reflect.field(o, "get_" + field);
+		if (tmp != null && UBuiltins.callable(tmp))
+			return tmp();
+		else
+			return Reflect.field(o, field);
 	}
 
-	public static function setProperty( o : Dynamic, field : String, value : Dynamic ) : Void {
-
+	public static function setProperty(o:Dynamic, field:String, value:Dynamic):Void {
 		var field = handleKeywords(field);
-
-		return if (Builtin.hasattr(o,"set_"+field)) {
-			var tmp = Builtin.getattr(o,"set_"+field);
-			tmp(value);
-		}
-		else Builtin.setattr(o,field, value);
+		if (Boot.isAnonObject(o))
+			UBuiltins.setattr(o, field, value);
+		else if (UBuiltins.hasattr(o, "set_" + field))
+			UBuiltins.getattr(o, "set_" + field)(value);
+		else
+			UBuiltins.setattr(o, field, value);
 	}
 
-	public static function callMethod( o : Dynamic, func : Dynamic, args : Array<Dynamic> ) : Dynamic
-	{
-		var args:VarArgs = args;
-		return if (Builtin.callable(func)) func(python.Syntax.varArgs(args)) else null;
+	public static function callMethod(o:Dynamic, func:haxe.Constraints.Function, args:Array<Dynamic>):Dynamic {
+		return if (UBuiltins.callable(func)) func(python.Syntax.varArgs(args)) else null;
 	}
 
-	public static inline function fields( o : Dynamic ) : Array<String>
-	{
+	public static inline function fields(o:Dynamic):Array<String> {
 		return python.Boot.fields(o);
 	}
 
-	public static function isFunction( f : Dynamic ) : Bool
-	{
-		return Inspect.isfunction(f) || Inspect.ismethod(f);
+	public static function isFunction(f:Dynamic):Bool {
+		return Inspect.isfunction(f) || Inspect.ismethod(f) || Boot.hasField(f, "func_code");
 	}
 
-	public static function compare<T>( a : T, b : T ) : Int {
-		if (a == null && b == null) return 0;
-		return
-			if (a == null) 1 else if (b == null) -1
-			else ( a == b ) ? 0 : (((cast a) > (cast b)) ? 1 : -1);
+	public static function compare<T>(a:T, b:T):Int {
+		if (a == null && b == null)
+			return 0;
+		else if (haxe.Int64.isInt64(a) && haxe.Int64.isInt64(b))
+			return haxe.Int64.compare(cast a, cast b);
+		return if (a == null) 1 else if (b == null) -1 else (a == b) ? 0 : (((cast a) > (cast b)) ? 1 : -1);
 	}
 
-	public static function compareMethods( f1 : Dynamic, f2 : Dynamic ) : Bool {
-		if( f1 == f2 )
+	static inline function isClosure(v:Dynamic):Bool {
+		return UBuiltins.isinstance(v, MethodClosure);
+	}
+
+	public static function compareMethods(f1:Dynamic, f2:Dynamic):Bool {
+		if (f1 == f2)
 			return true;
-		if( !isFunction(f1) || !isFunction(f2) )
+		if (isClosure(f1) && isClosure(f2)) {
+			var m1 = (f1 : MethodClosure);
+			var m2 = (f2 : MethodClosure);
+			return m1.obj == m2.obj && m1.func == m2.func;
+		}
+		if (!isFunction(f1) || !isFunction(f2))
 			return false;
 
 		return false;
 	}
 
-	public static function isObject( v : Dynamic ) : Bool {
-
+	public static function isObject(v:Dynamic):Bool {
 		return switch (Type.typeof(v)) {
 			case TObject, TClass(_): true;
-			case _ : false;
+			case _: false;
 		}
 	}
 
-	public static function isEnumValue( v : Dynamic ) : Bool {
-		return v != Enum && Builtin.isinstance(v, cast Enum);
+	public static function isEnumValue(v:Dynamic):Bool {
+		return v != Enum && UBuiltins.isinstance(v, cast Enum);
 	}
 
-	public static function deleteField( o : Dynamic, field : String ) : Bool {
-		if( !hasField(o,field) ) return false;
+	public static function deleteField(o:Dynamic, field:String):Bool {
+		field = handleKeywords(field);
+		if (!hasField(o, field))
+			return false;
 		Syntax.callField(o, "__delattr__", field);
 		return true;
 	}
 
-	public static function copy<T>( o : T ) : T {
-		var o2 : Dynamic = {};
-		for( f in Reflect.fields(o) )
-			Reflect.setField(o2,f,Reflect.field(o,f));
+	public static function copy<T>(o:Null<T>):Null<T> {
+		if (o == null)
+			return null;
+		var o2:Dynamic = {};
+		for (f in Reflect.fields(o))
+			Reflect.setField(o2, f, Reflect.field(o, f));
 		return o2;
 	}
 
-
-
-	@:overload(function( f : Array<Dynamic> -> Void ) : Dynamic {})
-	public static function makeVarArgs( f : Array<Dynamic> -> Dynamic ) : Dynamic {
-		return function (v:VarArgs) {
+	public static function makeVarArgs<T>(f:Array<Dynamic>->T):Dynamic {
+		return function(v:VarArgs<Dynamic>) {
 			return f(v);
 		}
 	}
-
 }

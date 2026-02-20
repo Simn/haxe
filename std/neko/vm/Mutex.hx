@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,24 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package neko.vm;
 
-class Mutex {
-	var m : Dynamic;
-	public function new() {
-		m = mutex_create();
-	}
-	public function acquire() {
-		mutex_acquire(m);
-	}
-	public function tryAcquire() : Bool {
-		return mutex_try(m);
-	}
-	public function release() {
-		mutex_release(m);
-	}
-	static var mutex_create = neko.Lib.loadLazy("std","mutex_create",0);
-	static var mutex_release = neko.Lib.loadLazy("std","mutex_release",1);
-	static var mutex_acquire = neko.Lib.loadLazy("std","mutex_acquire",1);
-	static var mutex_try = neko.Lib.loadLazy("std","mutex_try",1);
-}
+@:deprecated typedef Mutex = sys.thread.Mutex;

@@ -1,32 +1,91 @@
-/*
- * Copyright (C)2005-2014 Haxe Foundation
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
- */
-
 package haxe;
 
-/**
-    A special abstract type that represents "rest" function argument.
+import haxe.iterators.RestIterator;
+import haxe.iterators.RestKeyValueIterator;
 
-    Should be used as a type for the last argument of an extern method,
-    representing that arbitrary number of arguments of given type can be
-    passed to that method.
+private typedef NativeRest<T> = Array<T>;
+
+/**
+	A special type that represents a "rest" function argument.
+
+	The special `...` syntax can be used for convenience and improved readability:
+
+	```haxe
+	function f(...rest:Int) {
+		$type(rest); // haxe.Rest<Int>
+	}
+
+	f(1, 2, 3);
+
+	final array = [1, 2, 3];
+	f(...array);
+	```
+
+	Should be used as a type for the last argument of a method, indicating that
+	an arbitrary number of arguments of the given type can be passed to that method.
+
+	Allows to use array access by index to get values of rest arguments.
+	If the index exceeds the amount of rest arguments passed, the result is unspecified.
 **/
-abstract Rest<T>(Array<T>) { }
+@:coreApi
+abstract Rest<T>(NativeRest<T>) {
+	/** Amount of arguments passed as rest arguments */
+	public var length(get,never):Int;
+	inline function get_length():Int
+		return this.length;
+
+	/**
+		Create rest arguments using contents of `array`.
+
+		WARNING:
+		Depending on a target platform modifying `array` after using this method
+		may affect the created `Rest` instance.
+		Use `Rest.of(array.copy())` to avoid that.
+	**/
+	@:from static public inline function of<T>(array:Array<T>):Rest<T>
+		return new Rest(array);
+
+	inline function new(array:Array<T>):Void
+		this = array;
+
+	@:arrayAccess inline function get(index:Int):T
+		return this[index];
+
+	/**
+		Creates an array containing all the values of rest arguments.
+	**/
+	@:to public #if !cppia inline #end function toArray():Array<T>
+		return this.copy();
+
+	public inline function iterator():RestIterator<T>
+		return new RestIterator<T>(this);
+
+	public inline function keyValueIterator():RestKeyValueIterator<T>
+		return new RestKeyValueIterator<T>(this);
+
+	/**
+		Create a new rest arguments collection by appending `item` to this one.
+	**/
+	public function append(item:T):Rest<T> {
+		var result = this.copy();
+		result.push(item);
+		return new Rest(result);
+	}
+
+	/**
+		Create a new rest arguments collection by prepending this one with `item`.
+	**/
+	public function prepend(item:T):Rest<T> {
+		var result = this.copy();
+		result.unshift(item);
+		return new Rest(result);
+	}
+
+	public inline function toString():String {
+		#if (flash || js)
+			return '[${this.toString()}]';
+		#else
+			return this.toString();
+		#end
+	}
+}

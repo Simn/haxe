@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,12 +20,19 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\MediaStreamAudioSourceNode.webidl. Do not edit!
+
 package js.html.audio;
 
-@:native("MediaStreamAudioSourceNode")
-extern class MediaStreamAudioSourceNode extends AudioSourceNode
-{
-	var mediaStream(default,null) : js.html.rtc.MediaStream;
+/**
+	A `MediaStreamAudioSourceNode` has no inputs and exactly one output, and is created using the `AudioContext.createMediaStreamSource` method. The number of channels in the output equals the number of channels in `AudioMediaStreamTrack`. If there is no valid media stream, then the number of output channels will be one silent channel.
 
+	Documentation [MediaStreamAudioSourceNode](https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamAudioSourceNode) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamAudioSourceNode$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamAudioSourceNode>
+**/
+@:native("MediaStreamAudioSourceNode")
+extern class MediaStreamAudioSourceNode extends AudioNode {
+	/** @throws DOMError */
+	function new( context : AudioContext, options : MediaStreamAudioSourceOptions ) : Void;
 }

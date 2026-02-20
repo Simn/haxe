@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,34 +20,30 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SpeechRecognitionError.webidl. Do not edit!
+
 package js.html;
 
+/**
+	The `SpeechRecognitionError` interface of the Web Speech API represents error messages from the recognition service.
+
+	Documentation [SpeechRecognitionError](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognitionError) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognitionError$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognitionError>
+**/
 @:native("SpeechRecognitionError")
-extern class SpeechRecognitionError extends Event
-{
-	static inline var ABORTED : Int = 2;
-
-	static inline var AUDIO_CAPTURE : Int = 3;
-
-	static inline var BAD_GRAMMAR : Int = 7;
-
-	static inline var LANGUAGE_NOT_SUPPORTED : Int = 8;
-
-	static inline var NETWORK : Int = 4;
-
-	static inline var NOT_ALLOWED : Int = 5;
-
-	static inline var NO_SPEECH : Int = 1;
-
-	static inline var OTHER : Int = 0;
-
-	static inline var SERVICE_NOT_ALLOWED : Int = 6;
-
-	var code(default,null) : Int;
-
+extern class SpeechRecognitionError extends Event {
+	
+	/**
+		Returns the type of error raised.
+	**/
+	var error(default,null) : SpeechRecognitionErrorCode;
+	
+	/**
+		Returns a message describing the error in more detail.
+	**/
 	var message(default,null) : String;
-
-	function new( type : String, canBubble : Bool = true, cancelable : Bool = true ) : Void;
-
+	
+	/** @throws DOMError */
+	function new( type : String, ?eventInitDict : SpeechRecognitionErrorInit ) : Void;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,18 +20,31 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HashChangeEvent.webidl. Do not edit!
+
 package js.html;
 
+/**
+	The `HashChangeEvent` event is fired when the fragment identifier of the URL has changed (the part of the URL that follows the # symbol, including the # symbol).
+
+	Documentation [HashChangeEvent](https://developer.mozilla.org/en-US/docs/Web/API/HashChangeEvent) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HashChangeEvent$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HashChangeEvent>
+**/
 @:native("HashChangeEvent")
-extern class HashChangeEvent extends Event
-{
-	var newURL(default,null) : String;
-
+extern class HashChangeEvent extends Event {
+	
+	/**
+		The previous URL from which the window was navigated.
+	**/
 	var oldURL(default,null) : String;
-
-	function new( type : String, canBubble : Bool = true, cancelable : Bool = true ) : Void;
-
-	function initHashChangeEvent( type : String, canBubble : Bool, cancelable : Bool, oldURL : String, newURL : String ) : Void;
-
+	
+	/**
+		The new URL to which the window is navigating.
+	**/
+	var newURL(default,null) : String;
+	
+	/** @throws DOMError */
+	function new( type : String, ?eventInitDict : HashChangeEventInit ) : Void;
+	function initHashChangeEvent( typeArg : String, canBubbleArg : Bool = false, cancelableArg : Bool = false, oldURLArg : String = "", newURLArg : String = "" ) : Void;
 }

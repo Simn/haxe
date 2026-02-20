@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,114 +19,165 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 /**
-	This class gives you access to many base functionalities of system platforms. Looks in [sys] sub packages for more system APIs.
+	This class provides access to various base functions of system platforms.
+	Look in the `sys` package for more system APIs.
 **/
 @:require(sys)
 extern class Sys {
+	/**
+		Prints any value to the standard output.
+	**/
+	static function print(v:Dynamic):Void;
 
 	/**
-		Print any value on the standard output.
+		Prints any value to the standard output, followed by a newline.
+		On Windows, this function outputs a CRLF newline.
+		LF newlines are printed on all other platforms.
 	**/
-	static function print( v : Dynamic ) : Void;
+	static function println(v:Dynamic):Void;
 
 	/**
-		Print any value on the standard output, followed by a newline
+		Returns all the arguments that were passed in the command line.
+		This does not include the interpreter or the name of the program file.
+
+		(java)(eval) On Windows, non-ASCII Unicode arguments will not work correctly.
 	**/
-	static function println( v : Dynamic ) : Void;
+	static function args():Array<String>;
 
 	/**
-		Returns all the arguments that were passed by the commandline.
+		Returns the value of the given environment variable, or `null` if it
+		doesn't exist.
 	**/
-	static function args() : Array<String>;
+	static function getEnv(s:String):Null<String>;
 
 	/**
-		Returns the value of the given environment variable.
+		Sets the value of the given environment variable.
+
+		If `v` is `null`, the environment variable is removed.
+
+		(java) This functionality is not available on Java; calling this function will throw.
 	**/
-	static function getEnv( s : String ) : String;
+	static function putEnv(s:String, v:Null<String>):Void;
 
 	/**
-		Set the value of the given environment variable.
+		Returns a map of the current environment variables and their values
+		as of the invocation of the function.
+
+		(python) On Windows, the variable names are always in upper case.
+
+		(cpp)(hl)(neko) On Windows, the variable names match the last capitalization used when modifying
+		the variable if the variable has been modified, otherwise they match their capitalization at
+		the start of the process.
+
+		On Windows on remaining targets, variable name capitalization matches however they were capitalized
+		at the start of the process or at the moment of their creation.
 	**/
-	static function putEnv( s : String, v : String ) : Void;
+	static function environment():Map<String, String>;
 
 	/**
-		Returns the whole environement variables.
+		Suspends execution for the given length of time (in seconds).
 	**/
-	static function environment() : Map<String,String>;
+	static function sleep(seconds:Float):Void;
 
 	/**
-		Suspend the current execution for the given time (in seconds).
+		Changes the current time locale, which will affect `DateTools.format` date formatting.
+		Returns `true` if the locale was successfully changed.
 	**/
-	static function sleep( seconds : Float ) : Void;
+	static function setTimeLocale(loc:String):Bool;
 
 	/**
-		Change the current time locale, which will affect [DateTools.format] date formating.
-		Returns true if the locale was successfully changed
+		Gets the current working directory (usually the one in which the program was started).
 	**/
-	static function setTimeLocale( loc : String ) : Bool;
+	static function getCwd():String;
 
 	/**
-		Get the current working directory (usually the one in which the program was started)
+		Changes the current working directory.
+
+		(java) This functionality is not available on Java; calling this function will throw.
 	**/
-	static function getCwd() : String;
+	static function setCwd(s:String):Void;
 
 	/**
-		Change the current working directory.
+		Returns the type of the current system. Possible values are:
+		 - `"Windows"`
+		 - `"Linux"`
+		 - `"BSD"`
+		 - `"Mac"`
 	**/
-	static function setCwd( s : String ) : Void;
+	static function systemName():String;
 
 	/**
-		Returns the name of the system you are running on. For instance :
-			"Windows", "Linux", "BSD" and "Mac" depending on your desktop OS.
+		Runs the given command. The command output will be printed to the same output as the current process.
+		The current process will block until the command terminates.
+		The return value is the exit code of the command (usually `0` indicates no error).
+
+		Command arguments can be passed in two ways:
+
+		 1. Using `args` to pass command arguments. Each argument will be automatically quoted and shell meta-characters will be escaped if needed.
+		`cmd` should be an executable name that can be located in the `PATH` environment variable, or a full path to an executable.
+
+		 2. When `args` is not given or is `null`, command arguments can be appended to `cmd`. No automatic quoting/escaping will be performed. `cmd` should be formatted exactly as it would be when typed at the command line.
+		It can run executables, as well as shell commands that are not executables (e.g. on Windows: `dir`, `cd`, `echo` etc).
+
+		Use the `sys.io.Process` API for more complex tasks, such as background processes, or providing input to the command.
 	**/
-	static function systemName() : String;
+	static function command(cmd:String, ?args:Array<String>):Int;
 
 	/**
-		Run the given command with the list of arguments. The command output will be printed on the same output as the current process.
-		The current process will block until the command terminates and it will return the command result (0 if there was no error).
-		Read the [sys.io.Process] api for a more complete way to start background processes.
+		Exits the current process with the given exit code.
+
+		(macro)(eval) Being invoked in a macro or eval context (e.g. with `-x` or `--run`) immediately terminates
+		the compilation process, which also prevents the execution of any `--next` sections of compilation arguments.
 	**/
-	static function command( cmd : String, ?args : Array<String> ) : Int;
+	static function exit(code:Int):Void;
 
 	/**
-		Exit the current process with the given error code.
+		Gives the most precise timestamp value available (in seconds).
 	**/
-	static function exit( code : Int ) : Void;
+	static function time():Float;
 
 	/**
-		Gives the most precise timestamp value (in seconds).
+    		Returns CPU time consumed by the current process or thread, measured in seconds.
+		This value only includes the actual time the CPU has actively spent executing 
+		instructions for the process/thread and excludes idle or sleep time. The precision 
+		and behavior may vary depending on the platform and underlying implementation.
 	**/
-	static function time() : Float;
-
-	/**
-		Gives the most precise timestamp value (in seconds) but only account for the actual time spent running on the CPU for the current thread/process.
-	**/
-	static function cpuTime() : Float;
+	static function cpuTime():Float;
 
 	/**
 		Returns the path to the current executable that we are running.
 	**/
-	static function executablePath() : String;
+	@:deprecated("Use programPath instead") static function executablePath():String;
 
 	/**
-		Read a single input character from the standard input (without blocking) and returns it. Setting [echo] to true will also display it on the output.
+		Returns the absolute path to the current program file that we are running.
+		Concretely, for an executable binary, it returns the path to the binary.
+		For a script (e.g. a PHP file), it returns the path to the script.
 	**/
-	static function getChar( echo : Bool ) : Int;
+	static function programPath():String;
 
 	/**
-		Returns the process standard input, from which you can read what user enters. Usually it will block until the user send a full input line. See [getChar] for an alternative.
+		Reads a single input character from the standard input and returns it.
+		Setting `echo` to `true` will also display the character on the output.
 	**/
-	static function stdin() : haxe.io.Input;
+	static function getChar(echo:Bool):Int;
 
 	/**
-		Returns the process standard output on which you can write.
+		Returns the standard input of the process, from which user input can be read.
+		Usually it will block until the user sends a full input line.
+		See `getChar` for an alternative.
 	**/
-	static function stdout() : haxe.io.Output;
+	static function stdin():haxe.io.Input;
 
 	/**
-		Returns the process standard error on which you can write.
+		Returns the standard output of the process, to which program output can be written.
 	**/
-	static function stderr() : haxe.io.Output;
+	static function stdout():haxe.io.Output;
 
+	/**
+		Returns the standard error of the process, to which program errors can be written.
+	**/
+	static function stderr():haxe.io.Output;
 }

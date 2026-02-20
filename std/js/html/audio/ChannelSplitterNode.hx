@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,10 +20,12 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\ChannelSplitterNode.webidl. Do not edit!
+
 package js.html.audio;
 
 @:native("ChannelSplitterNode")
-extern class ChannelSplitterNode extends AudioNode
-{
+extern class ChannelSplitterNode extends AudioNode {
+	/** @throws DOMError */
+	function new( context : BaseAudioContext, ?options : ChannelSplitterOptions ) : Void;
 }

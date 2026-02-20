@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,20 +20,40 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\DataTransferItem.webidl. Do not edit!
+
 package js.html;
 
+/**
+	The `DataTransferItem` object represents one drag data item. During a drag operation, each `drag event` has a `dataTransfer` property which contains a `list` of drag data items. Each item in the list is a `DataTransferItem` object.
+
+	Documentation [DataTransferItem](https://developer.mozilla.org/en-US/docs/Web/API/DataTransferItem) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/DataTransferItem$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/DataTransferItem>
+**/
 @:native("DataTransferItem")
-extern class DataTransferItem
-{
+extern class DataTransferItem {
+	
+	/**
+		The kind of drag data item, `string` or `file`.
+	**/
 	var kind(default,null) : String;
-
+	
+	/**
+		The drag data item's type, typically a MIME type.
+	**/
 	var type(default,null) : String;
-
-	function getAsEntry() : js.html.fs.Entry;
-
-	function getAsFile() : Blob;
-
-	function getAsString( callback_ : StringCallback ) : Void;
-
+	
+	
+	/**
+		Invokes the specified callback with the drag data item string as its argument.
+		@throws DOMError
+	**/
+	function getAsString( callback : String -> Void ) : Void;
+	
+	/**
+		Returns the `File` object associated with the drag data item (or null if the drag item is not a file).
+		@throws DOMError
+	**/
+	function getAsFile() : File;
 }

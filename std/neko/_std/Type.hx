@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,9 +19,11 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 enum ValueType {
 	TNull;
 	TInt;
+	TInt64;
 	TFloat;
 	TBool;
 	TObject;
@@ -33,7 +35,7 @@ enum ValueType {
 
 @:coreApi class Type {
 
-	public static function getClass<T>( o : T ) : Class<T> untyped {
+	public static function getClass<T>( o : T ) : Null<Class<T>> untyped {
 		if( __dollar__typeof(o) != __dollar__tobject )
 			return null;
 		var p = __dollar__objgetproto(o);
@@ -42,14 +44,14 @@ enum ValueType {
 		return p.__class__;
 	}
 
-	public static function getEnum( o : EnumValue ) : Enum<Dynamic> untyped {
+	public static function getEnum( o : EnumValue ) : Null<Enum<Dynamic>> untyped {
 		if( __dollar__typeof(o) != __dollar__tobject )
 			return null;
 		return o.__enum__;
 	}
 
 
-	public static function getSuperClass( c : Class<Dynamic> ) : Class<Dynamic> untyped {
+	public static function getSuperClass( c : Class<Dynamic> ) : Null<Class<Dynamic>> untyped {
 		return c.__super__;
 	}
 
@@ -66,9 +68,9 @@ enum ValueType {
 		return a.join(".");
 	}
 
-	public static function resolveClass( name : String ) : Class<Dynamic> untyped {
+	public static function resolveClass( name : String ) : Null<Class<Dynamic>> untyped {
 		var path = name.split(".");
-		cl = Reflect.field(untyped neko.Boot.__classes,path[0]);
+		var cl = Reflect.field(untyped neko.Boot.__classes,path[0]);
 		var i = 1;
 		while( cl != null && i < path.length ) {
 			cl = Reflect.field(cl,path[i]);
@@ -81,9 +83,9 @@ enum ValueType {
 	}
 
 
-	public static function resolveEnum( name : String ) : Enum<Dynamic> untyped {
+	public static function resolveEnum( name : String ) : Null<Enum<Dynamic>> untyped {
 		var path = name.split(".");
-		e = Reflect.field(neko.Boot.__classes,path[0]);
+		var e = Reflect.field(neko.Boot.__classes,path[0]);
 		var i = 1;
 		while( e != null && i < path.length ) {
 			e = Reflect.field(e,path[i]);
@@ -115,7 +117,7 @@ enum ValueType {
 	}
 
 	public static function createEnum<T>( e : Enum<T>, constr : String, ?params : Array<Dynamic> ) : T {
-		var f = Reflect.field(e,constr);
+		var f:Dynamic = Reflect.field(e,constr);
 		if( f == null ) throw "No such constructor "+constr;
 		if( Reflect.isFunction(f) ) {
 			if( params == null ) throw "Constructor "+constr+" need parameters";
@@ -174,13 +176,13 @@ enum ValueType {
 		return switch( __dollar__typeof(v) ) {
 		case 0: TNull;
 		case 1: TInt;
-		case 2: TFloat;
+		case 2: Std.int(v) == v ? TInt : TFloat;
 		case 3: TBool;
 		case 7: TFunction;
 		case 5:
 			var c = v.__class__;
 			if( c != null )
-				TClass(c);
+				(c == @:privateAccess haxe.Int64.IMPL) ? TInt64 : TClass(c);
 			else {
 				var e = v.__enum__;
 				if( e != null )

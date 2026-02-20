@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -21,47 +21,39 @@
  */
 package haxe.zip;
 
-@:coreApi
-class Uncompress {
-	var s : Dynamic;
+import haxe.io.Bytes;
+using cpp.marshal.ViewExtensions;
 
-	public function new( ?windowBits : Int ) : Void {
-		s = _inflate_init(windowBits);
+@:coreApi class Uncompress {
+	private final impl : cpp.zip.Uncompress;
+
+	public function new(?windowBits:Int):Void {
+		impl = cpp.zip.Uncompress.create(windowBits ?? 15);
 	}
 
-	public function execute( src : haxe.io.Bytes, srcPos : Int, dst : haxe.io.Bytes, dstPos : Int ) : { done : Bool, read : Int, write : Int } {
-		return _inflate_buffer(s,src.getData(),srcPos,dst.getData(),dstPos);
+	public function execute(src:haxe.io.Bytes, srcPos:Int, dst:haxe.io.Bytes, dstPos:Int):{done:Bool, read:Int, write:Int} {
+		final srcView = src.asView().slice(srcPos);
+		final dstView = dst.asView().slice(dstPos);
+		final result  = impl.execute(srcView, dstView);
+
+		return { write : result.write, read : result.read, done : result.done }
 	}
 
-	public function setFlushMode( f : FlushMode ) : Void {
-		_set_flush_mode(s,untyped f.__Tag());
+	public function setFlushMode(f:FlushMode):Void {
+		impl.setFlushMode(switch f {
+			case NO: cpp.zip.Flush.None;
+			case SYNC: cpp.zip.Flush.Sync;
+			case FULL: cpp.zip.Flush.Full;
+			case FINISH: cpp.zip.Flush.Finish;
+			case BLOCK: cpp.zip.Flush.Block;
+		});
 	}
 
-	public function close() : Void {
-		_inflate_end(s);
+	public function close():Void {
+		impl.close();
 	}
 
-	public static function run( src : haxe.io.Bytes, ?bufsize : Int ) : haxe.io.Bytes {
-		var u = new Uncompress(null);
-		if( bufsize == null ) bufsize = 1 << 16; // 64K
-		var tmp = haxe.io.Bytes.alloc(bufsize);
-		var b = new haxe.io.BytesBuffer();
-		var pos = 0;
-		u.setFlushMode(FlushMode.SYNC);
-		while( true ) {
-			var r = u.execute(src,pos,tmp,0);
-			b.addBytes(tmp,0,r.write);
-			pos += r.read;
-			if( r.done )
-				break;
-		}
-		u.close();
-		return b.getBytes();
+	public static function run(src:haxe.io.Bytes, ?bufsize:Int):haxe.io.Bytes {
+		return Bytes.ofData(cpp.zip.Uncompress.run(src.asView(), bufsize ?? 1 << 16));
 	}
-
-	static var _inflate_init = cpp.Lib.load("zlib","inflate_init",1);
-	static var _inflate_buffer = cpp.Lib.load("zlib","inflate_buffer",5);
-	static var _inflate_end = cpp.Lib.load("zlib","inflate_end",1);
-	static var _set_flush_mode = cpp.Lib.load("zlib","set_flush_mode",2);
-
 }

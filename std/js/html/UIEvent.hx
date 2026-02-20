@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,43 +20,65 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\UIEvent.webidl. Do not edit!
+
 package js.html;
 
-/** <div><div>
+/**
+	The `UIEvent` interface represents simple user interface events.
 
-<a rel="custom" href="http://mxr.mozilla.org/mozilla-central/source/dom/interfaces/events/nsIDOMUIEvent.idl"><code>dom/interfaces/events/nsIDOMUIEvent.idl</code></a><span><a rel="internal" href="https://developer.mozilla.org/en/Interfaces/About_Scriptable_Interfaces" title="en/Interfaces/About_Scriptable_Interfaces">Scriptable</a></span></div><span>A basic event interface for all user interface events</span><div><div>1.0</div><div>11.0</div><div title="Introduced in Gecko 1.0 
-"></div><div title="Last changed in Gecko 9.0 
-"></div></div>
-<div>Inherits from: <code><a rel="custom" href="https://developer.mozilla.org/en/XPCOM_Interface_Reference/nsIDOMEvent">nsIDOMEvent</a></code>
-<span>Last changed in Gecko 9.0 (Firefox 9.0 / Thunderbird 9.0 / SeaMonkey 2.6)
-</span></div></div>
-<p></p>
-<p>The DOM <code>UIEvent</code> represents simple user interface events.</p><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/UIEvent">MDN</a>. */
+	Documentation [UIEvent](https://developer.mozilla.org/en-US/docs/Web/API/UIEvent) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/UIEvent$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/UIEvent>
+**/
 @:native("UIEvent")
-extern class UIEvent extends Event
-{
-	var charCode(default,null) : Int;
-
-	/** Detail about the event, depending on the type of event. <strong>Read only.</strong> */
+extern class UIEvent extends Event {
+	static inline var SCROLL_PAGE_UP : Int = -32768;
+	static inline var SCROLL_PAGE_DOWN : Int = 32768;
+	
+	
+	/**
+		Returns a `WindowProxy` that contains the view that generated the event.
+	**/
+	var view(default,null) : Window;
+	
+	/**
+		Returns a `long` with details about the event, depending on the event type.
+	**/
 	var detail(default,null) : Int;
-
-	var keyCode(default,null) : Int;
-
+	
+	/**
+		Returns the horizontal coordinate of the event relative to the current layer.
+	**/
 	var layerX(default,null) : Int;
-
+	
+	/**
+		Returns the vertical coordinate of the event relative to the current layer.
+	**/
 	var layerY(default,null) : Int;
-
+	
+	/**
+		Returns the horizontal coordinate of the event relative to the whole document.
+	**/
 	var pageX(default,null) : Int;
-
+	
+	/**
+		Returns the vertical coordinate of the event relative to the whole document.
+	**/
 	var pageY(default,null) : Int;
-
-	/** A view which generated the event. <strong>Read only.</strong> */
-	var view(default,null) : DOMWindow;
-
+	
+	/**
+		Returns the numeric `keyCode` of the key pressed, or the character code (`charCode`) for an alphanumeric key pressed.
+	**/
 	var which(default,null) : Int;
-
-	function initUIEvent( type : String, canBubble : Bool, cancelable : Bool, view : DOMWindow, detail : Int ) : Void;
-
+	var rangeParent(default,null) : Node;
+	var rangeOffset(default,null) : Int;
+	
+	/** @throws DOMError */
+	function new( type : String, ?eventInitDict : UIEventInit ) : Void;
+	
+	/**
+		Initializes a `UIEvent` object. If the event has already being dispatched, this method does nothing.
+	**/
+	function initUIEvent( aType : String, aCanBubble : Bool = false, aCancelable : Bool = false, ?aView : Window, aDetail : Int = 0 ) : Void;
 }

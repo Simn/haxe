@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2013 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,36 +19,41 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package haxe;
 
+import haxe.Int64;
+
 /**
-	The Timer class allows you to create asynchronous timers on platforms that
+	The `Timer` class allows you to create asynchronous timers on platforms that
 	support events.
 
-	The intended usage is to create an instance of the Timer class with a given
-	interval, set its run() method to a custom function to be invoked and
-	eventually call stop() to stop the Timer.
+	The intended usage is to create an instance of the `Timer` class with a given
+	interval, set its `run()` method to a custom function to be invoked and
+	eventually call `stop()` to stop the `Timer`.
 
-	Note that a running Timer may or may not prevent the program to exit
-	automatically when main() returns.
+	Note that a running `Timer` may or may not prevent the program to exit
+	automatically when `main()` returns.
 
-	It is also possible to extend this class and override its run() method in
+	It is also possible to extend this class and override its `run()` method in
 	the child class.
+
+	Notice for threaded targets:
+	`Timer` instances require threads they were created in to run with Haxe's event loops.
+	Main thread of a Haxe program always contains an event loop. For other cases use
+	`sys.thread.Thread.createWithEventLoop` and `sys.thread.Thread.runWithEventLoop` methods.
 **/
 class Timer {
-	#if (flash || js || java || python)
-
 	#if (flash || js)
-		private var id : Null<Int>;
-	#elseif java
-		private var timer : java.util.Timer;
-		private var task : java.util.TimerTask;
+	private var id:Null<Int>;
+	#else
+	private var event:EventLoop.Event;
 	#end
 
 	/**
 		Creates a new timer that will run every `time_ms` milliseconds.
 
-		After creating the Timer instance, it calls `this].run` repeatedly,
+		After creating the Timer instance, it calls `this.run` repeatedly,
 		with delays of `time_ms` milliseconds, until `this.stop` is called.
 
 		The first invocation occurs after `time_ms` milliseconds, not
@@ -56,19 +61,17 @@ class Timer {
 
 		The accuracy of this may be platform-dependent.
 	**/
-	public function new( time_ms : Int ){
-		#if flash9
-			var me = this;
-			id = untyped __global__["flash.utils.setInterval"](function() { me.run(); },time_ms);
-		#elseif flash
-			var me = this;
-			id = untyped _global["setInterval"](function() { me.run(); },time_ms);
+	public function new(time_ms:Int) {
+		#if flash
+		var me = this;
+		id = untyped __global__["flash.utils.setInterval"](function() {
+			me.run();
+		}, time_ms);
 		#elseif js
-			var me = this;
-			id = untyped setInterval(function() me.run(),time_ms);
-		#elseif java
-			timer = new java.util.Timer();
-			timer.scheduleAtFixedRate(task = new TimerTask(this), haxe.Int64.ofInt(time_ms), haxe.Int64.ofInt(time_ms));
+		var me = this;
+		id = untyped setInterval(function() me.run(), time_ms);
+		#else
+		event = EventLoop.current.addTimer(() -> this.run(), time_ms/1000.);
 		#end
 	}
 
@@ -82,20 +85,19 @@ class Timer {
 	**/
 	public function stop() {
 		#if (flash || js)
-			if( id == null )
-				return;
-			#if flash9
-				untyped __global__["flash.utils.clearInterval"](id);
-			#elseif flash
-				untyped _global["clearInterval"](id);
-			#elseif js
-				untyped clearInterval(id);
-			#end
-			id = null;
-		#elseif java
-			timer.cancel();
-			timer = null;
-			task = null;
+		if (id == null)
+			return;
+		#if flash
+		untyped __global__["flash.utils.clearInterval"](id);
+		#elseif js
+		untyped clearInterval(id);
+		#end
+		id = null;
+		#else
+		if (event != null) {
+			event.stop();
+			event = null;
+		}
 		#end
 	}
 
@@ -104,26 +106,27 @@ class Timer {
 
 		It can be overridden in a subclass, or rebound directly to a custom
 		function:
-			var timer = new haxe.Timer(1000); // 1000ms delay
-			timer.run = function() { ... }
+
+		```haxe
+		var timer = new haxe.Timer(1000); // 1000ms delay
+		timer.run = function() { ... }
+		```
 
 		Once bound, it can still be rebound to different functions until `this`
 		Timer is stopped through a call to `this.stop`.
 	**/
-	public dynamic function run() {
-
-	}
+	public dynamic function run() {}
 
 	/**
 		Invokes `f` after `time_ms` milliseconds.
 
 		This is a convenience function for creating a new Timer instance with
-		`time_ms` as argument, binding its run() method to `f` and then stopping
+		`time_ms` as argument, binding its `run()` method to `f` and then stopping
 		`this` Timer upon the first invocation.
 
-		If `f` is null, the result is unspecified.
+		If `f` is `null`, the result is unspecified.
 	**/
-	public static function delay( f : Void -> Void, time_ms : Int ) {
+	public static function delay(f:Void->Void, time_ms:Int) {
 		var t = new haxe.Timer(time_ms);
 		t.run = function() {
 			t.stop();
@@ -132,20 +135,18 @@ class Timer {
 		return t;
 	}
 
-	#end
-
 	/**
 		Measures the time it takes to execute `f`, in seconds with fractions.
 
 		This is a convenience function for calculating the difference between
-		Timer.stamp() before and after the invocation of `f`.
+		`Timer.stamp()` before and after the invocation of `f`.
 
-		The difference is passed as argument to Log.trace(), with "s" appended
+		The difference is passed as argument to `Log.trace()`, with `"s"` appended
 		to denote the unit. The optional `pos` argument is passed through.
 
-		If `f` is null, the result is unspecified.
+		If `f` is `null`, the result is unspecified.
 	**/
-	public static function measure<T>( f : Void -> T, ?pos : PosInfos ) : T {
+	public static function measure<T>(f:Void->T, ?pos:PosInfos):T {
 		var t0 = stamp();
 		var r = f();
 		Log.trace((stamp() - t0) + "s", pos);
@@ -158,35 +159,58 @@ class Timer {
 		The value itself might differ depending on platforms, only differences
 		between two values make sense.
 	**/
-	public static function stamp() : Float {
+	public static inline function stamp():Float {
 		#if flash
-			return flash.Lib.getTimer() / 1000;
-		#elseif (neko || php)
-			return Sys.time();
+		return flash.Lib.getTimer() / 1000;
 		#elseif js
-			return Date.now().getTime() / 1000;
-		#elseif cpp
-			return untyped __global__.__time_stamp();
-		#elseif sys
-			return Sys.time();
+		#if nodejs
+		var hrtime = js.Syntax.code('process.hrtime()'); // [seconds, remaining nanoseconds]
+		return hrtime[0] + hrtime[1] / 1e9;
 		#else
-			return 0;
+		return @:privateAccess HxOverrides.now() / 1000;
+		#end
+		#elseif cpp
+		return untyped __global__.__time_stamp();
+		#elseif python
+		return Sys.cpuTime();
+		#elseif sys
+		return Sys.time();
+		#else
+		return 0;
 		#end
 	}
 
-}
-
-#if java
-@:nativeGen
-private class TimerTask extends java.util.TimerTask {
-	var timer:Timer;
-	public function new(timer:Timer):Void {
-		super();
-		this.timer = timer;
+	/**
+	 * Returns a monotonically increasing timestamp with millisecond resolution.
+	 *
+	 * The precision and epoch of the timer is platform defined.
+	 */
+	public static inline function milliseconds():Int64 {
+		#if flash
+		return flash.Lib.getTimer();
+		#elseif js
+		#if nodejs
+		var hrtime = js.Syntax.code('process.hrtime()'); // [seconds, remaining nanoseconds]
+		return hrtime[0] * 1000 + (hrtime[1] / 1000000i64);
+		#else
+		return Std.int(@:privateAccess HxOverrides.now());
+		#end
+		#elseif cpp
+		return untyped __global__.__time_stamp_ms();
+		#elseif python
+		#if (python_version >= 3.7)
+		return python.lib.Time.perf_counter_ns() / 1000000i64;
+		#else
+		return Std.int(stamp() * 1000);
+		#end
+		#elseif (hl && hl_ver >= version("1.16.0") && !hl_legacy32)
+		return hl.Api.timestampMs();
+		#elseif jvm
+		return java.lang.System.nanoTime() / 1000000i64;
+		#elseif eval
+		return @:privateAccess Sys.timestamp_ms();
+		#else
+		return Int64.mul(Int64.fromFloat(stamp()), 1000);
+		#end
 	}
-
-	@:overload public function run():Void {
-		timer.run();
-	}
 }
-#end

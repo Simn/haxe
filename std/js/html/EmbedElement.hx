@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,42 +20,49 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLEmbedElement.webidl. Do not edit!
+
 package js.html;
 
-/** <strong>Note:</strong>&nbsp;This topic describes the HTMLEmbedElement interface as defined in the HTML5 standard. It does not address earlier, non-standardized version of the interface.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/HTMLEmbedElement">MDN</a>. */
+/**
+	The `HTMLEmbedElement` interface, which provides special properties (beyond the regular `HTMLElement` interface it also has available to it by inheritance) for manipulating `embed` elements.
+
+	Documentation [HTMLEmbedElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLEmbedElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLEmbedElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLEmbedElement>
+**/
 @:native("HTMLEmbedElement")
-extern class EmbedElement extends Element
-{
-	var align : String;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/embed#attr-height">height</a></code>
- HTML&nbsp;attribute, containing the displayed height of the resource. */
-	var height : String;
-
-	var name : String;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/embed#attr-src">src</a></code>
- HTML&nbsp;attribute, containing the address of the resource. */
+extern class EmbedElement extends Element {
+	
+	/**
+		Is a `DOMString` that reflects the `src` HTML attribute, containing the address of the resource.
+	**/
 	var src : String;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/embed#attr-type">type</a></code>
- HTML&nbsp;attribute, containing the type of the resource. */
+	
+	/**
+		Is a `DOMString` that reflects the `type` HTML attribute, containing the type of the resource.
+	**/
 	var type : String;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/embed#attr-width">width</a></code>
- HTML&nbsp;attribute, containing the displayed width of the resource. */
+	
+	/**
+		Is a `DOMString` that reflects the `width` HTML attribute, containing the displayed width of the resource.
+	**/
 	var width : String;
-
-	function getSVGDocument() : js.html.svg.Document;
-
+	
+	/**
+		Is a `DOMString` reflecting the `height` HTML attribute, containing the displayed height of the resource.
+	**/
+	var height : String;
+	
+	/**
+		Is a `DOMString` representing an enumerated property indicating alignment of the element's contents with respect to the surrounding context. The possible values are `"left"`, `"right"`, `"center"`, and `"justify"`.
+	**/
+	var align : String;
+	
+	/**
+		Is a `DOMString` representing the name of the embedded object.
+	**/
+	var name : String;
+	
+	function getSVGDocument() : HTMLDocument;
 }

@@ -1,0 +1,10 @@
+--main cpp.cppia.Host
+-D source-header=''
+-D scriptable
+-D dll_export=bin/cppia.classes
+-D HXCPP_CATCH_SEGV
+--debug
+--dce no
+-cpp bin/cppia
+-p src
+--macro include("scripthost")

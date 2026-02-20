@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,21 +20,32 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\CustomEvent.webidl. Do not edit!
+
 package js.html;
 
-/** The DOM <code>CustomEvent</code> are events initialized by an application for any purpose. It's represented by the <code><a rel="internal" href="https://developer.mozilla.org/Article_not_found?uri=en/XPCOM_Interface_Reference/nsIDOMCustomEvent&amp;ident=nsIDOMCustomEvent" class="new">nsIDOMCustomEvent</a></code>
-&nbsp;interface, which extends the <code><a rel="custom" href="https://developer.mozilla.org/en/XPCOM_Interface_Reference/nsIDOMEvent">nsIDOMEvent</a></code>
- interface.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/CustomEvent">MDN</a>. */
+/**
+	This interface inherits properties from its parent, `Event`:
+
+	Documentation [CustomEvent](https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent>
+**/
 @:native("CustomEvent")
-extern class CustomEvent extends Event
-{
-	/** The data passed when initializing the event. */
+extern class CustomEvent extends Event {
+	
+	/**
+		Any data passed when initializing the event.
+	**/
 	var detail(default,null) : Dynamic;
-
-	function new( type : String, canBubble : Bool = true, cancelable : Bool = true ) : Void;
-
-	function initCustomEvent( typeArg : String, canBubbleArg : Bool, cancelableArg : Bool, detailArg : Dynamic ) : Void;
-
+	
+	/** @throws DOMError */
+	function new( type : String, ?eventInitDict : CustomEventInit ) : Void;
+	
+	/**
+		
+		 Initializes a `CustomEvent` object. If the event has already being dispatched, this method does nothing.
+		 
+	**/
+	function initCustomEvent( type : String, canBubble : Bool = false, cancelable : Bool = false, ?detail : Dynamic ) : Void;
 }

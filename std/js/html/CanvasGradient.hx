@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,14 +20,23 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\CanvasRenderingContext2D.webidl. Do not edit!
+
 package js.html;
 
-/** This is an opaque object representing a gradient and returned by <a title="en/DOM/CanvasRenderingContext2D" rel="internal" href="/api/js/html/CanvasRenderingContext2D">CanvasRenderingContext2D</a>'s <a title="en/DOM/CanvasRenderingContext2D.createLinearGradient" rel="internal" href="/api/js/html/CanvasRenderingContext2D">createLinearGradient</a> or <a title="en/DOM/CanvasRenderingContext2D.createRadialGradient" rel="internal" href="/api/js/html/CanvasRenderingContext2D">createRadialGradient</a> methods.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/CanvasGradient">MDN</a>. */
-@:native("CanvasGradient")
-extern class CanvasGradient
-{
-	function addColorStop( offset : Float, color : String ) : Void;
+/**
+	The `CanvasGradient` interface represents an opaque object describing a gradient. It is returned by the methods `CanvasRenderingContext2D.createLinearGradient()` or `CanvasRenderingContext2D.createRadialGradient()`.
 
+	Documentation [CanvasGradient](https://developer.mozilla.org/en-US/docs/Web/API/CanvasGradient) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/CanvasGradient$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/CanvasGradient>
+**/
+@:native("CanvasGradient")
+extern class CanvasGradient {
+	
+	/**
+		Adds a new stop, defined by an `offset` and a `color`, to the gradient. If the offset is not between `0` and `1` an `INDEX_SIZE_ERR` is raised, if the color can't be parsed as a CSS `color`, a `SYNTAX_ERR` is raised.
+		@throws DOMError
+	**/
+	function addColorStop( offset : Float, color : String ) : Void;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,12 +20,12 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from namedConstructors.webidl. Do not edit!
+
 package js.html;
 
 @:native("Image")
-extern class Image extends ImageElement
-{
-	function new() : Void;
-
+extern class Image extends ImageElement {
+	/** @throws DOMError */
+	function new( ?width : Int, ?height : Int ) : Void;
 }

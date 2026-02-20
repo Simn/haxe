@@ -1,23 +1,34 @@
+/*
+ * Copyright (C)2005-2019 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+
 import python.lib.Time;
 import python.lib.Os;
 import sys.io.FileInput;
 import sys.io.FileOutput;
+import haxe.ds.StringMap;
 
 @:coreApi
 class Sys {
-
-	static var environ:haxe.ds.StringMap<String> = {
-		environ = new haxe.ds.StringMap();
-
-		var env = Os.environ;
-
-		for (key in env.keys()) {
-			environ.set(key, env.get(key, null));
-		}
-		environ;
-	}
-
-	public static function time():Float {
+	public static inline function time():Float {
 		return Time.time();
 	}
 
@@ -25,74 +36,94 @@ class Sys {
 		python.lib.Sys.exit(code);
 	}
 
-	public static function print(v:Dynamic):Void {
+	public static inline function print(v:Dynamic):Void {
 		python.Lib.print(v);
 	}
 
-	public static function println(v:Dynamic):Void {
+	public static inline function println(v:Dynamic):Void {
 		python.Lib.println(v);
 	}
 
-	public static function args() : Array<String> {
+	public static function args():Array<String> {
 		var argv = python.lib.Sys.argv;
 		return argv.slice(1);
 	}
 
-	public static function getEnv( s : String ) : String {
-		return environ.get(s);
+	public static function getEnv(s:String):Null<String> {
+		return Os.environ.get(s, null);
 	}
 
-	public static function putEnv( s : String, v : String ) : Void {
-		python.lib.Os.putenv(s, v);
-		environ.set(s, v);
+	public static function putEnv(s:String, v:Null<String>):Void {
+		if (v == null) {
+			try {
+				Os.environ.remove(s);
+			} catch(e:python.Exceptions.KeyError) {
+				// the variable didn't exist
+			}
+			return;
+		}
+		Os.environ.set(s, v);
 	}
 
-	public static function environment() : Map<String,String> {
+	public static function environment():Map<String, String> {
+		final environ = new StringMap();
+		final env = Os.environ;
+		for (key in env.keys()) {
+			environ.set(key, env.get(key, null));
+		}
 		return environ;
 	}
 
-	public static function sleep( seconds : Float ) : Void {
+	public static function sleep(seconds:Float):Void {
 		python.lib.Time.sleep(seconds);
 	}
 
-	public static function setTimeLocale( loc : String ) : Bool {
+	public static function setTimeLocale(loc:String):Bool {
 		return false;
 	}
 
-	public static function getCwd() : String {
-		return python.lib.Os.getcwd();
+	public static function getCwd():String {
+		return haxe.io.Path.addTrailingSlash(python.lib.Os.getcwd());
 	}
 
-	public static function setCwd( s : String ) : Void {
+	public static function setCwd(s:String):Void {
 		python.lib.Os.chdir(s);
 	}
 
-	public static function systemName() : String {
+	public static function systemName():String {
 		return switch (python.lib.Sys.platform) {
-			case x if (StringTools.startsWith(x, "linux")):
+			case var x if (StringTools.startsWith(x, "linux")):
 				"Linux";
 			case "darwin": "Mac";
-			case "win32" | "cygwin" : "Windows";
-			case _ :
+			case "win32" | "cygwin": "Windows";
+			case _:
 				throw "not supported platform";
 		}
 	}
 
-	public static function command( cmd : String, ?args : Array<String> ) : Int {
-		var args = args == null ? [cmd] : [cmd].concat(args);
-		return python.lib.Subprocess.call(args);
+	public static function command(cmd:String, ?args:Array<String>):Int {
+		return if (args == null)
+			python.lib.Subprocess.call(cmd, {shell: true});
+		else
+			python.lib.Subprocess.call([cmd].concat(args));
 	}
 
-	public static function cpuTime() : Float {
-		return python.lib.Time.clock();
+	public static inline function cpuTime():Float {
+		return python.lib.Timeit.default_timer();
 	}
 
-	public static function executablePath() : String {
+	@:deprecated("Use programPath instead") public static function executablePath():String {
 		return python.lib.Sys.argv[0];
 	}
 
-	public static function getChar( echo : Bool ) : Int {
+	// It has to be initialized before any call to Sys.setCwd()...
+	static var _programPath = sys.FileSystem.fullPath(python.lib.Inspect.getsourcefile(Sys));
 
+	public static function programPath():String {
+		return _programPath;
+	}
+
+	public static function getChar(echo:Bool):Int {
 		var ch = switch (systemName()) {
 			case "Linux" | "Mac":
 				var fd = python.lib.Sys.stdin.fileno();
@@ -111,8 +142,9 @@ class Sys {
 				}
 
 			case "Windows":
-				python.lib.Msvcrt.getch().decode("utf-8").charCodeAt(0);
-			case x :
+				// python.lib.Msvcrt.getch().decode("utf-8").charCodeAt(0);
+				python.lib.Msvcrt.getwch().charCodeAt(0);
+			case var x:
 				throw "platform " + x + " not supported";
 		}
 		if (echo) {
@@ -121,17 +153,15 @@ class Sys {
 		return ch;
 	}
 
-	public static function stdin() : haxe.io.Input {
+	public static function stdin():haxe.io.Input {
 		return python.io.IoTools.createFileInputFromText(python.lib.Sys.stdin);
 	}
 
-	public static function stdout() : haxe.io.Output {
+	public static function stdout():haxe.io.Output {
 		return python.io.IoTools.createFileOutputFromText(python.lib.Sys.stdout);
 	}
 
-	public static function stderr() : haxe.io.Output {
+	public static function stderr():haxe.io.Output {
 		return python.io.IoTools.createFileOutputFromText(python.lib.Sys.stderr);
 	}
-
-
 }

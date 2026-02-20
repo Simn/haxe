@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,13 +20,17 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGSetElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGSetElement</code> interface corresponds to the <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/set">&lt;set&gt;</a></code>
- element.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGSetElement">MDN</a>. */
+/**
+	The `SVGSetElement` interface corresponds to the `set` element.
+
+	Documentation [SVGSetElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGSetElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGSetElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGSetElement>
+**/
 @:native("SVGSetElement")
-extern class SetElement extends AnimationElement
-{
+extern class SetElement extends AnimationElement {
 }

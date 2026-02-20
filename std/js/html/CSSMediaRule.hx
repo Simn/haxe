@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,22 +20,23 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\CSSMediaRule.webidl. Do not edit!
+
 package js.html;
 
-/** An object representing a single CSS media rule.&nbsp;<code>CSSMediaRule</code>&nbsp;implements the&nbsp;<code><a href="https://developer.mozilla.org/en/DOM/CSSRule" rel="custom">CSSRule</a></code>&nbsp;interface.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/cssMediaRule">MDN</a>. */
+/**
+	The `CSSMediaRule` is an interface representing a single CSS `@media` rule. It implements the `CSSConditionRule` interface, and therefore the `CSSGroupingRule` and the `CSSRule` interface with a type value of `4` (`CSSRule.MEDIA_RULE`).
+
+	Documentation [CSSMediaRule](https://developer.mozilla.org/en-US/docs/Web/API/CSSMediaRule) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/CSSMediaRule$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/CSSMediaRule>
+**/
 @:native("CSSMediaRule")
-extern class CSSMediaRule extends CSSRule
-{
-	/** Returns a <code><a title="en/DOM/CSSRuleList" rel="internal" href="https://developer.mozilla.org/en/DOM/CSSRuleList">CSSRuleList</a></code> of the CSS rules in the media rule. */
-	var cssRules(default,null) : CSSRuleList;
-
-	/** Specifies the intended destination medium for style information. */
+extern class CSSMediaRule extends CSSConditionRule {
+	
+	/**
+		Specifies a `MediaList` representing the intended destination medium for style information.
+	**/
 	var media(default,null) : MediaList;
-
-	function deleteRule( index : Int ) : Void;
-
-	function insertRule( rule : String, index : Int ) : Int;
-
+	
 }

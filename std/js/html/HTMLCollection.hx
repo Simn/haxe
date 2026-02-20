@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,21 +20,33 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLCollection.webidl. Do not edit!
+
 package js.html;
 
-/** <p><code>HTMLCollection</code> is an interface representing a generic collection of elements (in document order) and offers methods and properties for traversing the list.</p>
-<div class="note"><strong>Note:</strong> This interface is called <code>HTMLCollection</code> for historical reasons (before DOM4, collections implementing this interface could only have HTML elements as their items).</div>
-<p><code>HTMLCollection</code>s in the HTML DOM are live; they are automatically updated when the underlying document is changed.</p><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/HTMLCollection">MDN</a>. */
+/**
+	The `HTMLCollection` interface represents a generic collection (array-like object similar to arguments) of elements (in document order) and offers methods and properties for selecting from the list.
+
+	Documentation [HTMLCollection](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCollection) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCollection$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLCollection>
+**/
 @:native("HTMLCollection")
-extern class HTMLCollection implements ArrayAccess<Node>
-{
-	/** The number of items in the collection. <strong>Read only</strong>. */
+extern class HTMLCollection implements ArrayAccess<Element> {
+	
+	/**
+		Returns the number of items in the collection.
+	**/
 	var length(default,null) : Int;
-
-	function item( index : Int ) : Node;
-
-	function namedItem( name : String ) : Node;
-
+	
+	
+	/**
+		Returns the specific node at the given zero-based `index` into the list. Returns `null` if the `index` is out of range.
+	**/
+	function item( index : Int ) : Element;
+	
+	/**
+		Returns the specific node whose ID or, as a fallback, name matches the string specified by `name`. Matching by name is only done as a last resort, only in HTML, and only if the referenced element supports the `name` attribute. Returns `null` if no node exists by the given name.
+	**/
+	function namedItem( name : String ) : Element;
 }

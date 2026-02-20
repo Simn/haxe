@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,14 +20,29 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\Crypto.webidl. Do not edit!
+
 package js.html;
 
-/** Non-standard<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/JavaScript_crypto">MDN</a>. */
-@:native("Crypto")
-extern class Crypto
-{
-	function getRandomValues( array : ArrayBufferView ) : Void;
+/**
+	The `Crypto` interface represents basic cryptography features available in the current context. It allows access to a cryptographically strong random number generator and to cryptographic primitives.
 
+	Documentation [Crypto](https://developer.mozilla.org/en-US/docs/Web/API/Crypto) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/Crypto$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/Crypto>
+**/
+@:native("Crypto")
+extern class Crypto {
+	
+	/**
+		Returns a `SubtleCrypto` object providing access to common cryptographic primitives, like hashing, signing, encryption or decryption.
+	**/
+	var subtle(default,null) : SubtleCrypto;
+	
+	
+	/**
+		Fills the passed `TypedArray` with cryptographically sound random values.
+		@throws DOMError
+	**/
+	function getRandomValues( array : js.lib.ArrayBufferView ) : js.lib.ArrayBufferView;
 }

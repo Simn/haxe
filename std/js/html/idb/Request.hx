@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,36 +20,55 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\IDBRequest.webidl. Do not edit!
+
 package js.html.idb;
 
-/** <p>The <code>IDBRequest</code> interface of the IndexedDB&nbsp;API provides access to results of asynchronous requests to databases and database objects using event handler attributes. Each reading and writing operation on a database is done using a request.</p>
-<p>The request object does not initially contain any information about the result of the operation, but once information becomes available, an event is fired on the request, and the information becomes available through the properties of the <code>IDBRequest</code> instance.</p>
-<p>Inherits from: <a title="en/DOM/EventTarget" rel="internal" href="/api/js/html/EventTarget">EventTarget</a></p><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/IndexedDB/IDBRequest">MDN</a>. */
+/**
+	The request object does not initially contain any information about the result of the operation, but once information becomes available, an event is fired on the request, and the information becomes available through the properties of the `IDBRequest` instance.
+
+	Documentation [IDBRequest](https://developer.mozilla.org/en-US/docs/Web/API/IDBRequest) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/IDBRequest$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/IDBRequest>
+**/
 @:native("IDBRequest")
-extern class Request extends js.html.EventTarget
-{
-	/** Getter throws DatabaseException. */
-	var error(default,null) : js.html.DOMError;
-
-	/** Getter throws DatabaseException. */
-	var errorCode(default,null) : Int;
-
-	/** Getter throws DatabaseException. */
-	var errorMessage(default,null) : String;
-
-	var onerror : js.html.EventListener;
-
-	var onsuccess : js.html.EventListener;
-
-	var readyState(default,null) : String;
-
-	/** Getter throws DatabaseException. */
-	var result(default,null) : Any;
-
-	var source(default,null) : Any;
-
+extern class Request extends js.html.EventTarget {
+	
+	/**
+		
+		 Returns the result of the request. If the the request failed and the result is not available, an InvalidStateError exception is thrown.
+		 
+	**/
+	var result(default,null) : Dynamic;
+	
+	/**
+		Returns a `DOMException` in the event of an unsuccessful request, indicating what went wrong.
+	**/
+	var error(default,null) : js.html.DOMException;
+	
+	/**
+		The source of the request, such as an `IDBIndex` or an `IDBObjectStore`. If no source exists (such as when calling `IDBFactory.open`), it returns null.
+	**/
+	var source(default,null) : haxe.extern.EitherType<ObjectStore,haxe.extern.EitherType<Index,Cursor>>;
+	
+	/**
+		The transaction for the request. This property can be null for certain requests, for example those returned from `IDBFactory.open` unless an upgrade is needed. (You're just connecting to a database, so there is no transaction to return).
+	**/
 	var transaction(default,null) : Transaction;
-
+	
+	/**
+		The state of the request. Every request starts in the `pending` state. The state changes to `done` when the request completes successfully or when an error occurs.
+	**/
+	var readyState(default,null) : RequestReadyState;
+	
+	/**
+		The event handler for the success event.
+	**/
+	var onsuccess : haxe.Constraints.Function;
+	
+	/**
+		The event handler for the error event.
+	**/
+	var onerror : haxe.Constraints.Function;
+	
 }

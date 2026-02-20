@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,25 +20,34 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLStyleElement.webidl. Do not edit!
+
 package js.html;
 
-/** See <a title="en/DOM/Using_dynamic_styling_information" rel="internal" href="https://developer.mozilla.org/en/DOM/Using_dynamic_styling_information">Using dynamic styling information</a> for an overview of the objects used to manipulate specified CSS properties using the DOM.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/HTMLStyleElement">MDN</a>. */
+/**
+	The `HTMLStyleElement` interface represents a `style` element. It inherits properties and methods from its parent, `HTMLElement`, and from `LinkStyle`.
+
+	Documentation [HTMLStyleElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLStyleElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLStyleElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLStyleElement>
+**/
 @:native("HTMLStyleElement")
-extern class StyleElement extends Element
-{
-	/** Returns true if the stylesheet is disabled, and false if not */
+extern class StyleElement extends Element {
+	
+	/**
+		Is a `Boolean` value representing whether or not the stylesheet is disabled (true) or not (false).
+	**/
 	var disabled : Bool;
-
-	/** Specifies the intended destination medium for style information. */
+	
+	/**
+		Is a `DOMString` representing the intended destination medium for style information.
+	**/
 	var media : String;
-
-	var scoped : Bool;
-
-	var sheet(default,null) : StyleSheet;
-
-	/** Returns the type of style being applied by this statement. */
+	
+	/**
+		Is a `DOMString` representing the type of style being applied by this statement.
+	**/
 	var type : String;
-
+	var sheet(default,null) : StyleSheet;
+	
 }

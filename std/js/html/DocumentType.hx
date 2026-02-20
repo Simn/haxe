@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,27 +20,43 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\DocumentType.webidl. Do not edit!
+
 package js.html;
 
-/** <p><span>NOTE:&nbsp;This interface is not fully supported in Mozilla at present, including for indicating internalSubset information which Gecko generally does otherwise support.</span></p>
-<p><code>DocumentType</code> inherits <a title="en/DOM/Node" rel="internal" href="/api/js/html/Node">Node</a>'s properties, methods, and constants as well as the following properties of its own:</p><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/DocumentType">MDN</a>. */
+/**
+	The `DocumentType` interface represents a `Node` containing a doctype.
+
+	Documentation [DocumentType](https://developer.mozilla.org/en-US/docs/Web/API/DocumentType) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/DocumentType$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/DocumentType>
+**/
 @:native("DocumentType")
-extern class DocumentType extends Node
-{
-	var entities(default,null) : NamedNodeMap;
-
-	var internalSubset(default,null) : String;
-
+extern class DocumentType extends Node {
+	
+	/**
+		A `DOMString`, eg `"html"` for `!DOCTYPE HTML`.
+	**/
 	var name(default,null) : String;
-
-	var notations(default,null) : NamedNodeMap;
-
+	
+	/**
+		A `DOMString`, eg `"-//W3C//DTD HTML 4.01//EN"`, empty string for HTML5.
+	**/
 	var publicId(default,null) : String;
-
+	
+	/**
+		A `DOMString`, eg `"http://www.w3.org/TR/html4/strict.dtd"`, empty string for HTML5.
+	**/
 	var systemId(default,null) : String;
-
+	
+	/** @throws DOMError */
+	@:overload( function( nodes : haxe.extern.Rest<String>) : Void {} )
+	function before( nodes : haxe.extern.Rest<Node> ) : Void;
+	/** @throws DOMError */
+	@:overload( function( nodes : haxe.extern.Rest<String>) : Void {} )
+	function after( nodes : haxe.extern.Rest<Node> ) : Void;
+	/** @throws DOMError */
+	@:overload( function( nodes : haxe.extern.Rest<String>) : Void {} )
+	function replaceWith( nodes : haxe.extern.Rest<Node> ) : Void;
 	function remove() : Void;
-
 }

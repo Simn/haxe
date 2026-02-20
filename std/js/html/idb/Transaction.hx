@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,43 +20,65 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\IDBTransaction.webidl. Do not edit!
+
 package js.html.idb;
 
-/** <p>The <code>IDBTransaction</code> interface of the <a title="en/IndexedDB" rel="internal" href="https://developer.mozilla.org/en/IndexedDB">IndexedDB&nbsp;API</a> provides a static, asynchronous transaction on a database using event handler attributes. All reading and writing of data are done within transactions. You actually use <code><a title="en/IndexedDB/IDBDatabase" rel="internal" href="/api/js/html/idb/Database">IDBDatabase</a></code> to start transactions and use <code>IDBTransaction</code> to set the mode of the transaction and access an object store and make your request. You can also use it to abort transactions.</p>
-<p>Inherits from: <a title="en/DOM/EventTarget" rel="internal" href="/api/js/html/EventTarget">EventTarget</a></p><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/IndexedDB/IDBTransaction">MDN</a>. */
+/**
+	Note that as of Firefox 40, IndexedDB transactions have relaxed durability guarantees to increase performance (see bug 1112702.) Previously in a `readwrite` transaction `IDBTransaction.oncomplete` was fired only when all data was guaranteed to have been flushed to disk. In Firefox 40+ the `complete` event is fired after the OS has been told to write the data but potentially before that data has actually been flushed to disk. The `complete` event may thus be delivered quicker than before, however, there exists a small chance that the entire transaction will be lost if the OS crashes or there is a loss of system power before the data is flushed to disk. Since such catastrophic events are rare most consumers should not need to concern themselves further.
+
+	Documentation [IDBTransaction](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction>
+**/
 @:native("IDBTransaction")
-extern class Transaction extends js.html.EventTarget
-{
-	/** Allows data to be read but not changed.&nbsp; */
-	static inline var READ_ONLY : Int = 0;
-
-	/** Allows reading and writing of data in existing data stores to be changed. */
-	static inline var READ_WRITE : Int = 1;
-
-	/** Allows any operation to be performed, including ones that delete and create object stores and indexes. This mode is for updating the version number of transactions that were started using the <a title="en/IndexedDB/IDBDatabase#setVersion" rel="internal" href="https://developer.mozilla.org/en/IndexedDB/IDBDatabase#setVersion"><code>setVersion()</code></a> method of <a title="en/IndexedDB/IDBDatabase" rel="internal" href="https://developer.mozilla.org/en/IndexedDB/IDBDatabase">IDBDatabase</a> objects. Transactions of this mode cannot run concurrently with other transactions. */
-	static inline var VERSION_CHANGE : Int = 2;
-
-	/** The database connection that this transaction is associated with. */
+extern class Transaction extends js.html.EventTarget {
+	
+	/**
+		The mode for isolating access to data in the object stores that are in the scope of the transaction. For possible values, see the Constants section below. The default value is `readonly`.
+	**/
+	var mode(default,null) : TransactionMode;
+	
+	/**
+		The database connection with which this transaction is associated.
+	**/
 	var db(default,null) : Database;
-
-	var error(default,null) : js.html.DOMError;
-
-	/** The mode for isolating access to data in the object stores that are in the scope of the transaction. For possible values, see Constants. The default value is <code><a href="#const_read_only" title="#const read only">READ_ONLY</a></code>. */
-	var mode(default,null) : String;
-
-	/** The event handler for the <code>onabort</code> event. */
-	var onabort : js.html.EventListener;
-
-	/** The event handler for the <code>oncomplete</code> event. */
-	var oncomplete : js.html.EventListener;
-
-	/** The event handler for the <code>error </code>event. */
-	var onerror : js.html.EventListener;
-
-	function abort() : Void;
-
+	
+	/**
+		Returns a `DOMException` indicating the type of error that occured when there is an unsuccessful transaction. This property is `null` if the transaction is not finished, is finished and successfully committed, or was aborted with `IDBTransaction.abort` function.
+	**/
+	var error(default,null) : js.html.DOMException;
+	
+	/**
+		The event handler for the `abort` event, fired when the transaction is aborted. This can happen due to:
+		 
+		  bad requests, e.g. trying to add() the same key twice, or put() with the same index key with a uniqueness constraint and there is no error handler on the request to call preventDefault() on the event,
+		  an explicit abort() call from script
+		  uncaught exception in request's success/error handler,
+		  an I/O error (actual failure to write to disk, e.g. disk detached, or other OS/hardware failure), or
+		  quota exceeded.
+		 
+		 
+	**/
+	var onabort : haxe.Constraints.Function;
+	
+	/**
+		The event handler for the `complete` event, thrown when the transaction completes successfully.
+	**/
+	var oncomplete : haxe.Constraints.Function;
+	
+	/**
+		The event handler for the `error` event, thrown when the transaction fails to complete.
+	**/
+	var onerror : haxe.Constraints.Function;
+	
+	/**
+		Returns a `DOMStringList` of the names of `IDBObjectStore` objects.
+	**/
+	var objectStoreNames(default,null) : js.html.DOMStringList;
+	
+	/** @throws DOMError */
 	function objectStore( name : String ) : ObjectStore;
-
+	/** @throws DOMError */
+	function abort() : Void;
 }

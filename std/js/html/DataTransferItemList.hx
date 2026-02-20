@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,19 +20,42 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\DataTransferItemList.webidl. Do not edit!
+
 package js.html;
 
+/**
+	The `DataTransferItemList` object is a list of `DataTransferItem` objects representing items being dragged. During a drag operation, each `DragEvent` has a `dataTransfer` property and that property is a `DataTransferItemList`.
+
+	Documentation [DataTransferItemList](https://developer.mozilla.org/en-US/docs/Web/API/DataTransferItemList) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/DataTransferItemList$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/DataTransferItemList>
+**/
 @:native("DataTransferItemList")
-extern class DataTransferItemList implements ArrayAccess<DataTransferItem>
-{
+extern class DataTransferItemList implements ArrayAccess<DataTransferItem> {
+	
+	/**
+		An `unsigned long` that is the number of drag items in the list.
+	**/
 	var length(default,null) : Int;
-
-	@:overload( function( file : File ) :Void {} )
-	function add( data : String, type : String ) : Void;
-
+	
+	
+	/**
+		Adds an item (either a `File` object or a `DOMString`) to the drag item list and returns a `DataTransferItem` object for the new item.
+		@throws DOMError
+	**/
+	@:overload( function( data : String, type : String ) : DataTransferItem {} )
+	function add( data : File ) : DataTransferItem;
+	
+	/**
+		Removes the drag item from the list at the given index.
+		@throws DOMError
+	**/
+	function remove( index : Int ) : Void;
+	
+	/**
+		Removes all of the drag items from the list.
+		@throws DOMError
+	**/
 	function clear() : Void;
-
-	function item( index : Int ) : DataTransferItem;
-
 }

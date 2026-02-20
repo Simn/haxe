@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,25 +20,45 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGCircleElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGCircleElement</code> interface provides access to the properties of <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/circle">&lt;circle&gt;</a></code>
- elements, as well as methods to manipulate them.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/Document_Object_Model_(DOM)/SVGCircleElement">MDN</a>. */
+/**
+	The `SVGCircleElement` interface is an interface for the `circle` element. The circle element is defined by the cx and cy attributes that denote the coordinates of the centre of the circle.
+
+	Documentation [SVGCircleElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGCircleElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGCircleElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGCircleElement>
+**/
 @:native("SVGCircleElement")
-extern class CircleElement extends Element
-{
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/cx">cx</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/circle">&lt;circle&gt;</a></code>
- element. */
+extern class CircleElement extends GeometryElement {
+	
+	/**
+		
+		 This property defines the x-coordinate of the center of the circle element. It is denoted by the `cx` attribute of the `circle` element. If unspecified, the value of this attribute is assumed to be `0`.
+		
+		 It can be animated by SVG's animation elements.
+		 
+	**/
 	var cx(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/cy">cy</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/circle">&lt;circle&gt;</a></code>
- element. */
+	
+	/**
+		
+		 This property defines the y-coordinate of the center of the circle element. It is denoted by the `cy` attribute of the `circle` element. If unspecified, the value of this attribute is assumed to be `0`.
+		
+		 It can be animated by SVG's animation elements.
+		 
+	**/
 	var cy(default,null) : AnimatedLength;
-
+	
+	/**
+		
+		 This property defines the radius of the circle element. It is denoted by the `r` of the `circle` element. A negative value gives an error, while `0` disables the rendering of the element.
+		
+		 It can be animated by SVG's animation elements.
+		 
+	**/
 	var r(default,null) : AnimatedLength;
-
+	
 }

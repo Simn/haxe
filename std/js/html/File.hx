@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,33 +20,30 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\File.webidl. Do not edit!
+
 package js.html;
 
-/** <p>The <code>File</code> object provides information about -- and access to the contents of -- files. These are generally retrieved from a <code><a rel="custom" href="/api/js/html/FileList">FileList</a></code>
- object returned as a result of a user selecting files using the <code>input</code> element, or from a drag and drop operation's <a title="En/DragDrop/DataTransfer" rel="internal" href="https://developer.mozilla.org/En/DragDrop/DataTransfer"><code>DataTransfer</code></a> object.</p>
-<div class="geckoVersionNote">
-<p>
-</p><div class="geckoVersionHeading">Gecko 2.0 note<div>(Firefox 4 / Thunderbird 3.3 / SeaMonkey 2.1)
-</div></div>
-<p></p>
-<p>Starting in Gecko 2.0&nbsp;(Firefox 4 / Thunderbird 3.3 / SeaMonkey 2.1)
-, the File object inherits from the <code><a rel="custom" href="/api/js/html/Blob">Blob</a></code>
-&nbsp;interface, which provides methods and properties providing further information about the file.</p>
-</div>
-<p>The file reference can be saved when the form is submitted while the user is offline, so that the data can be retrieved and uploaded when the Internet connection is restored.</p>
-<div class="note"><strong>Note:</strong> The <code>File</code> object as implemented by Gecko offers several non-standard methods for reading the contents of the file. These should <em>not</em> be used, as they will prevent your web application from being used in other browsers, as well as in future versions of Gecko, which will likely remove these methods.</div><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/File">MDN</a>. */
+/**
+	The `File` interface provides information about files and allows JavaScript in a web page to access their content.
+
+	Documentation [File](https://developer.mozilla.org/en-US/docs/Web/API/File) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/File$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/File>
+**/
 @:native("File")
-extern class File extends Blob
-{
-	var lastModifiedDate(default,null) : Date;
-
-	/** The name of the file referenced by the <code>File</code> object. <strong>Read only.</strong> 
-<span title="(Firefox 3.6 / Thunderbird 3.1 / Fennec 1.0)
-">Requires Gecko 1.9.2</span> */
+extern class File extends Blob {
+	
+	/**
+		Returns the name of the file referenced by the `File` object.
+	**/
 	var name(default,null) : String;
-
-	var relativePath(default,null) : String;
-
+	
+	/**
+		Returns the last modified time of the file, in millisecond since the UNIX epoch (January 1st, 1970 at Midnight).
+	**/
+	var lastModified(default,null) : Int;
+	
+	/** @throws DOMError */
+	function new( fileBits : Array<haxe.extern.EitherType<haxe.extern.EitherType<js.lib.ArrayBufferView,js.lib.ArrayBuffer>,haxe.extern.EitherType<Blob,String>>>, fileName : String, ?options : FilePropertyBag ) : Void;
 }

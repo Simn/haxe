@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,18 +20,24 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGClipPathElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGClipPathElement</code> interface provides access to the properties of <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/clipPath">&lt;clipPath&gt;</a></code>
- elements, as well as methods to manipulate them.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGClipPathElement">MDN</a>. */
-@:native("SVGClipPathElement")
-extern class ClipPathElement extends Element
-{
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/clipPathUnits">clipPathUnits</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/clipPath">&lt;clipPath&gt;</a></code>
- element. Takes one of the constants defined in <code><a rel="internal" href="https://developer.mozilla.org/Article_not_found?uri=en/DOM/SVGUnitTypes" class="new">SVGUnitTypes</a></code> */
-	var clipPathUnits(default,null) : AnimatedEnumeration;
+/**
+	The `SVGClipPathElement` interface provides access to the properties of `clipPath` elements, as well as methods to manipulate them.
 
+	Documentation [SVGClipPathElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGClipPathElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGClipPathElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGClipPathElement>
+**/
+@:native("SVGClipPathElement")
+extern class ClipPathElement extends Element {
+	
+	/**
+		An `SVGAnimatedEnumeration` corresponding to the `clipPathUnits` attribute of the given `clipPath` element. Takes one of the constants defined in `SVGUnitTypes`.
+	**/
+	var clipPathUnits(default,null) : AnimatedEnumeration;
+	var transform(default,null) : AnimatedTransformList;
+	
 }

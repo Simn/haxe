@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,26 +20,38 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLProgressElement.webidl. Do not edit!
+
 package js.html;
 
-/** The HTML <em>progress</em> (<code>&lt;progress&gt;</code>) element is used to view the completion progress of a task. While the specifics of how it's displayed is left up to the browser developer, it's typically displayed as a progress bar.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/HTML/Element/progress">MDN</a>. */
+/**
+	The `HTMLProgressElement` interface provides special properties and methods (beyond the regular `HTMLElement` interface it also has available to it by inheritance) for manipulating the layout and presentation of `progress` elements.
+
+	Documentation [HTMLProgressElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLProgressElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLProgressElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLProgressElement>
+**/
 @:native("HTMLProgressElement")
-extern class ProgressElement extends Element
-{
-	var labels(default,null) : NodeList;
-
-	/** This attribute describes how much work the task indicated by the <code>progress</code> element requires. Setter throws DOMException. */
-	var max : Float;
-
-	var position(default,null) : Float;
-
-	/** <dl><dd>This attribute specifies how much of the task that has been completed. If there is no <code>value</code> attribute, the progress bar is indeterminate; this indicates that an activity is ongoing with no indication of how long it is expected to take.</dd>
-</dl>
-<p>You can use the <code><a rel="custom" href="https://developer.mozilla.org/en/CSS/orient">orient</a></code>
- property to specify whether the progress bar should be rendered horizontally (the default) or vertically. The <code><a rel="custom" href="https://developer.mozilla.org/en/CSS/%3Aindeterminate">:indeterminate</a></code>
- pseudo-class can be used to match against indeterminate progress bars.</p> Setter throws DOMException. */
+extern class ProgressElement extends Element {
+	
+	/**
+		Is a `double` value that reflects the current value; if the progress bar is an indeterminate progress bar, it returns `0`.
+	**/
 	var value : Float;
-
+	
+	/**
+		Is a `double` value reflecting the content attribute of the same name, limited to numbers greater than zero. Its default value is `1.0`.
+	**/
+	var max : Float;
+	
+	/**
+		Returns a `double` value returning the result of dividing the current value (`value`) by the maximum value (`max`); if the progress bar is an indeterminate progress bar, it returns `-1`.
+	**/
+	var position(default,null) : Float;
+	
+	/**
+		Returns `NodeList` containing the list of `label` elements that are labels for this element.
+	**/
+	var labels(default,null) : NodeList;
+	
 }

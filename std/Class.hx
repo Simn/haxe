@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,10 +19,12 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 /**
 	An abstract type that represents a Class.
 
 	See `Type` for the Haxe Reflection API.
+
+	@see https://haxe.org/manual/types-class-instance.html
 **/
-@:coreType @:runtimeValue abstract Class<T> {
-}
+@:coreType @:runtimeValue abstract Class<T> {}

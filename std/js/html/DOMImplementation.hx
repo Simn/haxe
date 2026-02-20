@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,22 +20,40 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\DOMImplementation.webidl. Do not edit!
+
 package js.html;
 
-/** Provides methods which are not dependent on any particular DOM instances. Returned by <code><a title="En/DOM/Document.implementation" class="internal" rel="internal" href="https://developer.mozilla.org/en/DOM/document.implementation">document.implementation</a></code>.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/DOMImplementation">MDN</a>. */
+/**
+	The `DOMImplementation` interface represent an object providing methods which are not dependent on any particular document. Such an object is returned by the `Document.implementation` property.
+
+	Documentation [DOMImplementation](https://developer.mozilla.org/en-US/docs/Web/API/DOMImplementation) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/DOMImplementation$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/DOMImplementation>
+**/
 @:native("DOMImplementation")
-extern class DOMImplementation
-{
-	function createCSSStyleSheet( title : String, media : String ) : CSSStyleSheet;
-
-	function createDocument( ?namespaceURI : String, ?qualifiedName : String, ?doctype : DocumentType ) : Document;
-
-	function createDocumentType( ?qualifiedName : String, ?publicId : String, ?systemId : String ) : DocumentType;
-
-	function createHTMLDocument( title : String ) : Document;
-
-	function hasFeature( feature : String, ?version : String ) : Bool;
-
+extern class DOMImplementation {
+	
+	/**
+		Returns a `Boolean` indicating if a given feature is supported or not. This function is unreliable and kept for compatibility purpose alone: except for SVG-related queries, it always returns `true`. Old browsers are very inconsistent in their behavior.
+	**/
+	function hasFeature() : Bool;
+	
+	/**
+		Creates and returns a `DocumentType`.
+		@throws DOMError
+	**/
+	function createDocumentType( qualifiedName : String, publicId : String, systemId : String ) : DocumentType;
+	
+	/**
+		Creates and returns an `XMLDocument`.
+		@throws DOMError
+	**/
+	function createDocument( namespace : String, qualifiedName : String, ?doctype : DocumentType ) : HTMLDocument;
+	
+	/**
+		Creates and returns an HTML `Document`.
+		@throws DOMError
+	**/
+	function createHTMLDocument( ?title : String ) : HTMLDocument;
 }

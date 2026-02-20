@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,16 +20,23 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLPreElement.webidl. Do not edit!
+
 package js.html;
 
-/** This element represents preformatted text. Text within this element is typically displayed in a non-proportional font exactly as it is laid out in the file. Whitespaces inside this element are displayed as typed.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/HTML/Element/pre">MDN</a>. */
+/**
+	The `HTMLPreElement` interface expose specific properties and methods (beyond those defined by regular `HTMLElement` interface it also has available to it by inheritance) for manipulating block of preformatted text.
+
+	Documentation [HTMLPreElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLPreElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLPreElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLPreElement>
+**/
 @:native("HTMLPreElement")
-extern class PreElement extends Element
-{
+extern class PreElement extends Element {
+	
+	/**
+		Is a `long` value reflecting the obsolete `width` attribute, containing a fixed-size length for the `pre` element.
+	**/
 	var width : Int;
-
-	var wrap : Bool;
-
+	
 }

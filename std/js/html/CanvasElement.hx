@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,43 +20,73 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLCanvasElement.webidl. Do not edit!
+
 package js.html;
 
-/** DOM&nbsp;canvas elements expose the <code><a class="external" href="http://www.w3.org/TR/html5/the-canvas-element.html#htmlcanvaselement" rel="external nofollow" target="_blank" title="http://www.w3.org/TR/html5/the-canvas-element.html#htmlcanvaselement">HTMLCanvasElement</a></code> interface, which provides properties and methods for manipulating the layout and presentation of canvas elements. The <code>HTMLCanvasElement</code> interface inherits the properties and methods of the <code><a rel="custom" href="/api/js/html/Element">element</a></code>
- object interface.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/HTMLCanvasElement">MDN</a>. */
+/**
+	The `HTMLCanvasElement` interface provides properties and methods for manipulating the layout and presentation of canvas elements. The `HTMLCanvasElement` interface also inherits the properties and methods of the `HTMLElement` interface.
+
+	Documentation [HTMLCanvasElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement>
+**/
 @:native("HTMLCanvasElement")
-extern class CanvasElement extends Element
-{
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/canvas#attr-height">height</a></code>
- HTML attribute, specifying the height of the coordinate space in CSS pixels. */
-	var height : Int;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/canvas#attr-width">width</a></code>
- HTML attribute, specifying the width of the coordinate space in CSS pixels. */
+extern class CanvasElement extends Element {
+	
+	/**
+		Is a positive `integer` reflecting the `width` HTML attribute of the `canvas` element interpreted in CSS pixels. When the attribute is not specified, or if it is set to an invalid value, like a negative, the default value of `300` is used.
+	**/
 	var width : Int;
-
-	function getContext( contextId : String ) : Dynamic;
-
-	function toDataURL( ?type : String ) : String;
-
-	/** A typed shortcut for <code>getContext("2d")</code>. */
-	public inline function getContext2d() : CanvasRenderingContext2D { return cast getContext("2d"); }
-
-	public inline function getContextWebGL( ?attribs :js.html.webgl.ContextAttributes ) :js.html.webgl.RenderingContext {
+	
+	/**
+		Is a positive `integer` reflecting the `height` HTML attribute of the `canvas` element interpreted in CSS pixels. When the attribute is not specified, or if it is set to an invalid value, like a negative, the default value of `150` is used.
+	**/
+	var height : Int;
+	
+	
+	/**
+		Returns a drawing context on the canvas, or null if the context ID is not supported. A drawing context lets you draw on the canvas. Calling getContext with `"2d"` returns a `CanvasRenderingContext2D` object, whereas calling it with `"webgl"` (or `"experimental-webgl"`) returns a `WebGLRenderingContext` object. This context is only available on browsers that implement WebGL.
+		@throws DOMError
+	**/
+	function getContext( contextId : String, ?contextOptions : Dynamic ) : Dynamic;
+	
+	/**
+		Returns a data-URL containing a representation of the image in the format specified by the `type` parameter (defaults to `png`). The returned image is in a resolution of 96dpi.
+		@throws DOMError
+	**/
+	function toDataURL( type : String = "", ?encoderOptions : Dynamic ) : String;
+	
+	/**
+		Creates a `Blob` object representing the image contained in the canvas; this file may be cached on the disk or stored in memory at the discretion of the user agent.
+		@throws DOMError
+	**/
+	function toBlob( callback : Blob -> Void, type : String = "", ?encoderOptions : Dynamic ) : Void;
+	
+	/**
+		Returns a `CanvasCaptureMediaStream` that is a real-time video capture of the surface of the canvas.
+		@throws DOMError
+	**/
+	function captureStream( ?frameRate : Float ) : CanvasCaptureMediaStream;
+	
+	/** Shorthand for getting a CanvasRenderingContext2D. */
+	inline function getContext2d( ?attribs : {} ) : CanvasRenderingContext2D {
+		return cast getContext("2d", attribs);
+	}
+	/** Shorthand for getting a js.html.webgl.RenderingContext. */
+	inline function getContextWebGL( ?attribs : js.html.webgl.ContextAttributes ) : js.html.webgl.RenderingContext {
 		return CanvasUtil.getContextWebGL(this, attribs);
+	}
+	/** Shorthand for getting a js.html.webgl.WebGL2RenderingContext. */
+	inline function getContextWebGL2( ?attribs : js.html.webgl.ContextAttributes ) : js.html.webgl.WebGL2RenderingContext {
+		return this.getContext('webgl2', attribs);
 	}
 }
 
 private class CanvasUtil {
-	public static function getContextWebGL( canvas :CanvasElement, attribs :Dynamic ) {
+	public static function getContextWebGL( canvas :CanvasElement, attribs :{} ) {
 		for (name in ["webgl", "experimental-webgl"]) {
-			var ctx = (untyped canvas).getContext(name, attribs);
+			var ctx = canvas.getContext(name, attribs);
 			if (ctx != null) return ctx;
 		}
 		return null;

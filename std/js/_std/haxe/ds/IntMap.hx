@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,67 +19,155 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package haxe.ds;
 
-@:coreApi class IntMap<T> implements haxe.Constraints.IMap<Int,T> {
+#if (js_es >= 6)
+@:coreApi class IntMap<T> implements haxe.Constraints.IMap<Int, T> {
+	private var m:js.lib.Map<Int, T>;
 
-	private var h : Dynamic;
-
-	public function new() : Void {
-		h = {};
+	public inline function new():Void {
+		m = new js.lib.Map();
 	}
 
-	public function set( key : Int, value : T ) : Void {
-		untyped h[key] = value;
+	public inline function set(key:Int, value:T):Void {
+		m.set(key, value);
 	}
 
-	public function get( key : Int ) : Null<T> {
-		return untyped h[key];
+	public inline function get(key:Int):Null<T> {
+		return m.get(key);
 	}
 
-	public function exists( key : Int ) : Bool {
-		return untyped h.hasOwnProperty(key);
+	public inline function exists(key:Int):Bool {
+		return m.has(key);
 	}
 
-	public function remove( key : Int ) : Bool {
-		if( untyped !h.hasOwnProperty(key) ) return false;
-		untyped  __js__("delete")(h[key]);
-		return true;
+	public inline function remove(key:Int):Bool {
+		return m.delete(key);
 	}
 
-	public function keys() : Iterator<Int> {
-		var a = [];
-		untyped {
-			__js__("for( var key in this.h ) {");
-				if( h.hasOwnProperty(key) )
-					a.push(key|0);
-			__js__("}");
-		}
-		return a.iterator();
+	public inline function keys():Iterator<Int> {
+		return new js.lib.HaxeIterator(m.keys());
 	}
 
-	public function iterator() : Iterator<T> {
-		return untyped {
-			ref : h,
-			it : keys(),
-			hasNext : function() { return __this__.it.hasNext(); },
-			next : function() { var i = __this__.it.next(); return __this__.ref[i]; }
-		};
+	public inline function iterator():Iterator<T> {
+		return m.iterator();
 	}
 
-	public function toString() : String {
+	public inline function keyValueIterator():KeyValueIterator<Int, T> {
+		return m.keyValueIterator();
+	}
+
+	public inline function copy():IntMap<T> {
+		var copied = new IntMap();
+		copied.m = new js.lib.Map(m);
+		return copied;
+	}
+
+	public function toString():String {
 		var s = new StringBuf();
-		s.add("{");
-		var it = keys();
-		for( i in it ) {
-			s.add(i);
+		s.add("[");
+		var it = keyValueIterator();
+		for (i in it) {
+			s.add(i.key);
 			s.add(" => ");
-			s.add(Std.string(get(i)));
-			if( it.hasNext() )
+			s.add(Std.string(i.value));
+			if (it.hasNext())
 				s.add(", ");
 		}
-		s.add("}");
+		s.add("]");
 		return s.toString();
 	}
 
+	public inline function clear():Void {
+		m.clear();
+	}
+
+	public inline function size():Int {
+		return m.size;
+	}
 }
+#else
+@:coreApi class IntMap<T> implements haxe.Constraints.IMap<Int, T> {
+	private var h:Dynamic;
+
+	public inline function new():Void {
+		h = {};
+	}
+
+	public inline function set(key:Int, value:T):Void {
+		h[key] = value;
+	}
+
+	public inline function get(key:Int):Null<T> {
+		return h[key];
+	}
+
+	public inline function exists(key:Int):Bool {
+		return (cast h).hasOwnProperty(key);
+	}
+
+	public function remove(key:Int):Bool {
+		if (!(cast h).hasOwnProperty(key))
+			return false;
+		js.Syntax.delete(h, key);
+		return true;
+	}
+
+	public function keys():Iterator<Int> {
+		var a = [];
+		js.Syntax.code("for( var key in {0} ) if({0}.hasOwnProperty(key)) {1}.push(+key)", h, a);
+		return a.iterator();
+	}
+
+	public function iterator():Iterator<T> {
+		return untyped {
+			ref: h,
+			it: keys(),
+			hasNext: function() {
+				return __this__.it.hasNext();
+			},
+			next: function() {
+				var i = __this__.it.next();
+				return __this__.ref[i];
+			}
+		};
+	}
+
+	@:runtime public inline function keyValueIterator():KeyValueIterator<Int, T> {
+		return new haxe.iterators.MapKeyValueIterator(this);
+	}
+
+	public function copy():IntMap<T> {
+		var copied = new IntMap();
+		for (key in keys())
+			copied.set(key, get(key));
+		return copied;
+	}
+
+	public function toString():String {
+		var s = new StringBuf();
+		s.add("[");
+		var it = keys();
+		for (i in it) {
+			s.add(i);
+			s.add(" => ");
+			s.add(Std.string(get(i)));
+			if (it.hasNext())
+				s.add(", ");
+		}
+		s.add("]");
+		return s.toString();
+	}
+
+	public inline function clear():Void {
+		h = {};
+	}
+
+	public inline function size():Int {
+		var s:Any = 0;
+		js.Syntax.code("for( var key in {0} ) if({0}.hasOwnProperty(key)) {1}++", h, s);
+		return s;
+	}
+}
+#end

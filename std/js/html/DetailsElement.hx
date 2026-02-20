@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,15 +20,23 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLDetailsElement.webidl. Do not edit!
+
 package js.html;
 
-/** The HTML <em>details</em> element (<code>&lt;details&gt;</code>) is used as a disclosure widget from which the user the retrieve additional information.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/HTML/Element/details">MDN</a>. */
-@:native("HTMLDetailsElement")
-extern class DetailsElement extends Element
-{
-	/** This Boolean attribute indicates whether the details will be shown to the user on page load. If omitted the details will be hidden. */
-	var open : Bool;
+/**
+	The `HTMLDetailsElement` interface provides special properties (beyond the regular `HTMLElement` interface it also has available to it by inheritance) for manipulating `details` elements.
 
+	Documentation [HTMLDetailsElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLDetailsElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLDetailsElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLDetailsElement>
+**/
+@:native("HTMLDetailsElement")
+extern class DetailsElement extends Element {
+	
+	/**
+		Is a `boolean` reflecting the `open` HTML attribute, indicating whether or not the element’s contents (not counting the `summary`) is to be shown to the user.
+	**/
+	var open : Bool;
+	
 }

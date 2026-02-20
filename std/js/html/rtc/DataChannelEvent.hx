@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,12 +20,21 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\RTCDataChannelEvent.webidl. Do not edit!
+
 package js.html.rtc;
 
-@:native("RTCDataChannelEvent")
-extern class DataChannelEvent extends js.html.Event
-{
-	var channel(default,null) : DataChannel;
+/**
+	The `RTCDataChannelEvent()` constructor returns a new `RTCDataChannelEvent` object, which represents a `datachannel` event. These events sent to an `RTCPeerConnection` when its remote peer is asking to open an `RTCDataChannel` between the two peers.
 
+	Documentation [RTCDataChannelEvent](https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannelEvent) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannelEvent$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannelEvent>
+**/
+@:native("RTCDataChannelEvent")
+extern class DataChannelEvent extends js.html.Event {
+	var channel(default,null) : DataChannel;
+	
+	/** @throws DOMError */
+	function new( type : String, eventInitDict : DataChannelEventInit ) : Void;
 }

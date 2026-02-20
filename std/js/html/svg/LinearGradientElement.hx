@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,33 +20,38 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGLinearGradientElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGLinearGradientElement</code> interface corresponds to the <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/linearGradient">&lt;linearGradient&gt;</a></code>
- element.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGLinearGradientElement">MDN</a>. */
+/**
+	The `SVGLinearGradientElement` interface corresponds to the `linearGradient` element.
+
+	Documentation [SVGLinearGradientElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGLinearGradientElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGLinearGradientElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGLinearGradientElement>
+**/
 @:native("SVGLinearGradientElement")
-extern class LinearGradientElement extends GradientElement
-{
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/x1">x1</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/linearGradient">&lt;linearGradient&gt;</a></code>
- element. */
+extern class LinearGradientElement extends GradientElement {
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `x1` attribute of the given `linearGradient` element.
+	**/
 	var x1(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/x2">x2</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/linearGradient">&lt;linearGradient&gt;</a></code>
- element. */
-	var x2(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/y1">y1</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/linearGradient">&lt;linearGradient&gt;</a></code>
- element. */
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `y1` attribute of the given `linearGradient` element.
+	**/
 	var y1(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/y2">y2</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/linearGradient">&lt;linearGradient&gt;</a></code>
- element. */
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `x2` attribute of the given `linearGradient` element.
+	**/
+	var x2(default,null) : AnimatedLength;
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `y2` attribute of the given `linearGradient` element.
+	**/
 	var y2(default,null) : AnimatedLength;
-
+	
 }

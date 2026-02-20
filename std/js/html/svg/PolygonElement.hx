@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,16 +20,20 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGPolygonElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>polygon</code> element defines a closed shape consisting of a set of connected straight line segments.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/SVG/Element/polygon">MDN</a>. */
+/**
+	The `SVGPolygonElement` interface provides access to the properties of `polygon` elements, as well as methods to manipulate them.
+
+	Documentation [SVGPolygonElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGPolygonElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGPolygonElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGPolygonElement>
+**/
 @:native("SVGPolygonElement")
-extern class PolygonElement extends Element
-{
-	var animatedPoints(default,null) : PointList;
-
+extern class PolygonElement extends GeometryElement {
 	var points(default,null) : PointList;
-
+	var animatedPoints(default,null) : PointList;
+	
 }

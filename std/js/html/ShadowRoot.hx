@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,31 +20,43 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\ShadowRoot.webidl. Do not edit!
+
 package js.html;
 
+/**
+	The `ShadowRoot` interface of the Shadow DOM API is the root node of a DOM subtree that is rendered separately from a document's main DOM tree.
+
+	Documentation [ShadowRoot](https://developer.mozilla.org/en-US/docs/Web/API/ShadowRoot) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/ShadowRoot$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/ShadowRoot>
+**/
 @:native("ShadowRoot")
-extern class ShadowRoot extends DocumentFragment
-{
-	var activeElement(default,null) : Element;
-
-	var applyAuthorStyles : Bool;
-
-	/** Setter throws DOMException. */
+extern class ShadowRoot extends DocumentFragment {
+	
+	/**
+		The mode of the `ShadowRoot` — either `open` or `closed`. This defines whether or not the shadow root's internal features are accessible from JavaScript.
+	**/
+	var mode(default,null) : ShadowRootMode;
+	
+	/**
+		Returns a reference to the DOM element the `ShadowRoot` is attached to.
+	**/
+	var host(default,null) : Element;
+	
+	/**
+		Sets or returns a reference to the DOM tree inside the `ShadowRoot`.
+	**/
 	var innerHTML : String;
-
-	var resetStyleInheritance : Bool;
-
-	function new( host : Element ) : Void;
-
+	var activeElement(default,null) : Element;
+	var styleSheets(default,null) : StyleSheetList;
+	var pointerLockElement(default,null) : Element;
+	var fullscreenElement(default,null) : Element;
+	
 	function getElementById( elementId : String ) : Element;
-
-	function getElementsByClassName( className : String ) : NodeList;
-
-	function getElementsByTagName( tagName : String ) : NodeList;
-
-	function getElementsByTagNameNS( ?namespaceURI : String, localName : String ) : NodeList;
-
-	function getSelection() : DOMSelection;
-
+	function getElementsByTagName( localName : String ) : HTMLCollection;
+	function getElementsByTagNameNS( namespace : String, localName : String ) : HTMLCollection;
+	function getElementsByClassName( classNames : String ) : HTMLCollection;
+	function elementFromPoint( x : Float, y : Float ) : Element;
+	function elementsFromPoint( x : Float, y : Float ) : Array<Element>;
 }

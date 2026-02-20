@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,20 +20,28 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLModElement.webidl. Do not edit!
+
 package js.html;
 
-/** DOM mod (modification)&nbsp;objects expose the <a title="http://www.w3.org/TR/html5/edits.html#htmlmodelement" class=" external" rel="external nofollow" href="http://www.w3.org/TR/html5/edits.html#htmlmodelement" target="_blank">HTMLModElement</a> (or <span><a rel="custom nofollow" href="https://developer.mozilla.org/en/HTML">HTML 4</a></span> <a class=" external" rel="external nofollow" href="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-79359609" title="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-79359609" target="_blank"><code>HTMLModElement</code></a>) interface, which provides special properties (beyond the regular <a rel="internal" href="/api/js/html/Element">element</a> object interface they also have available to them by inheritance) for manipulating modification elements.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/HTMLModElement">MDN</a>. */
+/**
+	The `HTMLModElement` interface provides special properties (beyond the regular methods and properties available through the `HTMLElement` interface they also have available to them by inheritance) for manipulating modification elements, that is `del` and `ins`.
+
+	Documentation [HTMLModElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLModElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLModElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLModElement>
+**/
 @:native("HTMLModElement")
-extern class ModElement extends Element
-{
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/del#attr-cite">cite</a></code>
- HTML attribute, containing a URI of a resource explaining the change. */
+extern class ModElement extends Element {
+	
+	/**
+		Is a `DOMString` reflecting the `cite` HTML attribute, containing a URI of a resource explaining the change.
+	**/
 	var cite : String;
-
+	
+	/**
+		Is a `DOMString` reflecting the `datetime` HTML attribute, containing a date-and-time string representing a timestamp for the change.
+	**/
 	var dateTime : String;
-
+	
 }

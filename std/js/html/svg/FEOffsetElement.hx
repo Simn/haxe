@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,20 +20,38 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGFEOffsetElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The input image as a whole is offset by the values specified in the 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/dx" class="new">dx</a></code> and 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/dy" class="new">dy</a></code> attributes. It's used in creating drop-shadows.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/SVG/Element/feOffset">MDN</a>. */
+/**
+	The `SVGFEOffsetElement` interface corresponds to the `feOffset` element.
+
+	Documentation [SVGFEOffsetElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGFEOffsetElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGFEOffsetElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGFEOffsetElement>
+**/
 @:native("SVGFEOffsetElement")
-extern class FEOffsetElement extends Element
-{
-	var dx(default,null) : AnimatedNumber;
-
-	var dy(default,null) : AnimatedNumber;
-
+extern class FEOffsetElement extends Element {
+	
+	/**
+		An `SVGAnimatedString` corresponding to the `in` attribute of the given element.
+	**/
 	var in1(default,null) : AnimatedString;
-
+	
+	/**
+		An `SVGAnimatedNumber` corresponding to the `dx` attribute of the given element.
+	**/
+	var dx(default,null) : AnimatedNumber;
+	
+	/**
+		An `SVGAnimatedNumber` corresponding to the `dy` attribute of the given element.
+	**/
+	var dy(default,null) : AnimatedNumber;
+	var x(default,null) : AnimatedLength;
+	var y(default,null) : AnimatedLength;
+	var width(default,null) : AnimatedLength;
+	var height(default,null) : AnimatedLength;
+	var result(default,null) : AnimatedString;
+	
 }

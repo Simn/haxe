@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,23 +19,50 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package haxe.io;
 
 #if neko
-	typedef BytesData =	neko.NativeString;
-#elseif flash9
-	typedef BytesData =	flash.utils.ByteArray;
-#elseif php
-	typedef BytesData =	php.NativeString;
+typedef BytesData = neko.NativeString;
+#elseif flash
+typedef BytesData = flash.utils.ByteArray;
 #elseif cpp
-	extern class Unsigned_char__ { }
-	typedef BytesData = Array<Unsigned_char__>;
+typedef BytesData = Array<cpp.UInt8>;
 #elseif java
-	typedef BytesData = java.NativeArray<java.StdTypes.Int8>;
-#elseif cs
-	typedef BytesData = cs.NativeArray<cs.StdTypes.UInt8>;
+typedef BytesData = jvm.NativeArray<jvm.Int8>;
 #elseif python
-	typedef BytesData = python.lib.ByteArray;
+typedef BytesData = python.Bytearray;
+#elseif js
+typedef BytesData = js.lib.ArrayBuffer;
+#elseif hl
+class BytesDataImpl {
+	public var bytes:hl.Bytes;
+	public var length:Int;
+
+	public function new(b, length) {
+		this.bytes = b;
+		this.length = length;
+	}
+}
+
+@:forward(bytes, length)
+abstract BytesDataAbstract(BytesDataImpl) {
+	public inline function new(b, length) {
+		this = new BytesDataImpl(b, length);
+	}
+
+	@:arrayAccess inline function get(i:Int)
+		return this.bytes[i];
+
+	@:arrayAccess inline function set(i:Int, v:Int)
+		return this.bytes[i] = v;
+
+	@:to inline function toBytes():hl.Bytes {
+		return this == null ? null : this.bytes;
+	}
+}
+
+typedef BytesData = BytesDataAbstract;
 #else
-	typedef BytesData = Array<Int>;
+typedef BytesData = Array<Int>;
 #end

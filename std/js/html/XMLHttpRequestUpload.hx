@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,22 +20,10 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\XMLHttpRequestUpload.webidl. Do not edit!
+
 package js.html;
 
 @:native("XMLHttpRequestUpload")
-extern class XMLHttpRequestUpload extends EventTarget
-{
-	var onabort : EventListener;
-
-	var onerror : EventListener;
-
-	var onload : EventListener;
-
-	var onloadend : EventListener;
-
-	var onloadstart : EventListener;
-
-	var onprogress : EventListener;
-
+extern class XMLHttpRequestUpload extends XMLHttpRequestEventTarget {
 }

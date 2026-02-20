@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,17 +20,23 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLBRElement.webidl. Do not edit!
+
 package js.html;
 
-/** DOM break elements expose the <a class="external" href="http://www.w3.org/TR/html5/text-level-semantics.html#the-br-element" rel="external nofollow" target="_blank" title="http://www.w3.org/TR/html5/text-level-semantics.html#the-br-element">HTMLBRElement</a> (or <span><a href="https://developer.mozilla.org/en/HTML" rel="custom nofollow">HTML 4</a></span> <a class="external" href="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-56836063" rel="external nofollow" target="_blank" title="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-56836063"><code>HTMLBRElement</code></a>) interface which inherits from HTMLElement, but defines no additional members in 
-<span><a rel="custom" href="https://developer.mozilla.org/en/HTML/HTML5">HTML5</a></span>. The introduced additional property is also deprecated in 
-<span>HTML 4.01</span>.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/HTMLBRElement">MDN</a>. */
-@:native("HTMLBRElement")
-extern class BRElement extends Element
-{
-	/** Indicates flow of text around floating objects. */
-	var clear : String;
+/**
+	The `HTMLBRElement` interface represents a HTML line break element (`br`). It inherits from `HTMLElement`.
 
+	Documentation [HTMLBRElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLBRElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLBRElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLBRElement>
+**/
+@:native("HTMLBRElement")
+extern class BRElement extends Element {
+	
+	/**
+		Is a `DOMString` indicating the flow of text around floating objects.
+	**/
+	var clear : String;
+	
 }

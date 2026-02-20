@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,12 +20,30 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\DOMError.webidl. Do not edit!
+
 package js.html;
 
-@:native("DOMError")
-extern class DOMError
-{
-	var name(default,null) : String;
+/**
+	The `DOMError` interface describes an error object that contains an error name.
 
+	Documentation [DOMError](https://developer.mozilla.org/en-US/docs/Web/API/DOMError) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/DOMError$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/DOMError>
+**/
+@:native("DOMError")
+extern class DOMError {
+	
+	/**
+		Returns a `DOMString` representing one of the error type names (see below).
+	**/
+	var name(default,null) : String;
+	
+	/**
+		Returns a `DOMString` representing a message or description associated with the given error type name.
+	**/
+	var message(default,null) : String;
+	
+	/** @throws DOMError */
+	function new( name : String, message : String = "" ) : Void;
 }

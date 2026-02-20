@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,16 +20,35 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\TransitionEvent.webidl. Do not edit!
+
 package js.html;
 
+/**
+	The `Transition``Event` interface represents events providing information related to transitions.
+
+	Documentation [TransitionEvent](https://developer.mozilla.org/en-US/docs/Web/API/TransitionEvent) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/TransitionEvent$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/TransitionEvent>
+**/
 @:native("TransitionEvent")
-extern class TransitionEvent extends Event
-{
-	var elapsedTime(default,null) : Float;
-
+extern class TransitionEvent extends Event {
+	
+	/**
+		Is a `DOMString` containing the name CSS property associated with the transition.
+	**/
 	var propertyName(default,null) : String;
-
-	function new( type : String, canBubble : Bool = true, cancelable : Bool = true ) : Void;
-
+	
+	/**
+		Is a `float` giving the amount of time the transition has been running, in seconds, when this event fired. This value is not affected by the `transition-delay` property.
+	**/
+	var elapsedTime(default,null) : Float;
+	
+	/**
+		Is a `DOMString`, starting with `'::'`, containing the name of the pseudo-element the animation runs on. If the transition doesn't run on a pseudo-element but on the element, an empty string: `''``.`
+	**/
+	var pseudoElement(default,null) : String;
+	
+	/** @throws DOMError */
+	function new( type : String, ?eventInitDict : TransitionEventInit ) : Void;
 }

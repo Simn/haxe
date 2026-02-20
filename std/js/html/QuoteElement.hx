@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,19 +20,23 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLQuoteElement.webidl. Do not edit!
+
 package js.html;
 
-/** DOM quote objects expose the <a class=" external" title="http://www.w3.org/TR/html5/grouping-content.html#htmlquoteelement" rel="external" href="http://www.w3.org/TR/html5/grouping-content.html#htmlquoteelement" target="_blank">HTMLQuoteElement</a> (or 
-<span><a rel="custom" href="https://developer.mozilla.org/en/HTML">HTML 4</a></span> <a class=" external" title="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-70319763" rel="external" href="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-70319763" target="_blank"><code>HTMLQuoteElement</code></a>) interface, which provides special properties&nbsp; (beyond the regular <a href="/api/js/html/Element" rel="internal">element</a> object interface they also have available to them by inheritance) for manipulating quote elements.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/HTMLQuoteElement">MDN</a>. */
+/**
+	The `HTMLQuoteElement` interface provides special properties and methods (beyond the regular `HTMLElement` interface it also has available to it by inheritance) for manipulating quoting elements, like `blockquote` and `q`, but not the `cite` element.
+
+	Documentation [HTMLQuoteElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLQuoteElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLQuoteElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLQuoteElement>
+**/
 @:native("HTMLQuoteElement")
-extern class QuoteElement extends Element
-{
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/blockquote#attr-cite">cite</a></code>
- HTML attribute, containing a URL for the source of the quotation. */
+extern class QuoteElement extends Element {
+	
+	/**
+		Is a `DOMString` reflecting the `cite` HTML attribute, containing a URL for the source of the quotation.
+	**/
 	var cite : String;
-
+	
 }

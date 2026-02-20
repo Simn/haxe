@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,14 +20,25 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\PageTransitionEvent.webidl. Do not edit!
+
 package js.html;
 
+/**
+	The `PageTransitionEvent` is fired when a document is being loaded or unloaded.
+
+	Documentation [PageTransitionEvent](https://developer.mozilla.org/en-US/docs/Web/API/PageTransitionEvent) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/PageTransitionEvent$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/PageTransitionEvent>
+**/
 @:native("PageTransitionEvent")
-extern class PageTransitionEvent extends Event
-{
+extern class PageTransitionEvent extends Event {
+	
+	/**
+		Indicates if the document is loading from a cache.
+	**/
 	var persisted(default,null) : Bool;
-
-	function new( type : String, canBubble : Bool = true, cancelable : Bool = true ) : Void;
-
+	
+	/** @throws DOMError */
+	function new( type : String, ?eventInitDict : PageTransitionEventInit ) : Void;
 }

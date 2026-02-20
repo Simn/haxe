@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,23 +20,34 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGRect.webidl. Do not edit!
+
 package js.html.svg;
 
-/** <p>The <code>SVGRect</code> represents rectangular geometry. Rectangles are defined as consisting of a (x,y) coordinate pair identifying a minimum X value, a minimum Y value, and a width and height, which are usually constrained to be non-negative.</p>
-<p>An <code>SVGRect</code> object can be designated as read only, which means that attempts to modify the object will result in an exception being thrown.</p><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGRect">MDN</a>. */
+/**
+	The `SVGRect` represents a rectangle. Rectangles consist of an x and y coordinate pair identifying a minimum x value, a minimum y value, and a width and height, which are constrained to be non-negative.
+
+	Documentation [SVGRect](https://developer.mozilla.org/en-US/docs/Web/API/SVGRect) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGRect$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGRect>
+**/
 @:native("SVGRect")
-extern class Rect
-{
-	/** The <em>height</em> coordinate of the rectangle, in user units. */
-	var height : Float;
-
-	/** The <em>width</em> coordinate of the rectangle, in user units. */
-	var width : Float;
-
+extern class Rect {
+	
+	/**
+		The exact effect of this coordinate depends on each element. If the attribute is not specified, the effect is as if a value of `0` were specified.
+	**/
 	var x : Float;
-
+	
+	/**
+		The exact effect of this coordinate depends on each element.If the attribute is not specified, the effect is as if a value of `0` were specified.
+	**/
 	var y : Float;
-
+	
+	/**
+		This represents the width of the rectangle.A value that is negative results to an error. A value of zero disables rendering of the element
+	**/
+	var width : Float;
+	var height : Float;
+	
 }

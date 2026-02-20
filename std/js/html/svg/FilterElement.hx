@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,31 +20,49 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGFilterElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>filter</code> element serves as container for atomic filter operations. It is never rendered directly. A filter is referenced by using the 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/filter" class="new">filter</a></code> attribute on the target SVG element.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/SVG/Element/filter">MDN</a>. */
+/**
+	The `SVGFilterElement` interface provides access to the properties of `filter` elements, as well as methods to manipulate them.
+
+	Documentation [SVGFilterElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGFilterElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGFilterElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGFilterElement>
+**/
 @:native("SVGFilterElement")
-extern class FilterElement extends Element
-{
-	var filterResX(default,null) : AnimatedInteger;
-
-	var filterResY(default,null) : AnimatedInteger;
-
+extern class FilterElement extends Element {
+	
+	/**
+		An `SVGAnimatedEnumeration` that corresponds to the `filterUnits` attribute of the given `filter` element. Takes one of the constants defined in `SVGUnitTypes`.
+	**/
 	var filterUnits(default,null) : AnimatedEnumeration;
-
-	var height(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedEnumeration` that corresponds to the `primitiveUnits` attribute of the given `filter` element. Takes one of the constants defined in `SVGUnitTypes`.
+	**/
 	var primitiveUnits(default,null) : AnimatedEnumeration;
-
-	var width(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedLength` that corresponds to the `x` attribute on the given `filter` element.
+	**/
 	var x(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedLength` that corresponds to the `y` attribute of the given `filter` element.
+	**/
 	var y(default,null) : AnimatedLength;
-
-	function setFilterRes( filterResX : Int, filterResY : Int ) : Void;
-
+	
+	/**
+		An `SVGAnimatedLength` that corresponds to the `width` attribute of the given `filter` element.
+	**/
+	var width(default,null) : AnimatedLength;
+	
+	/**
+		An `SVGAnimatedLength` that corresponds to the `height` attribute of the given `filter` element.
+	**/
+	var height(default,null) : AnimatedLength;
+	var href(default,null) : AnimatedString;
+	
 }

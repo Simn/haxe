@@ -1,5 +1,29 @@
--cp src
+-p src
+-D analyzer-optimize
+-D analyzer-user-var-fusion
+-D loop-unroll-max-cost=0
+--each
+
+--main TestAnalyzer
+--interp
+
+--next
+--main TestNullChecker
+-D analyzer-check-null
+--interp
+
+--next
+--main TestTreBehavior
+--interp
+
+--next
 -js testopt.js
 --macro Macro.register('Test')
 --macro Macro.register('TestJs')
--dce std
+--macro Macro.register('TestLocalDce')
+--macro Macro.register('TestNadako')
+--macro Macro.register('TestCompoundBlockElements')
+--macro Macro.register('TestTreGeneration')
+--macro Macro.register('TestInlineConstructors')
+--macro Macro.register('issues')
+--dce std

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,14 +20,23 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\CanvasRenderingContext2D.webidl. Do not edit!
+
 package js.html;
 
-/** Returned by <a title="CanvasRenderingContext2D" rel="internal" href="https://developer.mozilla.org/CanvasRenderingContext2D" class="new ">CanvasRenderingContext2D</a>'s <a title="CanvasRenderingContext2D.measureText" rel="internal" href="https://developer.mozilla.org/CanvasRenderingContext2D.measureText" class="new ">measureText</a> method.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/TextMetrics">MDN</a>. */
-@:native("TextMetrics")
-extern class TextMetrics
-{
-	var width(default,null) : Float;
+/**
+	The `TextMetrics` interface represents the dimension of a text in the canvas, as created by the `CanvasRenderingContext2D.measureText()` method.
 
+	Documentation [TextMetrics](https://developer.mozilla.org/en-US/docs/Web/API/TextMetrics) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/TextMetrics$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/TextMetrics>
+**/
+@:native("TextMetrics")
+extern class TextMetrics {
+	
+	/**
+		Is a `double` giving the calculated width of a segment of inline text in CSS pixels. It takes into account the current font of the context.
+	**/
+	var width(default,null) : Float;
+	
 }

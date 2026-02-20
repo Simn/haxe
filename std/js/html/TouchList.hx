@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,19 +20,28 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\TouchList.webidl. Do not edit!
+
 package js.html;
 
-/** A <code>TouchList</code> represents a list of all of the points of contact with a touch surface; for example, if the user has three fingers on the screen (or trackpad), the corresponding <code>TouchList</code> would have one <code><a rel="custom" href="/api/js/html/Touch">Touch</a></code>
- object for each finger, for a total of three entries.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/TouchList">MDN</a>. */
+/**
+	The `TouchList` interface represents a list of contact points with a touch surface; for example, if the user has three fingers on the touch surface (such as a screen or trackpad), the corresponding `TouchList` object would have one `Touch` object for each finger, for a total of three entries.
+
+	Documentation [TouchList](https://developer.mozilla.org/en-US/docs/Web/API/TouchList) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/TouchList$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/TouchList>
+**/
 @:native("TouchList")
-extern class TouchList implements ArrayAccess<Touch>
-{
-	/** The number of <code><a rel="custom" href="https://developer.mozilla.org/en/DOM/Touch">Touch</a></code>
-&nbsp;objects in the <code>TouchList</code>. <strong>Read only.</strong> */
+extern class TouchList implements ArrayAccess<Touch> {
+	
+	/**
+		The number of `Touch` objects in the `TouchList`.
+	**/
 	var length(default,null) : Int;
-
+	
+	
+	/**
+		Returns the `Touch` object at the specified index in the list.
+	**/
 	function item( index : Int ) : Touch;
-
 }

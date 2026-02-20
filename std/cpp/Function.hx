@@ -1,22 +1,60 @@
+/*
+ * Copyright (C)2005-2019 Haxe Foundation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+
 package cpp;
 
-@:coreType @:structAccess @:include("cpp/Pointer.h")
-extern class Function<T>
-{
-   public function new(d:Dynamic);
+@:callable
+typedef FunctionData<T, ABI> = T;
 
-   // Actually a function pointer, but can be called using haxe notation
-	public var call(default,null):T;
+@:include("cpp/Pointer.h") @:callable
+extern abstract Function<T, ABI:cpp.abi.Abi>(FunctionData<T, ABI>) {
+	inline public function new(inValue:T)
+		this = inValue;
 
-   public static function getProcAddress<T>(inModule:String, inFunction:String) : Function<T>;
-   public static function fromStaticFunction<T>(inStaticFunction:T) : Function<T>;
+	// Legacy Api
+	public var call(get, never):FunctionData<T, ABI>;
 
-	public function lt(inOther:Function<T>):Bool;
-	public function leq(inOther:Function<T>):Bool;
-	public function gt(inOther:Function<T>):Bool;
-	public function geq(inOther:Function<T>):Bool;
+	inline function get_call():FunctionData<T, ABI>
+		return this;
 
+	@:native("::cpp::Function_obj::getProcAddress")
+	extern static function nativeGetProcAddress<T, ABI:cpp.abi.Abi>(inModule:String, inFunction:String):AutoCast;
 
+	inline public static function getProcAddress<T, ABI:cpp.abi.Abi>(inModule:String, inFunction:String):Function<T, ABI> {
+		return cast nativeGetProcAddress(inModule, inFunction);
+	}
+
+	@:native("::cpp::Function_obj::fromStaticFunction")
+	extern static function nativeFromStaticFunction<T>(inStaticFunction:T):AutoCast;
+
+	inline public static function fromStaticFunction<T>(inStaticFunction:T):Callable<T> {
+		return cast nativeFromStaticFunction(inStaticFunction);
+	}
+
+	extern public function lt(inOther:Function<T, ABI>):Bool;
+
+	extern public function leq(inOther:Function<T, ABI>):Bool;
+
+	extern public function gt(inOther:Function<T, ABI>):Bool;
+
+	extern public function geq(inOther:Function<T, ABI>):Bool;
 }
-
-

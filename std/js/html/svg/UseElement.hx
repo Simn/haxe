@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,37 +20,39 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGUseElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGUseElement</code> interface provides access to the properties of <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/use">&lt;use&gt;</a></code>
- elements, as well as methods to manipulate them.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGUseElement">MDN</a>. */
+/**
+	The `SVGUseElement` interface corresponds to the `use` element.
+
+	Documentation [SVGUseElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGUseElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGUseElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGUseElement>
+**/
 @:native("SVGUseElement")
-extern class UseElement extends Element
-{
-	/** If the 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/xlink%3Ahref">xlink:href</a></code> attribute is being animated, contains the current animated root of the instance tree. If the 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/xlink%3Ahref">xlink:href</a></code> attribute is not currently being animated, contains the same value as <code>instanceRoot</code>. See description of <code><a rel="internal" href="https://developer.mozilla.org/Article_not_found?uri=en/DOM/SVGElementInstance" class="new">SVGElementInstance</a></code>
- to learn more about the instance tree. */
-	var animatedInstanceRoot(default,null) : ElementInstance;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/height">height</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/use">&lt;use&gt;</a></code>
- element. */
-	var height(default,null) : AnimatedLength;
-
-	/** The root of the instance tree. See description of <code><a rel="internal" href="https://developer.mozilla.org/Article_not_found?uri=en/DOM/SVGElementInstance" class="new">SVGElementInstance</a></code>
- to learn more about the instance tree. */
-	var instanceRoot(default,null) : ElementInstance;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/width">width</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/use">&lt;use&gt;</a></code>
- element. */
-	var width(default,null) : AnimatedLength;
-
+extern class UseElement extends GraphicsElement {
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `x` attribute of the given element.
+	**/
 	var x(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `y` attribute of the given element.
+	**/
 	var y(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `width` attribute of the given element.
+	**/
+	var width(default,null) : AnimatedLength;
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `height` attribute of the given element.
+	**/
+	var height(default,null) : AnimatedLength;
+	var href(default,null) : AnimatedString;
+	
 }

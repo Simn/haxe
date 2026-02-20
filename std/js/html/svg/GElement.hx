@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,13 +20,17 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGGElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGGElement</code> interface corresponds to the <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/g">&lt;g&gt;</a></code>
- element.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGGElement">MDN</a>. */
+/**
+	The `SVGGElement` interface corresponds to the `g` element.
+
+	Documentation [SVGGElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGGElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGGElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGGElement>
+**/
 @:native("SVGGElement")
-extern class GElement extends Element
-{
+extern class GElement extends GraphicsElement {
 }

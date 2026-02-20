@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,16 +20,21 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\DOMParser.webidl. Do not edit!
+
 package js.html;
 
-/** This page redirects to a page that no longer exists <a rel="internal" class="new" href="https://developer.mozilla.org/en/Document_Object_Model_(DOM)/DOMParser">en/Document_Object_Model_(DOM)/DOMParser</a>.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOMParser">MDN</a>. */
+/**
+	The `DOMParser` interface provides the ability to parse XML or HTML source code from a string into a DOM `Document`.
+
+	Documentation [DOMParser](https://developer.mozilla.org/en-US/docs/Web/API/DOMParser) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/DOMParser$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/DOMParser>
+**/
 @:native("DOMParser")
-extern class DOMParser
-{
+extern class DOMParser {
+	/** @throws DOMError */
 	function new() : Void;
-
-	function parseFromString( str : String, contentType : String ) : Document;
-
+	/** @throws DOMError */
+	function parseFromString( str : String, type : SupportedType ) : HTMLDocument;
 }

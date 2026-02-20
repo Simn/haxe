@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,46 +19,29 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package sys.net;
 
-/**
-	A given IP host name.
-**/
 class Host {
+	public var host(default, null):String;
+	public var ip(default, null):Int;
 
-	/**
-		The actual IP corresponding to the host.
-	**/
-	public var ip(default,null) : Int;
+	var name:String;
 
-	/**
-		Creates a new Host : the name can be an IP in the form "127.0.0.1" or an host name such as "google.com", in which case
-		the corresponding IP address is resolved using DNS. An exception occur if the host name could not be found.
-	**/
-    var name:String;
-	public function new( name : String ) : Void {
-        this.name = name;
-    }
+	public function new(name:String):Void {
+		host = name;
+		this.name = name;
+	}
 
-	/**
-		Returns the IP representation of the host
-	**/
-	public function toString() : String {
-        return name;
-    }
+	public function toString():String {
+		return name;
+	}
 
-	/**
-		Perform a reverse-DNS query to resolve a host name from an IP.
-	**/
-	public function reverse() : String {
-        return "";
-    }
+	public function reverse():String {
+		return "";
+	}
 
-	/**
-		Returns the local computer host name
-	**/
-	public static function localhost() : String {
-        return "";
-    }
-
+	public static function localhost():String {
+		return "";
+	}
 }

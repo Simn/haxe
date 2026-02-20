@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,15 +20,23 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGFEMergeNodeElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The feMergeNode takes the result of another filter to be processed by its parent <code><a rel="custom" href="/api/js/html/svg/FEMergeElement">&lt;feMerge&gt;</a></code>
-.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/SVG/Element/feMergeNode">MDN</a>. */
-@:native("SVGFEMergeNodeElement")
-extern class FEMergeNodeElement extends Element
-{
-	var in1(default,null) : AnimatedString;
+/**
+	The `SVGFEMergeNodeElement` interface corresponds to the `feMergeNode` element.
 
+	Documentation [SVGFEMergeNodeElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGFEMergeNodeElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGFEMergeNodeElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGFEMergeNodeElement>
+**/
+@:native("SVGFEMergeNodeElement")
+extern class FEMergeNodeElement extends Element {
+	
+	/**
+		An `SVGAnimatedString` corresponding to the `in` attribute of the given element.
+	**/
+	var in1(default,null) : AnimatedString;
+	
 }

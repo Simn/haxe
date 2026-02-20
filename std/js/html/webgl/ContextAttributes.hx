@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,21 +20,17 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\WebGLRenderingContext.webidl. Do not edit!
+
 package js.html.webgl;
 
-typedef ContextAttributes =
-{
-	@:optional var alpha : Bool;
-
-	@:optional var antialias : Bool;
-
-	@:optional var depth : Bool;
-
-	@:optional var premultipliedAlpha : Bool;
-
-	@:optional var preserveDrawingBuffer : Bool;
-
-	@:optional var stencil : Bool;
-
+typedef ContextAttributes = {
+	var ?alpha : Bool;
+	var ?antialias : Bool;
+	var ?depth : Bool;
+	var ?failIfMajorPerformanceCaveat : Bool;
+	var ?powerPreference : PowerPreference;
+	var ?premultipliedAlpha : Bool;
+	var ?preserveDrawingBuffer : Bool;
+	var ?stencil : Bool;
 }

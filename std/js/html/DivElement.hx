@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,17 +20,23 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLDivElement.webidl. Do not edit!
+
 package js.html;
 
-/** DOM&nbsp;div (document division) objects expose the <a title="http://www.w3.org/TR/html5/grouping-content.html#htmldivelement" class=" external" rel="external nofollow" href="http://www.w3.org/TR/html5/grouping-content.html#htmldivelement" target="_blank">HTMLDivElement</a> (or 
-<span><a rel="custom" href="https://developer.mozilla.org/en/HTML">HTML 4</a></span> <a class=" external" rel="external nofollow" href="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-22445964" title="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-22445964" target="_blank"><code>HTMLDivElement</code></a>) interface, which provides special properties (beyond the regular <a rel="internal" href="/api/js/html/Element">element</a> object interface they also have available to them by inheritance) for manipulating div elements. In 
-<span><a rel="custom" href="https://developer.mozilla.org/en/HTML/HTML5">HTML5</a></span>, this interface inherits from HTMLElement, but defines no additional members.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/HTMLDivElement">MDN</a>. */
-@:native("HTMLDivElement")
-extern class DivElement extends Element
-{
-	/** Enumerated attribute indicating alignment of the element's contents with respect to the surrounding context. */
-	var align : String;
+/**
+	The `HTMLDivElement` interface provides special properties (beyond the regular `HTMLElement` interface it also has available to it by inheritance) for manipulating div elements.
 
+	Documentation [HTMLDivElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLDivElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLDivElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLDivElement>
+**/
+@:native("HTMLDivElement")
+extern class DivElement extends Element {
+	
+	/**
+		Is a `DOMString` representing an enumerated property indicating alignment of the element's contents with respect to the surrounding context. The possible values are `"left"`, `"right"`, `"justify"`, and `"center"`.
+	**/
+	var align : String;
+	
 }

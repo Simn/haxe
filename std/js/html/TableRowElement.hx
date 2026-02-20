@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,41 +20,70 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLTableRowElement.webidl. Do not edit!
+
 package js.html;
 
-/** DOM <code>table row</code> objects expose the <code><a class="external" rel="external" href="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-6986576" title="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-6986576" target="_blank">HTMLTableRowElement</a></code> interface, which provides special properties and methods (beyond the regular <a title="en/DOM/element" rel="internal" href="/api/js/html/Element">element</a> object interface they also have available to them by inheritance) for manipulating the layout and presentation of rows in an HTML table.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/HTMLTableRowElement">MDN</a>. */
+/**
+	The `HTMLTableRowElement` interface provides special properties and methods (beyond the `HTMLElement` interface it also has available to it by inheritance) for manipulating the layout and presentation of rows in an HTML table.
+
+	Documentation [HTMLTableRowElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLTableRowElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLTableRowElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLTableRowElement>
+**/
 @:native("HTMLTableRowElement")
-extern class TableRowElement extends Element
-{
-	/** <a title="en/DOM/tableRow.bgColor" rel="internal" href="https://developer.mozilla.org/en/DOM/tableRow.bgColor" class="new ">row.bgColor</a> 
-
-<span class="deprecatedInlineTemplate" title="">Deprecated</span> */
-	var align : String;
-
-	/** row.cells */
-	var bgColor : String;
-
-	/** row.ch */
-	var cells(default,null) : HTMLCollection;
-
-	/** row.chOff */
-	var ch : String;
-
-	/** row.rowIndex */
-	var chOff : String;
-
-	/** row.sectionRowIndex */
+extern class TableRowElement extends Element {
+	
+	/**
+		Returns a `long` value which gives the logical position of the row within the entire table. If the row is not part of a table, returns `-1`.
+	**/
 	var rowIndex(default,null) : Int;
-
-	/** row.vAlign */
+	
+	/**
+		Returns a `long` value which gives the logical position of the row within the table section it belongs to. If the row is not part of a section, returns `-1`.
+	**/
 	var sectionRowIndex(default,null) : Int;
-
+	
+	/**
+		Returns a live `HTMLCollection` containing the cells in the row. The `HTMLCollection` is live and is automatically updated when cells are added or removed.
+	**/
+	var cells(default,null) : HTMLCollection;
+	
+	/**
+		Is a `DOMString` containing an enumerated value reflecting the `align` attribute. It indicates the alignment of the element's contents with respect to the surrounding context. The possible values are `"left"`, `"right"`, and `"center"`.
+	**/
+	var align : String;
+	
+	/**
+		Is a `DOMString` containing one single character. This character is the one to align all the cell of a column on. It reflects the `char` and default to the decimal points associated with the language, e.g. `'.'` for English, or `','` for French. This property was optional and was not very well supported.
+	**/
+	var ch : String;
+	
+	/**
+		Is a `DOMString` containing a integer indicating how many characters must be left at the right (for left-to-right scripts; or at the left for right-to-left scripts) of the character defined by `HTMLTableRowElement.ch`. This property was optional and was not very well supported.
+	**/
+	var chOff : String;
+	
+	/**
+		Is a `DOMString` representing an enumerated value indicating how the content of the cell must be vertically aligned. It reflects the `valign` attribute and can have one of the following values: `"top"`, `"middle"`, `"bottom"`, or `"baseline"`.
+	**/
 	var vAlign : String;
-
+	
+	/**
+		Is a `DOMString` containing the background color of the cells. It reflects the obsolete `bgColor` attribute.
+	**/
+	var bgColor : String;
+	
+	
+	/**
+		Inserts a new cell just before the given position in the row. If the given position is not given or is `-1`, it appends the cell to the row. If the given position is greater (or equal as it starts at zero) than the amount of cells in the row, or is smaller than `-1`, it raises a `DOMException` with the `IndexSizeError` value. Returns a reference to a HTMLTableCellElement [en-US].
+		@throws DOMError
+	**/
+	function insertCell( index : Int = -1 ) : Element;
+	
+	/**
+		Removes the cell at the given position in the row. If the given position is greater (or equal as it starts at zero) than the amount of cells in the row, or is smaller than `0`, it raises a `DOMException` with the `IndexSizeError` value.
+		@throws DOMError
+	**/
 	function deleteCell( index : Int ) : Void;
-
-	function insertCell( index : Int ) : Element;
-
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,39 +20,39 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGGradientElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGGradient</code> interface is a base interface used by <code><a rel="custom" href="/api/js/html/svg/LinearGradientElement">SVGLinearGradientElement</a></code>
- and <code><a rel="custom" href="/api/js/html/svg/RadialGradientElement">SVGRadialGradientElement</a></code>
-.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGGradientElement">MDN</a>. */
+/**
+	The `SVGGradient` interface is a base interface used by `SVGLinearGradientElement` and `SVGRadialGradientElement`.
+
+	Documentation [SVGGradientElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGGradientElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGGradientElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGGradientElement>
+**/
 @:native("SVGGradientElement")
-extern class GradientElement extends Element
-{
-	/** Corresponds to value <em>pad</em>. */
-	static inline var SVG_SPREADMETHOD_PAD : Int = 1;
-
-	/** Corresponds to value <em>reflect</em>. */
-	static inline var SVG_SPREADMETHOD_REFLECT : Int = 2;
-
-	/** Corresponds to value <em>repeat</em>. */
-	static inline var SVG_SPREADMETHOD_REPEAT : Int = 3;
-
-	/** The type is not one of predefined types. It is invalid to attempt to define a new value of this type or to attempt to switch an existing value to this type. */
+extern class GradientElement extends Element {
 	static inline var SVG_SPREADMETHOD_UNKNOWN : Int = 0;
-
-	/** Corresponds to attribute 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/gradientTransform" class="new">gradientTransform</a></code> on the given element. */
-	var gradientTransform(default,null) : AnimatedTransformList;
-
-	/** Corresponds to attribute 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/gradientUnits" class="new">gradientUnits</a></code> on the given element. Takes one of the constants defined in <code><a rel="internal" href="https://developer.mozilla.org/Article_not_found?uri=en/DOM/SVGUnitTypes" class="new">SVGUnitTypes</a></code>
-. */
+	static inline var SVG_SPREADMETHOD_PAD : Int = 1;
+	static inline var SVG_SPREADMETHOD_REFLECT : Int = 2;
+	static inline var SVG_SPREADMETHOD_REPEAT : Int = 3;
+	
+	
+	/**
+		Returns an `SVGAnimatedEnumeration` corresponding to the `gradientUnits` attribute on the given element. Takes one of the constants defined in `SVGUnitTypes`.
+	**/
 	var gradientUnits(default,null) : AnimatedEnumeration;
-
-	/** Corresponds to attribute 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/spreadMethod" class="new">spreadMethod</a></code> on the given element. One of the Spread Method Types defined on this interface. */
+	
+	/**
+		Returns an `SVGAnimatedTransformList` corresponding to attribute `gradientTransform` on the given element.
+	**/
+	var gradientTransform(default,null) : AnimatedTransformList;
+	
+	/**
+		Returns an `SVGAnimatedEnumeration` corresponding to attribute `spreadMethod` on the given element. One of the spread method types defined on this interface.
+	**/
 	var spreadMethod(default,null) : AnimatedEnumeration;
-
+	var href(default,null) : AnimatedString;
+	
 }

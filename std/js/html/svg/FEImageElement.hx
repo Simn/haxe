@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,14 +20,29 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGFEImageElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The feImage filter fetches image data from an external source and provides the pixel data as output.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/SVG/Element/feImage">MDN</a>. */
-@:native("SVGFEImageElement")
-extern class FEImageElement extends Element
-{
-	var preserveAspectRatio(default,null) : AnimatedPreserveAspectRatio;
+/**
+	The `SVGFEImageElement` interface corresponds to the `feImage` element.
 
+	Documentation [SVGFEImageElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGFEImageElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGFEImageElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGFEImageElement>
+**/
+@:native("SVGFEImageElement")
+extern class FEImageElement extends Element {
+	
+	/**
+		An `SVGAnimatedPreserveAspectRatio` corresponding to the `preserveAspectRatio` attribute of the given element.
+	**/
+	var preserveAspectRatio(default,null) : AnimatedPreserveAspectRatio;
+	var x(default,null) : AnimatedLength;
+	var y(default,null) : AnimatedLength;
+	var width(default,null) : AnimatedLength;
+	var height(default,null) : AnimatedLength;
+	var result(default,null) : AnimatedString;
+	var href(default,null) : AnimatedString;
+	
 }

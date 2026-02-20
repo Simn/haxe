@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package haxe.ds;
 
 /**
@@ -26,58 +27,127 @@ package haxe.ds;
 	As a result, it will be faster to access the map for reading, but it might fail
 	with some reserved keys such as `constructor` or `prototype`.
 **/
-class UnsafeStringMap<T> implements haxe.Constraints.IMap<String,T> {
+class UnsafeStringMap<T> implements haxe.Constraints.IMap<String, T> {
+	private var h:flash.utils.Dictionary;
 
-	private var h : flash.utils.Dictionary;
-
-	public function new() : Void {
+	public function new():Void {
 		h = new flash.utils.Dictionary();
 	}
 
-	public inline function set( key : String, value : T ) : Void {
+	public inline function set(key:String, value:T):Void {
 		untyped h[key] = value;
 	}
 
-	public inline function get( key : String ) : Null<T> {
+	public inline function get(key:String):Null<T> {
 		return untyped h[key];
 	}
 
-	public inline function exists( key : String ) : Bool {
-		return untyped __in__(key,h);
+	public inline function exists(key:String):Bool {
+		return untyped __in__(key, h);
 	}
 
-	public function remove( key : String ) : Bool {
-		if( untyped !h.hasOwnProperty(key) ) return false;
-		untyped __delete__(h,key);
+	public function remove(key:String):Bool {
+		if (untyped !h.hasOwnProperty(key))
+			return false;
+		untyped __delete__(h, key);
 		return true;
 	}
 
-	public function keys() : Iterator<String> {
-		return untyped (__keys__(h)).iterator();
+	public inline function keys():Iterator<String> {
+		return new UnsafeStringMapKeysIterator(h);
 	}
 
-	public function iterator() : Iterator<T> {
-		return untyped {
-			ref : h,
-			it : __keys__(h).iterator(),
-			hasNext : function() { return __this__.it.hasNext(); },
-			next : function() { var i : Dynamic = __this__.it.next(); return __this__.ref[i]; }
-		};
+	public inline function iterator():Iterator<T> {
+		return new UnsafeStringMapValuesIterator<T>(h);
 	}
 
-	public function toString() : String {
+	public inline function keyValueIterator():KeyValueIterator<String, T> {
+		return new haxe.iterators.MapKeyValueIterator(this);
+	}
+
+	public function copy():UnsafeStringMap<T> {
+		var copied = new UnsafeStringMap();
+		for (key in keys())
+			copied.set(key, get(key));
+		return copied;
+	}
+
+	public function toString():String {
 		var s = new StringBuf();
-		s.add("{");
+		s.add("[");
 		var it = keys();
-		for( i in it ) {
+		for (i in it) {
 			s.add(i);
 			s.add(" => ");
 			s.add(Std.string(get(i)));
-			if( it.hasNext() )
+			if (it.hasNext())
 				s.add(", ");
 		}
-		s.add("}");
+		s.add("]");
 		return s.toString();
 	}
 
+	public inline function clear():Void {
+		h = new flash.utils.Dictionary();
+	}
+	
+	public function size():Int {
+		var s = 0;
+		for(_ in keys()) s++;
+		return s;
+	}
+}
+
+// this version uses __has_next__/__forin__ special SWF opcodes for iteration with no allocation
+
+@:allow(haxe.ds.UnsafeStringMap)
+private class UnsafeStringMapKeysIterator {
+	var h:flash.utils.Dictionary;
+	var index:Int;
+	var nextIndex:Int;
+
+	inline function new(h:flash.utils.Dictionary):Void {
+		this.h = h;
+		this.index = 0;
+		hasNext();
+	}
+
+	public inline function hasNext():Bool {
+		var h = h, index = index; // tmp vars required for __has_next
+		var n = untyped __has_next__(h, index);
+		this.nextIndex = index; // store next index
+		return n;
+	}
+
+	public inline function next():String {
+		var r:String = untyped __forin__(h, nextIndex);
+		index = nextIndex;
+		return r;
+	}
+}
+
+@:allow(haxe.ds.UnsafeStringMap)
+private class UnsafeStringMapValuesIterator<T> {
+	var h:flash.utils.Dictionary;
+	var index:Int;
+	var nextIndex:Int;
+
+	inline function new(h:flash.utils.Dictionary):Void {
+		this.h = h;
+		this.index = 0;
+		hasNext();
+	}
+
+	public inline function hasNext():Bool {
+		var h = h, index = index; // tmp vars required for __has_next
+		var n = untyped __has_next__(h, index);
+		this.nextIndex = index; // store next index
+		return n;
+	}
+
+	public inline function next():T {
+		var r = untyped __foreach__(h, nextIndex);
+		index = nextIndex;
+		return r;
+	}
 }

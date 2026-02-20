@@ -1,2 +1,4 @@
--cp src
---run Main
+-p src
+#-D MISC_TEST_FILTER=4270
+-main Main
+--interp 

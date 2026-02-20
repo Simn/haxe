@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,14 +20,33 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\RTCStatsReport.webidl. Do not edit!
+
 package js.html.rtc;
 
+/**
+	The `RTCStatsReport` interface is used to provide statistics data about WebRTC connections as returned by the `RTCPeerConnection.getStats()`, `RTCRtpReceiver.getStats()`, and `RTCRtpSender.getStats()` methods.
+
+	Documentation [RTCStatsReport](https://developer.mozilla.org/en-US/docs/Web/API/RTCStatsReport) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/RTCStatsReport$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/RTCStatsReport>
+**/
 @:native("RTCStatsReport")
-extern class StatsReport
-{
-	var local(default,null) : StatsElement;
-
-	var remote(default,null) : StatsElement;
-
+extern class StatsReport {
+	var size(default,null) : Int;
+	
+	/** @throws DOMError */
+	function entries() : Dynamic;
+	/** @throws DOMError */
+	function keys() : Dynamic;
+	/** @throws DOMError */
+	function values() : Dynamic;
+	/** @throws DOMError */
+	function forEach( callback : Dynamic, ?thisArg : Dynamic ) : Void;
+	/** @throws DOMError */
+	@:pure
+	function has( key : String ) : Bool;
+	/** @throws DOMError */
+	@:pure
+	function get( key : String ) : Dynamic;
 }

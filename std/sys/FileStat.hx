@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,27 +19,65 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package sys;
 
 /**
-	File informations, as given by [sys.FileSystem.stat]
+	File information, as given by `sys.FileSystem.stat`.
 **/
 typedef FileStat = {
-	/** the user group id for the file **/
-	var gid : Int;
-	/** the user id for the file **/
-	var uid : Int;
-	/** the last access time for the file (when enabled by the file system) **/
-	var atime : Date;
-	/** the last modification time for the file **/
-	var mtime : Date;
-	/** the creation time for the file **/
-	var ctime : Date;
-	/** the size of the file **/
-	var size : Int;
-	var dev : Int;
-	var ino : Int;
-	var nlink : Int;
-	var rdev : Int;
-	var mode : Int;
+	/**
+		The user group id for the file owner.
+	**/
+	var gid:Int;
+
+	/** 
+		The user id for the file owner.
+	**/
+	var uid:Int;
+
+	/** 
+		The last access time for the file (when enabled by the file system).
+	**/
+	var atime:Date;
+
+	/** 
+		The last modification time for the file.
+	**/
+	var mtime:Date;
+
+	/**
+		The creation time for the file (not all file systems support this).
+	**/
+	var ctime:Date;
+
+	/** 
+		The size of the file, in bytes.
+	**/
+	var size:Int;
+
+	/** 
+		The device on which stat resides.
+	**/
+	var dev:Int;
+
+	/** 
+		The inode number for stat.
+	**/
+	var ino:Int;
+
+	/** 
+		The number of hard links to stat.
+	**/
+	var nlink:Int;
+
+	/** 
+		The device type on which stat resides (special files only).
+	**/
+	var rdev:Int;
+
+	/** 
+		The permission bits of stat. The meaning of the bits is platform dependent.
+	**/
+	var mode:Int;
 }

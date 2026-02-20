@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,24 +20,38 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLParamElement.webidl. Do not edit!
+
 package js.html;
 
-/** <strong>Parameter </strong>element which defines parameters for <code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/object">&lt;object&gt;</a></code>
-.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/HTML/Element/param">MDN</a>. */
+/**
+	The `HTMLParamElement` interface provides special properties (beyond those of the regular `HTMLElement` object interface it inherits) for manipulating `param` elements, representing a pair of a key and a value that acts as a parameter for an `object` element.
+
+	Documentation [HTMLParamElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLParamElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLParamElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLParamElement>
+**/
 @:native("HTMLParamElement")
-extern class ParamElement extends Element
-{
-	/** Name of the parameter. */
+extern class ParamElement extends Element {
+	
+	/**
+		Is a `DOMString` representing the name of the parameter. It reflects the `name` attribute.
+	**/
 	var name : String;
-
-	/** Only used if the <code>valuetype</code> is set to "ref". Specifies the type of values found at the URI specified by value. */
-	var type : String;
-
-	/** Value of the parameter. */
+	
+	/**
+		Is a `DOMString` representing the value associated to the parameter. It reflects the `value` attribute.
+	**/
 	var value : String;
-
+	
+	/**
+		Is a `DOMString` containing the type of the parameter when `valueType` has the `"ref"` value. It reflects the `type` attribute.
+	**/
+	var type : String;
+	
+	/**
+		Is a `DOMString` containing the type of the `value`. It reflects the ``valuetype`` attribute and has one of the values: `"data"`, `"ref"`, or `"object"`.
+	**/
 	var valueType : String;
-
+	
 }

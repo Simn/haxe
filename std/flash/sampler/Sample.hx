@@ -1,6 +1,6 @@
 package flash.sampler;
 
 extern class Sample {
-	var stack : Array<StackFrame>;
-	var time : Float;
+	final stack : Array<StackFrame>;
+	final time : Float;
 }

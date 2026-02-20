@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,16 +20,21 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGUnitTypes.webidl. Do not edit!
+
 package js.html.svg;
 
+/**
+	The `SVGUnitTypes` interface defines a commonly used set of constants used for reflecting `gradientUnits`, `patternContentUnits` and other similar attributes.
+
+	Documentation [SVGUnitTypes](https://developer.mozilla.org/en-US/docs/Web/API/SVGUnitTypes) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGUnitTypes$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGUnitTypes>
+**/
 @:native("SVGUnitTypes")
-extern class UnitTypes
-{
-	static inline var SVG_UNIT_TYPE_OBJECTBOUNDINGBOX : Int = 2;
-
+extern class UnitTypes {
 	static inline var SVG_UNIT_TYPE_UNKNOWN : Int = 0;
-
 	static inline var SVG_UNIT_TYPE_USERSPACEONUSE : Int = 1;
-
+	static inline var SVG_UNIT_TYPE_OBJECTBOUNDINGBOX : Int = 2;
+	
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,27 +20,24 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\MessagePort.webidl. Do not edit!
+
 package js.html;
 
-/** <div>
+/**
+	The `MessagePort` interface of the Channel Messaging API represents one of the two ports of a `MessageChannel`, allowing messages to be sent from one port and listening out for them arriving at the other.
 
-<a rel="custom" href="http://mxr.mozilla.org/mozilla-central/source/dom/interfaces/threads/nsIDOMWorkers.idl"><code>dom/interfaces/threads/nsIDOMWorkers.idl</code></a><span><a rel="internal" href="https://developer.mozilla.org/en/Interfaces/About_Scriptable_Interfaces" title="en/Interfaces/About_Scriptable_Interfaces">Scriptable</a></span></div><span>This interface represents a worker thread's message port, which is used to allow the worker to post messages back to its creator.</span><div><div>1.0</div><div>11.0</div><div></div><div>Introduced</div><div>Gecko 1.9.1</div><div title="Introduced in Gecko 1.9.1 (Firefox 3.5 / Thunderbird 3.0 / SeaMonkey 2.0)
-"></div><div title="Last changed in Gecko 1.9.1 (Firefox 3.5 / Thunderbird 3.0 / SeaMonkey 2.0)
-"></div></div>
-<div>Inherits from: <code><a rel="custom" href="https://developer.mozilla.org/en/XPCOM_Interface_Reference/nsISupports">nsISupports</a></code>
-<span>Last changed in Gecko 1.9.1 (Firefox 3.5 / Thunderbird 3.0 / SeaMonkey 2.0)
-</span></div><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/XPCOM_Interface_Reference/NsIWorkerMessagePort">MDN</a>. */
+	Documentation [MessagePort](https://developer.mozilla.org/en-US/docs/Web/API/MessagePort) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/MessagePort$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/MessagePort>
+**/
 @:native("MessagePort")
-extern class MessagePort extends EventTarget
-{
-	var onmessage : EventListener;
-
-	function close() : Void;
-
-	function postMessage( message : Dynamic, ?messagePorts : Array<Dynamic> ) : Void;
-
+extern class MessagePort extends EventTarget {
+	var onmessage : haxe.Constraints.Function;
+	var onmessageerror : haxe.Constraints.Function;
+	
+	/** @throws DOMError */
+	function postMessage( message : Dynamic, ?transferable : Array<Dynamic> ) : Void;
 	function start() : Void;
-
+	function close() : Void;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,18 +20,23 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\MutationObserver.webidl. Do not edit!
+
 package js.html;
 
+/**
+	The `MutationObserver` interface provides the ability to watch for changes being made to the DOM tree. It is designed as a replacement for the older Mutation Events feature which was part of the DOM3 Events specification.
+
+	Documentation [MutationObserver](https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver>
+**/
 @:native("MutationObserver")
-extern class MutationObserver
-{
-	function new( ?arg0 : Dynamic ) : Void;
-
+extern class MutationObserver {
+	/** @throws DOMError */
+	function new( mutationCallback : Array<MutationRecord> -> MutationObserver -> Void ) : Void;
+	/** @throws DOMError */
+	function observe( target : Node, ?options : MutationObserverInit ) : Void;
 	function disconnect() : Void;
-
-	function observe( target : Node, options : Dynamic ) : Void;
-
-	function takeRecords() : Array<js.html.MutationRecord>;
-
+	function takeRecords() : Array<MutationRecord>;
 }

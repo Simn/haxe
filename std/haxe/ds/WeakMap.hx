@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2013 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -28,21 +28,21 @@ package haxe.ds;
 	The keys are considered to be weak references on static targets.
 
 	See `Map` for documentation details.
-**/
-class WeakMap<K: { },V> implements haxe.Constraints.IMap<K,V> {
 
+	@see https://haxe.org/manual/std-Map.html
+**/
+class WeakMap<K:{}, V> implements haxe.Constraints.IMap<K, V> {
 	/**
 		Creates a new WeakMap.
 	**/
 	public function new():Void {
-		throw "Not implemented for this platform";
+		throw new haxe.exceptions.NotImplementedException("Not implemented for this platform");
 	}
 
 	/**
 		See `Map.set`
 	**/
-	public function set(key:K, value:V):Void {
-	}
+	public function set(key:K, value:V):Void {}
 
 	/**
 		See `Map.get`
@@ -80,9 +80,35 @@ class WeakMap<K: { },V> implements haxe.Constraints.IMap<K,V> {
 	}
 
 	/**
+		See `Map.keyValueIterator`
+	**/
+	public inline function keyValueIterator():KeyValueIterator<K, V> {
+		return null;
+	}
+
+	/**
+		See `Map.copy`
+	**/
+	public function copy():WeakMap<K, V> {
+		return null;
+	}
+
+	/**
 		See `Map.toString`
 	**/
 	public function toString():String {
 		return null;
+	}
+
+	/**
+		See `Map.clear`
+	**/
+	public function clear():Void {}
+
+	/**
+		See `Map.size`
+	**/
+	public function size():Int {
+		return 0;
 	}
 }

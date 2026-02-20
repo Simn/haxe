@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,21 +20,21 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\XMLSerializer.webidl. Do not edit!
+
 package js.html;
 
-/** <div dir="ltr" id="result_box">XMLSerializer can be used to convert DOM subtree or DOM document into text. XMLSerializer is available to unprivileged scripts.</div>
-<p><code> </code></p>
-<div class="note">
-<div dir="ltr">XMLSerializer is mainly useful for applications and extensions based on the Mozilla platform. While it is available for web pages, it's not part of any standard and level of support in other browsers unknown.</div>
-<div id="result_box" dir="ltr">&nbsp;</div>
-</div><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/XMLSerializer">MDN</a>. */
+/**
+	The `XMLSerializer` interface provides the `serializeToString()` method to construct an XML string representing a DOM tree.
+
+	Documentation [XMLSerializer](https://developer.mozilla.org/en-US/docs/Web/API/XMLSerializer) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/XMLSerializer$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/XMLSerializer>
+**/
 @:native("XMLSerializer")
-extern class XMLSerializer
-{
+extern class XMLSerializer {
+	/** @throws DOMError */
 	function new() : Void;
-
-	function serializeToString( node : Node ) : String;
-
+	/** @throws DOMError */
+	function serializeToString( root : Node ) : String;
 }

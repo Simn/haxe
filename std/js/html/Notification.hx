@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,47 +20,92 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\Notification.webidl. Do not edit!
+
 package js.html;
 
-/** <div class="geckoMinversionHeaderTemplate"><p>Mobile Only in Gecko 2.0</p><p>Available only in Firefox Mobile as of Gecko 2.0 (Firefox 4 / Thunderbird 3.3 / SeaMonkey 2.1)
-</p></div>
+/**
+	The `Notification` interface of the Notifications API is used to configure and display desktop notifications to the user.
 
-<div><p>Non-standard</p></div><p></p>
-<p>The notification object, which you create using the <code><a rel="custom" href="https://developer.mozilla.org/en/DOM/navigator.mozNotification">navigator.mozNotification</a></code>
-&nbsp;object's <code>createNotification()</code>&nbsp;method, is used to configure and display desktop notifications to the user.</p><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/notification">MDN</a>. */
+	Documentation [Notification](https://developer.mozilla.org/en-US/docs/Web/API/Notification) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/Notification$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/Notification>
+**/
 @:native("Notification")
-extern class Notification extends EventTarget
-{
-	var dir : String;
-
-	/** &nbsp;A function to call when the notification is clicked. */
-	var onclick : EventListener;
-
-	/** &nbsp;A function to call when the notification is dismissed. */
-	var onclose : EventListener;
-
-	var ondisplay : EventListener;
-
-	var onerror : EventListener;
-
-	var onshow : EventListener;
-
-	var permission(default,null) : String;
-
-	var replaceId : String;
-
-	var tag : String;
-
-	function new( title : String, options : Dynamic ) : Void;
-
-	function cancel() : Void;
-
+extern class Notification extends EventTarget {
+	
+	/**
+		A string representing the current permission to display notifications. Possible values are:
+		 
+		  `denied` — The user refuses to have notifications displayed.
+		  `granted` — The user accepts having notifications displayed.
+		  `default` — The user choice is unknown and therefore the browser will act as if the value were denied.
+		 
+		 
+	**/
+	static var permission(default,null) : NotificationPermission;
+	
+	
+	/**
+		A handler for the `click` event. It is triggered each time the user clicks on the notification.
+	**/
+	var onclick : haxe.Constraints.Function;
+	
+	/**
+		A handler for the `show` event. It is triggered when the notification is displayed.
+	**/
+	var onshow : haxe.Constraints.Function;
+	
+	/**
+		A handler for the `error` event. It is triggered each time the notification encounters an error.
+	**/
+	var onerror : haxe.Constraints.Function;
+	
+	/**
+		A handler for the `close` event. It is triggered when the user closes the notification.
+	**/
+	var onclose : haxe.Constraints.Function;
+	
+	/**
+		The title of the notification as specified in the first parameter of the constructor.
+	**/
+	var title(default,null) : String;
+	
+	/**
+		The text direction of the notification as specified in the constructor's `options` parameter.
+	**/
+	var dir(default,null) : NotificationDirection;
+	
+	/**
+		The language code of the notification as specified in the constructor's `options` parameter.
+	**/
+	var lang(default,null) : String;
+	
+	/**
+		The body string of the notification as specified in the constructor's `options` parameter.
+	**/
+	var body(default,null) : String;
+	
+	/**
+		The ID of the notification (if any) as specified in the constructor's `options` parameter.
+	**/
+	var tag(default,null) : String;
+	
+	/**
+		The URL of the image used as an icon of the notification as specified in the constructor's `options` parameter.
+	**/
+	var icon(default,null) : String;
+	
+	/**
+		Returns a structured clone of the notification’s data.
+	**/
+	var data(default,null) : Dynamic;
+	
+	/** @throws DOMError */
+	function new( title : String, ?options : NotificationOptions ) : Void;
+	
+	/**
+		Programmatically closes a notification.
+	**/
 	function close() : Void;
-
-	static function requestPermission( callback_ : NotificationPermissionCallback ) : Void;
-
-	function show() : Void;
-
 }

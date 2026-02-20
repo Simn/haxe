@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,19 +20,47 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\DocumentFragment.webidl. Do not edit!
+
 package js.html;
 
-/** <p>DocumentFragment has no properties or methods of its own, but inherits from <a title="En/DOM/Node" class="internal" rel="internal" href="https://developer.mozilla.org/En/DOM/Node"><code>Node</code></a>. </p>
-<p>A <code><a class="external" rel="external" href="http://www.w3.org/TR/DOM-Level-2-Core/core.html#ID-B63ED1A3" title="http://www.w3.org/TR/DOM-Level-2-Core/core.html#ID-B63ED1A3" target="_blank">DocumentFragment</a></code> is a minimal document object that has no parent. It is used as a light-weight version of document to store well-formed or potentially non-well-formed fragments of XML.</p>
-<p>See <a title="En/DOM/Node" class="internal" rel="internal" href="https://developer.mozilla.org/En/DOM/Node"><code>Node</code></a> for a listing of its properties, constants and methods.</p>
-<p>Various other methods can take a document fragment as an argument (e.g., any <code><a class="external" rel="external" href="http://www.w3.org/TR/DOM-Level-2-Core/core.html#ID-1950641247" title="http://www.w3.org/TR/DOM-Level-2-Core/core.html#ID-1950641247" target="_blank">Node</a></code> interface methods such as <code><a title="En/DOM/Node.appendChild" rel="internal" href="https://developer.mozilla.org/En/DOM/Node.appendChild">appendChild</a></code> and <code><a title="En/DOM/Node.insertBefore" rel="internal" href="https://developer.mozilla.org/En/DOM/Node.insertBefore">insertBefore</a></code>), in which case the children of the fragment are appended or inserted, not the fragment itself.</p><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/DocumentFragment">MDN</a>. */
+/**
+	The `DocumentFragment` interface represents a minimal document object that has no parent. It is used as a lightweight version of `Document` that stores a segment of a document structure comprised of nodes just like a standard document. The key difference is that because the document fragment isn't part of the active document tree structure, changes made to the fragment don't affect the document, cause reflow, or incur any performance impact that can occur when changes are made.
+
+	Documentation [DocumentFragment](https://developer.mozilla.org/en-US/docs/Web/API/DocumentFragment) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/DocumentFragment$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/DocumentFragment>
+**/
 @:native("DocumentFragment")
-extern class DocumentFragment extends Node
-{
+extern class DocumentFragment extends Node {
+	var children(default,null) : HTMLCollection;
+	var firstElementChild(default,null) : Element;
+	var lastElementChild(default,null) : Element;
+	var childElementCount(default,null) : Int;
+	
+	/** @throws DOMError */
+	function new() : Void;
+	
+	/**
+		Returns the first `Element` node within the DocumentFragment`, in document order, that matches the specified ID.
+	**/
+	function getElementById( elementId : String ) : Element;
+	
+	/**
+		Returns the first `Element` node within the `DocumentFragment`, in document order, that matches the specified selectors.
+		@throws DOMError
+	**/
 	function querySelector( selectors : String ) : Element;
-
+	
+	/**
+		Returns a `NodeList` of all the `Element` nodes within the `DocumentFragment` that match the specified selectors.
+		@throws DOMError
+	**/
 	function querySelectorAll( selectors : String ) : NodeList;
-
+	/** @throws DOMError */
+	@:overload( function( nodes : haxe.extern.Rest<String>) : Void {} )
+	function prepend( nodes : haxe.extern.Rest<Node> ) : Void;
+	/** @throws DOMError */
+	@:overload( function( nodes : haxe.extern.Rest<String>) : Void {} )
+	function append( nodes : haxe.extern.Rest<Node> ) : Void;
 }

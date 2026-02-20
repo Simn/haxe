@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,13 +20,17 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGDefsElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGDefsElement</code> interface corresponds to the <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/defs">&lt;defs&gt;</a></code>
- element.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGDefsElement">MDN</a>. */
+/**
+	The `SVGDefsElement` interface corresponds to the `defs` element.
+
+	Documentation [SVGDefsElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGDefsElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGDefsElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGDefsElement>
+**/
 @:native("SVGDefsElement")
-extern class DefsElement extends Element
-{
+extern class DefsElement extends GraphicsElement {
 }

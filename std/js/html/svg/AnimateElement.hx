@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,13 +20,17 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGAnimateElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGAnimateElement</code> interface corresponds to the <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/animate">&lt;animate&gt;</a></code>
- element.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGAnimateElement">MDN</a>. */
+/**
+	The `SVGAnimateElement` interface corresponds to the `animate` element.
+
+	Documentation [SVGAnimateElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGAnimateElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGAnimateElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGAnimateElement>
+**/
 @:native("SVGAnimateElement")
-extern class AnimateElement extends AnimationElement
-{
+extern class AnimateElement extends AnimationElement {
 }

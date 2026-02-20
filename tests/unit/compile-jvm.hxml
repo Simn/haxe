@@ -1,0 +1,5 @@
+compile-java-native.hxml
+
+--next
+
+compile-jvm-only.hxml

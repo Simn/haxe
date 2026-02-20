@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,21 +20,39 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\Text.webidl. Do not edit!
+
 package js.html;
 
-/** <p>In the <a title="en/DOM" rel="internal" href="https://developer.mozilla.org/en/DOM">DOM</a>, the Text interface represents the textual content of an <a class="internal" title="En/DOM/Element" rel="internal" href="/api/js/html/Element">Element</a> or <a class="internal" title="En/DOM/Attr" rel="internal" href="https://developer.mozilla.org/En/DOM/Attr">Attr</a>.&nbsp; If an element has no markup within its content, it has a single child implementing Text that contains the element's text.&nbsp; However, if the element contains markup, it is parsed into information items and Text nodes that form its children.</p>
-<p>New documents have a single Text node for each block of text.&nbsp; Over time, more Text nodes may be created as the document's content changes.&nbsp; The <code>Node.normalize()</code>&nbsp;method merges adjacent Text objects back into a single node for each block of text.</p>
-<p>Text also implements the <a title="En/DOM/CharacterData" rel="internal" href="/api/js/html/CharacterData">CharacterData</a> interface (which implements the Node interface).</p><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/Text">MDN</a>. */
+/**
+	The `Text` interface represents the textual content of `Element` or `Attr`.  If an element has no markup within its content, it has a single child implementing `Text` that contains the element's text.  However, if the element contains markup, it is parsed into information items and `Text` nodes that form its children.
+
+	Documentation [Text](https://developer.mozilla.org/en-US/docs/Web/API/Text) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/Text$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/Text>
+**/
 @:native("Text")
-extern class Text extends CharacterData
-{
-	/** Returns all text of all Text nodes logically adjacent to this node, concatenated in document order. */
+extern class Text extends CharacterData {
+	
+	/**
+		Returns a `DOMString` containing the text of all `Text` nodes logically adjacent to this `Node`, concatenated in document order.
+	**/
 	var wholeText(default,null) : String;
-
-	function replaceWholeText( content : String ) : Text;
-
+	
+	/** @throws DOMError */
+	function new( data : String = "" ) : Void;
+	/** @throws DOMError */
 	function splitText( offset : Int ) : Text;
-
+	/** @throws DOMError */
+	@:overload( function( quad : DOMQuad, from : Element, ?options : ConvertCoordinateOptions) : DOMQuad {} )
+	@:overload( function( quad : DOMQuad, from : HTMLDocument, ?options : ConvertCoordinateOptions) : DOMQuad {} )
+	function convertQuadFromNode( quad : DOMQuad, from : Text, ?options : ConvertCoordinateOptions ) : DOMQuad;
+	/** @throws DOMError */
+	@:overload( function( rect : DOMRectReadOnly, from : Element, ?options : ConvertCoordinateOptions) : DOMQuad {} )
+	@:overload( function( rect : DOMRectReadOnly, from : HTMLDocument, ?options : ConvertCoordinateOptions) : DOMQuad {} )
+	function convertRectFromNode( rect : DOMRectReadOnly, from : Text, ?options : ConvertCoordinateOptions ) : DOMQuad;
+	/** @throws DOMError */
+	@:overload( function( point : DOMPointInit, from : Element, ?options : ConvertCoordinateOptions) : DOMPoint {} )
+	@:overload( function( point : DOMPointInit, from : HTMLDocument, ?options : ConvertCoordinateOptions) : DOMPoint {} )
+	function convertPointFromNode( point : DOMPointInit, from : Text, ?options : ConvertCoordinateOptions ) : DOMPoint;
 }

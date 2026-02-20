@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,43 +20,59 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\EventSource.webidl. Do not edit!
+
 package js.html;
 
-/** <p>The <code>EventSource</code> interface is used to manage server-sent events. You can set the onmessage attribute to a JavaScript function to receive non-typed messages (that is, messages with no <code>event</code> field). You can also call <code>addEventListener()</code> to listen for events just like any other event source.</p>
-<p>See <a title="en/Server-sent events/Using server-sent events" rel="internal" href="https://developer.mozilla.org/en/Server-sent_events/Using_server-sent_events">Using server-sent events</a> for further details.</p><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/Server-sent_events/EventSource">MDN</a>. */
+/**
+	The `EventSource` interface is web content's interface to server-sent events. An `EventSource` instance opens a persistent connection to an HTTP server, which sends events in `text/event-stream` format.
+
+	Documentation [EventSource](https://developer.mozilla.org/en-US/docs/Web/API/EventSource) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/EventSource$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/EventSource>
+**/
 @:native("EventSource")
-extern class EventSource extends EventTarget
-{
-	/** The connection is not being established, has been closed or there was a fatal error. */
-	static inline var CLOSED : Int = 2;
-
-	/** The connection is being established. */
+extern class EventSource extends EventTarget {
 	static inline var CONNECTING : Int = 0;
-
-	/** The connection is open and dispatching events. */
 	static inline var OPEN : Int = 1;
-
-	var URL(default,null) : String;
-
-	/** A JavaScript function to call when an error occurs. */
-	var onerror : EventListener;
-
-	/** A JavaScript function to call when an a message without an <code>event</code> field arrives. */
-	var onmessage : EventListener;
-
-	/** A JavaScript function to call when the connection has opened. */
-	var onopen : EventListener;
-
-	/** The state of the connection, must be one of <code>CONNECTING</code>, <code>OPEN</code>, or <code>CLOSED</code>. <strong>Read only.</strong> */
-	var readyState(default,null) : Int;
-
-	/** Read only. */
+	static inline var CLOSED : Int = 2;
+	
+	
+	/**
+		A `DOMString` representing the URL of the source.
+	**/
 	var url(default,null) : String;
-
-	function new( scriptUrl : String ) : Void;
-
+	
+	/**
+		A `Boolean` indicating whether the `EventSource` object was instantiated with cross-origin (CORS) credentials set (`true`), or not (`false`, the default).
+	**/
+	var withCredentials(default,null) : Bool;
+	
+	/**
+		A number representing the state of the connection. Possible values are `CONNECTING` (`0`), `OPEN` (`1`), or `CLOSED` (`2`).
+	**/
+	var readyState(default,null) : Int;
+	
+	/**
+		Is an `EventHandler` called when an `open` event is received, that is when the connection was just opened.
+	**/
+	var onopen : haxe.Constraints.Function;
+	
+	/**
+		Is an `EventHandler` called when a `message` event is received, that is when a message is coming from the source.
+	**/
+	var onmessage : haxe.Constraints.Function;
+	
+	/**
+		Is an `EventHandler` called when an error occurs and the `error` event is dispatched on an `EventSource` object.
+	**/
+	var onerror : haxe.Constraints.Function;
+	
+	/** @throws DOMError */
+	function new( url : String, ?eventSourceInitDict : EventSourceInit ) : Void;
+	
+	/**
+		Closes the connection, if any, and sets the `readyState` attribute to `CLOSED`. If the connection is already closed, the method does nothing.
+	**/
 	function close() : Void;
-
 }

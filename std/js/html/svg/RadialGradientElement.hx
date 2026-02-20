@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,37 +20,40 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGRadialGradientElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGRadialGradientElement</code> interface corresponds to the <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/radialGradient">&lt;radialGradient&gt;</a></code>
- element.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGRadialGradientElement">MDN</a>. */
+/**
+	The `SVGRadialGradientElement` interface corresponds to the `RadialGradient` element.
+
+	Documentation [SVGRadialGradientElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGRadialGradientElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGRadialGradientElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGRadialGradientElement>
+**/
 @:native("SVGRadialGradientElement")
-extern class RadialGradientElement extends GradientElement
-{
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/cx">cx</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/radialGradient">&lt;radialGradient&gt;</a></code>
- element. */
+extern class RadialGradientElement extends GradientElement {
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `cx` attribute of the given `RadialGradient` element.
+	**/
 	var cx(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/cy">cy</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/radialGradient">&lt;radialGradient&gt;</a></code>
- element. */
 	var cy(default,null) : AnimatedLength;
-
-	var fr(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/fx" class="new">fx</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/radialGradient">&lt;radialGradient&gt;</a></code>
- element. */
-	var fx(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/fy" class="new">fy</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/radialGradient">&lt;radialGradient&gt;</a></code>
- element. */
-	var fy(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `r` attribute of the given `RadialGradient` element.
+	**/
 	var r(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `fx` attribute of the given `RadialGradient` element.
+	**/
+	var fx(default,null) : AnimatedLength;
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `fy` attribute of the given `RadialGradient` element.
+	**/
+	var fy(default,null) : AnimatedLength;
+	var fr(default,null) : AnimatedLength;
+	
 }

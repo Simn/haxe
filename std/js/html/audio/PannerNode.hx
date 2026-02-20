@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,50 +20,100 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\PannerNode.webidl. Do not edit!
+
 package js.html.audio;
 
+/**
+	A `PannerNode` always has exactly one input and one output: the input can be mono or stereo but the output is always stereo (2 channels); you can't have panning effects without at least two audio channels!
+
+	Documentation [PannerNode](https://developer.mozilla.org/en-US/docs/Web/API/PannerNode) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/PannerNode$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/PannerNode>
+**/
 @:native("PannerNode")
-extern class PannerNode extends AudioNode
-{
-	static inline var EQUALPOWER : Int = 0;
-
-	static inline var EXPONENTIAL_DISTANCE : Int = 2;
-
-	static inline var HRTF : Int = 1;
-
-	static inline var INVERSE_DISTANCE : Int = 1;
-
-	static inline var LINEAR_DISTANCE : Int = 0;
-
-	static inline var SOUNDFIELD : Int = 2;
-
-	var coneGain(default,null) : AudioGain;
-
-	var coneInnerAngle : Float;
-
-	var coneOuterAngle : Float;
-
-	var coneOuterGain : Float;
-
-	var distanceGain(default,null) : AudioGain;
-
-	/** Setter throws DOMException. */
-	var distanceModel : Int;
-
-	var maxDistance : Float;
-
-	/** Setter throws DOMException. */
-	var panningModel : Int;
-
+extern class PannerNode extends AudioNode {
+	
+	/**
+		An enumerated value determining which spatialisation algorithm to use to position the audio in 3D space.
+	**/
+	var panningModel : PanningModelType;
+	
+	/**
+		Represents the horizontal position of the audio in a right-hand cartesian coordinate sytem. The default is 0. While this `AudioParam` cannot be directly changed, its value can be altered using its `AudioParam.value` property. The default is value is 0.
+	**/
+	var positionX(default,null) : AudioParam;
+	
+	/**
+		Represents the vertical position of the audio in a right-hand cartesian coordinate sytem. The default is 0. While this `AudioParam` cannot be directly changed, its value can be altered using its `AudioParam.value` property. The default is value is 0.
+	**/
+	var positionY(default,null) : AudioParam;
+	
+	/**
+		Represents the longitudinal (back and forth) position of the audio in a right-hand cartesian coordinate sytem. The default is 0. While this `AudioParam` cannot be directly changed, its value can be altered using its `AudioParam.value` property. The default is value is 0.
+	**/
+	var positionZ(default,null) : AudioParam;
+	
+	/**
+		Represents the horizontal position of the audio source's vector in a right-hand cartesian coordinate sytem. While this `AudioParam` cannot be directly changed, its value can be altered using its `AudioParam.value` property. The default is value is 1.
+	**/
+	var orientationX(default,null) : AudioParam;
+	
+	/**
+		Represents the vertical position of the audio source's vector in a right-hand cartesian coordinate sytem. The default is 0. While this `AudioParam` cannot be directly changed, its value can be altered using its `AudioParam.value` property. The default is value is 0.
+	**/
+	var orientationY(default,null) : AudioParam;
+	
+	/**
+		Represents the longitudinal (back and forth) position of the audio source's vector in a right-hand cartesian coordinate sytem. The default is 0. While this `AudioParam` cannot be directly changed, its value can be altered using its `AudioParam.value` property. The default is value is 0.
+	**/
+	var orientationZ(default,null) : AudioParam;
+	
+	/**
+		An enumerated value determining which algorithm to use to reduce the volume of the audio source as it moves away from the listener.
+	**/
+	var distanceModel : DistanceModelType;
+	
+	/**
+		A double value representing the reference distance for reducing volume as the audio source moves further from the listener.
+	**/
 	var refDistance : Float;
-
+	
+	/**
+		A double value representing the maximum distance between the audio source and the listener, after which the volume is not reduced any further.
+	**/
+	var maxDistance : Float;
+	
+	/**
+		A double value describing how quickly the volume is reduced as the source moves away from the listener. This value is used by all distance models.
+	**/
 	var rolloffFactor : Float;
-
-	function setOrientation( x : Float, y : Float, z : Float ) : Void;
-
+	
+	/**
+		Is a double value describing the angle, in degrees, of a cone inside of which there will be no volume reduction.
+	**/
+	var coneInnerAngle : Float;
+	
+	/**
+		A double value describing the angle, in degrees, of a cone outside of which the volume will be reduced by a constant value, defined by the `coneOuterGain` attribute.
+	**/
+	var coneOuterAngle : Float;
+	
+	/**
+		A double value describing the amount of volume reduction outside the cone defined by the `coneOuterAngle` attribute. Its default value is `0`, meaning that no sound can be heard.
+	**/
+	var coneOuterGain : Float;
+	
+	/** @throws DOMError */
+	function new( context : BaseAudioContext, ?options : PannerOptions ) : Void;
+	
+	/**
+		Defines the position of the audio source relative to the listener (represented by an `AudioListener` object stored in the `AudioContext.listener` attribute.)
+	**/
 	function setPosition( x : Float, y : Float, z : Float ) : Void;
-
-	function setVelocity( x : Float, y : Float, z : Float ) : Void;
-
+	
+	/**
+		Defines the direction the audio source is playing in.
+	**/
+	function setOrientation( x : Float, y : Float, z : Float ) : Void;
 }

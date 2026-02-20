@@ -1,0 +1,4 @@
+brew "ninja"
+brew "cmake"
+brew "pkg-config"
+brew "libunistring"

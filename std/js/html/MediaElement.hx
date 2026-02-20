@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,166 +20,224 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLMediaElement.webidl. Do not edit!
+
 package js.html;
 
-/** HTML media elements (such as <code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/audio">&lt;audio&gt;</a></code>
- and <code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/video">&lt;video&gt;</a></code>
-) expose the <code>HTMLMediaElement</code> interface which provides special properties and methods (beyond the regular <a href="/api/js/html/Element" rel="internal">element</a> object interface they also have available to them by inheritance) for manipulating the layout and presentation of media elements.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/HTMLMediaElement">MDN</a>. */
-@:native("HTMLMediaElement")
-extern class MediaElement extends Element
-{
-	/** Data is available for the current playback position, but not enough to actually play more than one frame. */
-	static inline var HAVE_CURRENT_DATA : Int = 2;
+import js.lib.Promise;
 
-	/** Enough data is available—and the download rate is high enough—that the media can be played through to the end without interruption. */
+/**
+	The `HTMLMediaElement` interface adds to `HTMLElement` the properties and methods needed to support basic media-related capabilities that are common to audio and video.
+
+	Documentation [HTMLMediaElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement>
+**/
+@:native("HTMLMediaElement")
+extern class MediaElement extends Element {
+	static inline var NETWORK_EMPTY : Int = 0;
+	static inline var NETWORK_IDLE : Int = 1;
+	static inline var NETWORK_LOADING : Int = 2;
+	static inline var NETWORK_NO_SOURCE : Int = 3;
+	static inline var HAVE_NOTHING : Int = 0;
+	static inline var HAVE_METADATA : Int = 1;
+	static inline var HAVE_CURRENT_DATA : Int = 2;
+	static inline var HAVE_FUTURE_DATA : Int = 3;
 	static inline var HAVE_ENOUGH_DATA : Int = 4;
 
-	/** Data for the current playback position as well as for at least a little bit of time into the future is available (in other words, at least two frames of video, for example). */
-	static inline var HAVE_FUTURE_DATA : Int = 3;
 
-	/** Enough of the media resource has been retrieved that the metadata attributes are initialized.&nbsp; Seeking will no longer raise an exception. */
-	static inline var HAVE_METADATA : Int = 1;
-
-	/** No information is available about the media resource. */
-	static inline var HAVE_NOTHING : Int = 0;
-
-	static inline var NETWORK_EMPTY : Int = 0;
-
-	static inline var NETWORK_IDLE : Int = 1;
-
-	static inline var NETWORK_LOADING : Int = 2;
-
-	static inline var NETWORK_NO_SOURCE : Int = 3;
-
-	var audioDecodedByteCount(default,null) : Int;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/video#attr-autoplay">autoplay</a></code>
- HTML&nbsp;attribute, indicating whether to begin playing as soon as enough media is available. */
-	var autoplay : Bool;
-
-	/** The ranges of the media source that the browser has buffered, if any. */
-	var buffered(default,null) : TimeRanges;
-
-	var closedCaptionsVisible : Bool;
-
-	var controller : MediaController;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/video#attr-controls">controls</a></code>
- HTML attribute, indicating whether user interface items for controlling the resource should be displayed. */
-	var controls : Bool;
-
-	/** The absolute URL of the chosen media resource (if, for example, the server selects a media file based on the resolution of the user's display), or an empty string if the <code>networkState</code> is <code>EMPTY</code>. */
-	var currentSrc(default,null) : String;
-
-	/** The current playback time, in seconds.&nbsp; Setting this value seeks the media to the new time. Setter throws DOMException. */
-	var currentTime : Float;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/video#attr-muted">muted</a></code>
- HTML attribute, indicating whether the media element's audio output should be muted by default. Changing the value dynamically will not unmute the audio (it only controls the default state). */
-	var defaultMuted : Bool;
-
-	/** The default playback rate for the media.&nbsp; The Ogg backend does not support this.&nbsp; 1.0 is "normal speed," values lower than 1.0 make the media play slower than normal, higher values make it play faster.&nbsp; The value 0.0 is invalid and throws a <code>NOT_SUPPORTED_ERR</code>&nbsp;exception. */
-	var defaultPlaybackRate : Float;
-
-	/** The length of the media in seconds, or zero if no media data is available.&nbsp; If the media data is available but the length is unknown, this value is <code>NaN</code>.&nbsp; If the media is streamed and has no predefined length, the value is <code>Inf</code>. */
-	var duration(default,null) : Float;
-
-	/** Indicates whether the media element has ended playback. */
-	var ended(default,null) : Bool;
-
-	/** The media error object for the most recent error, or null if there has not been an error. */
+	/**
+		Returns a `MediaError` object for the most recent error, or `null` if there has not been an error.
+	**/
 	var error(default,null) : MediaError;
 
-	var hasClosedCaptions(default,null) : Bool;
-
-	var initialTime(default,null) : Float;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/video#attr-loop">loop</a></code>
- HTML&nbsp;attribute, indicating whether the media element should start over when it reaches the end. */
-	var loop : Bool;
-
-	var mediaGroup : String;
-
-	/** <code>true</code> if the audio is muted, and <code>false</code> otherwise. */
-	var muted : Bool;
-
-	/** <p>The current state of fetching the media over the network.</p> <table class="standard-table"> <tbody> <tr> <td class="header">Constant</td> <td class="header">Value</td> <td class="header">Description</td> </tr> <tr> <td><code>EMPTY</code></td> <td>0</td> <td>There is no data yet.&nbsp; The <code>readyState</code> is also <code>HAVE_NOTHING</code>.</td> </tr> <tr> <td><code>LOADING</code></td> <td>1</td> <td>The media is loading.</td> </tr> <tr> <td><code>LOADED_METADATA</code></td> <td>2</td> <td>The media's metadata has been loaded.</td> </tr> <tr> <td><code>LOADED_FIRST_FRAME</code></td> <td>3</td> <td>The media's first frame has been loaded.</td> </tr> <tr> <td><code>LOADED</code></td> <td>4</td> <td>The media has been fully loaded.</td> </tr> </tbody> </table> */
-	var networkState(default,null) : Int;
-
-	var onkeyadded : EventListener;
-
-	var onkeyerror : EventListener;
-
-	var onkeymessage : EventListener;
-
-	var onneedkey : EventListener;
-
-	/** Indicates whether the media element is paused. */
-	var paused(default,null) : Bool;
-
-	/** The current rate at which the media is being played back. This is used to implement user controls for fast forward, slow motion, and so forth. The normal playback rate is multiplied by this value to obtain the current rate, so a value of 1.0 indicates normal speed.&nbsp; Not supported by the Ogg backend. */
-	var playbackRate : Float;
-
-	/** The ranges of the media source that the browser has played, if any. */
-	var played(default,null) : TimeRanges;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/video#attr-preload">preload</a></code>
- HTML attribute, indicating what data should be preloaded at page-load time, if any. */
-	var preload : String;
-
-	var preservesPitch : Bool;
-
-	/** <p>The readiness state of the media:</p> <table class="standard-table"> <tbody> <tr> <td class="header">Constant</td> <td class="header">Value</td> <td class="header">Description</td> </tr> <tr> <td><code>HAVE_NOTHING</code></td> <td>0</td> <td>No information is available about the media resource.</td> </tr> <tr> <td><code>HAVE_METADATA</code></td> <td>1</td> <td>Enough of the media resource has been retrieved that the metadata attributes are initialized.&nbsp; Seeking will no longer raise an exception.</td> </tr> <tr> <td><code>HAVE_CURRENT_DATA</code></td> <td>2</td> <td>Data is available for the current playback position, but not enough to actually play more than one frame.</td> </tr> <tr> <td><code>HAVE_FUTURE_DATA</code></td> <td>3</td> <td>Data for the current playback position as well as for at least a little bit of time into the future is available (in other words, at least two frames of video, for example).</td> </tr> <tr> <td><code>HAVE_ENOUGH_DATA</code></td> <td>4</td> <td>Enough data is available—and the download rate is high enough—that the media can be played through to the end without interruption.</td> </tr> </tbody> </table> */
-	var readyState(default,null) : Int;
-
-	/** The time ranges that the user is able to seek to, if any. */
-	var seekable(default,null) : TimeRanges;
-
-	/** Indicates whether the media is in the process of seeking to a new position. */
-	var seeking(default,null) : Bool;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/video#attr-src">src</a></code>
- HTML attribute, containing the URL of a media resource to use. */
+	/**
+		Is a `DOMString` that reflects the `src` HTML attribute, which contains the URL of a media resource to use.
+	**/
 	var src : String;
 
-	/** The earliest possible position in the media, in seconds. */
-	var startTime(default,null) : Float;
+	/**
+		Returns a `DOMString` with the absolute URL of the chosen media resource.
+	**/
+	var currentSrc(default,null) : String;
 
-	var textTracks(default,null) : TextTrackList;
+	/**
+		Is a `DOMString` indicating the CORS setting for this media element.
+	**/
+	var crossOrigin : String;
 
-	var videoDecodedByteCount(default,null) : Int;
+	/**
+		Returns a `unsigned short` (enumeration) indicating the current state of fetching the media over the network.
+	**/
+	var networkState(default,null) : Int;
 
-	/** The audio volume, from 0.0 (silent) to 1.0 (loudest). Setter throws DOMException. */
+	/**
+		Is a `DOMString` that reflects the `preload` HTML attribute, indicating what data should be preloaded, if any. Possible values are: `none`, `metadata`, `auto`.
+	**/
+	var preload : String;
+
+	/**
+		Returns a `TimeRanges` object that indicates the ranges of the media source that the browser has buffered (if any) at the moment the `buffered` property is accessed.
+	**/
+	var buffered(default,null) : TimeRanges;
+
+	/**
+		Returns a `unsigned short` (enumeration) indicating the readiness state of the media.
+	**/
+	var readyState(default,null) : Int;
+
+	/**
+		Returns a `Boolean` that indicates whether the media is in the process of seeking to a new position.
+	**/
+	var seeking(default,null) : Bool;
+
+	/**
+		Is a `double` indicating the current playback time in seconds. Setting this value seeks the media to the new time.
+	**/
+	var currentTime : Float;
+
+	/**
+		Returns a `double` indicating the length of the media in seconds, or 0 if no media data is available.
+	**/
+	var duration(default,null) : Float;
+
+	/**
+		Returns a `Boolean` that indicates whether the media element is paused.
+	**/
+	var paused(default,null) : Bool;
+
+	/**
+		Is a `double` indicating the default playback rate for the media.
+	**/
+	var defaultPlaybackRate : Float;
+
+	/**
+		Is a `double` that indicates the rate at which the media is being played back. 
+	**/
+	var playbackRate : Float;
+
+	/**
+		Returns a `TimeRanges` object that contains the ranges of the media source that the browser has played, if any.
+	**/
+	var played(default,null) : TimeRanges;
+
+	/**
+		Returns a `TimeRanges` object that contains the time ranges that the user is able to seek to, if any.
+	**/
+	var seekable(default,null) : TimeRanges;
+
+	/**
+		Returns a `Boolean` that indicates whether the media element has finished playing.
+	**/
+	var ended(default,null) : Bool;
+
+	/**
+		A `Boolean` that reflects the `autoplay` HTML attribute, indicating whether playback should automatically begin as soon as enough media is available to do so without interruption.
+		 Sites which automatically play audio (or videos with an audio track) can be an unpleasant experience for users, so it should be avoided when possible. If you must offer autoplay functionality, you should make it opt-in (requiring a user to specifically enable it). However, this can be useful when creating media elements whose source will be set at a later time, under user control.
+
+	**/
+	var autoplay : Bool;
+
+	/**
+		Is a `Boolean` that reflects the `loop` HTML attribute, which indicates whether the media element should start over when it reaches the end.
+	**/
+	var loop : Bool;
+
+	/**
+		Is a `Boolean` that reflects the `controls` HTML attribute, indicating whether user interface items for controlling the resource should be displayed.
+	**/
+	var controls : Bool;
+
+	/**
+		Is a `double` indicating the audio volume, from 0.0 (silent) to 1.0 (loudest).
+	**/
 	var volume : Float;
 
-	function addKey( keySystem : String, key : Uint8Array, ?initData : Uint8Array, sessionId : String ) : Void;
+	/**
+		Is a `Boolean` that determines whether audio is muted. `true` if the audio is muted and `false` otherwise.
+	**/
+	var muted : Bool;
 
-	function addTextTrack( kind : String, ?label : String, ?language : String ) : TextTrack;
+	/**
+		Is a `Boolean` that reflects the `muted` HTML attribute, which indicates whether the media element's audio output should be muted by default.
+	**/
+	var defaultMuted : Bool;
 
-	function canPlayType( type : String, ?keySystem : String ) : String;
+	/**
+		A `AudioTrackList` that lists the `AudioTrack` objects contained in the element.
+	**/
+	var audioTracks(default,null) : AudioTrackList;
 
-	function cancelKeyRequest( keySystem : String, sessionId : String ) : Void;
+	/**
+		Returns the list of `VideoTrack` objects contained in the element.
 
-	function generateKeyRequest( keySystem : String, ?initData : Uint8Array ) : Void;
+		 Gecko supports only single track playback, and the parsing of tracks' metadata is only available for media with the Ogg container format.
 
+
+	**/
+	var videoTracks(default,null) : VideoTrackList;
+
+	/**
+		Returns the list of `TextTrack` objects contained in the element.
+	**/
+	var textTracks(default,null) : TextTrackList;
+
+	/**
+		Is a `MediaStream` representing the media to play or that has played in the current `HTMLMediaElement`, or `null` if not assigned.
+	**/
+	var srcObject : MediaStream;
+
+	/**
+		Returns a `MediaKeys` object or `null`. MediaKeys is a set of keys that an associated HTMLMediaElement can use for decryption of media data during playback.
+	**/
+	var mediaKeys(default,null) : js.html.eme.MediaKeys;
+
+	/**
+		Sets the `EventHandler` called when the media is encrypted.
+	**/
+	var onencrypted : haxe.Constraints.Function;
+
+	/**
+		Sets the `EventHandler` called when playback is blocked while waiting for an encryption key.
+	**/
+	var onwaitingforkey : haxe.Constraints.Function;
+
+
+	/**
+		Resets the media element and restarts the media resource. Any pending events are discarded. How much media data is fetched is still affected by the `preload` attribute. This method can be useful for releasing resources after any `src` attribute and `source` element descendants have been removed. Otherwise, it is usually unnecessary to use this method, unless required to rescan `source` element children after dynamic changes.
+	**/
 	function load() : Void;
 
+	/**
+		Determines whether the specified media type can be played back.
+	**/
+	function canPlayType( type : String ) : String;
+
+	/**
+		Directly seeks to the given time.
+		@throws DOMError
+	**/
+	function fastSeek( time : Float ) : Void;
+
+	/**
+		Begins playback of the media.
+		@throws DOMError
+	**/
+	function play() : Promise<Void>;
+
+	/**
+		Pauses the media playback.
+		@throws DOMError
+	**/
 	function pause() : Void;
 
-	function play() : Void;
+	/**
+		Adds a text track (such as a track for subtitles) to a media element.
+	**/
+	function addTextTrack( kind : TextTrackKind, label : String = "", language : String = "" ) : TextTrack;
 
+	/**
+		Returns `Promise`. Sets the `MediaKeys` keys to use when decrypting media during playback.
+	**/
+	function setMediaKeys( mediaKeys : js.html.eme.MediaKeys ) : Promise<Void>;
 }

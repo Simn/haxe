@@ -1,10 +1,10 @@
 package flash.net;
 
 extern class URLRequestMethod {
-	@:require(flash10_1) static var DELETE : String;
-	static var GET : String;
-	@:require(flash10_1) static var HEAD : String;
-	@:require(flash10_1) static var OPTIONS : String;
-	static var POST : String;
-	@:require(flash10_1) static var PUT : String;
+	@:require(flash10_1) static final DELETE : String;
+	static final GET : String;
+	@:require(flash10_1) static final HEAD : String;
+	@:require(flash10_1) static final OPTIONS : String;
+	static final POST : String;
+	@:require(flash10_1) static final PUT : String;
 }

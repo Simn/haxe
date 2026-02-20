@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,86 +20,138 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLImageElement.webidl. Do not edit!
+
 package js.html;
 
-/** DOM image objects expose the <a title="http://www.w3.org/TR/html5/embedded-content-1.html#htmlimageelement" class=" external" rel="external" href="http://www.w3.org/TR/html5/embedded-content-1.html#htmlimageelement" target="_blank">HTMLImageElement</a> (or 
-<span><a rel="custom" href="https://developer.mozilla.org/en/HTML">HTML 4</a></span> <a title="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-17701901" class=" external" rel="external" href="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-17701901" target="_blank"><code>HTMLImageElement</code></a>) interface, which provides special properties and methods (beyond the regular <code><a rel="custom" href="/api/js/html/Element">element</a></code>
- object interface they also have available to them by inheritance) for manipulating the layout and presentation of input elements.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/HTMLImageElement">MDN</a>. */
+/**
+	The `HTMLImageElement` interface provides special properties and methods  for manipulating the layout and presentation of `img` elements.
+
+	Documentation [HTMLImageElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement>
+**/
 @:native("HTMLImageElement")
-extern class ImageElement extends Element
-{
-	/** Indicates the alignment of the image with respect to the surrounding context. */
-	var align : String;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/img#attr-alt">alt</a></code>
- HTML attribute, indicating fallback context for the image. */
+extern class ImageElement extends Element {
+	
+	/**
+		Is a `DOMString` that reflects the `alt` HTML attribute,  thus indicating fallback context for the image.
+	**/
 	var alt : String;
-
-	/** Width of the border around the image. */
-	var border : String;
-
-	/** True if the browser has fetched the image, and it is in a <a title="en/HTML/Element/Img#Image Format" rel="internal" href="https://developer.mozilla.org/En/HTML/Element/Img#Image_Format">supported image type</a> that was decoded without errors. */
-	var complete(default,null) : Bool;
-
-	/** The CORS setting for this image element. See <a title="en/HTML/CORS settings attributes" rel="internal" href="https://developer.mozilla.org/en/HTML/CORS_settings_attributes">CORS&nbsp;settings attributes</a> for details. */
-	var crossOrigin : String;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/img#attr-height">height</a></code>
- HTML attribute, indicating the rendered height of the image in CSS&nbsp;pixels. */
-	var height : Int;
-
-	/** Space to the left and right of the image. */
-	var hspace : Int;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/img#attr-ismap">ismap</a></code>
- HTML attribute, indicating that the image is part of a server-side image map. */
-	var isMap : Bool;
-
-	/** URI of a long description of the image. */
-	var longDesc : String;
-
-	/** A reference to a low-quality (but faster to load) copy of the image. */
-	var lowsrc : String;
-
-	var name : String;
-
-	/** Intrinsic height of the image in CSS&nbsp;pixels, if it is available; otherwise, 0. */
-	var naturalHeight(default,null) : Int;
-
-	/** Intrinsic width of the image in CSS&nbsp;pixels, if it is available; otherwise, 0. */
-	var naturalWidth(default,null) : Int;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element#attr-src">src</a></code>
- HTML attribute, containing the URL of the image. */
+	
+	/**
+		Is a `DOMString` that reflects the `src` HTML attribute, containing the full URL of the image including base URI.
+	**/
 	var src : String;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/img#attr-usemap">usemap</a></code>
- HTML attribute, containing a partial URL of a map element. */
+	
+	/**
+		Is a `DOMString` reflecting the `srcset` HTML attribute, containing a list of candidate images, separated by a comma (`',', U+002C COMMA`). A candidate image is a URL followed by a `'w'` with the width of the images, or an `'x'` followed by the pixel density.
+	**/
+	var srcset : String;
+	
+	/**
+		Is a `DOMString` representing the CORS setting for this image element. See CORS settings attributes for further details.
+	**/
+	var crossOrigin : String;
+	
+	/**
+		Is a `DOMString` that reflects the `usemap` HTML attribute, containing a partial URL of a map element.
+	**/
 	var useMap : String;
-
-	/** Space above and below the image. */
-	var vspace : Int;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/img#attr-width">width</a></code>
- HTML attribute, indicating the rendered width of the image in CSS&nbsp;pixels. */
+	
+	/**
+		Is a `DOMString` that reflects the `referrerpolicy` HTML attribute indicating which referrer to use in order to fetch the image.
+	**/
+	var referrerPolicy : String;
+	
+	/**
+		Is a `Boolean` that reflects the `ismap` HTML attribute, indicating that the image is part of a server-side image map.
+	**/
+	var isMap : Bool;
+	
+	/**
+		Is a `unsigned long` that reflects the `width` HTML attribute, indicating the rendered width of the image in CSS pixels.
+	**/
 	var width : Int;
-
+	
+	/**
+		Is a `unsigned long` that reflects the `height` HTML attribute, indicating the rendered height of the image in CSS pixels.
+	**/
+	var height : Int;
+	
+	/**
+		Returns a `DOMString` representing a hint given to the browser on how it should decode the image.
+	**/
+	var decoding : String;
+	
+	/**
+		Returns a `unsigned long` representing the intrinsic width of the image in CSS pixels, if it is available; otherwise, it will show `0`.
+	**/
+	var naturalWidth(default,null) : Int;
+	
+	/**
+		Returns a `unsigned long` representing the intrinsic height of the image in CSS pixels, if it is available; else, it shows `0`.
+	**/
+	var naturalHeight(default,null) : Int;
+	
+	/**
+		Returns a `Boolean` that is `true` if the browser has finished fetching the image, whether successful or not. It also shows true, if the image has no `HTMLImageElement.src` value.
+	**/
+	var complete(default,null) : Bool;
+	
+	/**
+		Is a `DOMString` representing the name of the element.
+	**/
+	var name : String;
+	
+	/**
+		Is a `DOMString` indicating the alignment of the image with respect to the surrounding context. The possible values are `"left"`, `"right"`, `"justify"`, and `"center"`.
+	**/
+	var align : String;
+	
+	/**
+		Is a `long` representing the space on either side of the image.
+	**/
+	var hspace : Int;
+	
+	/**
+		Is a `long` representing the space above and below the image.
+	**/
+	var vspace : Int;
+	
+	/**
+		Is a `DOMString` representing the URI of a long description of the image.
+	**/
+	var longDesc : String;
+	
+	/**
+		Is a `DOMString` that is responsible for the width of the border surrounding the image. This is now deprecated and the CSS `border` property should be used instead.
+	**/
+	var border : String;
+	
+	/**
+		Is a `DOMString` reflecting the `sizes` HTML attribute.
+	**/
+	var sizes : String;
+	
+	/**
+		Returns a `DOMString` representing the URL to the currently displayed image (which may change, for example in response to media queries).
+	**/
+	var currentSrc(default,null) : String;
+	
+	/**
+		Is a `DOMString` that refers to a low-quality (but faster to load) copy of the image.
+	**/
+	var lowsrc : String;
+	
+	/**
+		Returns a `long` representing the horizontal offset from the nearest layer. This property mimics an old Netscape 4 behavior.
+	**/
 	var x(default,null) : Int;
-
+	
+	/**
+		Returns a `long` representing the vertical offset from the nearest layer. This property is also similar to behavior of an old Netscape 4.
+	**/
 	var y(default,null) : Int;
-
+	
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,64 +20,51 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\AudioContext.webidl. Do not edit!
+
 package js.html.audio;
 
+import js.lib.Promise;
+
+/**
+	The `AudioContext` interface represents an audio-processing graph built from audio modules linked together, each represented by an `AudioNode`.
+
+	Documentation [AudioContext](https://developer.mozilla.org/en-US/docs/Web/API/AudioContext) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/AudioContext$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/AudioContext>
+**/
 @:native("AudioContext")
-extern class AudioContext extends js.html.EventTarget
-{
-	var activeSourceCount(default,null) : Int;
+extern class AudioContext extends BaseAudioContext {
+	/** @throws DOMError */
+	function new( ?contextOptions : AudioContextOptions ) : Void;
 
-	var currentTime(default,null) : Float;
+	/**
+		Suspends the progression of time in the audio context, temporarily halting audio hardware access and reducing CPU/battery usage in the process.
+		@throws DOMError
+	**/
+	function suspend() : Promise<Void>;
 
-	var destination(default,null) : AudioDestinationNode;
+	/**
+		Closes the audio context, releasing any system audio resources that it uses.
+		@throws DOMError
+	**/
+	function close() : Promise<Void>;
 
-	var listener(default,null) : AudioListener;
-
-	var oncomplete : js.html.EventListener;
-
-	var sampleRate(default,null) : Float;
-
-	function new() : Void;
-
-	function createAnalyser() : AnalyserNode;
-
-	function createBiquadFilter() : BiquadFilterNode;
-
-	/** Throws DOMException. */
-	@:overload( function( numberOfChannels : Int, numberOfFrames : Int, sampleRate : Float ) :AudioBuffer {} )
-	function createBuffer( buffer : js.html.ArrayBuffer, mixToMono : Bool ) : AudioBuffer;
-
-	function createBufferSource() : AudioBufferSourceNode;
-
-	function createChannelMerger( ?numberOfInputs : Int ) : ChannelMergerNode;
-
-	function createChannelSplitter( ?numberOfOutputs : Int ) : ChannelSplitterNode;
-
-	function createConvolver() : ConvolverNode;
-
-	function createDelay( ?maxDelayTime : Float ) : DelayNode;
-
-	function createDynamicsCompressor() : DynamicsCompressorNode;
-
-	function createGain() : GainNode;
-
+	/**
+		Creates a `MediaElementAudioSourceNode` associated with an `HTMLMediaElement`. This can be used to play and manipulate audio from `video` or `audio` elements.
+		@throws DOMError
+	**/
 	function createMediaElementSource( mediaElement : js.html.MediaElement ) : MediaElementAudioSourceNode;
 
-	function createMediaStreamSource( mediaStream : js.html.rtc.MediaStream ) : MediaStreamAudioSourceNode;
+	/**
+		Creates a `MediaStreamAudioSourceNode` associated with a `MediaStream` representing an audio stream which may come from the local computer microphone or other sources.
+		@throws DOMError
+	**/
+	function createMediaStreamSource( mediaStream : js.html.MediaStream ) : MediaStreamAudioSourceNode;
 
-	function createOscillator() : OscillatorNode;
-
-	function createPanner() : PannerNode;
-
-	function createScriptProcessor( bufferSize : Int, ?numberOfInputChannels : Int, ?numberOfOutputChannels : Int ) : ScriptProcessorNode;
-
-	function createWaveShaper() : WaveShaperNode;
-
-	function createWaveTable( real : js.html.Float32Array, imag : js.html.Float32Array ) : WaveTable;
-
-	function decodeAudioData( audioData : js.html.ArrayBuffer, successCallback : AudioBufferCallback, ?errorCallback : AudioBufferCallback ) : Void;
-
-	function startRendering() : Void;
-
+	/**
+		Creates a `MediaStreamAudioDestinationNode` associated with a `MediaStream` representing an audio stream which may be stored in a local file or sent to another computer.
+		@throws DOMError
+	**/
+	function createMediaStreamDestination() : MediaStreamAudioDestinationNode;
 }

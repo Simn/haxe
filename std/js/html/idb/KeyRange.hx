@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,29 +20,68 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\IDBKeyRange.webidl. Do not edit!
+
 package js.html.idb;
 
-/** The <code>IDBKeyRange</code> interface of the <a title="en/IndexedDB" rel="internal" href="https://developer.mozilla.org/en/IndexedDB">IndexedDB API</a> represents a continuous interval over some data type that is used for keys. Records can be retrieved from object stores and indexes using keys or a range of keys. You can limit the range using lower and upper bounds. For example, you can iterate over all values of a key between x and y.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/IndexedDB/IDBKeyRange">MDN</a>. */
+/**
+	A key range can be a single value or a range with upper and lower bounds or endpoints. If the key range has both upper and lower bounds, then it is bounded; if it has no bounds, it is unbounded. A bounded key range can either be open (the endpoints are excluded) or closed (the endpoints are included). To retrieve all keys within a certain range, you can use the following code constructs:
+
+	Documentation [IDBKeyRange](https://developer.mozilla.org/en-US/docs/Web/API/IDBKeyRange) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/IDBKeyRange$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/IDBKeyRange>
+**/
 @:native("IDBKeyRange")
-extern class KeyRange
-{
-	var lower(default,null) : Key;
-
+extern class KeyRange {
+	
+	/**
+		Creates a new key range containing a single value.
+		@throws DOMError
+	**/
+	static function only( value : Dynamic ) : KeyRange;
+	
+	/**
+		Creates a new key range with only a lower bound.
+		@throws DOMError
+	**/
+	static function lowerBound( lower : Dynamic, open : Bool = false ) : KeyRange;
+	
+	/**
+		Creates a new upper-bound key range.
+		@throws DOMError
+	**/
+	static function upperBound( upper : Dynamic, open : Bool = false ) : KeyRange;
+	
+	/**
+		Creates a new key range with upper and lower bounds.
+		@throws DOMError
+	**/
+	static function bound( lower : Dynamic, upper : Dynamic, lowerOpen : Bool = false, upperOpen : Bool = false ) : KeyRange;
+	
+	/**
+		Lower bound of the key range.
+	**/
+	var lower(default,null) : Dynamic;
+	
+	/**
+		Upper bound of the key range.
+	**/
+	var upper(default,null) : Dynamic;
+	
+	/**
+		Returns false if the lower-bound value is included in the key range.
+	**/
 	var lowerOpen(default,null) : Bool;
-
-	var upper(default,null) : Key;
-
-	/** Returns false if the upper-bound value is included in the key range. */
+	
+	/**
+		Returns false if the upper-bound value is included in the key range.
+	**/
 	var upperOpen(default,null) : Bool;
-
-	static function bound( lower : Key, upper : Key, ?lowerOpen : Bool, ?upperOpen : Bool ) : KeyRange;
-
-	static function lowerBound( bound : Key, ?open : Bool ) : KeyRange;
-
-	static function only( value : Key ) : KeyRange;
-
-	static function upperBound( bound : Key, ?open : Bool ) : KeyRange;
-
+	
+	
+	/**
+		Returns a boolean indicating whether a specified key is inside the key range.
+		@throws DOMError
+	**/
+	function includes( key : Dynamic ) : Bool;
 }

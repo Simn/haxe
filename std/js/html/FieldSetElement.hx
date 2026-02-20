@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,49 +20,71 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\HTMLFieldSetElement.webidl. Do not edit!
+
 package js.html;
 
-/** DOM&nbsp;<code>fieldset</code> elements expose the <a class=" external" title="http://dev.w3.org/html5/spec/forms.html#htmlfieldsetelement" rel="external" href="http://dev.w3.org/html5/spec/forms.html#htmlfieldsetelement" target="_blank">HTMLFieldSetElement</a>&nbsp; (
-<span><a rel="custom" href="https://developer.mozilla.org/en/HTML">HTML 4</a></span> <a class=" external" title="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-7365882" rel="external" href="http://www.w3.org/TR/DOM-Level-2-HTML/html.html#ID-7365882" target="_blank">HTMLFieldSetElement</a>) interface, which provides special properties and methods (beyond the regular <a rel="internal" href="/api/js/html/Element">element</a> object interface they also have available to them by inheritance) for manipulating the layout and presentation of field-set elements.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/HTMLFieldSetElement">MDN</a>. */
+/**
+	The `HTMLFieldSetElement` interface has special properties and methods (beyond the regular `HTMLElement` interface it also has available to it by inheritance) for manipulating the layout and presentation of field-set elements.
+
+	Documentation [HTMLFieldSetElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLFieldSetElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/HTMLFieldSetElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/HTMLFieldSetElement>
+**/
 @:native("HTMLFieldSetElement")
-extern class FieldSetElement extends Element
-{
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/fieldset#attr-disabled">disabled</a></code>
- HTML&nbsp;attribute, indicating whether the user can interact with the control. */
+extern class FieldSetElement extends Element {
+	
+	/**
+		A `Boolean` reflecting the `disabled` HTML attribute, indicating whether the user can interact with the control.
+	**/
 	var disabled : Bool;
-
-	/** The elements belonging to this field set. */
-	var elements(default,null) : HTMLCollection;
-
-	/** The containing form element, if this element is in a form. Otherwise, the element the <a title="en/HTML/Element/fieldset#attr-name" rel="internal" href="https://developer.mozilla.org/en/HTML/Element/fieldset#attr-name">name content attribute</a> points to 
-<span><a rel="custom" href="https://developer.mozilla.org/en/HTML/HTML5">HTML5</a></span>. (<code>null</code> in 
-<span><a rel="custom" href="https://developer.mozilla.org/en/HTML">HTML 4</a></span>.) */
+	
+	/**
+		An `HTMLFormControlsCollection` or `HTMLCollection` referencing the containing form element, if this element is in a form.
+		
+		 If the field set is not a descendant of a form element, then the attribute can be the ID of any form element in the same document it is related to, or the `null` value if none matches.
+	**/
 	var form(default,null) : FormElement;
-
-	/** Reflects the 
-
-<code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/fieldset#attr-name">name</a></code>
- HTML&nbsp;attribute, containing the name of the field set, used for submitting the form. */
+	
+	/**
+		A `DOMString` reflecting the `name` HTML attribute, containing the name of the field set, used for submitting the form.
+	**/
 	var name : String;
-
-	/** Must be the string <code>fieldset</code>. */
+	
+	/**
+		The `DOMString` `"fieldset"`.
+	**/
 	var type(default,null) : String;
-
-	/** A localized message that describes the validation constraints that the element does not satisfy (if any). This is the empty string if the element&nbsp; is not a candidate for constraint validation (<strong>willValidate</strong> is false), or it satisfies its constraints. */
-	var validationMessage(default,null) : String;
-
-	/** The validity states that this element is in. */
-	var validity(default,null) : ValidityState;
-
-	/** Always false because <code>fieldset</code> objects are never candidates for constraint validation. */
+	
+	/**
+		The elements belonging to this field set. The type of this property depends on the version of the spec that is implemented by the browser.
+	**/
+	var elements(default,null) : HTMLCollection;
+	
+	/**
+		A `Boolean` `false`, because `fieldset` objects are never candidates for constraint validation.
+	**/
 	var willValidate(default,null) : Bool;
-
+	
+	/**
+		A `ValidityState` representing the validity states that this element is in.
+	**/
+	var validity(default,null) : ValidityState;
+	
+	/**
+		A `DOMString` representing a localized message that describes the validation constraints that the element does not satisfy (if any). This is the empty string if the element is not a candidate for constraint validation (`willValidate` is `false`), or it satisfies its constraints.
+	**/
+	var validationMessage(default,null) : String;
+	
+	
+	/**
+		Always returns `true` because `fieldset` objects are never candidates for constraint validation.
+	**/
 	function checkValidity() : Bool;
-
+	function reportValidity() : Bool;
+	
+	/**
+		Sets a custom validity message for the field set. If this message is not the empty string, then the field set is suffering from a custom validity error, and does not validate.
+	**/
 	function setCustomValidity( error : String ) : Void;
-
 }

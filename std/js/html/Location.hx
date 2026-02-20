@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,48 +20,81 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\Location.webidl. Do not edit!
+
 package js.html;
 
-/** Returns a <a href="#Location_object"> <code>Location</code> object</a>, which contains information about the URL of the document and provides methods for changing that URL. You can also assign to this property to load another URL.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/window.location">MDN</a>. */
+/**
+	The `Location` interface represents the location (URL) of the object it is linked to. Changes done on it are reflected on the object it relates to. Both the `Document` and `Window` interface have such a linked `Location`, accessible via `Document.location` and `Window.location` respectively.
+
+	Documentation [Location](https://developer.mozilla.org/en-US/docs/Web/API/Location) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/Location$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/Location>
+**/
 @:native("Location")
-extern class Location
-{
-	var ancestorOrigins(default,null) : DOMStringList;
-
-	/** the part of the URL that follows the # symbol, including the # symbol.<br> You can listen for the <a title="en/DOM/window.onhashchange" rel="internal" href="https://developer.mozilla.org/en/DOM/window.onhashchange">hashchange event</a> to get notified of changes to the hash in supporting browsers. */
-	var hash : String;
-
-	/** the host name and port number. */
-	var host : String;
-
-	/** the host name (without the port number or square brackets). */
-	var hostname : String;
-
-	/** the entire URL. */
+extern class Location {
+	
+	/**
+		Is a `DOMString` containing the entire URL. If changed, the associated document navigates to the new page. It can be set from a different origin than the associated document.
+	**/
 	var href : String;
-
+	
+	/**
+		Returns a `DOMString` containing the canonical form of the origin of the specific location.
+	**/
 	var origin(default,null) : String;
-
-	/** the path (relative to the host). */
-	var pathname : String;
-
-	/** the port number of the URL. */
-	var port : String;
-
-	/** the protocol of the URL. */
+	
+	/**
+		Is a `DOMString` containing the protocol scheme of the URL, including the final `':'`.
+	**/
 	var protocol : String;
-
-	/** the part of the URL that follows the&nbsp;? symbol, including the&nbsp;? symbol. */
+	
+	/**
+		Is a `DOMString` containing the host, that is the hostname, a `':'`, and the port of the URL.
+	**/
+	var host : String;
+	
+	/**
+		Is a `DOMString` containing the domain of the URL.
+	**/
+	var hostname : String;
+	
+	/**
+		Is a `DOMString` containing the port number of the URL.
+	**/
+	var port : String;
+	
+	/**
+		Is a `DOMString` containing an initial `'/'` followed by the path of the URL.
+	**/
+	var pathname : String;
+	
+	/**
+		Is a `DOMString` containing a `'?'` followed by the parameters or "querystring" of the URL. Modern browsers provide URLSearchParams and URL.searchParams to make it easy to parse out the parameters from the querystring.
+	**/
 	var search : String;
-
+	
+	/**
+		Is a `DOMString` containing a `'#'` followed by the fragment identifier of the URL.
+	**/
+	var hash : String;
+	
+	
+	/**
+		Loads the resource at the URL provided in parameter.
+		@throws DOMError
+	**/
 	function assign( url : String ) : Void;
-
-	function reload() : Void;
-
+	
+	/**
+		Replaces the current resource with the one at the provided URL. The difference from the `assign()` method is that after using `replace()` the current page will not be saved in session `History`, meaning the user won't be able to use the back button to navigate to it.
+		@throws DOMError
+	**/
 	function replace( url : String ) : Void;
-
-	function toString() : String;
-
+	
+	/**
+		Reloads the resource from the current URL. Its optional unique parameter is a `Boolean`, which, when it is `true`, causes the page to always be reloaded from the server. If it is `false` or not specified, the browser may reload the page from its cache.
+		@throws DOMError
+	**/
+	function reload( forceget : Bool = false ) : Void;
 }

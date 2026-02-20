@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,19 +20,28 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\NodeList.webidl. Do not edit!
+
 package js.html;
 
-/** NodeList objects are collections of nodes returned by <a title="document.getElementsByTagName" rel="internal" href="https://developer.mozilla.org/en/DOM/document.getElementsByTagName"><code>getElementsByTagName</code></a>, <a title="document.getElementsByTagNameNS" rel="internal" href="https://developer.mozilla.org/en/DOM/document.getElementsByTagNameNS"><code>getElementsByTagNameNS</code></a>, <code><a rel="custom" href="https://developer.mozilla.org/en/DOM/Node.childNodes">Node.childNodes</a></code>
-, <a title="document.querySelectorAll" rel="internal" href="https://developer.mozilla.org/En/DOM/Document.querySelectorAll">querySelectorAll</a>, <a title="document.getElementsByClassName" rel="internal" href="https://developer.mozilla.org/en/DOM/document.getElementsByClassName"><code>getElementsByClassName</code></a>, etc.NodeList objects are collections of nodes returned by <a title="document.getElementsByTagName" rel="internal" href="https://developer.mozilla.org/en/DOM/document.getElementsByTagName"><code>getElementsByTagName</code></a>, <a title="document.getElementsByTagNameNS" rel="internal" href="https://developer.mozilla.org/en/DOM/document.getElementsByTagNameNS"><code>getElementsByTagNameNS</code></a>, <code><a rel="custom" href="https://developer.mozilla.org/en/DOM/Node.childNodes">Node.childNodes</a></code>
-, <a title="document.querySelectorAll" rel="internal" href="https://developer.mozilla.org/En/DOM/Document.querySelectorAll">querySelectorAll</a>, <a title="document.getElementsByClassName" rel="internal" href="https://developer.mozilla.org/en/DOM/document.getElementsByClassName"><code>getElementsByClassName</code></a>, etc.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/En/DOM/NodeList">MDN</a>. */
+/**
+	`NodeList` objects are collections of nodes such as those returned by properties such as `Node.childNodes` and the `document.querySelectorAll()` method.
+
+	Documentation [NodeList](https://developer.mozilla.org/en-US/docs/Web/API/NodeList) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/NodeList$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/NodeList>
+**/
 @:native("NodeList")
-extern class NodeList implements ArrayAccess<Node>
-{
-	/** Reflects the number of elements in the NodeList.&nbsp; */
+extern class NodeList implements ArrayAccess<Node> {
+	
+	/**
+		The number of nodes in the `NodeList`.
+	**/
 	var length(default,null) : Int;
-
+	
+	
+	/**
+		Returns an item in the list by its index, or `null` if the index is out-of-bounds; can be used as an alternative to simply accessing `nodeList[idx]` (which instead returns  `undefined` when `idx` is out-of-bounds).
+	**/
 	function item( index : Int ) : Node;
-
 }

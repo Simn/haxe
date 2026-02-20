@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,14 +20,20 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\CSSKeyframeRule.webidl. Do not edit!
+
 package js.html;
 
+/**
+	The `CSSKeyframeRule` interface describes an object representing a set of style for a given keyframe. It corresponds to the contains of a single keyframe of a `@keyframes` at-rule. It implements the `CSSRule` interface with a type value of `8` (`CSSRule.KEYFRAME_RULE`).
+
+	Documentation [CSSKeyframeRule](https://developer.mozilla.org/en-US/docs/Web/API/CSSKeyframeRule) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/CSSKeyframeRule$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/CSSKeyframeRule>
+**/
 @:native("CSSKeyframeRule")
-extern class CSSKeyframeRule extends CSSRule
-{
+extern class CSSKeyframeRule extends CSSRule {
 	var keyText : String;
-
 	var style(default,null) : CSSStyleDeclaration;
-
+	
 }

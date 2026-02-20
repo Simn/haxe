@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,33 +20,38 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGLineElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGLineElement</code> interface provides access to the properties of <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/line">&lt;line&gt;</a></code>
- elements, as well as methods to manipulate them.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGLineElement">MDN</a>. */
+/**
+	The `SVGLineElement` interface provides access to the properties of `line` elements, as well as methods to manipulate them.
+
+	Documentation [SVGLineElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGLineElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGLineElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGLineElement>
+**/
 @:native("SVGLineElement")
-extern class LineElement extends Element
-{
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/x1">x1</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/line">&lt;line&gt;</a></code>
- element. */
+extern class LineElement extends GeometryElement {
+	
+	/**
+		Returns an `SVGAnimatedLength` that corresponds to attribute `x1` on the given `line` element.
+	**/
 	var x1(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/x2">x2</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/line">&lt;line&gt;</a></code>
- element. */
-	var x2(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/y1">y1</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/line">&lt;line&gt;</a></code>
- element. */
+	
+	/**
+		Returns an `SVGAnimatedLength` that corresponds to attribute `y1` on the given `line` element.
+	**/
 	var y1(default,null) : AnimatedLength;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/y2">y2</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/line">&lt;line&gt;</a></code>
- element. */
+	
+	/**
+		Returns an `SVGAnimatedLength` that corresponds to attribute `x2` on the given `line` element.
+	**/
+	var x2(default,null) : AnimatedLength;
+	
+	/**
+		Returns an `SVGAnimatedLength` that corresponds to attribute `y2` on the given `line` element.
+	**/
 	var y2(default,null) : AnimatedLength;
-
+	
 }

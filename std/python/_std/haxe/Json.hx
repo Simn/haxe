@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,25 +19,17 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package haxe;
 
 import python.Syntax;
 
 class Json {
-
-	public static inline function parse( text : String ) : Dynamic {
-		return python.lib.Json.loads(text, null, null, python.Lib.dictToAnon);
+	public static inline function parse(text:String):Dynamic {
+		return python.lib.Json.loads(text, {object_hook: python.Lib.dictToAnon});
 	}
 
-	public static inline function stringify( value : Dynamic, ?replacer:Dynamic -> Dynamic -> Dynamic, ?space : String ) : String {
-
+	public static inline function stringify(value:Dynamic, ?replacer:(key:Dynamic, value:Dynamic) -> Dynamic, ?space:String):String {
 		return haxe.format.JsonPrinter.print(value, replacer, space);
-		/*
-		function def (o:Dynamic) {
-			trace(o);
-			return python.Lib.anonToDict(o);
-		}
-		return python.lib.Json.dumps(value, false, false, true, true, null, null, null, def);
-		*/
 	}
 }

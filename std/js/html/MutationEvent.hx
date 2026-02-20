@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,28 +20,29 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\MutationEvent.webidl. Do not edit!
+
 package js.html;
 
+/**
+	Provides event properties that are specific to modifications to the Document Object Model (DOM) hierarchy and nodes.
+
+	Documentation [MutationEvent](https://developer.mozilla.org/en-US/docs/Web/API/MutationEvent) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/MutationEvent$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/MutationEvent>
+**/
 @:native("MutationEvent")
-extern class MutationEvent extends Event
-{
-	static inline var ADDITION : Int = 2;
-
+extern class MutationEvent extends Event {
 	static inline var MODIFICATION : Int = 1;
-
+	static inline var ADDITION : Int = 2;
 	static inline var REMOVAL : Int = 3;
-
-	var attrChange(default,null) : Int;
-
-	var attrName(default,null) : String;
-
-	var newValue(default,null) : String;
-
-	var prevValue(default,null) : String;
-
+	
 	var relatedNode(default,null) : Node;
-
-	function initMutationEvent( type : String, canBubble : Bool, cancelable : Bool, relatedNode : Node, prevValue : String, newValue : String, attrName : String, attrChange : Int ) : Void;
-
+	var prevValue(default,null) : String;
+	var newValue(default,null) : String;
+	var attrName(default,null) : String;
+	var attrChange(default,null) : Int;
+	
+	/** @throws DOMError */
+	function initMutationEvent( type : String, canBubble : Bool = false, cancelable : Bool = false, ?relatedNode : Node, prevValue : String = "", newValue : String = "", attrName : String = "", attrChange : Int = 0 ) : Void;
 }

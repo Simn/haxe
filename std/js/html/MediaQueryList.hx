@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,30 +20,49 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\MediaQueryList.webidl. Do not edit!
+
 package js.html;
 
-/** <div><strong>DRAFT</strong>
-<div>This page is not complete.</div>
-</div>
+/**
+	A `MediaQueryList` object stores information on a media query applied to a document, and handles sending notifications to listeners when the media query state change (i.e. when the media query test starts or stops evaluating to `true`).
 
-<p></p>
-<p>A <code>MediaQueryList</code> object maintains a list of <a title="En/CSS/Media queries" rel="internal" href="https://developer.mozilla.org/En/CSS/Media_queries">media queries</a> on a <code><a rel="custom" href="/api/js/html/Document">document</a></code>
-, and handles sending notifications to listeners when the media queries on the document change.</p>
-<p>This makes it possible to observe a document to detect when its media queries change, instead of polling the values periodically, if you need to programmatically detect changes to the values of media queries on a document.</p><br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/MediaQueryList">MDN</a>. */
+	Documentation [MediaQueryList](https://developer.mozilla.org/en-US/docs/Web/API/MediaQueryList) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/MediaQueryList$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/MediaQueryList>
+**/
 @:native("MediaQueryList")
-extern class MediaQueryList
-{
-	/** <code>true</code> if the <code><a rel="custom" href="https://developer.mozilla.org/en/DOM/document">document</a></code>
- currently matches the media query list; otherwise <code>false</code>. <strong>Read only.</strong> */
-	var matches(default,null) : Bool;
-
-	/** The serialized media query list. */
+extern class MediaQueryList extends EventTarget {
+	
+	/**
+		 A `DOMString` representing a serialized media query.
+	**/
 	var media(default,null) : String;
-
-	function addListener( listener : MediaQueryListListener ) : Void;
-
-	function removeListener( listener : MediaQueryListListener ) : Void;
-
+	
+	/**
+		 A `Boolean` that returns `true` if the `document` currently matches the media query list, or `false` if not.
+	**/
+	var matches(default,null) : Bool;
+	
+	/**
+		 An event handler property representing a function that is invoked when the `change` event fires, i.e when the status of media query support changes. The event object is a `MediaQueryListEvent` instance, which is recognised as a `MediaListQuery` instance in older browsers, for backwards compatibility purposes.
+	**/
+	var onchange : haxe.Constraints.Function;
+	
+	
+	/**
+		 Adds a listener to the `MediaQueryListener` that will run a custom callback function in response to the media query status changing. This is basically an alias for `EventTarget.addEventListener()`, for backwards compatibility purposes.
+		@throws DOMError
+	**/
+	@:overload( function( listener : haxe.Constraints.Function) : Void {} )
+	@:overload( function( listener : EventListener) : Void {} )
+	function addListener( listener : Event -> Void ) : Void;
+	
+	/**
+		 Removes a listener from the `MediaQueryListener`. This is basically an alias for `EventTarget.removeEventListener()`, for backwards compatibility purposes.
+		@throws DOMError
+	**/
+	@:overload( function( listener : haxe.Constraints.Function) : Void {} )
+	@:overload( function( listener : EventListener) : Void {} )
+	function removeListener( listener : Event -> Void ) : Void;
 }

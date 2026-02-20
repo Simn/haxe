@@ -8,13 +8,6 @@
 
 --next
 
--swf all.swf
--swf-version 8
--xml flash8.xml
--D flash_lite
-
---next
-
 -js all.js
 -xml js.xml
 
@@ -22,7 +15,7 @@
 
 -swf all9.swf
 -xml flash9.xml
--swf-version 11.4
+--swf-version 11.4
 
 --next
 
@@ -33,23 +26,23 @@
 
 -cpp all_cpp
 -xml cpp.xml
--D xmldoc
 -D HXCPP_MULTI_THREADED
 
 --next
--java all_java
--xml java.xml
--D xmldoc
-
---next
--cs all_cs
--D unsafe
--xml cs.xml
--D xmldoc
+--jvm all_jvm
+-xml jvm.xml
 
 --next
 -python all_python
 -xml python.xml
+
+--next
+-hl all_hl
+-xml hl.xml
+
+--next
+--interp
+-xml interp.xml
 
 --next
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package haxe;
 
 /**
@@ -26,302 +27,159 @@ package haxe;
 **/
 enum StackItem {
 	CFunction;
-	Module( m : String );
-	FilePos( s : Null<StackItem>, file : String, line : Int );
-	Method( classname : String, method : String );
-	LocalFunction( v : Int );
+	Module(m:String);
+	FilePos(s:Null<StackItem>, file:String, line:Int, ?column:Int);
+	Method(classname:Null<String>, method:String);
+	LocalFunction(?v:Int);
 }
 
 /**
-	Get informations about the call stack.
+	Get information about the call stack.
 **/
-class CallStack {
+@:allow(haxe.Exception)
+@:using(haxe.CallStack)
+abstract CallStack(Array<StackItem>) from Array<StackItem> {
+	/**
+		The length of this stack.
+	**/
+	public var length(get,never):Int;
+	inline function get_length():Int return this.length;
 
 	/**
 		Return the call stack elements, or an empty array if not available.
 	**/
-	public static function callStack() : Array<StackItem> {
-		#if neko
-			var a = makeStack(untyped __dollar__callstack());
-			a.shift(); // remove Stack.callStack()
-			return a;
-		#elseif flash9
-			var a = makeStack( new flash.errors.Error().getStackTrace() );
-			a.shift(); // remove Stack.callStack()
-			return a;
-		#elseif flash
-			return makeStack("$s");
-		#elseif php
-			return makeStack("%s");
-		#elseif cpp
-			var s:Array<String> = untyped __global__.__hxcpp_get_call_stack(true);
-			return makeStack(s);
-		#elseif js
-			// https://code.google.com/p/v8/wiki/JavaScriptStackTraceApi
-			var oldValue = (untyped Error).prepareStackTrace;
-			(untyped Error).prepareStackTrace = function (error, callsites :Array<Dynamic>) {
-				var stack = [];
-				for (site in callsites) {
-					var method = null;
-					var fullName :String = site.getFunctionName();
-					if (fullName != null) {
-						var idx = fullName.lastIndexOf(".");
-						if (idx >= 0) {
-							var className = fullName.substr(0, idx);
-							var methodName = fullName.substr(idx+1);
-							method = Method(className, methodName);
-						}
-					}
-					stack.push(FilePos(method, site.getFileName(), site.getLineNumber()));
-				}
-				return stack;
-			}
-			var a = makeStack(untyped __new__("Error").stack);
-			a.shift(); // remove Stack.callStack()
-			(untyped Error).prepareStackTrace = oldValue;
-			return a;
-		#elseif java
-			var stack = [];
-			for ( el in java.lang.Thread.currentThread().getStackTrace() ) {
-				var className = el.getClassName();
-				var methodName = el.getMethodName();
-				var fileName = el.getFileName();
-				var lineNumber = el.getLineNumber();
-				var method = Method( className, methodName );
-				if ( fileName != null || lineNumber >= 0 ) {
-					stack.push( FilePos( method, fileName, lineNumber ) );
-				}
-				else {
-					stack.push( method );
-				}
-			}
-			stack.shift();
-			stack.shift();
-			stack.pop();
-			return stack;
-		#elseif cs
-			return makeStack(new cs.system.diagnostics.StackTrace(1, true));
-		#elseif python
-			var stack = [];
-			var infos = python.lib.Traceback.extract_stack();
-			infos.pop();
-			infos.reverse();
-			for (elem in infos)
-				stack.push(FilePos(null, elem._1, elem._2));
-			return stack;
-		#else
-			return []; // Unsupported
-		#end
+	public static function callStack():Array<StackItem> {
+		return NativeStackTrace.toHaxe(NativeStackTrace.callStack());
 	}
 
 	/**
 		Return the exception stack : this is the stack elements between
 		the place the last exception was thrown and the place it was
 		caught, or an empty array if not available.
+		Set `fullStack` parameter to true in order to return the full exception stack.
+
+		May not work if catch type was a derivative from `haxe.Exception`.
 	**/
-	#if cpp @:noStack #end /* Do not mess up the exception stack */
-	public static function exceptionStack() : Array<StackItem> {
-		#if neko
-			return makeStack(untyped __dollar__excstack());
-		#elseif as3
-			return new Array();
-		#elseif flash9
-			var err : flash.errors.Error = untyped flash.Boot.lastError;
-			if( err == null ) return new Array();
-			var a = makeStack( err.getStackTrace() );
-			var c = callStack();
-			var i = c.length - 1;
-			while( i > 0 ) {
-				if( Std.string(a[a.length-1]) == Std.string(c[i]) )
-					a.pop();
-				else
-					break;
-				i--;
-			}
-			return a;
-		#elseif flash
-			return makeStack("$e");
-		#elseif php
-			return makeStack("%e");
-		#elseif cpp
-			var s:Array<String> = untyped __global__.__hxcpp_get_exception_stack();
-			return makeStack(s);
-		#elseif java
-			var stack = [];
-			for ( el in java.internal.Exceptions.currentException().getStackTrace() ) {
-				var className = el.getClassName();
-				var methodName = el.getMethodName();
-				var fileName = el.getFileName();
-				var lineNumber = el.getLineNumber();
-				var method = Method( className, methodName );
-				if ( fileName != null || lineNumber >= 0 ) {
-					stack.push( FilePos( method, fileName, lineNumber ) );
-				}
-				else {
-					stack.push( method );
-				}
-			}
-			// stack.shift();
-			stack.shift();
-			stack.pop();
-			return stack;
-		#elseif cs
-			return makeStack(new cs.system.diagnostics.StackTrace(cs.internal.Exceptions.exception, true));
-		#elseif python
-			var stack = [];
-			var exc = python.lib.Sys.exc_info();
-			if (exc._3 != null)
-			{
-				var infos = python.lib.Traceback.extract_tb(exc._3);
-				infos.reverse();
-				for (elem in infos)
-					stack.push(FilePos(null, elem._1, elem._2));
-			}
-			return stack;
-		#else
-			return []; // Unsupported
-		#end
+	public static function exceptionStack( fullStack = false ):Array<StackItem> {
+		var eStack:CallStack = NativeStackTrace.toHaxe(NativeStackTrace.exceptionStack());
+		return (fullStack ? eStack : eStack.subtract(callStack())).asArray();
 	}
 
 	/**
 		Returns a representation of the stack as a printable string.
 	**/
-	public static function toString( stack : Array<StackItem> ) {
+	static public function toString(stack:CallStack):String {
 		var b = new StringBuf();
-		for( s in stack ) {
-			b.add("\nCalled from ");
-			itemToString(b,s);
+		for (s in stack.asArray()) {
+			b.add('\nCalled from ');
+			itemToString(b, s);
 		}
 		return b.toString();
 	}
 
-	private static function itemToString( b : StringBuf, s ) {
-		switch( s ) {
-		case CFunction:
-			b.add("a C function");
-		case Module(m):
-			b.add("module ");
-			b.add(m);
-		case FilePos(s,file,line):
-			if( s != null ) {
-				itemToString(b,s);
-				b.add(" (");
+	/**
+		Returns a range of entries of current stack from the beginning to the the
+		common part of this and `stack`.
+	**/
+	public function subtract(stack:CallStack):CallStack {
+		var startIndex = -1;
+		var i = -1;
+		while(++i < this.length) {
+			for(j in 0...stack.length) {
+				if(equalItems(this[i], stack[j])) {
+					if(startIndex < 0) {
+						startIndex = i;
+					}
+					++i;
+					if(i >= this.length) break;
+				} else {
+					startIndex = -1;
+				}
 			}
-			b.add(file);
-			b.add(" line ");
-			b.add(line);
-			if( s != null ) b.add(")");
-		case Method(cname,meth):
-			b.add(cname);
-			b.add(".");
-			b.add(meth);
-		case LocalFunction(n):
-			b.add("local function #");
-			b.add(n);
+			if(startIndex >= 0) break;
+		}
+		return startIndex >= 0 ? this.slice(0, startIndex) : this;
+	}
+
+	/**
+		Make a copy of the stack.
+	**/
+	public inline function copy():CallStack {
+		return this.copy();
+	}
+
+	@:arrayAccess public inline function get(index:Int):StackItem {
+		return this[index];
+	}
+
+	public inline function asArray():Array<StackItem> {
+		return this;
+	}
+
+	static function equalItems(item1:Null<StackItem>, item2:Null<StackItem>):Bool {
+		return switch([item1, item2]) {
+			case [null, null]: true;
+			case [CFunction, CFunction]: true;
+			case [Module(m1), Module(m2)]:
+				m1 == m2;
+			case [FilePos(item1, file1, line1, col1), FilePos(item2, file2, line2, col2)]:
+				file1 == file2 && line1 == line2 && col1 == col2 && equalItems(item1, item2);
+			case [Method(class1, method1), Method(class2, method2)]:
+				class1 == class2 && method1 == method2;
+			case [LocalFunction(v1), LocalFunction(v2)]:
+				v1 == v2;
+			case _: false;
 		}
 	}
 
-	#if cpp @:noStack #end /* Do not mess up the exception stack */
-	private static function makeStack(s #if cs : cs.system.diagnostics.StackTrace #end) {
-		#if neko
-			var a = new Array();
-			var l = untyped __dollar__asize(s);
-			var i = 0;
-			while( i < l ) {
-				var x = s[i++];
-				if( x == null )
-					a.unshift(CFunction);
-				else if( untyped __dollar__typeof(x) == __dollar__tstring )
-					a.unshift(Module(new String(x)));
-				else
-					a.unshift(FilePos(null,new String(untyped x[0]),untyped x[1]));
-			}
-			return a;
-		#elseif flash9
-			var a = new Array();
-			var r = ~/at ([^\/]+?)\$?(\/[^\(]+)?\(\)(\[(.*?):([0-9]+)\])?/;
-			var rlambda = ~/^MethodInfo-([0-9]+)$/g;
-			while( r.match(s) ) {
-				var cl = r.matched(1).split("::").join(".");
-				var meth = r.matched(2);
-				var item;
-				if( meth == null ) {
-					if( rlambda.match(cl) )
-						item = LocalFunction(Std.parseInt(rlambda.matched(1)));
-					else
-						item = Method(cl,"new");
-				} else
-					item = Method(cl,meth.substr(1));
-				if( r.matched(3) != null )
-					item = FilePos( item, r.matched(4), Std.parseInt(r.matched(5)) );
-				a.push(item);
-				s = r.matchedRight();
-			}
-			return a;
-		#elseif flash
-			var a : Array<String> = untyped __eval__(s);
-			var m = new Array();
-			for( i in 0...a.length - if(s == "$s") 2 else 0 ) {
-				var d = a[i].split("::");
-				m.unshift(Method(d[0],d[1]));
-			}
-			return m;
-		#elseif php
-			if (!untyped __call__("isset", __var__("GLOBALS", s)))
-				return [];
-			var a : Array<String> = untyped __var__("GLOBALS", s);
-			var m = [];
-			for( i in 0...a.length - ((s == "%s") ? 2 : 0)) {
-				var d = a[i].split("::");
-				m.unshift(Method(d[0],d[1]));
-			}
-			return m;
-		#elseif cpp
-			var stack : Array<String> = s;
-			var m = new Array<StackItem>();
-			for(func in stack) {
-				var words = func.split("::");
-				if (words.length==0)
-					m.unshift(CFunction)
-				else if (words.length==2)
-					m.unshift(Method(words[0],words[1]));
-				else if (words.length==4)
-					m.unshift(FilePos( Method(words[0],words[1]),words[2],Std.parseInt(words[3])));
-			}
-			return m;
-		#elseif js
-			if ((untyped __js__("typeof"))(s) == "string") {
-				// Return the raw lines in browsers that don't support prepareStackTrace
-				var stack : Array<String> = s.split("\n");
-				var m = [];
-				for( line in stack ) {
-					m.push(Module(line)); // A little weird, but better than nothing
-				}
-				return m;
+	static function exceptionToString(e:Exception):String {
+		if(e.previous == null) {
+			return 'Exception: ${e.toString()}${e.stack}';
+		}
+		var result = '';
+		var e:Null<Exception> = e;
+		var prev:Null<Exception> = null;
+		while(e != null) {
+			if(prev == null) {
+				result = 'Exception: ${e.message}${e.stack}' + result;
 			} else {
-				return cast s;
+				var prevStack = @:privateAccess e.stack.subtract(prev.stack);
+				result = 'Exception: ${e.message}${prevStack}\n\nNext ' + result;
 			}
-		#elseif cs
-			var stack = [];
-			for (i in 0...s.FrameCount)
-			{
-				var frame = s.GetFrame(i);
-				var m = frame.GetMethod();
-
-				var method = StackItem.Method(m.ReflectedType.ToString(), m.Name);
-
-				var fileName = frame.GetFileName();
-				var lineNumber = frame.GetFileLineNumber();
-
-				if (fileName != null || lineNumber >= 0)
-					stack.push(FilePos(method, fileName, lineNumber));
-				else
-					stack.push(method);
-			}
-			return stack;
-		#else
-			return null;
-		#end
+			prev = e;
+			e = e.previous;
+		}
+		return result;
 	}
 
+	static function itemToString(b:StringBuf, s) {
+		switch (s) {
+			case CFunction:
+				b.add("a C function");
+			case Module(m):
+				b.add("module ");
+				b.add(m);
+			case FilePos(s, file, line, col):
+				if (s != null) {
+					itemToString(b, s);
+					b.add(" (");
+				}
+				b.add(file);
+				b.add(" line ");
+				b.add(line);
+				if (col != null) {
+					b.add(" column ");
+					b.add(col);
+				}
+				if (s != null)
+					b.add(")");
+			case Method(cname, meth):
+				b.add(cname == null ? "<unknown>" : cname);
+				b.add(".");
+				b.add(meth);
+			case LocalFunction(n):
+				b.add("local function #");
+				b.add(n);
+		}
+	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,151 +20,170 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\SVGSVGElement.webidl. Do not edit!
+
 package js.html.svg;
 
-/** The <code>SVGSVGElement</code> interface provides access to the properties of <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/svg">&lt;svg&gt;</a></code>
- elements, as well as methods to manipulate them. This interface contains also various miscellaneous commonly-used utility methods, such as matrix operations and the ability to control the time of redraw on visual rendering devices.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/SVGSVGElement">MDN</a>. */
+/**
+	The `SVGSVGElement` interface provides access to the properties of `svg` elements, as well as methods to manipulate them. This interface contains also various miscellaneous commonly-used utility methods, such as matrix operations and the ability to control the time of redraw on visual rendering devices.
+
+	Documentation [SVGSVGElement](https://developer.mozilla.org/en-US/docs/Web/API/SVGSVGElement) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/SVGSVGElement$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/SVGSVGElement>
+**/
 @:native("SVGSVGElement")
-extern class SVGElement extends Element
-{
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/contentScriptType">contentScriptType</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/svg">&lt;svg&gt;</a></code>
- element. */
-	var contentScriptType : String;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/contentStyleType">contentStyleType</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/svg">&lt;svg&gt;</a></code>
- element. */
-	var contentStyleType : String;
-
-	/** On an outermost <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/svg">&lt;svg&gt;</a></code>
- element, this attribute indicates the current scale factor relative to the initial view to take into account user magnification and panning operations. DOM attributes <code>currentScale</code> and <code>currentTranslate</code> are equivalent to the 2x3 matrix <code>[a b c d e f] = [currentScale 0 0 currentScale currentTranslate.x currentTranslate.y]</code>. If "magnification" is enabled (i.e., <code>zoomAndPan="magnify"</code>), then the effect is as if an extra transformation were placed at the outermost level on the SVG document fragment (i.e., outside the outermost <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/svg">&lt;svg&gt;</a></code>
- element). */
-	var currentScale : Float;
-
-	/** On an outermost <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/svg">&lt;svg&gt;</a></code>
- element, the corresponding translation factor that takes into account user "magnification". */
-	var currentTranslate(default,null) : Point;
-
-	/** The definition of the initial view (i.e., before magnification and panning) of the current innermost SVG document fragment. The meaning depends on the situation:<br> <ul> <li>If the initial view was a "standard" view, then: <ul> <li>the values for 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/viewBox" class="new">viewBox</a></code>, 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/preserveAspectRatio">preserveAspectRatio</a></code> and 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/zoomAndPan" class="new">zoomAndPan</a></code> within 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/currentView" class="new">currentView</a></code> will match the values for the corresponding DOM attributes that are on <code>SVGSVGElement</code> directly</li> <li>the values for 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/transform">transform</a></code> and 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/viewTarget" class="new">viewTarget</a></code> within 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/currentView" class="new">currentView</a></code> will be null</li> </ul> </li> <li>If the initial view was a link into a <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/view">&lt;view&gt;</a></code>
- element, then: <ul> <li>the values for 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/viewBox" class="new">viewBox</a></code>, 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/preserveAspectRatio">preserveAspectRatio</a></code> and 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/zoomAndPan" class="new">zoomAndPan</a></code> within 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/currentView" class="new">currentView</a></code> will correspond to the corresponding attributes for the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/view">&lt;view&gt;</a></code>
- element</li> <li>the values for 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/transform">transform</a></code> and 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/viewTarget" class="new">viewTarget</a></code> within 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/currentView" class="new">currentView</a></code> will be null</li> </ul> </li> <li>If the initial view was a link into another element (i.e., other than a <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/view">&lt;view&gt;</a></code>
-), then: <ul> <li>the values for 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/viewBox" class="new">viewBox</a></code>, 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/preserveAspectRatio">preserveAspectRatio</a></code> and 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/zoomAndPan" class="new">zoomAndPan</a></code> within 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/currentView" class="new">currentView</a></code> will match the values for the corresponding DOM attributes that are on <code>SVGSVGElement</code> directly for the closest ancestor <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/svg">&lt;svg&gt;</a></code>
- element</li> <li>the values for 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/transform">transform</a></code> within 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/currentView" class="new">currentView</a></code> will be null</li> <li>the 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/viewTarget" class="new">viewTarget</a></code> within 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/currentView" class="new">currentView</a></code> will represent the target of the link</li> </ul> </li> <li>If the initial view was a link into the SVG document fragment using an SVG view specification fragment identifier (i.e., #svgView(...)), then: <ul> <li>the values for 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/viewBox" class="new">viewBox</a></code>, 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/preserveAspectRatio">preserveAspectRatio</a></code>, 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/zoomAndPan" class="new">zoomAndPan</a></code>, 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/transform">transform</a></code> and 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/viewTarget" class="new">viewTarget</a></code> within 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/currentView" class="new">currentView</a></code> will correspond to the values from the SVG view specification fragment identifier</li> </ul> </li> </ul> */
-	var currentView(default,null) : ViewSpec;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/height">height</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/svg">&lt;svg&gt;</a></code>
- element. */
-	var height(default,null) : AnimatedLength;
-
-	/** Size of a pixel units (as defined by CSS2) along the x-axis of the viewport, which represents a unit somewhere in the range of 70dpi to 120dpi, and, on systems that support this, might actually match the characteristics of the target medium. On systems where it is impossible to know the size of a pixel, a suitable default pixel size is provided. */
-	var pixelUnitToMillimeterX(default,null) : Float;
-
-	/** Corresponding size of a pixel unit along the y-axis of the viewport. */
-	var pixelUnitToMillimeterY(default,null) : Float;
-
-	/** User interface (UI) events in DOM Level 2 indicate the screen positions at which the given UI event occurred. When the browser actually knows the physical size of a "screen unit", this attribute will express that information; otherwise, user agents will provide a suitable default value such as .28mm. */
-	var screenPixelToMillimeterX(default,null) : Float;
-
-	/** Corresponding size of a screen pixel along the y-axis of the viewport. */
-	var screenPixelToMillimeterY(default,null) : Float;
-
-	/** The initial view (i.e., before magnification and panning) of the current innermost SVG document fragment can be either the "standard" view (i.e., based on attributes on the <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/svg">&lt;svg&gt;</a></code>
- element such as 
-<code><a rel="internal" href="https://developer.mozilla.org/en/SVG/Attribute/viewBox" class="new">viewBox</a></code>) or to a "custom" view (i.e., a hyperlink into a particular <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/view">&lt;view&gt;</a></code>
- or other element). If the initial view is the "standard" view, then this attribute is false. If the initial view is a "custom" view, then this attribute is true. */
-	var useCurrentView(default,null) : Bool;
-
-	/** The position and size of the viewport (implicit or explicit) that corresponds to this <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/svg">&lt;svg&gt;</a></code>
- element. When the browser is actually rendering the content, then the position and size values represent the actual values when rendering. The position and size values are unitless values in the coordinate system of the parent element. If no parent element exists (i.e., <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/svg">&lt;svg&gt;</a></code>
- element represents the root of the document tree), if this SVG document is embedded as part of another document (e.g., via the HTML <code><a rel="custom" href="https://developer.mozilla.org/en/HTML/Element/object">&lt;object&gt;</a></code>
- element), then the position and size are unitless values in the coordinate system of the parent document. (If the parent uses CSS or XSL layout, then unitless values represent pixel units for the current CSS or XSL viewport.) */
-	var viewport(default,null) : Rect;
-
-	/** Corresponds to attribute 
-<code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Attribute/width">width</a></code> on the given <code><a rel="custom" href="https://developer.mozilla.org/en/SVG/Element/svg">&lt;svg&gt;</a></code>
- element. */
-	var width(default,null) : AnimatedLength;
-
+extern class SVGElement extends GraphicsElement {
+	static inline var SVG_ZOOMANDPAN_UNKNOWN : Int = 0;
+	static inline var SVG_ZOOMANDPAN_DISABLE : Int = 1;
+	static inline var SVG_ZOOMANDPAN_MAGNIFY : Int = 2;
+	
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `x` attribute of the given `svg` element.
+	**/
 	var x(default,null) : AnimatedLength;
-
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `y` attribute of the given `svg` element.
+	**/
 	var y(default,null) : AnimatedLength;
-
-	function animationsPaused() : Bool;
-
-	function checkEnclosure( element : Element, rect : Rect ) : Bool;
-
-	function checkIntersection( element : Element, rect : Rect ) : Bool;
-
-	function createSVGAngle() : Angle;
-
-	function createSVGLength() : Length;
-
-	function createSVGMatrix() : Matrix;
-
-	function createSVGNumber() : Number;
-
-	function createSVGPoint() : Point;
-
-	function createSVGRect() : Rect;
-
-	function createSVGTransform() : Transform;
-
-	function createSVGTransformFromMatrix( matrix : Matrix ) : Transform;
-
-	function deselectAll() : Void;
-
-	function forceRedraw() : Void;
-
-	function getCurrentTime() : Float;
-
-	function getElementById( elementId : String ) : js.html.Element;
-
-	function getEnclosureList( rect : Rect, referenceElement : Element ) : js.html.NodeList;
-
-	function getIntersectionList( rect : Rect, referenceElement : Element ) : js.html.NodeList;
-
-	function pauseAnimations() : Void;
-
-	function setCurrentTime( seconds : Float ) : Void;
-
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `width` attribute of the given `svg` element.
+	**/
+	var width(default,null) : AnimatedLength;
+	
+	/**
+		An `SVGAnimatedLength` corresponding to the `height` attribute of the given `svg` element.
+	**/
+	var height(default,null) : AnimatedLength;
+	
+	/**
+		The initial view (i.e., before magnification and panning) of the current innermost SVG document fragment can be either the "standard" view, i.e., based on attributes on the `svg` element such as `viewBox`) or on a "custom" view (i.e., a hyperlink into a particular `view` or other element). If the initial view is the "standard" view, then this attribute is `false`. If the initial view is a "custom" view, then this attribute is `true`.
+	**/
+	var useCurrentView(default,null) : Bool;
+	
+	/**
+		On an outermost `svg` element, this float attribute indicates the current scale factor relative to the initial view to take into account user magnification and panning operations. DOM attributes `currentScale` and `currentTranslate` are equivalent to the 2x3 matrix `[a b c d e f] = [currentScale 0 0 currentScale currentTranslate.x currentTranslate.y]`. If "magnification" is enabled (i.e., `zoomAndPan="magnify"`), then the effect is as if an extra transformation were placed at the outermost level on the SVG document fragment (i.e., outside the outermost `svg` element).
+	**/
+	var currentScale : Float;
+	
+	/**
+		An `SVGPoint` representing the translation factor that takes into account user "magnification" corresponding to an outermost `svg` element. The behavior is undefined for svg elements that are not at the outermost level.
+	**/
+	var currentTranslate(default,null) : Point;
+	var viewBox(default,null) : AnimatedRect;
+	var preserveAspectRatio(default,null) : AnimatedPreserveAspectRatio;
+	var zoomAndPan : Int;
+	
+	
+	/**
+		
+		 Takes a time-out value which indicates that redraw shall not occur until:
+		 the corresponding unsuspendRedraw() call has been made, an unsuspendRedrawAll() call has been made, or its timer has timed out.
+		
+		 In environments that do not support interactivity (e.g., print media), then redraw shall not be suspended. Calls to `suspendRedraw()` and `unsuspendRedraw()` should, but need not be, made in balanced pairs.
+		
+		 To suspend redraw actions as a collection of SVG DOM changes occur, precede the changes to the SVG DOM with a method call similar to:
+		
+		 suspendHandleID = suspendRedraw(maxWaitMilliseconds);
+		
+		 and follow the changes with a method call similar to:
+		
+		 unsuspendRedraw(suspendHandleID);
+		
+		 Note that multiple suspendRedraw calls can be used at once and that each such method call is treated independently of the other suspendRedraw method calls.
+		 
+	**/
 	function suspendRedraw( maxWaitMilliseconds : Int ) : Int;
-
-	function unpauseAnimations() : Void;
-
-	function unsuspendRedraw( suspendHandleId : Int ) : Void;
-
+	
+	/**
+		Cancels a specified `suspendRedraw()` by providing a unique suspend handle ID that was returned by a previous `suspendRedraw()` call.
+	**/
+	function unsuspendRedraw( suspendHandleID : Int ) : Void;
+	
+	/**
+		Cancels all currently active `suspendRedraw()` method calls. This method is most useful at the very end of a set of SVG DOM calls to ensure that all pending `suspendRedraw()` method calls have been cancelled.
+	**/
 	function unsuspendRedrawAll() : Void;
-
+	
+	/**
+		In rendering environments supporting interactivity, forces the user agent to immediately redraw all regions of the viewport that require updating.
+	**/
+	function forceRedraw() : Void;
+	
+	/**
+		Suspends (i.e., pauses) all currently running animations that are defined within the SVG document fragment corresponding to this `svg` element, causing the animation clock corresponding to this document fragment to stand still until it is unpaused.
+	**/
+	function pauseAnimations() : Void;
+	
+	/**
+		Unsuspends (i.e., unpauses) currently running animations that are defined within the SVG document fragment, causing the animation clock to continue from the time at which it was suspended.
+	**/
+	function unpauseAnimations() : Void;
+	
+	/**
+		Returns true if this SVG document fragment is in a paused state.
+	**/
+	function animationsPaused() : Bool;
+	
+	/**
+		Returns the current time in seconds relative to the start time for the current SVG document fragment. If getCurrentTime is called before the document timeline has begun (for example, by script running in a `script` element before the document's SVGLoad event is dispatched), then 0 is returned.
+	**/
+	function getCurrentTime() : Float;
+	
+	/**
+		Adjusts the clock for this SVG document fragment, establishing a new current time. If `setCurrentTime` is called before the document timeline has begun (for example, by script running in a `script` element before the document's SVGLoad event is dispatched), then the value of seconds in the last invocation of the method gives the time that the document will seek to once the document timeline has begun.
+	**/
+	function setCurrentTime( seconds : Float ) : Void;
+	
+	/**
+		Unselects any selected objects, including any selections of text strings and type-in bars.
+	**/
+	function deselectAll() : Void;
+	
+	/**
+		Creates an `SVGNumber` object outside of any document trees. The object is initialized to a value of zero.
+	**/
+	function createSVGNumber() : Number;
+	
+	/**
+		Creates an `SVGLength` object outside of any document trees. The object is initialized to a value of zero user units.
+	**/
+	function createSVGLength() : Length;
+	
+	/**
+		Creates an `SVGAngle` object outside of any document trees. The object is initialized to a value of zero degrees (unitless).
+	**/
+	function createSVGAngle() : Angle;
+	
+	/**
+		Creates an `SVGPoint` object outside of any document trees. The object is initialized to the point (0,0) in the user coordinate system.
+	**/
+	function createSVGPoint() : Point;
+	
+	/**
+		Creates an `SVGMatrix` object outside of any document trees. The object is initialized to the identity matrix.
+	**/
+	function createSVGMatrix() : Matrix;
+	
+	/**
+		Creates an `SVGRect` object outside of any document trees. The object is initialized such that all values are set to 0 user units.
+	**/
+	function createSVGRect() : Rect;
+	
+	/**
+		Creates an `SVGTransform` object outside of any document trees. The object is initialized to an identity matrix transform (`SVG_TRANSFORM_MATRIX`).
+	**/
+	function createSVGTransform() : Transform;
+	
+	/**
+		Creates an `SVGTransform` object outside of any document trees. The object is initialized to the given matrix transform (i.e., `SVG_TRANSFORM_MATRIX`). The values from the parameter matrix are copied, the matrix parameter is not adopted as `SVGTransform::matrix`.
+	**/
+	function createSVGTransformFromMatrix( matrix : Matrix ) : Transform;
+	
+	/**
+		Searches this SVG document fragment (i.e., the search is restricted to a subset of the document tree) for an Element whose id is given by elementId. If an Element is found, that Element is returned. If no such element exists, returns null. Behavior is not defined if more than one element has this id.
+	**/
+	function getElementById( elementId : String ) : js.html.Element;
 }

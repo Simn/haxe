@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,6 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+import haxe.SysTools;
+
 @:coreApi class Sys {
 
 	public static function print( v : Dynamic ) : Void {
@@ -60,14 +62,14 @@
 		return r;
 	}
 
-	public static function getEnv( s : String ) : String {
+	public static function getEnv( s : String ) : Null<String> {
 		var v = get_env(untyped s.__s);
 		if( v == null )
 			return null;
 		return new String(v);
 	}
 
-	public static function putEnv( s : String, v : String ) : Void {
+	public static function putEnv( s : String, v : Null<String> ) : Void {
 		untyped put_env(s.__s,if( v == null ) null else v.__s);
 	}
 
@@ -91,27 +93,22 @@
 		return new String(sys_string());
 	}
 
-	static function escapeArgument( arg : String ) : String {
-		var ok = true;
-		for( i in 0...arg.length )
-			switch( arg.charCodeAt(i) ) {
-			case ' '.code, '\t'.code, '"'.code, '&'.code, '|'.code, '<'.code, '>'.code, '#'.code , ';'.code, '*'.code, '?'.code, '('.code, ')'.code, '{'.code, '}'.code, '$'.code:
-				ok = false;
-			case 0, 13, 10: // [eof] [cr] [lf]
-				arg = arg.substr(0,i);
-			}
-		if( ok )
-			return arg;
-		return '"'+arg.split('\\').join("\\\\").split('"').join('\\"')+'"';
-	}
-
 	public static function command( cmd : String, ?args : Array<String> ) : Int {
-		if( args != null ) {
-			cmd = escapeArgument(cmd);
-			for( a in args )
-				cmd += " "+escapeArgument(a);
+		if (args == null) {
+			return sys_command(untyped cmd.__s);
+		} else {
+			switch (systemName()) {
+				case "Windows":
+					cmd = [
+						for (a in [StringTools.replace(cmd, "/", "\\")].concat(args))
+						SysTools.quoteWinArg(a, true)
+					].join(" ");
+					return sys_command(untyped cmd.__s);
+				case _:
+					cmd = [cmd].concat(args).map(SysTools.quoteUnixArg).join(" ");
+					return sys_command(untyped cmd.__s);
+			}
 		}
-		return sys_command(untyped cmd.__s);
 	}
 
 	public static function exit( code : Int ) : Void {
@@ -126,8 +123,18 @@
 		return sys_cpu_time();
 	}
 
-	public static function executablePath() : String {
+	@:deprecated("Use programPath instead") public static function executablePath() : String {
 		return new String(sys_exe_path());
+	}
+
+	public static function programPath() : String {
+		#if macro
+		return null;
+		#elseif interp
+		return new String(sys_program_path());
+		#else
+		return sys_program_path;
+		#end
 	}
 
 	public static function environment() : Map<String,String> {
@@ -152,6 +159,37 @@
 	private static var sys_time = neko.Lib.load("std","sys_time",0);
 	private static var sys_cpu_time = neko.Lib.load("std","sys_cpu_time",0);
 	private static var sys_exe_path = neko.Lib.load("std","sys_exe_path",0);
+	#if interp
+	private static var sys_program_path = neko.Lib.load("std","sys_program_path",0);
+	#elseif !macro
+	// It has to be initialized before any call to loadModule or Sys.setCwd()...
+	private static var sys_program_path = {
+		var m = neko.vm.Module.local().name;
+		if (m == "") { // it is likely neko embedded in an exe
+			var exe = new String(sys_exe_path());
+			try {
+				sys.FileSystem.fullPath(exe);
+			} catch (e:Dynamic) {
+				exe;
+			}
+		} else {
+			try {
+				sys.FileSystem.fullPath(m);
+			} catch (e:Dynamic) {
+				// maybe the neko module name was supplied without .n extension...
+				if (!StringTools.endsWith(m, ".n")) {
+					try {
+						sys.FileSystem.fullPath(m + ".n");
+					} catch (e:Dynamic) {
+						m;
+					}
+				} else {
+					m;
+				}
+			}
+		}
+	}
+	#end
 	private static var sys_env = neko.Lib.load("std","sys_env",0);
 
 	private static var file_stdin = neko.Lib.load("std","file_stdin",0);

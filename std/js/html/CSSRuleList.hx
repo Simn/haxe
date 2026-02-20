@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2014 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,16 +20,20 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-// This file is generated, do not edit!
+// This file is generated from mozilla\CSSRuleList.webidl. Do not edit!
+
 package js.html;
 
-/** A <code>CSSRuleList</code> is an array-like object containing an ordered collection of <code><a title="en/DOM/cssRule" rel="internal" href="/api/js/html/CSSKeyframeRule">CSSRule</a></code> objects.<br><br>
-Documentation for this class was provided by <a href="https://developer.mozilla.org/en/DOM/CSSRuleList">MDN</a>. */
+/**
+	A `CSSRuleList` is an (indirect-modify only) array-like object containing an ordered collection of `CSSRule` objects.
+
+	Documentation [CSSRuleList](https://developer.mozilla.org/en-US/docs/Web/API/CSSRuleList) by [Mozilla Contributors](https://developer.mozilla.org/en-US/docs/Web/API/CSSRuleList$history), licensed under [CC-BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/).
+
+	@see <https://developer.mozilla.org/en-US/docs/Web/API/CSSRuleList>
+**/
 @:native("CSSRuleList")
-extern class CSSRuleList implements ArrayAccess<CSSRule>
-{
+extern class CSSRuleList implements ArrayAccess<CSSRule> {
 	var length(default,null) : Int;
-
+	
 	function item( index : Int ) : CSSRule;
-
 }

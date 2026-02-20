@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -21,42 +21,39 @@
  */
 package haxe.zip;
 
-@:coreApi
-class Compress {
+import haxe.io.Bytes;
+using cpp.marshal.ViewExtensions;
 
-	var s : Dynamic;
+@:coreApi class Compress {
+	private final impl : cpp.zip.Compress;
 
-	public function new( level : Int ) : Void {
-		s = _deflate_init(level);
+	public function new(level:Int) {
+		impl = cpp.zip.Compress.create(level);
 	}
 
-	public function execute( src : haxe.io.Bytes, srcPos : Int, dst : haxe.io.Bytes, dstPos : Int ) : { done : Bool, read : Int, write : Int } {
-		return _deflate_buffer(s,src.getData(),srcPos,dst.getData(),dstPos);
+	public function execute(src:haxe.io.Bytes, srcPos:Int, dst:haxe.io.Bytes, dstPos:Int):{done:Bool, read:Int, write:Int} {
+		final srcView = src.asView().slice(srcPos);
+		final dstView = dst.asView().slice(dstPos);
+		final result  = impl.execute(srcView, dstView);
+
+		return { write : result.write, read : result.read, done : result.done }
 	}
 
-	public function setFlushMode( f : FlushMode ) : Void {
-		_set_flush_mode(s,Std.string(f));
+	public function setFlushMode(f:FlushMode):Void {
+		impl.setFlushMode(switch f {
+			case NO: cpp.zip.Flush.None;
+			case SYNC: cpp.zip.Flush.Sync;
+			case FULL: cpp.zip.Flush.Full;
+			case FINISH: cpp.zip.Flush.Finish;
+			case BLOCK: cpp.zip.Flush.Block;
+		});
 	}
 
-	public function close() : Void {
-		_deflate_end(s);
+	public function close():Void {
+		impl.close();
 	}
 
-	public static function run( s : haxe.io.Bytes, level : Int ) : haxe.io.Bytes {
-		var c = new Compress(level);
-		c.setFlushMode(FlushMode.FINISH);
-		var out = haxe.io.Bytes.alloc(_deflate_bound(c.s,s.length));
-		var r = c.execute(s,0,out,0);
-		c.close();
-		if( !r.done || r.read != s.length )
-			throw "Compression failed";
-		return out.sub(0,r.write);
+	public static function run(s:haxe.io.Bytes, level:Int):haxe.io.Bytes {
+		return Bytes.ofData(cpp.zip.Compress.run(s.asView(), level));
 	}
-
-	static var _deflate_init = cpp.Lib.load("zlib","deflate_init",1);
-	static var _deflate_bound = cpp.Lib.load("zlib","deflate_bound",2);
-	static var _deflate_buffer = cpp.Lib.load("zlib","deflate_buffer",5);
-	static var _deflate_end = cpp.Lib.load("zlib","deflate_end",1);
-	static var _set_flush_mode = cpp.Lib.load("zlib","set_flush_mode",2);
-
 }

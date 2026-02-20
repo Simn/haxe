@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2019 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,24 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
 package neko.vm;
 
-class Deque<T> {
-	var q : Dynamic;
-	public function new() {
-		q = deque_create();
-	}
-	public function add( i : T ) {
-		deque_add(q,i);
-	}
-	public function push( i : T ) {
-		deque_push(q,i);
-	}
-	public function pop( block : Bool ) : Null<T> {
-		return deque_pop(q,block);
-	}
-	static var deque_create = neko.Lib.loadLazy("std","deque_create",0);
-	static var deque_add = neko.Lib.loadLazy("std","deque_add",2);
-	static var deque_push = neko.Lib.loadLazy("std","deque_push",2);
-	static var deque_pop = neko.Lib.loadLazy("std","deque_pop",2);
-}
+@:deprecated typedef Deque<T> = sys.thread.Deque<T>;
