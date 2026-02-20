@@ -927,7 +927,7 @@ let generate_function gctx ctx f =
 				dyn_call r cl pl
 			| HFun (args,ret) ->
 				let sargs = String.concat "," (List.map2 rcast pl args) in
-				sexpr "%s%s->hasValue ? %s((vdynamic*)%s->value%s) : %s(%s)" (rassign r ret) (reg cl) (rfun cl (HDyn :: args) ret) (reg cl) (if sargs = "" then "" else "," ^ sargs) (rfun cl args ret) sargs
+				sexpr "%s(%s->hasValue ? %s((vdynamic*)%s->value%s) : %s(%s))" (rassign r ret) (reg cl) (rfun cl (HDyn :: args) ret) (reg cl) (if sargs = "" then "" else "," ^ sargs) (rfun cl args ret) sargs
 			| _ ->
 				Globals.die "" __LOC__)
 		| OStaticClosure (r,fid) ->
