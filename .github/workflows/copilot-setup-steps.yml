@@ -74,11 +74,9 @@ jobs:
           eval $(opam env)
           opam config exec -- make -s -j`nproc` STATICLINK=1 haxe
           opam config exec -- make -s haxelib
-          make -s package_unix
-          ls -l out
           ldd -v ./haxe
           ldd -v ./haxelib
-          sudo make -s install
+          echo "$GITHUB_WORKSPACE" >> $GITHUB_PATH
 
       - name: Test haxelib command
         run: |
