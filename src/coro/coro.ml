@@ -314,25 +314,22 @@ let coro_to_state_machine ctx coro_class cb_root exprs args vtmp_result vtmp_err
 
 	begin match gen_mode with
 		| GenInline cf_captured ->
-			(* Inline path: pass hoisted args directly to the constructor and call invokeResume()
+			(* Inline path: pass hoisted args directly to the constructor and call startCoroutine()
 			   on the result — no intermediate variable, no separate field assignments. *)
 			let ctor_args = ecompletion :: List.map (fun (_, e, _) -> e) hoisted_args @ (Option.map_default (fun (e,_) -> [e]) [] cf_captured) in
 			let tnew = mk (TNew (coro_class.ContinuationClassBuilder.cls, coro_class.outside.param_types, ctor_args)) t coro_class.name_pos in
-			let invoke_resume_type = TFun([], tret_invoke_resume) in
-			let einvoke = b#instance_field tnew coro_class.ContinuationClassBuilder.cls coro_class.outside.param_types invoke_resume_field invoke_resume_type in
-			b#return (b#call einvoke [] tret_invoke_resume)
+			let cf_start_coroutine = PMap.find "startCoroutine" cont.base_continuation_class.cl_fields in
+			let start_coroutine_type = TFun([], tret_invoke_resume) in
+			let estart = b#instance_field tnew cont.base_continuation_class [coro_class.outside.result_type] cf_start_coroutine start_coroutine_type in
+			b#return (b#call estart [] tret_invoke_resume)
 		| GenThunk _ ->
 			(* Thunk path: build the closure that captures outer locals, allocate the continuation
-			   (passing hoisted args to the constructor), then call invokeResume(). *)
-			let inside_to_outside t =
-				apply_params coro_class.inside.params coro_class.outside.param_types t
-			in
+			   (passing hoisted args to the constructor), then call startCoroutine(). *)
 			let econt = b#local vcontinuation coro_class.name_pos in
-			let continuation_field cf ty =
-				b#instance_field econt coro_class.ContinuationClassBuilder.cls coro_class.outside.param_types cf ty
-			in
-			let invoke_resume_type = inside_to_outside invoke_resume_field.cf_type in
-			let einvoke_resume_call = b#call (continuation_field invoke_resume_field invoke_resume_type) [] tret_invoke_resume in
+			let cf_start_coroutine = PMap.find "startCoroutine" cont.base_continuation_class.cl_fields in
+			let start_coroutine_type = TFun([], tret_invoke_resume) in
+			let estart_access = b#instance_field econt cont.base_continuation_class [coro_class.outside.result_type] cf_start_coroutine start_coroutine_type in
+			let estart_call = b#call estart_access [] tret_invoke_resume in
 			let thunk_body_el = [
 				b#var_init vtmp_result eresult;
 				b#var_init_null vtmp_error;
@@ -350,7 +347,7 @@ let coro_to_state_machine ctx coro_class cb_root exprs args vtmp_result vtmp_err
 					b#var_init_null vcontinuation;
 					b#var_init vthunk ethunk;
 					b#assign (b#local vcontinuation coro_class.name_pos) tnew;
-					b#return einvoke_resume_call]) end
+					b#return estart_call]) end
 	end
 
 let rewrite_super_field ctx egthis e =

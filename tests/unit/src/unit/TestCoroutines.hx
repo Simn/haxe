@@ -96,25 +96,11 @@ private class TrackingCont<T> implements IContinuation<T> {
 }
 
 function invokeCoroutine<T>(cont:IContinuation<T>, f:haxe.coro.Coroutine<() -> T>) {
-	final result:SuspensionResult<T> = f(cont);
-	switch (result.state) {
-		case Pending:
-		case Returned:
-			cont.resume(result.result, null);
-		case Thrown:
-			cont.resume(null, result.error);
-	}
+	f(cont);
 }
 
 function invokeCoroutineVoid(cont:IContinuation<haxe.Unit>, f:haxe.coro.Coroutine<() -> Void>) {
-	final result:SuspensionResult<haxe.Unit> = f(cont);
-	switch (result.state) {
-		case Pending:
-		case Returned:
-			cont.resume(result.result, null);
-		case Thrown:
-			cont.resume(null, result.error);
-	}
+	f(cont);
 }
 
 class TestCoroutines extends Test {

@@ -91,6 +91,37 @@ abstract class BaseContinuation<T> extends SuspensionResult<T> implements IConti
     }
 
 	/**
+		Called by the compiler-generated thin wrapper when a coroutine is invoked for
+		the first time from outside another coroutine (i.e. from non-coroutine code).
+
+		Runs the coroutine via `invokeResume`. If the coroutine completes synchronously
+		and the `completion` is not itself a `BaseContinuation` (meaning we are at the
+		outermost level of a coroutine call chain), the result is dispatched automatically
+		to `completion.resume` — just as it would be on the asynchronous resume path.
+		This ensures the continuation is always called, regardless of whether the coroutine
+		ever suspends.
+
+		When the `completion` IS a `BaseContinuation` (an internal state-machine call from
+		within another coroutine), the raw `SuspensionResult` is returned unchanged so the
+		calling state machine can handle it directly, preserving the existing behavior.
+	**/
+	@:noCompletion
+	public final function startCoroutine():SuspensionResult<T> {
+		final resumeResult = invokeResume();
+		if (resumeResult != SuspensionResult.suspended && !(completion is BaseContinuation)) {
+			this.resumeResult = resumeResult;
+			final dispatcher = context.get(Dispatcher);
+			if (dispatcher != null) {
+				dispatcher.dispatch(this);
+			} else {
+				onDispatch();
+			}
+			return cast SuspensionResult.suspended;
+		}
+		return resumeResult;
+	}
+
+	/**
 		@see `IStackFrame.callerFrame`
 	**/
     public function callerFrame():Null<IStackFrame> {
