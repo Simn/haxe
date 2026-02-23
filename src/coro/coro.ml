@@ -581,8 +581,8 @@ let fun_to_coro ctx coro_type =
 				mk (TBlock stmts) t_dynamic pos
 			);
 			make_inline_tail_call = (fun call ->
-				let (ecallcoroutine, eret) = CoroToTexpr.SuspensionCalls.make_suspending_tail_call ctx cont exprs call in
-				b#void_block [stack_item_inserter call.cs_pos; ecallcoroutine; eret]
+				let ereturn = CoroToTexpr.SuspensionCalls.make_suspending_tail_call ctx cont exprs call in
+				b#void_block [stack_item_inserter call.cs_pos; ereturn]
 			);
 			make_this = (fun e ->
 				let egthis = Lazy.force egthis in

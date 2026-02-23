@@ -76,39 +76,28 @@ abstract class BaseContinuation<T> extends SuspensionResult<T> implements IConti
 		this.error = error;
 		// In a threaded environment, we have to assume that `invokeResume` might
 		// go into this `resume` function before we're even done here. We can only
-		// make assumptions about its return value if it's not the `suspended` marker,
-		// because in that case it must be a final state of the coroutine.
-		final resumeResult = invokeResume();
-		if (resumeResult != SuspensionResult.suspended) {
-			this.resumeResult = resumeResult;
-			final dispatcher = context.get(Dispatcher);
-			if (dispatcher != null) {
-				dispatcher.dispatch(this);
-			} else {
-				onDispatch();
-			}
-		}
+		// make assumptions about its return value if it's in a final state (Returned
+		// or Thrown), because only then can we be sure no further resume will happen.
+		dispatchIfReady(invokeResume());
     }
 
 	/**
 		Called by the compiler-generated thin wrapper when a coroutine is invoked for
-		the first time from outside another coroutine (i.e. from non-coroutine code).
-
-		Runs the coroutine via `invokeResume`. If the coroutine completes synchronously
-		and the `completion` is not itself a `BaseContinuation` (meaning we are at the
-		outermost level of a coroutine call chain), the result is dispatched automatically
-		to `completion.resume` — just as it would be on the asynchronous resume path.
-		This ensures the continuation is always called, regardless of whether the coroutine
-		ever suspends.
-
-		When the `completion` IS a `BaseContinuation` (an internal state-machine call from
-		within another coroutine), the raw `SuspensionResult` is returned unchanged so the
-		calling state machine can handle it directly, preserving the existing behavior.
+		the first time. Runs the coroutine via `invokeResume` and dispatches to
+		`completion` if it completes synchronously, ensuring the continuation is always
+		called regardless of whether the coroutine ever suspends.
 	**/
 	@:noCompletion
 	public final function startCoroutine():SuspensionResult<T> {
-		final resumeResult = invokeResume();
-		if (resumeResult != SuspensionResult.suspended && !(completion is BaseContinuation)) {
+		dispatchIfReady(invokeResume());
+		return cast SuspensionResult.suspended;
+	}
+
+	function dispatchIfReady(resumeResult:SuspensionResult<T>):Void {
+		// Check by state rather than by reference equality with the `suspended` singleton:
+		// `@:coroutine(transformed)` functions may return a non-singleton Pending result,
+		// and we must not dispatch in that case either.
+		if (resumeResult.state != Pending) {
 			this.resumeResult = resumeResult;
 			final dispatcher = context.get(Dispatcher);
 			if (dispatcher != null) {
@@ -116,9 +105,7 @@ abstract class BaseContinuation<T> extends SuspensionResult<T> implements IConti
 			} else {
 				onDispatch();
 			}
-			return cast SuspensionResult.suspended;
 		}
-		return resumeResult;
 	}
 
 	/**
