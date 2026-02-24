@@ -17,6 +17,7 @@ class ExceptionHandler implements IElement<ExceptionHandler> {
 }
 
 class DefaultExceptionHandler extends ExceptionHandler {
+	// Kept as a named subclass for compatibility with hxcoro's public setup API.
 	public function new() {
 		super();
 	}
