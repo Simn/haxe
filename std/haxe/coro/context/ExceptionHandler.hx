@@ -109,7 +109,34 @@ class DefaultExceptionHandler extends ExceptionHandler {
 
 		if (existingIdx != null) {
 			// Exception was already processed by an inner coroutine chain.
-			// Don't reprocess, just set the insert index for the outer chain.
+			// Don't reprocess the stack. Instead, extract the sync bridge frames
+			// from the native exception stack and append them.
+			// On eval the native exception stack is ordered outermost-to-innermost:
+			//   [syncFun1, syncFun2, CoroRun.run, ..., resolveTask]
+			// We collect entries before the first CoroRun entry (the sync bridge),
+			// then reverse them to get innermost-first order.
+			var syncFrames:Array<StackItem> = [];
+			var nativeExcStack = haxe.CallStack.exceptionStack(true);
+			if (nativeExcStack != null) {
+				for (nativeItem in nativeExcStack) {
+					switch (nativeItem) {
+						case FilePos(Method("hxcoro.CoroRun", _), _):
+							break;
+						case _:
+							syncFrames.push(nativeItem);
+					}
+				}
+				syncFrames.reverse();
+			}
+
+			if (syncFrames.length > 0) {
+				var stack = exception.stack.asArray();
+				for (frame in syncFrames) {
+					stack.push(frame);
+				}
+				exception.stack = stack;
+			}
+
 			// Use negative value to signal that the immediate buildCallStack call
 			// (from the catching continuation's exception handler) should be skipped.
 			setInsertIndex(exception, -(exception.stack.asArray().length + 1));

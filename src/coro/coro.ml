@@ -264,7 +264,7 @@ let create_continuation_class ctx cont coro_class initial_state invoke_resume_fi
 
 	ctx.typer.m.curmod.m_types <- ctx.typer.m.curmod.m_types @ [ TClassDecl coro_class.cls ]
 
-let check_assertions assert_config num_states num_hoisted p =
+let check_assertions debug assert_config num_states num_hoisted p =
 	let open CoroConfig in
 	begin match assert_config with
 	| None -> ()
@@ -272,9 +272,17 @@ let check_assertions assert_config num_states num_hoisted p =
 		(match assert_config.num_states with
 		| None -> ()
 		| Some expected ->
-			if num_states <> expected then
-				Error.raise_typing_error
-					(Printf.sprintf "Expected %d coroutine state(s), got %d" expected num_states) p);
+			(* In debug mode, tail call optimization is disabled which may add extra states.
+			   Only check that we don't have fewer states than expected. *)
+			if debug then begin
+				if num_states < expected then
+					Error.raise_typing_error
+						(Printf.sprintf "Expected at least %d coroutine state(s), got %d" expected num_states) p
+			end else begin
+				if num_states <> expected then
+					Error.raise_typing_error
+						(Printf.sprintf "Expected %d coroutine state(s), got %d" expected num_states) p
+			end);
 		(match assert_config.num_hoisted with
 		| None -> ()
 		| Some expected ->
@@ -288,7 +296,7 @@ let coro_to_state_machine ctx coro_class cb_root exprs args vtmp_result vtmp_err
 	let cont = coro_class.ContinuationClassBuilder.continuation_api in
 	let eloop, initial_state, fields, num_states = CoroToTexpr.block_to_texpr_coroutine ctx cb_root cont coro_class.cls coro_class.outside.param_types args exprs coro_class.name_pos stack_item_inserter start_exception in
 	(* Check @:coroutine(assert) config *)
-	check_assertions ctx.config.assert_config num_states (List.length fields) coro_class.name_pos;
+	check_assertions ctx.typer.com.Common.debug ctx.config.assert_config num_states (List.length fields) coro_class.name_pos;
 	(* update cf_type to use inside type parameters *)
 	List.iter (fun cf ->
 		cf.cf_type <- substitute_type_params coro_class.type_param_subst cf.cf_type;

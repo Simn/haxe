@@ -387,9 +387,10 @@ let expr_to_coro ctx etmp_result etmp_error_unwrapped cb_root scope deferred e =
 							begin match cs_kind with
 							| { CoroConfig.no_suspend = true } ->
 								(* For a Never-suspending callee in TCO tail position, keep the
-								   existing tail-call optimisation (single-state, no resume block). *)
+								   existing tail-call optimisation (single-state, no resume block).
+								   Disabled in debug mode to preserve stack trace information. *)
 								let is_tco = match ret with
-									| RTailBlock | RTailReturn -> cb.cb_catch = None
+									| RTailBlock | RTailReturn -> cb.cb_catch = None && not ctx.typer.com.Common.debug
 									| _ -> false
 								in
 								if is_tco then begin
@@ -414,6 +415,7 @@ let expr_to_coro ctx etmp_result etmp_error_unwrapped cb_root scope deferred e =
 									Some (cb, ev)
 								end
 							| _ ->
+								let is_debug = ctx.typer.com.Common.debug in
 								let res,next = match ret with
 								| RValue ->
 									let v = tmp_local cb e.etype None e.epos in
@@ -421,11 +423,11 @@ let expr_to_coro ctx etmp_result etmp_error_unwrapped cb_root scope deferred e =
 									let cb_next = make_next_block () in
 									cb_next.cb_stack_value <- Some ev;
 									SusResult,Some(cb_next,ev)
-								| RTailBlock when cb.cb_catch = None ->
+								| RTailBlock when cb.cb_catch = None && not is_debug ->
 									SusBlock,None
 								| RBlock | RTailBlock ->
 									SusBlock,Some ((make_next_block (),e_no_value))
-								| RTailReturn when cb.cb_catch = None ->
+								| RTailReturn when cb.cb_catch = None && not is_debug ->
 									SusResult,None
 								| RTerminate _ | RMapExpr _ | RLocal _ | RTailReturn ->
 									SusResult,Some ((make_next_block ()),Lazy.force etmp_result)
