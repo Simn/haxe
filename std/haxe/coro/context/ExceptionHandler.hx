@@ -42,7 +42,6 @@ abstract class ExceptionHandler implements IElement<ExceptionHandler> {
 class DefaultExceptionHandler extends ExceptionHandler {
 	#if debug
 	final insertIndexByException = new haxe.coro.Tls<ObjectMap<Exception, Int>>();
-	final skipCurrentFrameByException = new haxe.coro.Tls<ObjectMap<Exception, Bool>>();
 	#end
 
 	static inline function toStackItem(item:CoroStackItem):StackItem {
@@ -54,19 +53,32 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		};
 	}
 
+	static inline function itemMatchesCoroFrame(item:StackItem, frameItem:CoroStackItem):Bool {
+		return switch [item, frameItem] {
+			case [FilePos(Method(cls2, func2), _, _, _), ClassFunction(cls, func, _, _, _)]:
+				cls == cls2 && func == func2;
+			case [FilePos(LocalFunction(id2), _, _, _), LocalFunction(id, _, _, _)]:
+				id == id2;
+			case _:
+				false;
+		}
+	}
+
+	static function itemMatchesAnyCoroFrame(item:StackItem, frames:Array<CoroStackItem>):Bool {
+		for (frame in frames) {
+			if (itemMatchesCoroFrame(item, frame)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	#if debug
 	inline function getInsertIndexByException() {
 		if (insertIndexByException.value == null) {
 			insertIndexByException.value = new ObjectMap();
 		}
 		return insertIndexByException.value;
-	}
-
-	inline function getSkipCurrentFrameByException() {
-		if (skipCurrentFrameByException.value == null) {
-			skipCurrentFrameByException.value = new ObjectMap();
-		}
-		return skipCurrentFrameByException.value;
 	}
 	#end
 
@@ -78,9 +90,11 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		#end
 		#if debug
 		var stack = [];
-		var skipping = 0;
 		var localInsertIndex = 0;
 		var frameItem = cont.getStackItem();
+		var seenInvokeResume = false;
+		var skippedChainFrame = false;
+		var chainFrames = [];
 
 		/*
 			Find first coro stack element
@@ -93,27 +107,33 @@ class DefaultExceptionHandler extends ExceptionHandler {
 			}
 			frameItem = currentFrame.getStackItem();
 		}
+		while (currentFrame != null) {
+			final item = currentFrame.getStackItem();
+			if (item != null) {
+				chainFrames.push(item);
+			}
+			currentFrame = currentFrame.callerFrame();
+		}
 
 		switch (frameItem) {
 			case null:
 				return exception;
-			case ClassFunction(_, _, file, line, _) | LocalFunction(_, file, line, _):
-				for (index => item in exception.stack.asArray()) {
+			case ClassFunction(_, _, _, _, _) | LocalFunction(_, _, _, _):
+				for (item in exception.stack.asArray()) {
 					switch (item) {
-						case FilePos(_, file2, line2, _) if (skipping == 0 && file == file2 && line == line2):
+						case FilePos(Method(_, "invokeResume"), _) if (!seenInvokeResume):
+							seenInvokeResume = true;
 							stack.push(item);
-							skipping = 0;
-						// TODO: this is silly
-						case FilePos(Method("hxcoro.CoroRun", "run"), _) if (skipping == 1):
-							skipping = 2;
-						// this is a hack
-						case FilePos(Method(_, "invokeResume"), _) if (skipping == 0):
-							skipping = 1;
-							localInsertIndex = index;
-						case _:
-							if (skipping != 1) {
-								stack.push(item);
+							localInsertIndex = stack.length;
+						case FilePos(Method(_, "invokeResume"), _):
+						case FilePos(Method("hxcoro.CoroRun", "run"), _):
+						case _ if (itemMatchesAnyCoroFrame(item, chainFrames)):
+							if (!skippedChainFrame) {
+								skippedChainFrame = true;
+								localInsertIndex = stack.length;
 							}
+						case _:
+							stack.push(item);
 					}
 				}
 			case _:
@@ -121,7 +141,6 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		}
 		exception.stack = stack;
 		getInsertIndexByException().set(exception, localInsertIndex);
-		getSkipCurrentFrameByException().set(exception, true);
 		#end
 		return exception;
 	}
@@ -137,14 +156,6 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		if (idx == null) {
 			return;
 		}
-		final skipCurrentFrameByException = getSkipCurrentFrameByException();
-		if (skipCurrentFrameByException.get(error) == true) {
-			skipCurrentFrameByException.remove(error);
-			if (cont.callerFrame() == null) {
-				insertIndexByException.remove(error);
-			}
-			return;
-		}
 
 		final frameItem = cont.getStackItem();
 		if (frameItem != null) {
@@ -156,7 +167,6 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		}
 		if (cont.callerFrame() == null) {
 			insertIndexByException.remove(error);
-			skipCurrentFrameByException.remove(error);
 		}
 		#end
 	}
