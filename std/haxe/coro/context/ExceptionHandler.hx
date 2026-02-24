@@ -53,6 +53,26 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		};
 	}
 
+	static inline function itemMatchesCoroFrame(item:StackItem, frameItem:CoroStackItem):Bool {
+		return switch [item, frameItem] {
+			case [FilePos(Method(cls2, func2), _, _, _), ClassFunction(cls, func, _, _, _)]:
+				cls == cls2 && func == func2;
+			case [FilePos(LocalFunction(id2), _, _, _), LocalFunction(id, _, _, _)]:
+				id == id2;
+			case _:
+				false;
+		}
+	}
+
+	static function itemMatchesAnyCoroFrame(item:StackItem, frames:Array<CoroStackItem>):Bool {
+		for (frame in frames) {
+			if (itemMatchesCoroFrame(item, frame)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	#if debug
 	inline function getInsertIndexByException() {
 		if (insertIndexByException.value == null) {
@@ -73,7 +93,8 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		var localInsertIndex = 0;
 		var frameItem = cont.getStackItem();
 		var seenInvokeResume = false;
-		var skippedCurrentFrame = false;
+		var skippedChainFrame = false;
+		var chainFrames = [];
 
 		/*
 			Find first coro stack element
@@ -86,11 +107,18 @@ class DefaultExceptionHandler extends ExceptionHandler {
 			}
 			frameItem = currentFrame.getStackItem();
 		}
+		while (currentFrame != null) {
+			final item = currentFrame.getStackItem();
+			if (item != null) {
+				chainFrames.push(item);
+			}
+			currentFrame = currentFrame.callerFrame();
+		}
 
 		switch (frameItem) {
 			case null:
 				return exception;
-			case ClassFunction(_, _, file, line, _) | LocalFunction(_, file, line, _):
+			case ClassFunction(_, _, _, _, _) | LocalFunction(_, _, _, _):
 				for (item in exception.stack.asArray()) {
 					switch (item) {
 						case FilePos(Method(_, "invokeResume"), _) if (!seenInvokeResume):
@@ -99,20 +127,11 @@ class DefaultExceptionHandler extends ExceptionHandler {
 							localInsertIndex = stack.length;
 						case FilePos(Method(_, "invokeResume"), _):
 						case FilePos(Method("hxcoro.CoroRun", "run"), _):
-						case FilePos(Method(cls2, func2), file2, line2, _)
-							if (!skippedCurrentFrame && file == file2 && line == line2 && switch (frameItem) {
-								case ClassFunction(cls, func, _, _, _): cls == cls2 && func == func2;
-								case _: false;
-							}):
-							skippedCurrentFrame = true;
-							localInsertIndex = stack.length;
-						case FilePos(LocalFunction(id2), file2, line2, _)
-							if (!skippedCurrentFrame && file == file2 && line == line2 && switch (frameItem) {
-								case LocalFunction(id, _, _, _): id == id2;
-								case _: false;
-							}):
-							skippedCurrentFrame = true;
-							localInsertIndex = stack.length;
+						case _ if (itemMatchesAnyCoroFrame(item, chainFrames)):
+							if (!skippedChainFrame) {
+								skippedChainFrame = true;
+								localInsertIndex = stack.length;
+							}
 						case _:
 							stack.push(item);
 					}
