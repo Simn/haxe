@@ -36,12 +36,37 @@ abstract class ExceptionHandler implements IElement<ExceptionHandler> {
 	The default `ExceptionHandler` implementation, which reconstructs the coroutine call stack
 	from the continuation chain and inserts it into the exception's stack trace.
 
-	`insertIndex` is stored in thread-local storage, making this implementation safe for
-	concurrent use across multiple coroutines running on different threads.
+	The insert-index map is shared across threads (protected by a lock on threaded targets)
+	so that exceptions which cross coroutine-context / thread boundaries (e.g. re-thrown by
+	`CoroRun.run`) are correctly recognized as already-processed.
 **/
 class DefaultExceptionHandler extends ExceptionHandler {
 	#if debug
-	final insertIndexByException = new haxe.coro.Tls<ObjectMap<Exception, Int>>();
+	#if target.threaded
+	static final _lock = new sys.thread.Mutex();
+	#end
+	static final _insertIndexByException = new ObjectMap<Exception, Int>();
+
+	static function getInsertIndex(exception:Exception):Null<Int> {
+		#if target.threaded
+		_lock.acquire();
+		#end
+		final v = _insertIndexByException.get(exception);
+		#if target.threaded
+		_lock.release();
+		#end
+		return v;
+	}
+
+	static function setInsertIndex(exception:Exception, idx:Int):Void {
+		#if target.threaded
+		_lock.acquire();
+		#end
+		_insertIndexByException.set(exception, idx);
+		#if target.threaded
+		_lock.release();
+		#end
+	}
 	#end
 
 	static inline function toStackItem(item:CoroStackItem):StackItem {
@@ -73,15 +98,6 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		return false;
 	}
 
-	#if debug
-	inline function getInsertIndexByException() {
-		if (insertIndexByException.value == null) {
-			insertIndexByException.value = new ObjectMap();
-		}
-		return insertIndexByException.value;
-	}
-	#end
-
 	public function new() {}
 
 	public function startException(cont:BaseContinuation<Any>, exception:Exception):Exception {
@@ -89,6 +105,17 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		return exception;
 		#end
 		#if debug
+		final existingIdx = getInsertIndex(exception);
+
+		if (existingIdx != null) {
+			// Exception was already processed by an inner coroutine chain.
+			// Don't reprocess, just set the insert index for the outer chain.
+			// Use negative value to signal that the immediate buildCallStack call
+			// (from the catching continuation's exception handler) should be skipped.
+			setInsertIndex(exception, -(exception.stack.asArray().length + 1));
+			return exception;
+		}
+
 		var stack = [];
 		var localInsertIndex = 0;
 		var frameItem = cont.getStackItem();
@@ -140,7 +167,9 @@ class DefaultExceptionHandler extends ExceptionHandler {
 				return exception;
 		}
 		exception.stack = stack;
-		getInsertIndexByException().set(exception, localInsertIndex);
+		// Use negative value to signal that the immediate buildCallStack call
+		// (from the catching continuation's exception handler) should be skipped.
+		setInsertIndex(exception, -(localInsertIndex + 1));
 		#end
 		return exception;
 	}
@@ -151,9 +180,16 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		#end
 		#if debug
 		final error = cont.error;
-		final insertIndexByException = getInsertIndexByException();
-		final idx = insertIndexByException.get(error);
+		var idx = getInsertIndex(error);
 		if (idx == null) {
+			return;
+		}
+
+		if (idx < 0) {
+			// First buildCallStack call after startException — this is the catching
+			// continuation itself. Skip inserting its (stale) stack item, but decode
+			// and store the real insert index for subsequent calls.
+			setInsertIndex(error, -(idx + 1));
 			return;
 		}
 
@@ -163,10 +199,7 @@ class DefaultExceptionHandler extends ExceptionHandler {
 			final stack = error.stack.asArray();
 			stack.insert(idx, stackItem);
 			error.stack = stack;
-			insertIndexByException.set(error, idx + 1);
-		}
-		if (cont.callerFrame() == null) {
-			insertIndexByException.remove(error);
+			setInsertIndex(error, idx + 1);
 		}
 		#end
 	}
