@@ -140,6 +140,9 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		final skipCurrentFrameByException = getSkipCurrentFrameByException();
 		if (skipCurrentFrameByException.get(error) == true) {
 			skipCurrentFrameByException.remove(error);
+			if (cont.callerFrame() == null) {
+				insertIndexByException.remove(error);
+			}
 			return;
 		}
 

@@ -12,6 +12,9 @@ import haxe.coro.dispatchers.IDispatchObject;
 	casual coroutine user.
 **/
 abstract class BaseContinuation<T> extends SuspensionResult<T> implements IContinuation<T> implements IStackFrame implements IDispatchObject {
+	static inline final stackItemKindClassFunction = 0;
+	static inline final stackItemKindLocalFunction = 1;
+
     /**
 		The continuation to resume once `this` continuation completes.
 	**/
@@ -98,8 +101,10 @@ abstract class BaseContinuation<T> extends SuspensionResult<T> implements IConti
 	function setStackItem(kind:Int, cls:String, func:String, id:Int, file:String, line:Int, column:Int, pmin:Int, pmax:Int) {
 		#if debug
 		stackItem = switch (kind) {
-			case 0: ClassFunction(cls, func, file, line, column);
-			case _: LocalFunction(id, file, line, column);
+			case stackItemKindClassFunction: ClassFunction(cls, func, file, line, column);
+			case stackItemKindLocalFunction: LocalFunction(id, file, line, column);
+			case _:
+				throw new Exception('Invalid coroutine stack item kind: $kind (expected 0 for ClassFunction or 1 for LocalFunction)');
 		}
 		#if eval
 		eval.vm.Context.callMacroApi("associate_enum_value_pos")(stackItem, haxe.macro.Context.makePosition({file: file, min: pmin, max: pmax}));

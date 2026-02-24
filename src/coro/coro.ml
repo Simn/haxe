@@ -550,6 +550,8 @@ let fun_to_coro ctx coro_type =
 	let exprs = {CoroToTexpr.econtinuation;ecompletion;estate;eresult;egoto;eerror;etmp_result;etmp_error;etmp_error_unwrapped} in
 	let stack_item_inserter pos =
 		let field = PMap.find "setStackItem" cont.base_continuation_class.cl_fields in
+		(* setStackItem(kind, cls, func, id, file, line, column, pmin, pmax)
+		   kind: 0 = ClassFunction, 1 = LocalFunction *)
 		let eargs =
 			match coro_type with
 			| ClassField (cls, field, _, _) ->
@@ -562,6 +564,7 @@ let fun_to_coro ctx coro_type =
 			| LocalFunc (_, v) ->
 				[
 					b#int 1 coro_class.name_pos;
+					(* Placeholder values for ClassFunction-only parameters. *)
 					b#string "" coro_class.name_pos;
 					b#string "" coro_class.name_pos;
 					b#int v.v_id coro_class.name_pos;
