@@ -549,17 +549,21 @@ let fun_to_coro ctx coro_type =
 	let etmp_error = b#local vtmp_error coro_class.name_pos in
 	let exprs = {CoroToTexpr.econtinuation;ecompletion;estate;eresult;egoto;eerror;etmp_result;etmp_error;etmp_error_unwrapped} in
 	let stack_item_inserter pos =
-		let field, eargs =
+		let field = PMap.find "setStackItem" cont.base_continuation_class.cl_fields in
+		let eargs =
 			match coro_type with
 			| ClassField (cls, field, _, _) ->
-				PMap.find "setClassFuncStackItem" cont.base_continuation_class.cl_fields,
 				[
+					b#int 0 coro_class.name_pos;
 					b#string (s_class_path cls) coro_class.name_pos;
 					b#string field.cf_name coro_class.name_pos;
+					b#int 0 coro_class.name_pos;
 				]
 			| LocalFunc (_, v) ->
-				PMap.find "setLocalFuncStackItem" cont.base_continuation_class.cl_fields,
 				[
+					b#int 1 coro_class.name_pos;
+					b#string "" coro_class.name_pos;
+					b#string "" coro_class.name_pos;
 					b#int v.v_id coro_class.name_pos;
 				]
 		in

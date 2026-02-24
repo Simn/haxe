@@ -1,6 +1,5 @@
 package haxe.coro;
 
-import haxe.CallStack.StackItem;
 import haxe.Exception;
 import haxe.coro.context.Context;
 import haxe.coro.context.ExceptionHandler;
@@ -30,8 +29,7 @@ abstract class BaseContinuation<T> extends SuspensionResult<T> implements IConti
 
 	var resumeResult:Null<SuspensionResult<Any>>;
 	#if debug
-	var stackItem:Null<StackItem>;
-	var _hx_startedException:Bool;
+	var stackItem:Null<CoroStackItem>;
 	#end
 
 	/**
@@ -41,12 +39,9 @@ abstract class BaseContinuation<T> extends SuspensionResult<T> implements IConti
 		super(Pending);
         this.completion = completion;
         gotoLabel  = initialLabel;
-        error      = null;
-        result     = null;
+		error      = null;
+		result     = null;
 		context    = completion.context;
-		#if debug
-		_hx_startedException = false;
-		#end
     }
 
 	inline function get_context() {
@@ -92,7 +87,7 @@ abstract class BaseContinuation<T> extends SuspensionResult<T> implements IConti
 	/**
 		@see `IStackFrame.callerFrame`
 	**/
-	public function getStackItem():Null<StackItem> {
+	public function getStackItem():Null<CoroStackItem> {
 		#if debug
 		return stackItem;
 		#else
@@ -100,23 +95,17 @@ abstract class BaseContinuation<T> extends SuspensionResult<T> implements IConti
 		#end
 	}
 
-    function setClassFuncStackItem(cls:String, func:String, file:String, line:Int, pos:Int, pmin:Int, pmax:Int) {
+	function setStackItem(kind:Int, cls:String, func:String, id:Int, file:String, line:Int, column:Int, pmin:Int, pmax:Int) {
 		#if debug
-        stackItem = StackItem.FilePos(StackItem.Method(cls, func), file, line, pos);
+		stackItem = switch (kind) {
+			case 0: ClassFunction(cls, func, file, line, column);
+			case _: LocalFunction(id, file, line, column);
+		}
 		#if eval
 		eval.vm.Context.callMacroApi("associate_enum_value_pos")(stackItem, haxe.macro.Context.makePosition({file: file, min: pmin, max: pmax}));
 		#end
 		#end
-    }
-
-    function setLocalFuncStackItem(id:Int, file:String, line:Int, pos:Int, pmin:Int, pmax:Int) {
-		#if debug
-        stackItem = StackItem.FilePos(StackItem.LocalFunction(id), file, line, pos);
-		#if eval
-		eval.vm.Context.callMacroApi("associate_enum_value_pos")(stackItem, haxe.macro.Context.makePosition({file: file, min: pmin, max: pmax}));
-		#end
-		#end
-    }
+	}
 
 	function startException(exception:Exception) {
 		final handler = context.get(ExceptionHandler);

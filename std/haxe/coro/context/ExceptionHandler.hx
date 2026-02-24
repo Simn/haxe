@@ -1,7 +1,10 @@
 package haxe.coro.context;
 
+import haxe.CallStack.StackItem;
 import haxe.Exception;
 import haxe.coro.BaseContinuation;
+import haxe.coro.CoroStackItem;
+import haxe.ds.ObjectMap;
 
 /**
 	An abstract context element that handles exception stack trace management for coroutines.
@@ -38,7 +41,33 @@ abstract class ExceptionHandler implements IElement<ExceptionHandler> {
 **/
 class DefaultExceptionHandler extends ExceptionHandler {
 	#if debug
-	final insertIndex = new haxe.coro.Tls<Int>();
+	final insertIndexByException = new haxe.coro.Tls<ObjectMap<Exception, Int>>();
+	final skipCurrentFrameByException = new haxe.coro.Tls<ObjectMap<Exception, Bool>>();
+	#end
+
+	static inline function toStackItem(item:CoroStackItem):StackItem {
+		return switch (item) {
+			case ClassFunction(cls, func, file, line, column):
+				StackItem.FilePos(StackItem.Method(cls, func), file, line, column);
+			case LocalFunction(id, file, line, column):
+				StackItem.FilePos(StackItem.LocalFunction(id), file, line, column);
+		};
+	}
+
+	#if debug
+	inline function getInsertIndexByException() {
+		if (insertIndexByException.value == null) {
+			insertIndexByException.value = new ObjectMap();
+		}
+		return insertIndexByException.value;
+	}
+
+	inline function getSkipCurrentFrameByException() {
+		if (skipCurrentFrameByException.value == null) {
+			skipCurrentFrameByException.value = new ObjectMap();
+		}
+		return skipCurrentFrameByException.value;
+	}
 	#end
 
 	public function new() {}
@@ -48,29 +77,27 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		return exception;
 		#end
 		#if debug
-		@:privateAccess cont._hx_startedException = true;
-
 		var stack = [];
 		var skipping = 0;
 		var localInsertIndex = 0;
-		var stackItem = cont.getStackItem();
+		var frameItem = cont.getStackItem();
 
 		/*
 			Find first coro stack element
 		*/
 		var currentFrame:Null<haxe.coro.IStackFrame> = cont;
-		while (stackItem == null) {
+		while (frameItem == null) {
 			currentFrame = currentFrame.callerFrame();
 			if (currentFrame == null) {
 				break;
 			}
-			stackItem = currentFrame.getStackItem();
+			frameItem = currentFrame.getStackItem();
 		}
 
-		switch (stackItem) {
+		switch (frameItem) {
 			case null:
 				return exception;
-			case FilePos(_, file, line, _):
+			case ClassFunction(_, _, file, line, _) | LocalFunction(_, file, line, _):
 				for (index => item in exception.stack.asArray()) {
 					switch (item) {
 						case FilePos(_, file2, line2, _) if (skipping == 0 && file == file2 && line == line2):
@@ -93,7 +120,8 @@ class DefaultExceptionHandler extends ExceptionHandler {
 				return exception;
 		}
 		exception.stack = stack;
-		insertIndex.value = localInsertIndex;
+		getInsertIndexByException().set(exception, localInsertIndex);
+		getSkipCurrentFrameByException().set(exception, true);
 		#end
 		return exception;
 	}
@@ -103,19 +131,29 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		return;
 		#end
 		#if debug
-		if (@:privateAccess cont._hx_startedException) {
+		final error = cont.error;
+		final insertIndexByException = getInsertIndexByException();
+		final idx = insertIndexByException.get(error);
+		if (idx == null) {
+			return;
+		}
+		final skipCurrentFrameByException = getSkipCurrentFrameByException();
+		if (skipCurrentFrameByException.get(error) == true) {
+			skipCurrentFrameByException.remove(error);
 			return;
 		}
 
-		final stackItem = cont.getStackItem();
-		if (stackItem != null) {
-			final idx = insertIndex.value;
-			if (idx != null) {
-				final stack = cont.error.stack.asArray();
-				stack.insert(idx, stackItem);
-				cont.error.stack = stack;
-				insertIndex.value = idx + 1;
-			}
+		final frameItem = cont.getStackItem();
+		if (frameItem != null) {
+			final stackItem = toStackItem(frameItem);
+			final stack = error.stack.asArray();
+			stack.insert(idx, stackItem);
+			error.stack = stack;
+			insertIndexByException.set(error, idx + 1);
+		}
+		if (cont.callerFrame() == null) {
+			insertIndexByException.remove(error);
+			skipCurrentFrameByException.remove(error);
 		}
 		#end
 	}
