@@ -106,8 +106,6 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		}
 		thrownException.value = null;
 
-		exception.dump();
-
 		final newStack = [];
 		final exceptionStack = exception.exception.stack.asArray();
 
