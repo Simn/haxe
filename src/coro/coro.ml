@@ -549,6 +549,9 @@ let fun_to_coro ctx coro_type =
 	let etmp_error = b#local vtmp_error coro_class.name_pos in
 	let exprs = {CoroToTexpr.econtinuation;ecompletion;estate;eresult;egoto;eerror;etmp_result;etmp_error;etmp_error_unwrapped} in
 	let stack_item_inserter pos =
+		if not ctx.typer.com.debug then
+			b#void_block []
+		else begin
 		let field = PMap.find "setStackItem" cont.base_continuation_class.cl_fields in
 		(* setStackItem(kind, cls, func, id, file, line, column, pmin, pmax)
 		   kind: 0 = ClassFunction, 1 = LocalFunction *)
@@ -580,6 +583,7 @@ let fun_to_coro ctx coro_type =
 			b#int pos.pmax coro_class.name_pos;
 		] in
 		mk (TCall (eaccess, eargs)) basic.tvoid coro_class.name_pos
+		end
 	in
 
 	(* 5. Fill in the deferred callback implementations now that the continuation API exists *)
@@ -632,11 +636,15 @@ let fun_to_coro ctx coro_type =
 	(* 6. Transform blocks to state machine *)
 
 	let start_exception =
-		let cf = PMap.find "startException" cont.base_continuation_class.cl_fields in
-		let ef = continuation_field cf cf.cf_type in
-		(fun e ->
-			mk (TCall(ef,[e])) basic.texception coro_class.name_pos
-		)
+		if not ctx.typer.com.debug then
+			(fun e -> e)
+		else begin
+			let cf = PMap.find "startException" cont.base_continuation_class.cl_fields in
+			let ef = continuation_field cf cf.cf_type in
+			(fun e ->
+				mk (TCall(ef,[e])) basic.texception coro_class.name_pos
+			)
+		end
 	in
 	let tf_expr = coro_to_state_machine ctx coro_class cb_root exprs args vtmp_result vtmp_error vtmp_error_unwrapped vcompletion vcontinuation gen_mode stack_item_inserter start_exception in
 
