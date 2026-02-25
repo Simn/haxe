@@ -14,7 +14,7 @@ import haxe.coro.CoroStackItem;
 abstract class ExceptionHandler implements IElement<ExceptionHandler> {
 	public static final key = new Key<ExceptionHandler>('ExceptionHandler');
 
-	abstract public function registerSynchronousEntrypoint(p:PosInfos):Void;
+	abstract public function startSynchronousRun(context:Context, p:PosInfos):SynchronousRun;
 
 	/**
 		Called when an exception is first encountered in a coroutine to process its stack trace.
@@ -33,7 +33,7 @@ abstract class ExceptionHandler implements IElement<ExceptionHandler> {
 	}
 }
 
-class StartedException {
+private class StartedException {
 	public final exception:Exception;
 	public final coroStack:Array<CoroStackItem>;
 
@@ -58,30 +58,21 @@ class StartedException {
 	#end
 }
 
-/**
-	The default `ExceptionHandler` implementation, which reconstructs the coroutine call stack
-	from the continuation chain and inserts it into the exception's stack trace.
-**/
-class DefaultExceptionHandler extends ExceptionHandler {
+private class SynchronousRun implements IElement<SynchronousRun> {
+	public static final key = new Key<SynchronousRun>('SynchronousRun');
+
+	public final context:Context;
+
+	final entryPos:PosInfos;
 	final thrownException:Tls<StartedException>;
-	final syncEntrypoints:Tls<Array<Array<StackItem>>>;
 
-	public function new() {
+	public function new(context:Context, entryPos:PosInfos) {
+		this.context = context.with(this);
+		this.entryPos = entryPos;
 		thrownException = new Tls();
-		syncEntrypoints = new Tls();
 	}
 
-	public function registerSynchronousEntrypoint(p:PosInfos) {
-		if (syncEntrypoints.value == null)
-			syncEntrypoints.value = [];
-		syncEntrypoints.value.push(CallStack.callStack());
-	}
-
-	public function startException(cont:BaseContinuation<Any>, exception:Exception):Exception {
-		#if js
-		return exception;
-		#end
-
+	public function startException(cont:BaseContinuation<Any>, exception:Exception) {
 		var frameItem = cont.getStackItem();
 		if (frameItem == null) {
 			// If we have no frane item on our continuation, just bail.
@@ -104,15 +95,13 @@ class DefaultExceptionHandler extends ExceptionHandler {
 	}
 
 	public function buildCallStack(cont:BaseContinuation<Any>):Void {
-		#if js
-		return;
-		#end
-
 		final exception = thrownException.value;
 		if (exception == null || exception.coroStack.length == 0) {
 			return;
 		}
 		thrownException.value = null;
+
+		exception.dump();
 
 		final newStack = [];
 		final coroStack = exception.coroStack;
@@ -128,63 +117,14 @@ class DefaultExceptionHandler extends ExceptionHandler {
 			}
 		}
 
-		var foundInvokeResume = false;
 		for (item in exceptionStack) {
 			switch (item) {
 				// TODO: More patterns probably
 				case FilePos(StackItem.Method(_, "invokeResume"), file, line, column):
 					patchFirstCoroStack(file, line, column);
-					foundInvokeResume = true;
 					break;
 				case _:
 					newStack.push(item);
-			}
-		}
-
-		// If no invokeResume was found in the exception stack (nested coro scenario),
-		// try to use the captured synchronous entrypoint stack to:
-		// 1. Patch the first coro stack item position
-		// 2. Insert the synchronous call chain between the two coro worlds
-		if (!foundInvokeResume) {
-			final entrypoints = syncEntrypoints.value;
-			if (entrypoints != null && entrypoints.length > 0) {
-				final captured = entrypoints.pop();
-				final syncFrames = [];
-				var pastFramework = false;
-				var skippedFirst = false;
-				for (frame in captured) {
-					switch (frame) {
-						case FilePos(StackItem.Method(_, "invokeResume"), file, line, column):
-							patchFirstCoroStack(file, line, column);
-							break;
-						case FilePos(StackItem.Method(cls, _), _, _)
-							if (!pastFramework && (cls.indexOf("haxe.coro.") == 0 || cls.indexOf("hxcoro.") == 0)):
-							// Skip framework-internal frames before user code
-							continue;
-						case _:
-							pastFramework = true;
-							// Skip the first user frame — it's the CoroRun.run call site,
-							// already represented by the PosInfo entry from the inner coro stack.
-							if (!skippedFirst) {
-								skippedFirst = true;
-								continue;
-							}
-							syncFrames.push(frame);
-					}
-				}
-				// Remove trailing PosInfo-generated entry from the inner coro stack
-				// (the "coro" method entry) since it duplicates the lambda entry and
-				// is superseded by the captured sync frames.
-				if (newStack.length > 0) {
-					switch (newStack[newStack.length - 1]) {
-						case FilePos(StackItem.Method(_, "coro"), _, _):
-							newStack.pop();
-						case _:
-					}
-				}
-				for (frame in syncFrames) {
-					newStack.push(frame);
-				}
 			}
 		}
 
@@ -199,35 +139,43 @@ class DefaultExceptionHandler extends ExceptionHandler {
 			}
 		}
 
-		// Append the bottom stack — the synchronous call chain that brought us
-		// into the coroutine world. This comes from the outermost sync entrypoint.
-		final entrypoints = syncEntrypoints.value;
-		if (entrypoints != null && entrypoints.length > 0) {
-			final bottomCaptured = entrypoints[0];
-			var pastFramework = false;
-			var skippedFirst = false;
-			for (frame in bottomCaptured) {
-				switch (frame) {
-					case FilePos(StackItem.Method(_, "invokeResume"), _, _, _):
-						break;
-					case FilePos(StackItem.Method(cls, _), _, _)
-						if (!pastFramework && (cls.indexOf("haxe.coro.") == 0 || cls.indexOf("hxcoro.") == 0)):
-						continue;
-					case _:
-						pastFramework = true;
-						// Skip the first user frame — it's the entrypoint call site,
-						// already represented by the last PosInfo entry in the coro stack.
-						if (!skippedFirst) {
-							skippedFirst = true;
-							continue;
-						}
-						newStack.push(frame);
-				}
-			}
-			// Clear entrypoints since we've consumed them
-			syncEntrypoints.value = null;
-		}
-
 		exception.exception.stack = newStack;
+	}
+
+	public function complete() {
+		// Clear the exception to avoid keeping unnecessary references around.
+		thrownException.value = null;
+	}
+
+	public function getKey() {
+		return key;
+	}
+}
+
+/**
+	The default `ExceptionHandler` implementation, which reconstructs the coroutine call stack
+	from the continuation chain and inserts it into the exception's stack trace.
+**/
+class DefaultExceptionHandler extends ExceptionHandler {
+	public function new() {
+
+	}
+
+	public function startSynchronousRun(context:Context, p:PosInfos) {
+		return new SynchronousRun(context, p);
+	}
+
+	public function startException(cont:BaseContinuation<Any>, exception:Exception):Exception {
+		#if js
+		return exception;
+		#end
+		return cont.context.get(SynchronousRun).startException(cont, exception);
+	}
+
+	public function buildCallStack(cont:BaseContinuation<Any>):Void {
+		#if js
+		return;
+		#end
+		cont.context.get(SynchronousRun).buildCallStack(cont);
 	}
 }
