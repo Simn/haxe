@@ -109,10 +109,17 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		final newStack = [];
 		final exceptionStack = exception.exception.stack.asArray();
 
+		var invokeResumeFile:Null<String> = null;
+		var invokeResumeLine = 0;
+		var invokeResumeColumn = 0;
+
 		for (item in exceptionStack) {
 			switch (item) {
 				// TODO: More patterns probably
-				case FilePos(StackItem.Method(_, "invokeResume"), _, _, _):
+				case FilePos(StackItem.Method(_, "invokeResume"), file, line, column):
+					invokeResumeFile = file;
+					invokeResumeLine = line;
+					invokeResumeColumn = column;
 					break;
 				case _:
 					newStack.push(item);
@@ -122,9 +129,17 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		for (frame in exception.coroStack) {
 			switch (frame) {
 				case ClassFunction(cls, func, file, line, column):
-					newStack.push(StackItem.FilePos(StackItem.Method(cls, func), file, line, column));
+					final useFile = invokeResumeFile != null ? invokeResumeFile : file;
+					final useLine = invokeResumeFile != null ? invokeResumeLine : line;
+					final useColumn = invokeResumeFile != null ? invokeResumeColumn : column;
+					newStack.push(StackItem.FilePos(StackItem.Method(cls, func), useFile, useLine, useColumn));
+					invokeResumeFile = null;
 				case LocalFunction(id, file, line, column):
-					newStack.push(StackItem.FilePos(StackItem.LocalFunction(id), file, line, column));
+					final useFile = invokeResumeFile != null ? invokeResumeFile : file;
+					final useLine = invokeResumeFile != null ? invokeResumeLine : line;
+					final useColumn = invokeResumeFile != null ? invokeResumeColumn : column;
+					newStack.push(StackItem.FilePos(StackItem.LocalFunction(id), useFile, useLine, useColumn));
+					invokeResumeFile = null;
 				case CoroEntrypoint:
 			}
 		}
