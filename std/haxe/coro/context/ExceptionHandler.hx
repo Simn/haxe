@@ -101,45 +101,43 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		#end
 
 		final exception = thrownException.value;
-		if (exception == null) {
+		if (exception == null || exception.coroStack.length == 0) {
 			return;
 		}
 		thrownException.value = null;
 
 		final newStack = [];
+		final coroStack = exception.coroStack;
 		final exceptionStack = exception.exception.stack.asArray();
 
-		var invokeResumeFile:Null<String> = null;
-		var invokeResumeLine = 0;
-		var invokeResumeColumn = 0;
+		function patchFirstCoroStack(file:String, line:Int, column:Int) {
+			coroStack[0] = switch (coroStack[0]) {
+				case ClassFunction(cls, func, _, _, _):
+					ClassFunction(cls, func, file, line, column);
+				case LocalFunction(id, _, _, _):
+					LocalFunction(id, file, line, column);
+				case CoroEntrypoint:
+					 CoroEntrypoint;
+			}
+		}
 
 		for (item in exceptionStack) {
 			switch (item) {
 				// TODO: More patterns probably
 				case FilePos(StackItem.Method(_, "invokeResume"), file, line, column):
-					invokeResumeFile = file;
-					invokeResumeLine = line;
-					invokeResumeColumn = column;
+					patchFirstCoroStack(file, line, column);
 					break;
 				case _:
 					newStack.push(item);
 			}
 		}
 
-		for (frame in exception.coroStack) {
+		for (frame in coroStack) {
 			switch (frame) {
 				case ClassFunction(cls, func, file, line, column):
-					final useFile = invokeResumeFile != null ? invokeResumeFile : file;
-					final useLine = invokeResumeFile != null ? invokeResumeLine : line;
-					final useColumn = invokeResumeFile != null ? invokeResumeColumn : column;
-					newStack.push(StackItem.FilePos(StackItem.Method(cls, func), useFile, useLine, useColumn));
-					invokeResumeFile = null;
+					newStack.push(StackItem.FilePos(StackItem.Method(cls, func), file, line, column));
 				case LocalFunction(id, file, line, column):
-					final useFile = invokeResumeFile != null ? invokeResumeFile : file;
-					final useLine = invokeResumeFile != null ? invokeResumeLine : line;
-					final useColumn = invokeResumeFile != null ? invokeResumeColumn : column;
-					newStack.push(StackItem.FilePos(StackItem.LocalFunction(id), useFile, useLine, useColumn));
-					invokeResumeFile = null;
+					newStack.push(StackItem.FilePos(StackItem.LocalFunction(id), file, line, column));
 				case CoroEntrypoint:
 			}
 		}
