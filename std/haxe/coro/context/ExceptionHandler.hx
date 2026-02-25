@@ -64,13 +64,17 @@ class StartedException {
 **/
 class DefaultExceptionHandler extends ExceptionHandler {
 	final thrownException:Tls<StartedException>;
+	final syncEntrypoints:Tls<Array<Array<StackItem>>>;
 
 	public function new() {
 		thrownException = new Tls();
+		syncEntrypoints = new Tls();
 	}
 
 	public function registerSynchronousEntrypoint(p:PosInfos) {
-		// TODO: implement and respect in buildCallStack
+		if (syncEntrypoints.value == null)
+			syncEntrypoints.value = [];
+		syncEntrypoints.value.push(CallStack.callStack());
 	}
 
 	public function startException(cont:BaseContinuation<Any>, exception:Exception):Exception {
@@ -110,10 +114,6 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		}
 		thrownException.value = null;
 
-		#if sys
-		exception.dump();
-		#end
-
 		final newStack = [];
 		final coroStack = exception.coroStack;
 		final exceptionStack = exception.exception.stack.asArray();
@@ -128,14 +128,63 @@ class DefaultExceptionHandler extends ExceptionHandler {
 			}
 		}
 
+		var foundInvokeResume = false;
 		for (item in exceptionStack) {
 			switch (item) {
 				// TODO: More patterns probably
 				case FilePos(StackItem.Method(_, "invokeResume"), file, line, column):
 					patchFirstCoroStack(file, line, column);
+					foundInvokeResume = true;
 					break;
 				case _:
 					newStack.push(item);
+			}
+		}
+
+		// If no invokeResume was found in the exception stack (nested coro scenario),
+		// try to use the captured synchronous entrypoint stack to:
+		// 1. Patch the first coro stack item position
+		// 2. Insert the synchronous call chain between the two coro worlds
+		if (!foundInvokeResume) {
+			final entrypoints = syncEntrypoints.value;
+			if (entrypoints != null && entrypoints.length > 0) {
+				final captured = entrypoints.pop();
+				final syncFrames = [];
+				var pastFramework = false;
+				var skippedFirst = false;
+				for (frame in captured) {
+					switch (frame) {
+						case FilePos(StackItem.Method(_, "invokeResume"), file, line, column):
+							patchFirstCoroStack(file, line, column);
+							break;
+						case FilePos(StackItem.Method(cls, _), _, _)
+							if (!pastFramework && (cls.indexOf("haxe.coro.") == 0 || cls.indexOf("hxcoro.") == 0)):
+							// Skip framework-internal frames before user code
+							continue;
+						case _:
+							pastFramework = true;
+							// Skip the first user frame — it's the CoroRun.run call site,
+							// already represented by the PosInfo entry from the inner coro stack.
+							if (!skippedFirst) {
+								skippedFirst = true;
+								continue;
+							}
+							syncFrames.push(frame);
+					}
+				}
+				// Remove trailing PosInfo-generated entry from the inner coro stack
+				// (the "coro" method entry) since it duplicates the lambda entry and
+				// is superseded by the captured sync frames.
+				if (newStack.length > 0) {
+					switch (newStack[newStack.length - 1]) {
+						case FilePos(StackItem.Method(_, "coro"), _, _):
+							newStack.pop();
+						case _:
+					}
+				}
+				for (frame in syncFrames) {
+					newStack.push(frame);
+				}
 			}
 		}
 
