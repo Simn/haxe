@@ -1,11 +1,11 @@
 package haxe.coro.context;
 
-import haxe.zip.Entry;
 import haxe.CallStack.StackItem;
 import haxe.Exception;
 import haxe.coro.BaseContinuation;
 import haxe.coro.CoroStackItem;
 import haxe.ds.ObjectMap;
+import haxe.zip.Entry;
 
 /**
 	An abstract context element that handles exception stack trace management for coroutines.
@@ -111,13 +111,12 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		final exceptionStack = exception.exception.stack.asArray();
 
 		function patchFirstCoroStack(file:String, line:Int, column:Int) {
-			coroStack[0] = switch (coroStack[0]) {
+			switch (coroStack[0]) {
 				case ClassFunction(cls, func, _, _, _):
-					ClassFunction(cls, func, file, line, column);
+					coroStack[0] = ClassFunction(cls, func, file, line, column);
 				case LocalFunction(id, _, _, _):
-					LocalFunction(id, file, line, column);
-				case CoroEntrypoint:
-					 CoroEntrypoint;
+					coroStack[0] = LocalFunction(id, file, line, column);
+				case PosInfo(_):
 			}
 		}
 
@@ -138,7 +137,8 @@ class DefaultExceptionHandler extends ExceptionHandler {
 					newStack.push(StackItem.FilePos(StackItem.Method(cls, func), file, line, column));
 				case LocalFunction(id, file, line, column):
 					newStack.push(StackItem.FilePos(StackItem.LocalFunction(id), file, line, column));
-				case CoroEntrypoint:
+				case PosInfo(p):
+					newStack.push(StackItem.FilePos(StackItem.Method(p.className, "coro"), p.fileName, p.lineNumber));
 			}
 		}
 
