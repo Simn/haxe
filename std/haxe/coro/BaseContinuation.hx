@@ -110,9 +110,6 @@ abstract class BaseContinuation<T> extends SuspensionResult<T> implements IConti
 			case _:
 				throw new Exception('Invalid coroutine stack item kind: $kind (expected 0 for ClassFunction or 1 for LocalFunction)');
 		}
-		#if eval
-		eval.vm.Context.callMacroApi("associate_enum_value_pos")(stackItem, haxe.macro.Context.makePosition({file: file, min: pmin, max: pmax}));
-		#end
 		#end
 	}
 
