@@ -199,6 +199,35 @@ class DefaultExceptionHandler extends ExceptionHandler {
 			}
 		}
 
+		// Append the bottom stack — the synchronous call chain that brought us
+		// into the coroutine world. This comes from the outermost sync entrypoint.
+		final entrypoints = syncEntrypoints.value;
+		if (entrypoints != null && entrypoints.length > 0) {
+			final bottomCaptured = entrypoints[0];
+			var pastFramework = false;
+			var skippedFirst = false;
+			for (frame in bottomCaptured) {
+				switch (frame) {
+					case FilePos(StackItem.Method(_, "invokeResume"), _, _, _):
+						break;
+					case FilePos(StackItem.Method(cls, _), _, _)
+						if (!pastFramework && (cls.indexOf("haxe.coro.") == 0 || cls.indexOf("hxcoro.") == 0)):
+						continue;
+					case _:
+						pastFramework = true;
+						// Skip the first user frame — it's the entrypoint call site,
+						// already represented by the last PosInfo entry in the coro stack.
+						if (!skippedFirst) {
+							skippedFirst = true;
+							continue;
+						}
+						newStack.push(frame);
+				}
+			}
+			// Clear entrypoints since we've consumed them
+			syncEntrypoints.value = null;
+		}
+
 		exception.exception.stack = newStack;
 	}
 }

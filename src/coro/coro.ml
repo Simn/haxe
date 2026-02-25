@@ -300,6 +300,14 @@ let coro_to_state_machine ctx coro_class cb_root exprs args vtmp_result vtmp_err
 	let {CoroToTexpr.ecompletion;eresult;_} = exprs in
 	let tret_invoke_resume = cont.suspension_result coro_class.outside.result_type in
 
+	(* In debug mode, insert an initial setStackItem call at the very start of
+	   invokeResume so that the continuation always has a valid stack item, even in
+	   single-state coroutines where no suspension call triggers setStackItem. *)
+	let eloop =
+		let einit = stack_item_inserter coro_class.name_pos in
+		b#void_block [einit; eloop]
+	in
+
 	let invoke_resume_field = match gen_mode with
 		| GenInline cfo ->
 			ContinuationClassBuilder.mk_invoke_resume_with_body ctx coro_class vcontinuation vtmp_result vtmp_error vtmp_error_unwrapped eresult eloop
