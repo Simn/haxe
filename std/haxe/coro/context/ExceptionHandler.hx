@@ -132,12 +132,23 @@ private class SynchronousRun implements IElement<SynchronousRun> {
 
 		for (item in exceptionStack) {
 			switch (item) {
-				// TODO: More patterns probably
 				case FilePos(StackItem.Method(_, "invokeResume"), file, line, column):
-					patchFirstCoroStack(file, line, column);
+					// Only patch the coro stack position when we have actual Haxe source info.
+					// On PHP, Python etc. the invokeResume file is a compiled target path, not
+					// a .hx source file, so patching would overwrite the correct coro stack info.
+					if (file != null && file.endsWith(".hx")) {
+						patchFirstCoroStack(file, line, column);
+					}
 					break;
-				case _:
+				case FilePos(_, file, _, _) if (file != null && file.endsWith(".hx")):
+					// Collect Haxe source frames that appear before invokeResume (e.g. the
+					// actual throwing location and its sync callers on JVM/eval targets).
 					newStack.push(item);
+				case _:
+					// Not a Haxe source frame — either a compiled target path (PHP, Python, C++)
+					// or Neko's null-file format. Stop collecting to avoid polluting the
+					// reconstructed stack with platform-internal frames.
+					break;
 			}
 		}
 
@@ -236,16 +247,10 @@ class DefaultExceptionHandler extends ExceptionHandler {
 	}
 
 	public function startException(cont:BaseContinuation<Any>, exception:Exception):Exception {
-		#if js
-		return exception;
-		#end
 		return cont.context.get(SynchronousRun).startException(cont, exception);
 	}
 
 	public function buildCallStack(cont:BaseContinuation<Any>):Void {
-		#if js
-		return;
-		#end
 		cont.context.get(SynchronousRun).buildCallStack(cont);
 	}
 }
