@@ -7,4 +7,5 @@ package haxe.coro;
 enum CoroStackItem {
 	ClassFunction(cls:String, func:String, file:String, line:Int, column:Int);
 	LocalFunction(id:Int, file:String, line:Int, column:Int);
+	CoroEntrypoint;
 }

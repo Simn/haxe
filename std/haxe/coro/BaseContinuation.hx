@@ -81,13 +81,13 @@ abstract class BaseContinuation<T> extends SuspensionResult<T> implements IConti
 	/**
 		@see `IStackFrame.callerFrame`
 	**/
-    public function callerFrame():Null<IStackFrame> {
-        return if (completion is IStackFrame) {
-            cast completion;
-        } else {
-            null;
-        }
-    }
+	public function callerFrame():Null<IStackFrame> {
+		return if (completion is IStackFrame) {
+			cast completion;
+		} else {
+			null;
+		}
+	}
 
 	/**
 		@see `IStackFrame.callerFrame`

@@ -1,5 +1,6 @@
 package haxe.coro.context;
 
+import haxe.zip.Entry;
 import haxe.CallStack.StackItem;
 import haxe.Exception;
 import haxe.coro.BaseContinuation;
@@ -32,81 +33,56 @@ abstract class ExceptionHandler implements IElement<ExceptionHandler> {
 	}
 }
 
+class StartedException {
+	public final exception:Exception;
+	public final coroStack:Array<CoroStackItem>;
+
+	public function new(exception:Exception, coroStack:Array<CoroStackItem>) {
+		this.exception = exception;
+		this.coroStack = coroStack;
+	}
+
+	#if sys
+	public function dump() {
+		Sys.println("Exception stack:");
+		for (item in exception.stack.asArray()) {
+			Sys.print("\t");
+			Sys.println(item);
+		}
+		Sys.println("Coro stack:");
+		for (item in coroStack) {
+			Sys.print("\t");
+			Sys.println(item);
+		}
+	}
+	#end
+}
+
 /**
 	The default `ExceptionHandler` implementation, which reconstructs the coroutine call stack
 	from the continuation chain and inserts it into the exception's stack trace.
-
-	`insertIndex` is stored in thread-local storage, making this implementation safe for
-	concurrent use across multiple coroutines running on different threads.
 **/
 class DefaultExceptionHandler extends ExceptionHandler {
-	#if debug
-	final insertIndexByException = new haxe.coro.Tls<ObjectMap<Exception, Int>>();
-	#end
+	final thrownException:Tls<StartedException>;
 
-	static inline function toStackItem(item:CoroStackItem):StackItem {
-		return switch (item) {
-			case ClassFunction(cls, func, file, line, column):
-				StackItem.FilePos(StackItem.Method(cls, func), file, line, column);
-			case LocalFunction(id, file, line, column):
-				StackItem.FilePos(StackItem.LocalFunction(id), file, line, column);
-		};
+	public function new() {
+		thrownException = new Tls();
 	}
-
-	static inline function itemMatchesCoroFrame(item:StackItem, frameItem:CoroStackItem):Bool {
-		return switch [item, frameItem] {
-			case [FilePos(Method(cls2, func2), _, _, _), ClassFunction(cls, func, _, _, _)]:
-				cls == cls2 && func == func2;
-			case [FilePos(LocalFunction(id2), _, _, _), LocalFunction(id, _, _, _)]:
-				id == id2;
-			case _:
-				false;
-		}
-	}
-
-	static function itemMatchesAnyCoroFrame(item:StackItem, frames:Array<CoroStackItem>):Bool {
-		for (frame in frames) {
-			if (itemMatchesCoroFrame(item, frame)) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	#if debug
-	inline function getInsertIndexByException() {
-		if (insertIndexByException.value == null) {
-			insertIndexByException.value = new ObjectMap();
-		}
-		return insertIndexByException.value;
-	}
-	#end
-
-	public function new() {}
 
 	public function startException(cont:BaseContinuation<Any>, exception:Exception):Exception {
 		#if js
 		return exception;
 		#end
-		#if debug
-		var stack = [];
-		var localInsertIndex = 0;
-		var frameItem = cont.getStackItem();
-		var seenInvokeResume = false;
-		var skippedChainFrame = false;
-		var chainFrames = [];
 
-		/*
-			Find first coro stack element
-		*/
-		var currentFrame:Null<haxe.coro.IStackFrame> = cont;
-		while (frameItem == null) {
-			currentFrame = currentFrame.callerFrame();
-			if (currentFrame == null) {
-				break;
-			}
-			frameItem = currentFrame.getStackItem();
+		var frameItem = cont.getStackItem();
+		if (frameItem == null) {
+			// If we have no frane item on our continuation, just bail.
+			return exception;
 		}
+
+		// Collect coro frames from the continuation chain.
+		var chainFrames = [];
+		var currentFrame:Null<IStackFrame> = cont;
 		while (currentFrame != null) {
 			final item = currentFrame.getStackItem();
 			if (item != null) {
@@ -115,33 +91,7 @@ class DefaultExceptionHandler extends ExceptionHandler {
 			currentFrame = currentFrame.callerFrame();
 		}
 
-		switch (frameItem) {
-			case null:
-				return exception;
-			case ClassFunction(_, _, _, _, _) | LocalFunction(_, _, _, _):
-				for (item in exception.stack.asArray()) {
-					switch (item) {
-						case FilePos(Method(_, "invokeResume"), _) if (!seenInvokeResume):
-							seenInvokeResume = true;
-							stack.push(item);
-							localInsertIndex = stack.length;
-						case FilePos(Method(_, "invokeResume"), _):
-						case FilePos(Method("hxcoro.CoroRun", "run"), _):
-						case _ if (itemMatchesAnyCoroFrame(item, chainFrames)):
-							if (!skippedChainFrame) {
-								skippedChainFrame = true;
-								localInsertIndex = stack.length;
-							}
-						case _:
-							stack.push(item);
-					}
-				}
-			case _:
-				return exception;
-		}
-		exception.stack = stack;
-		getInsertIndexByException().set(exception, localInsertIndex);
-		#end
+		thrownException.value = new StartedException(exception, chainFrames);
 		return exception;
 	}
 
@@ -149,25 +99,38 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		#if js
 		return;
 		#end
-		#if debug
-		final error = cont.error;
-		final insertIndexByException = getInsertIndexByException();
-		final idx = insertIndexByException.get(error);
-		if (idx == null) {
+
+		final exception = thrownException.value;
+		if (exception == null) {
 			return;
 		}
+		thrownException.value = null;
 
-		final frameItem = cont.getStackItem();
-		if (frameItem != null) {
-			final stackItem = toStackItem(frameItem);
-			final stack = error.stack.asArray();
-			stack.insert(idx, stackItem);
-			error.stack = stack;
-			insertIndexByException.set(error, idx + 1);
+		exception.dump();
+
+		final newStack = [];
+		final exceptionStack = exception.exception.stack.asArray();
+
+		for (item in exceptionStack) {
+			switch (item) {
+				// TODO: More patterns probably
+				case FilePos(StackItem.Method(_, "invokeResume"), _, _, _):
+					break;
+				case _:
+					newStack.push(item);
+			}
 		}
-		if (cont.callerFrame() == null) {
-			insertIndexByException.remove(error);
+
+		for (frame in exception.coroStack) {
+			switch (frame) {
+				case ClassFunction(cls, func, file, line, column):
+					newStack.push(StackItem.FilePos(StackItem.Method(cls, func), file, line, column));
+				case LocalFunction(id, file, line, column):
+					newStack.push(StackItem.FilePos(StackItem.LocalFunction(id), file, line, column));
+				case CoroEntrypoint:
+			}
 		}
-		#end
+
+		exception.exception.stack = newStack;
 	}
 }
