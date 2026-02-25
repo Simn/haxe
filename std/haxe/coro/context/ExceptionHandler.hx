@@ -4,8 +4,6 @@ import haxe.CallStack.StackItem;
 import haxe.Exception;
 import haxe.coro.BaseContinuation;
 import haxe.coro.CoroStackItem;
-import haxe.ds.ObjectMap;
-import haxe.zip.Entry;
 
 /**
 	An abstract context element that handles exception stack trace management for coroutines.
@@ -15,6 +13,8 @@ import haxe.zip.Entry;
 **/
 abstract class ExceptionHandler implements IElement<ExceptionHandler> {
 	public static final key = new Key<ExceptionHandler>('ExceptionHandler');
+
+	abstract public function registerSynchronousEntrypoint(p:PosInfos):Void;
 
 	/**
 		Called when an exception is first encountered in a coroutine to process its stack trace.
@@ -69,6 +69,10 @@ class DefaultExceptionHandler extends ExceptionHandler {
 		thrownException = new Tls();
 	}
 
+	public function registerSynchronousEntrypoint(p:PosInfos) {
+		// TODO: implement and respect in buildCallStack
+	}
+
 	public function startException(cont:BaseContinuation<Any>, exception:Exception):Exception {
 		#if js
 		return exception;
@@ -105,6 +109,10 @@ class DefaultExceptionHandler extends ExceptionHandler {
 			return;
 		}
 		thrownException.value = null;
+
+		#if sys
+		exception.dump();
+		#end
 
 		final newStack = [];
 		final coroStack = exception.coroStack;
