@@ -13,17 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check-draft:
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Cancel CI for draft PRs
-        if: github.event.pull_request.draft == false
-        run: |
-        
   windows64-build:
-    needs: check-draft
+    if: github.event.pull_request.draft == false
     runs-on: windows-latest
     env:
       PLATFORM: windows64
@@ -70,7 +61,7 @@ jobs:
 
 
   linux-build:
-    needs: check-draft
+    if: github.event.pull_request.draft == false
     strategy:
       matrix:
         arch: [x86_64, arm64]
@@ -296,7 +287,7 @@ jobs:
         working-directory: ${{github.workspace}}/tests/docgen
 
   mac-build:
-    needs: check-draft
+    if: github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:
