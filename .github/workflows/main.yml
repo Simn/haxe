@@ -4,6 +4,7 @@ name: CI
 on:
   push:
   pull_request:
+    types: [opened, ready_for_review]
 
 env:
   OCAML_VERSION: 5.3.0
