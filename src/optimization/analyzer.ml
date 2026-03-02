@@ -774,28 +774,26 @@ module NullAnalysisImpl = struct
 		| _ ->
 			None
 
+	(* Determine the null state of a variable on a given edge based on
+	   the edge's source block terminator null-check condition. *)
+	let narrowed_state_from_edge actx edge checked_var_id is_eq_null default =
+		match edge.cfg_kind with
+		| CFGCondBranch _ ->
+			(* Then branch: condition was true *)
+			if is_eq_null then IsNull else NotNull
+		| CFGCondElse ->
+			(* Else branch: condition was false *)
+			if is_eq_null then NotNull else IsNull
+		| _ -> default
+
 	let narrow actx ctx edge _e t =
-		let source = edge.cfg_from in
-		match source.bb_terminator with
+		match edge.cfg_from.bb_terminator with
 		| TermCondBranch cond_expr ->
 			begin match get_null_check actx cond_expr with
 			| Some (checked_var_id, is_eq_null) ->
-				(* Check if the phi incoming expression references the checked variable *)
-				let e_var_id = match _e.eexpr with
-					| TLocal v -> Some v.v_id
-					| _ -> None
-				in
-				begin match e_var_id with
-				| Some v_id when v_id = checked_var_id ->
-					begin match edge.cfg_kind with
-					| CFGCondBranch _ ->
-						(* Then branch: condition was true *)
-						if is_eq_null then IsNull else NotNull
-					| CFGCondElse ->
-						(* Else branch: condition was false *)
-						if is_eq_null then NotNull else IsNull
-					| _ -> t
-					end
+				begin match _e.eexpr with
+				| TLocal v when v.v_id = checked_var_id ->
+					narrowed_state_from_edge actx edge checked_var_id is_eq_null t
 				| _ -> t
 				end
 			| None -> t
@@ -834,13 +832,7 @@ module NullAnalysisImpl = struct
 				| TermCondBranch cond_expr ->
 					begin match get_null_check actx cond_expr with
 					| Some (checked_var_id, is_eq_null) ->
-						let state = match edge.cfg_kind with
-							| CFGCondBranch _ ->
-								if is_eq_null then IsNull else NotNull
-							| CFGCondElse ->
-								if is_eq_null then NotNull else IsNull
-							| _ -> get_cell ctx checked_var_id
-						in
+						let state = narrowed_state_from_edge actx edge checked_var_id is_eq_null (get_cell ctx checked_var_id) in
 						[(checked_var_id, state)]
 					| None -> []
 					end

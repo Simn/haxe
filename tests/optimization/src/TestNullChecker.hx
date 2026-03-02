@@ -112,7 +112,7 @@ class TestNullChecker extends TestBase {
 	}
 
 	function useString(s:String) {
-		// Dummy function to consume a value
+		// Consume a non-null String value, ensuring the analysis tracks nullability correctly
 	}
 
 	function getString() {
