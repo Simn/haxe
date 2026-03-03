@@ -202,17 +202,134 @@ type dt_recursion =
 	| AfterSwitch
 	| Deep
 
+let is_tbreak e = match e.eexpr with TBreak -> true | _ -> false
+
+(* Mark decision tree nodes that are referenced multiple times as goto targets. *)
+let mark_goto_targets dt =
+	let visited = Hashtbl.create 16 in
+	let rec visit dt =
+		if Hashtbl.mem visited dt.dt_i then
+			dt.dt_goto_target <- true
+		else begin
+			Hashtbl.add visited dt.dt_i ();
+			match dt.dt_t with
+			| Leaf _ | Fail -> ()
+			| Switch(_, cases, default) ->
+				List.iter (fun sc -> visit sc.sc_dt) cases;
+				visit default
+			| Bind(_, dt') -> visit dt'
+			| Guard(_, dt1, dt2) | GuardNull(_, dt1, dt2) ->
+				visit dt1; visit dt2
+		end
+	in
+	visit dt
+
+(* Check if a dt node has a trivial body not worth deduplicating. *)
+let is_trivial_default dt = match dt.dt_t with
+	| Fail -> true
+	| Leaf case -> case.case_expr = None
+	| _ -> false
+
+(* Find the shared default dt node at the top level of the decision tree. *)
+let rec find_shared_default dt = match dt.dt_t with
+	| Switch(_, _, default) when default.dt_goto_target && not (is_trivial_default default) ->
+		Some default
+	| Guard(_, _, dt2) | GuardNull(_, _, dt2) when dt2.dt_goto_target && not (is_trivial_default dt2) ->
+		Some dt2
+	| Bind(_, inner_dt) -> find_shared_default inner_dt
+	| _ -> None
+
+(* Check that all Switch nodes in the decision tree have at most 1 case,
+   ensuring we generate TIf chains (not TSwitch) that work with the do-while optimization. *)
+let rec all_single_case_dt dt = match dt.dt_t with
+	| Switch(_, cases, default) ->
+		List.length cases <= 1
+		&& List.for_all (fun sc -> all_single_case_dt sc.sc_dt) cases
+		&& all_single_case_dt default
+	| Bind(_, dt') -> all_single_case_dt dt'
+	| Guard(_, dt1, dt2) | GuardNull(_, dt1, dt2) ->
+		all_single_case_dt dt1 && all_single_case_dt dt2
+	| Leaf _ | Fail -> true
+
 let to_texpr ctx t_switch with_type dt =
 	let v_lookup = ref IntMap.empty in
 	let com = ctx.com in
 	let p = dt.dt_pos in
+	let break_target = ref None in
+	let break_texpr = ref None in
 	let mk_index_call e =
 		mk (TEnumIndex e) com.basic.tint e.epos
 	in
-	let rec loop dt_rec params dt = match dt.dt_texpr with
-		| Some e ->
+	(* Restructure a texpr tree where else branches are TBreak into
+	   a form suitable for do-while(false): remove TBreak else branches
+	   and add TBreak at the end of successful case bodies instead.
+	   Also handle TBreak in "then" positions by inverting the condition. *)
+	let rec restructure_block e = match e.eexpr with
+		| TBlock el ->
+			begin match List.rev el with
+			| last :: rest_rev ->
+				let last' = restructure_block last in
+				{e with eexpr = TBlock (List.rev (last' :: rest_rev))}
+			| [] -> e
+			end
+		| _ -> restructure_if e
+	and restructure_if e = match e.eexpr with
+		| TIf(cond, e_then, Some e_else) when is_tbreak e_else ->
+			let e_then = restructure_then e_then in
+			{e with eexpr = TIf(cond, e_then, None)}
+		| TIf(cond, e_then, Some e_else) when is_tbreak e_then ->
+			(* TBreak in "then" position: invert condition to make it fall-through *)
+			let e_else = restructure_then e_else in
+			let inv_cond = mk (TUnop(Not, Prefix, cond)) com.basic.tbool cond.epos in
+			{e with eexpr = TIf(inv_cond, e_else, None)}
+		| _ -> e
+	and has_break_pattern e = match e.eexpr with
+		| TIf(_, _, Some e_else) when is_tbreak e_else -> true
+		| TIf(_, e_then, _) when is_tbreak e_then -> true
+		| _ -> false
+	and restructure_then e = match e.eexpr with
+		| TBlock el ->
+			begin match List.rev el with
+			| last :: rest_rev ->
+				if has_break_pattern last then
+					let last' = restructure_if last in
+					{e with eexpr = TBlock (List.rev (last' :: rest_rev))}
+				else
+					{e with eexpr = TBlock (el @ [mk TBreak com.basic.tvoid e.epos])}
+			| [] -> e
+			end
+		| TIf(cond, e_then, Some e_else) when is_tbreak e_else ->
+			let e_then = restructure_then e_then in
+			{e with eexpr = TIf(cond, e_then, None)}
+		| TIf(cond, e_then, Some e_else) when is_tbreak e_then ->
+			let e_else = restructure_then e_else in
+			let inv_cond = mk (TUnop(Not, Prefix, cond)) com.basic.tbool cond.epos in
+			{e with eexpr = TIf(inv_cond, e_else, None)}
+		| _ ->
+			mk (TBlock [e; mk TBreak com.basic.tvoid e.epos]) e.etype e.epos
+	in
+	let rec loop dt_rec params dt =
+		(* Check if this dt is the break target *)
+		let is_bt = match !break_target with
+			| Some target_i -> target_i = dt.dt_i
+			| None -> false
+		in
+		if is_bt then begin
+			(* Return the shared TBreak expression *)
+			let e = match !break_texpr with
+				| Some e -> e
+				| None ->
+					let e = mk TBreak com.basic.tvoid dt.dt_pos in
+					break_texpr := Some e;
+					e
+			in
 			Some e
-		| None ->
+		end else begin
+			let in_break_mode = Option.is_some !break_target in
+			match (if in_break_mode then None else dt.dt_texpr) with
+			| Some e ->
+				Some e
+			| None ->
 			let e = match dt.dt_t with
 				| Leaf case ->
 					begin match case.case_expr with
@@ -390,13 +507,50 @@ let to_texpr ctx t_switch with_type dt =
 				| Fail ->
 					None
 			in
-			dt.dt_texpr <- e;
+			if not in_break_mode then dt.dt_texpr <- e;
 			e
+		end
 	in
 	let params = extract_param_types ctx.type_params in
-	let e = loop Toplevel params dt in
-	match e with
+	(* Try the do-while optimization for shared defaults *)
+	mark_goto_targets dt;
+	let can_optimize =
+		(match with_type with WithType.NoValue -> true | _ -> ExtType.is_void (follow t_switch))
+		&& all_single_case_dt dt
+	in
+	let shared_default = if can_optimize then find_shared_default dt else None in
+	match shared_default with
+	| Some default_dt ->
+		(* Convert default first (caches in dt_texpr) *)
+		let e_default = loop Toplevel params default_dt in
+		(* Set break target and convert main tree *)
+		break_target := Some default_dt.dt_i;
+		let e_body = loop Toplevel params dt in
+		break_target := None;
+		begin match e_body, e_default with
+		| Some e_body, Some e_default ->
+			let e_body = restructure_block e_body in
+			let body_elements = match e_body.eexpr with
+				| TBlock el -> el
+				| _ -> [e_body]
+			in
+			let e_false = mk (TConst (TBool false)) com.basic.tbool p in
+			let e_while_body = mk (TBlock (body_elements @ [e_default])) com.basic.tvoid p in
+			let e_while = mk (TWhile(e_false, e_while_body, DoWhile)) com.basic.tvoid p in
+			Texpr.duplicate_tvars e_identity e_while
+		| _ ->
+			(* Fallback: re-convert without break target *)
+			let e = loop Toplevel params dt in
+			begin match e with
+			| None -> raise_typing_error "Unmatched patterns: _" p
+			| Some e -> Texpr.duplicate_tvars e_identity e
+			end
+		end
 	| None ->
-		raise_typing_error "Unmatched patterns: _" p;
-	| Some e ->
-		Texpr.duplicate_tvars e_identity e
+		let e = loop Toplevel params dt in
+		begin match e with
+		| None ->
+			raise_typing_error "Unmatched patterns: _" p;
+		| Some e ->
+			Texpr.duplicate_tvars e_identity e
+		end
