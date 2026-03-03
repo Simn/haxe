@@ -126,6 +126,36 @@ class TestJs {
 	static inline function verify(s1) return s1 == "foo";
 
 	@:js('
+		do {
+			if(t._hx_index == 0) {
+				var _gl = t.l;
+				var _gr = t.r;
+				if(_gl._hx_index == 1) {
+					if(_gl.v == "a") {
+						if(_gr._hx_index == 1) {
+							if(_gr.v == "b") {
+								if(Math.random() > 0.5) {
+									TestJs.use("matched");
+									break;
+								}
+							}
+						}
+					}
+				}
+			}
+			TestJs.use("default");
+		} while(false);
+	')
+	static function testSharedDefaultDoWhile(t:Tree<String>) {
+		switch (t) {
+			case Node(Leaf("a"), Leaf("b")) if (Math.random() > 0.5):
+				use("matched");
+			case _:
+				use("default");
+		}
+	}
+
+	@:js('
 		var object = { "hello" : "world"};
 		TestJs.use(object);
 	')
