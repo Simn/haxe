@@ -349,10 +349,16 @@ let to_texpr ctx t_switch with_type dt =
 						| SKEnum -> mk_index_call e_subject
 						| SKLength -> ExprToPattern.type_field_access ctx e_subject "length"
 					in
+					let can_fold_conditions e_default e_default2 =
+						match e_default,e_default2 with
+						| Some(e1),Some(e2) when e1 == e2 -> true
+						| None,None when in_dowhile_mode -> true
+						| _ -> false
+					in
 					let make_if e1 e2 =
 						let e_op = mk (TBinop(OpEq,e_subject,e1)) ctx.t.tbool e_subject.epos in
 						begin match e2.eexpr with
-							| TIf(e_op2,e3,e_default2) when (match e_default,e_default2 with Some(e1),Some(e2) when e1 == e2 -> true | None,None when in_dowhile_mode -> true | _ -> false) ->
+							| TIf(e_op2,e3,e_default2) when can_fold_conditions e_default e_default2 ->
 								let eand = binop OpBoolAnd e_op e_op2 ctx.t.tbool (punion e_op.epos e_op2.epos) in
 								mk (TIf(eand,e3,e_default)) t_switch dt.dt_pos
 							| _ ->
