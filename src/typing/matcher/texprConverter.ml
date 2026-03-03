@@ -202,7 +202,9 @@ type dt_recursion =
 	| AfterSwitch
 	| Deep
 
-let is_tbreak e = match e.eexpr with TBreak -> true | _ -> false
+let is_tbreak e = match e.eexpr with
+	| TBreak -> true
+	| _ -> false
 
 (* Mark decision tree nodes that are referenced multiple times as goto targets. *)
 let mark_goto_targets dt =
