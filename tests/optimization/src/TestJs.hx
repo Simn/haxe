@@ -127,19 +127,11 @@ class TestJs {
 
 	@:js('
 		do {
-			if(t._hx_index == 0) {
-				var _gl = t.l;
-				var _gr = t.r;
-				if(_gl._hx_index == 1) {
-					if(_gl.v == "a") {
-						if(_gr._hx_index == 1) {
-							if(_gr.v == "b") {
-								if(Math.random() > 0.5) {
-									TestJs.use("matched");
-									break;
-								}
-							}
-						}
+			if(t.l.v == "a") {
+				if(t.r.v == "b") {
+					if(Math.random() > 0.5) {
+						TestJs.use("matched");
+						break;
 					}
 				}
 			}
