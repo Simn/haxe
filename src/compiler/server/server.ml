@@ -49,12 +49,13 @@ module Connect = struct
 			| Unix.Unix_error(code,_,_) -> failwith("Couldn't connect on " ^ host ^ ":" ^ string_of_int port ^ " (" ^ (Unix.error_message code) ^ ")");
 			| _ -> failwith ("Couldn't connect on " ^ host ^ ":" ^ string_of_int port)
 		);
+		let protocol_version = Protocol.detect_version args in
 		let raw_args = ("--cwd " ^ Unix.getcwd()) :: Args.to_raw_args args in
 		let s = (String.concat "" (List.map (fun a -> a ^ "\n") raw_args)) in
-		PipeThings.ssend sock (Bytes.of_string (s ^ "\000"));
+		Protocol.ssend sock (Bytes.of_string (s ^ "\000"));
 		let has_error = ref false in
-		if PipeThings.use_new_protocol then
-			PipeThings.poll_new sock
+		if protocol_version >= Protocol.version_current then
+			ClientConnect.poll_new sock
 				~on_stdout:(fun s -> print_string s; flush stdout)
 				~on_stderr:(fun s -> prerr_string s)
 				~on_error:(fun () -> has_error := true)
@@ -69,7 +70,7 @@ module Connect = struct
 				| _ ->
 					prerr_endline line;
 			in
-			PipeThings.poll sock print
+			ClientConnect.poll sock print
 		end;
 		if !has_error then exit 1 else exit 0
 end
@@ -323,7 +324,8 @@ let wait_loop entry verbose accept =
 				in
 				let data = Helper.parse_hxml_data hxml in
 				let parsed_args = Args.parse_args sctx data in
-				let comm () = ServerCommunication.Communication.create_pipe sctx conn in
+				let protocol_version = Protocol.detect_version parsed_args in
+			let comm () = ServerCommunication.Communication.create_pipe sctx conn protocol_version in
 				RequestQueue.add rq parsed_args stdin comm;
 			with Unix.Unix_error _ ->
 				ServerMessage.socket_message "Connection Aborted";
@@ -387,7 +389,7 @@ let init_wait_socket ip port =
 			if not !closed then
 				match Unix.getsockopt_error sin with
 				| Some _ -> close()
-				| None -> PipeThings.ssend sin (Bytes.unsafe_of_string s);
+				| None -> Protocol.ssend sin (Bytes.unsafe_of_string s);
 		in
 		{ read; write; close; get_stdin }
 	) in

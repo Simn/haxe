@@ -74,24 +74,24 @@ module Communication = struct
 		} in
 		self
 
-	let create_pipe sctx (conn : server_connection) =
-		let write_frame tag s = conn.write (PipeThings.make_frame tag s) in
+	let create_pipe sctx (conn : server_connection) protocol_version =
+		let write_frame tag s = conn.write (Protocol.make_frame tag s) in
 		let rec self = {
 			write_out = (
-				if PipeThings.use_new_protocol then
-					(* New protocol: raw bytes in a tagged frame — no newline encoding needed. *)
-					fun s -> write_frame PipeThings.proto_tag_stdout s
+				if protocol_version >= Protocol.version_current then
+					(* v2: raw bytes in a tagged frame — no newline encoding needed. *)
+					fun s -> write_frame Protocol.tag_stdout s
 				else
-					(* Legacy: encode newlines as \x01 separators, wrap in \x01...\n. *)
+					(* v1 legacy: encode newlines as \x01 separators, wrap in \x01...\n. *)
 					fun s -> conn.write ("\x01" ^ String.concat "\x01" (ExtString.String.nsplit s "\n") ^ "\n")
 			);
 			write_err = (
-				if PipeThings.use_new_protocol then
+				if protocol_version >= Protocol.version_current then
 					(* The magic \x02\n value is the internal signal for "error flag";
 					   everything else is a genuine stderr chunk. *)
 					fun s ->
-						if s = "\x02\n" then write_frame PipeThings.proto_tag_error ""
-						else write_frame PipeThings.proto_tag_stderr s
+						if s = "\x02\n" then write_frame Protocol.tag_error ""
+						else write_frame Protocol.tag_stderr s
 				else
 					fun s -> conn.write s
 			);

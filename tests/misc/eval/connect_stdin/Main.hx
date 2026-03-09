@@ -192,6 +192,30 @@ class Main {
 			return exitCode == 0;
 		});
 
+		// Test 11: Protocol v2 (binary-framed) streaming works correctly.
+		// Same as Test 10 but explicitly opts into protocol version 2.
+		test("protocol v2 streaming output not buffered", () -> {
+			var client = new Process("haxe", [
+				"--connect", Std.string(port), "-D", "haxe.protocol-version=2",
+				"-cp", ".", "--main", "StreamOutput", "--interp"
+			]);
+			var firstLine = client.stdout.readLine();
+			client.stdin.writeByte(0);
+			client.stdin.close();
+			var rest = client.stdout.readAll().toString().trim();
+			var exitCode = client.exitCode();
+			client.close();
+			if (!firstLine.contains("before_stdin")) {
+				Sys.println('\n    First line should contain "before_stdin", got: "$firstLine"');
+				return false;
+			}
+			if (!rest.contains("after_stdin")) {
+				Sys.println('\n    Remaining output should contain "after_stdin", got: "$rest"');
+				return false;
+			}
+			return exitCode == 0;
+		});
+
 		// Clean up the server
 		server.kill();
 		server.close();

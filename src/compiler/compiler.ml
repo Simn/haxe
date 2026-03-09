@@ -53,7 +53,7 @@ let run_command ctx cmd =
 			(* In server mode, capture stdout/stderr and forward stdin through the communication channel.
 			   We use create_process instead of open_process_full so that we can
 			   properly forward the client's stdin and close it to signal EOF. *)
-			PipeThings.run_command ctx.comm cmd
+			ServerIo.run_command ctx.comm cmd
 		end
 	in
 	result
@@ -534,7 +534,7 @@ let compile_ctx sctx ctx =
 		catch_completion_and_exit ctx sctx run
 
 let create_context comm sctx request_scope timer_ctx compilation_step (parsed_args : parsed_arg list) =
-	let io = PipeThings.create_io comm in
+	let io = ServerIo.create_io comm in
 	let part_scope = {
 		warned_positions = Hashtbl.create 0;
 		diagnostics_messages = [];
