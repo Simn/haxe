@@ -23,10 +23,16 @@ open ParsedArg
 let version_legacy  = 1
 let version_current = 2
 
-(** Tag bytes for protocol v2 binary frames (server → client). *)
+(** Tag bytes for protocol v2 binary frames (server → client).
+
+    [tag_stdout], [tag_stderr], and [tag_error] can be sent at any time during
+    a request; they carry streaming output.  [tag_done] is sent exactly once,
+    at the end of every request, to signal completion.  Clients wait for
+    [tag_done] rather than a length prefix, which is what enables streaming. *)
 let tag_stdout = 0x01
 let tag_stderr = 0x02
 let tag_error  = 0x03
+let tag_done   = 0x04
 
 (** Extract the requested protocol version from a pre-parsed argument list.
     Looks for [Define ("haxe.protocol-version", Some n)]; hyphens in the key are

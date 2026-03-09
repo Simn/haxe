@@ -11,31 +11,54 @@ open MessageReporting
 open HxbData
 open TypeloadCacheHook
 
-let mk_length_prefixed_communication allow_nonblock chin chout =
-	let sin = Unix.descr_of_in_channel chin in
-	Unix.clear_nonblock sin;
-	let chin = IO.input_channel chin in
-	let chout = IO.output_channel chout in
+(** Communication channel for [--server-connect] mode.
 
+    The incoming request is in the same length-prefixed format as before:
+    [int32(len)][args separated by \\n][optionally \\x01 + stdin bytes].
+    This matches what [HaxeServerProcessBase.prepareInput] in haxeserver sends.
+
+    The outgoing encoding depends on the protocol version detected from the
+    parsed args.  For v2, every write goes out immediately as a binary frame so
+    the client can display output as it arrives.  A [tag_done] frame is sent at
+    [close()] to signal end of request.  For v1 (legacy), all output is buffered
+    and sent as a single length-prefixed blob at [close()].
+
+    [wait_loop] calls [conn.set_version] after parsing each request's args. *)
+let mk_streaming_communication chin chout =
+	Unix.clear_nonblock (Unix.descr_of_in_channel chin);
+	let ichin = IO.input_channel chin in
+	let chout_fd = Unix.descr_of_out_channel chout in
+	let ichout = IO.output_channel chout in
+	let version = ref Protocol.version_legacy in
 	let bout = Buffer.create 0 in
-
 	let read () =
-        let len = IO.read_i32 chin in
-        IO.really_nread_string chin len
+		let len = IO.read_i32 ichin in
+		IO.really_nread_string ichin len
 	in
-
-	let write = Buffer.add_string bout in
-
-	let close = fun() ->
-		flush stdout;
-		IO.write_i32 chout (Buffer.length bout);
-		IO.nwrite_string chout (Buffer.contents bout);
-		IO.flush chout;
+	let write s =
+		if !version >= Protocol.version_current then
+			Protocol.ssend chout_fd (Bytes.unsafe_of_string s)
+		else
+			Buffer.add_string bout s
+	in
+	let close () =
+		if !version >= Protocol.version_current then
+			Protocol.ssend chout_fd (Bytes.unsafe_of_string (Protocol.make_frame Protocol.tag_done ""))
+		else begin
+			IO.write_i32 ichout (Buffer.length bout);
+			IO.nwrite_string ichout (Buffer.contents bout);
+			IO.flush ichout;
+			Buffer.clear bout
+		end
+	in
+	let set_version v =
+		version := v;
 		Buffer.clear bout
 	in
-
 	fun () ->
-		{ read; write; close; get_stdin = (fun () -> None) }
+		version := Protocol.version_legacy;
+		Buffer.clear bout;
+		{ read; write; close; get_stdin = (fun () -> None); set_version }
 
 module Connect = struct
 	(* The connect function to connect to [host] at [port] and send arguments [args]. *)
@@ -325,7 +348,8 @@ let wait_loop entry verbose accept =
 				let data = Helper.parse_hxml_data hxml in
 				let parsed_args = Args.parse_args sctx data in
 				let protocol_version = Protocol.detect_version parsed_args in
-			let comm () = ServerCommunication.Communication.create_pipe sctx conn protocol_version in
+				conn.set_version protocol_version;
+				let comm () = ServerCommunication.Communication.create_pipe sctx conn protocol_version in
 				RequestQueue.add rq parsed_args stdin comm;
 			with Unix.Unix_error _ ->
 				ServerMessage.socket_message "Connection Aborted";
@@ -348,7 +372,7 @@ let init_wait_connect ip port =
 	in
 	let host = Unix.inet_addr_of_string host in
 	let chin, chout = Unix.open_connection (Unix.ADDR_INET (host,port)) in
-	mk_length_prefixed_communication true chin chout
+	mk_streaming_communication chin chout
 
 (* The accept-function to wait for a socket connection. *)
 let init_wait_socket ip port =
@@ -391,6 +415,6 @@ let init_wait_socket ip port =
 				| Some _ -> close()
 				| None -> Protocol.ssend sin (Bytes.unsafe_of_string s);
 		in
-		{ read; write; close; get_stdin }
+		{ read; write; close; get_stdin; set_version = (fun _ -> ()) }
 	) in
 	accept

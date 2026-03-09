@@ -35,6 +35,11 @@ type server_connection = {
 	write : string -> unit;
 	close : unit -> unit;
 	get_stdin : unit -> in_channel option;
+	(** Called by [wait_loop] after parsing args to inform the connection which
+	    protocol version this request will use.  Socket-mode connections ignore
+	    this; streaming ([--server-connect]) connections use it to choose between
+	    immediate binary framing (v2) and buffered length-prefix (v1). *)
+	set_version : int -> unit;
 }
 
 type server_accept = unit -> server_connection
