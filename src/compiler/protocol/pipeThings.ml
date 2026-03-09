@@ -1,4 +1,3 @@
-open ServerCommunication
 open CompilationContext
 
 (** Handles IO piping between the compilation server and its clients.
@@ -8,13 +7,42 @@ open CompilationContext
     compilation's stdin/stdout/stderr through the socket protocol rather
     than using the server process's own file descriptors.
 
-    The socket protocol uses newline-framed messages with prefix bytes:
-    - [\x01]: stdout data (newlines within the data are encoded as [\x01] separators)
-    - [\x02]: error flag
-    - other: stderr (written verbatim)
+    Two protocols are supported, selected by [use_new_protocol]:
 
-    Stdin data from the client is forwarded as raw bytes after the null-terminated
-    argument string, so newlines in stdin require no special encoding. *)
+    Legacy protocol — newline-framed text messages:
+    - [\x01<content>\n]: stdout (newlines within content encoded as [\x01])
+    - [\x02\n]: error flag
+    - [<text>\n]: stderr line
+
+    New binary protocol — length-prefixed frames:
+    - Frame format: [1 byte tag][4 bytes big-endian uint32 length][payload bytes]
+    - Tag [0x01]: stdout chunk (raw bytes, streamed immediately)
+    - Tag [0x02]: stderr chunk (raw bytes, streamed immediately)
+    - Tag [0x03]: error flag (empty payload)
+
+    Stdin data from the client is forwarded as raw bytes in both protocols,
+    sent after the null-terminated argument string. *)
+
+let use_new_protocol = true
+
+(** Tag bytes for the new binary framed protocol (server → client). *)
+let proto_tag_stdout = 0x01
+let proto_tag_stderr = 0x02
+let proto_tag_error  = 0x03
+
+(** Serialize a single frame: [tag][4-byte big-endian length][payload].
+    Combines header and payload into one allocation to keep them in a
+    single TCP segment. *)
+let make_frame tag payload =
+	let len = String.length payload in
+	let buf = Bytes.create (5 + len) in
+	Bytes.set buf 0 (Char.chr tag);
+	Bytes.set buf 1 (Char.chr ((len lsr 24) land 0xFF));
+	Bytes.set buf 2 (Char.chr ((len lsr 16) land 0xFF));
+	Bytes.set buf 3 (Char.chr ((len lsr  8) land 0xFF));
+	Bytes.set buf 4 (Char.chr ( len         land 0xFF));
+	Bytes.blit_string payload 0 buf 5 len;
+	Bytes.unsafe_to_string buf
 
 (** Reads all available data from [channel] in 1024-byte chunks,
 	passing each chunk to [f]. Stops on EOF or Unix error. *)
@@ -185,28 +213,12 @@ let ssend sock str =
 	in
 	loop 0 (Bytes.length str)
 
-let poll sock print =
-	let response_buf = Buffer.create 0 in
-	(* Process all complete lines (up to the last newline) in the buffer,
-	   keeping any partial unflushed line for the next read. *)
-	let flush_complete_lines () =
-		let s = Buffer.contents response_buf in
-		match String.rindex_opt s '\n' with
-		| None -> ()
-		| Some last_nl ->
-			let complete = String.sub s 0 (last_nl + 1) in
-			let remaining = String.sub s (last_nl + 1) (String.length s - last_nl - 1) in
-			let lines = ExtString.String.nsplit complete "\n" in
-			let lines = (match List.rev lines with "" :: l -> List.rev l | _ -> lines) in
-			List.iter print lines;
-			Buffer.reset response_buf;
-			if remaining <> "" then Buffer.add_string response_buf remaining
-	in
-	(* Forward stdin to the server socket in a background thread.
-	   Using a dedicated thread avoids mixing socket and non-socket file
-	   descriptors in Unix.select, which has known issues on Windows. *)
+(** Spawn a background thread that forwards local stdin to [sock] until
+	EOF, then half-closes the send side of [sock] to signal EOF to the
+	server.  Used by both [poll] and [poll_new]. *)
+let start_stdin_forward_thread sock =
 	let stdin_buf = Bytes.create 1024 in
-	let _ = Thread.create (fun () ->
+	ignore (Thread.create (fun () ->
 		(try
 			let rec loop () =
 				let n = Unix.read (Unix.descr_of_in_channel Stdlib.stdin) stdin_buf 0 1024 in
@@ -219,9 +231,27 @@ let poll sock print =
 			in
 			loop ()
 		with _ -> ())
-	) () in
-	(* Read server output until the connection closes, printing lines immediately
-	   as they arrive rather than waiting for the server to disconnect. *)
+	) ())
+
+(** Legacy line-framed client receive loop.
+	Buffers socket data and fires [print] for each complete newline-terminated
+	line, without waiting for the connection to close. *)
+let poll sock print =
+	let response_buf = Buffer.create 0 in
+	let flush_complete_lines () =
+		let s = Buffer.contents response_buf in
+		match String.rindex_opt s '\n' with
+		| None -> ()
+		| Some last_nl ->
+			let complete  = String.sub s 0 (last_nl + 1) in
+			let remaining = String.sub s (last_nl + 1) (String.length s - last_nl - 1) in
+			let lines = ExtString.String.nsplit complete "\n" in
+			let lines = (match List.rev lines with "" :: l -> List.rev l | _ -> lines) in
+			List.iter print lines;
+			Buffer.reset response_buf;
+			if remaining <> "" then Buffer.add_string response_buf remaining
+	in
+	start_stdin_forward_thread sock;
 	let sock_buf = Bytes.create 1024 in
 	let sock_open = ref true in
 	while !sock_open do
@@ -232,10 +262,46 @@ let poll sock print =
 		else
 			flush_complete_lines ()
 	done;
-	(* Flush any remaining partial line after the server closes the connection *)
 	let s = Buffer.contents response_buf in
 	if s <> "" then begin
 		let lines = ExtString.String.nsplit s "\n" in
 		let lines = (match List.rev lines with "" :: l -> List.rev l | _ -> lines) in
 		List.iter print lines
 	end
+
+(** New binary-framed client receive loop.
+	Reads frames from the server until the connection closes.
+	Each frame carries a tag ([proto_tag_stdout], [proto_tag_stderr],
+	[proto_tag_error]) and a length-prefixed payload.  Callbacks are
+	invoked immediately on each complete frame, giving byte-level
+	streaming granularity with no newline-alignment requirement. *)
+let poll_new sock ~on_stdout ~on_stderr ~on_error =
+	start_stdin_forward_thread sock;
+	let read_exactly n =
+		let buf = Bytes.create n in
+		let rec loop pos =
+			if pos = n then buf
+			else
+				let r = Unix.recv sock buf pos (n - pos) [] in
+				if r = 0 then raise Exit
+				else loop (pos + r)
+		in
+		loop 0
+	in
+	(try
+		while true do
+			let header = read_exactly 5 in
+			let tag = Char.code (Bytes.get header 0) in
+			let len =
+				(Char.code (Bytes.get header 1) lsl 24) lor
+				(Char.code (Bytes.get header 2) lsl 16) lor
+				(Char.code (Bytes.get header 3) lsl  8) lor
+				(Char.code (Bytes.get header 4))
+			in
+			let payload = if len > 0 then Bytes.unsafe_to_string (read_exactly len) else "" in
+			if      tag = proto_tag_stdout then on_stdout payload
+			else if tag = proto_tag_stderr then on_stderr payload
+			else if tag = proto_tag_error  then on_error ()
+			(* Unknown tags are silently skipped for forward compatibility *)
+		done
+	with _ -> ())

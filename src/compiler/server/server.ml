@@ -53,17 +53,24 @@ module Connect = struct
 		let s = (String.concat "" (List.map (fun a -> a ^ "\n") raw_args)) in
 		PipeThings.ssend sock (Bytes.of_string (s ^ "\000"));
 		let has_error = ref false in
-		let print line =
-			match (if line = "" then '\x00' else line.[0]) with
-			| '\x01' ->
-				print_string (String.concat "\n" (List.tl (ExtString.String.nsplit line "\x01")));
-				flush stdout
-			| '\x02' ->
-				has_error := true;
-			| _ ->
-				prerr_endline line;
-		in
-		PipeThings.poll sock print;
+		if PipeThings.use_new_protocol then
+			PipeThings.poll_new sock
+				~on_stdout:(fun s -> print_string s; flush stdout)
+				~on_stderr:(fun s -> prerr_string s)
+				~on_error:(fun () -> has_error := true)
+		else begin
+			let print line =
+				match (if line = "" then '\x00' else line.[0]) with
+				| '\x01' ->
+					print_string (String.concat "\n" (List.tl (ExtString.String.nsplit line "\x01")));
+					flush stdout
+				| '\x02' ->
+					has_error := true;
+				| _ ->
+					prerr_endline line;
+			in
+			PipeThings.poll sock print
+		end;
 		if !has_error then exit 1 else exit 0
 end
 
