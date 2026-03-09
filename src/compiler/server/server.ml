@@ -56,8 +56,12 @@ let mk_streaming_communication chin chout =
 		Buffer.clear bout
 	in
 	fun () ->
-		version := Protocol.version_legacy;
-		Buffer.clear bout;
+		(* Do NOT reset version here: the accept function is called again for the
+		   next request while the worker domain is still processing the current one.
+		   Resetting version here races with writes/close in the worker and causes
+		   the wrong protocol path (e.g. buffered v1 blob instead of a v2 TAG_DONE
+		   frame) to be taken.  Version is sticky once set via set_version; the
+		   initial value from [ref version_legacy] handles the very first request. *)
 		{ read; write; close; get_stdin = (fun () -> None); set_version }
 
 module Connect = struct
