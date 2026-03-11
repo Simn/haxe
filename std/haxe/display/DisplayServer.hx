@@ -18,11 +18,14 @@ import sys.thread.Deque;
 typedef RequestResult = {
 	/** True if the server signalled a compilation error (TAG_ERROR frame). */
 	var hasError:Bool;
+
 	/** Process stdout of the Haxe server (verbose messages: reusing, skipping, not-cached, etc.).
-	    These come from `print_endline` calls in `serverMessage.ml` when the server is started with `-v`. */
+		These come from `print_endline` calls in `serverMessage.ml` when the server is started with `-v`. */
 	var stdout:String;
+
 	/** Accumulated TAG_STDERR frames: compile errors, warnings, display JSON-RPC responses. */
 	var stderr:String;
+
 	/** Accumulated TAG_STDOUT frames: trace/print output from compiled user code. */
 	var prints:String;
 }
@@ -38,6 +41,13 @@ private typedef PendingRequest = {
 	/** Called on the I/O thread as each stderr frame (TAG_STDERR) arrives. */
 	?onStderr:String->Void,
 	cont:IContinuation<RequestResult>,
+}
+
+enum abstract ProtocolTag(Int) {
+	final TAG_STDOUT = 0x01; // stdout chunk  (display JSON responses)
+	final TAG_STDERR = 0x02; // stderr chunk  (compiler messages)
+	final TAG_ERROR = 0x03; // error flag    (empty payload)
+	final TAG_DONE = 0x04; // end-of-request sentinel
 }
 
 // ---------------------------------------------------------------------------
@@ -135,24 +145,8 @@ class CoroHaxeServer {
 		defaultArguments = args;
 	}
 
-	// -----------------------------------------------------------------------
-	// Internal I/O – runs on the worker thread
-	// -----------------------------------------------------------------------
-
-	// Protocol v2 frame tags (server → client)
-	static inline final TAG_STDOUT = 0x01; // stdout chunk  (display JSON responses)
-	static inline final TAG_STDERR = 0x02; // stderr chunk  (compiler messages)
-	static inline final TAG_ERROR  = 0x03; // error flag    (empty payload)
-	static inline final TAG_DONE   = 0x04; // end-of-request sentinel
-
-	static function doRequest(
-		conn:Socket,
-		procStdoutDeque:Deque<Null<String>>,
-		arguments:Array<String>,
-		stdin:Null<Bytes>,
-		onStdout:Null<String->Void>,
-		onStderr:Null<String->Void>
-	):RequestResult {
+	static function doRequest(conn:Socket, procStdoutDeque:Deque<Null<String>>, arguments:Array<String>, stdin:Null<Bytes>, onStdout:Null<String->Void>,
+			onStderr:Null<String->Void>):RequestResult {
 		// Prepend the protocol-version define so the server switches to v2
 		// tagged-frame output.  The server detects it via Protocol.detect_version
 		// and calls conn.set_version(2) before sending any response frames.
@@ -182,19 +176,22 @@ class CoroHaxeServer {
 		var hasError = false;
 
 		while (true) {
-			final tag = conn.input.readByte();
-			final len = readBeUint32(conn.input);        // always present
-			if (tag == TAG_DONE) break;                  // zero-length payload
+			final tag:ProtocolTag = cast conn.input.readByte();
+			final len = readBeUint32(conn.input); // always present
+			if (tag == TAG_DONE)
+				break; // zero-length payload
 
 			final chunk = len > 0 ? conn.input.read(len).toString() : "";
 
 			switch tag {
 				case TAG_STDOUT:
 					stdoutBuf.add(chunk);
-					if (onStdout != null) onStdout(chunk);
+					if (onStdout != null)
+						onStdout(chunk);
 				case TAG_STDERR:
 					stderrBuf.add(chunk);
-					if (onStderr != null) onStderr(chunk);
+					if (onStderr != null)
+						onStderr(chunk);
 				case TAG_ERROR:
 					hasError = true;
 				case t:
@@ -242,12 +239,7 @@ class CoroHaxeServer {
 	 * the I/O thread as individual frames arrive, *before* the coroutine is
 	 * resumed.  Enables eager progress display or feeding a `Deque`.
 	 */
-	@:coroutine public function request(
-		arguments:Array<String>,
-		?stdin:Bytes,
-		?onStdout:String->Void,
-		?onStderr:String->Void
-	):RequestResult {
+	@:coroutine public function request(arguments:Array<String>, ?stdin:Bytes, ?onStdout:String->Void, ?onStderr:String->Void):RequestResult {
 		return suspend(cont -> {
 			requestDeque.push({
 				arguments: defaultArguments.concat(arguments),
@@ -278,11 +270,7 @@ class CoroHaxeServer {
 // callers can eagerly stream TAG_STDERR frames on the I/O thread as they
 // arrive, before the coroutine is resumed.
 // ---------------------------------------------------------------------------
-@:coroutine function displayRequest<TParams, TResponse>(
-		server:CoroHaxeServer,
-		method:HaxeRequestMethod<TParams, TResponse>,
-		params:TParams,
-		?id:Int,
+@:coroutine function displayRequest<TParams, TResponse>(server:CoroHaxeServer, method:HaxeRequestMethod<TParams, TResponse>, params:TParams, ?id:Int,
 		?onStderr:String->Void):TResponse {
 	final json = haxe.Json.stringify({
 		jsonrpc: "2.0",
