@@ -2,14 +2,13 @@ import SkipReason;
 import haxe.PosInfos;
 import haxe.Exception;
 import haxe.display.Position;
-import haxeserver.HaxeServerRequestResult;
+import haxe.display.DisplayServer.CoroHaxeServer;
+import haxe.display.DisplayServer.RequestResult;
 import haxe.display.JsonModuleTypes;
 import haxe.display.Display;
 import haxe.display.Protocol;
 import haxe.display.Diagnostic;
 import haxe.Json;
-import haxeserver.process.HaxeServerProcessNode;
-import haxeserver.HaxeServerAsync;
 import utest.Assert;
 import utest.ITest;
 import utils.Vfs;
@@ -47,15 +46,15 @@ class TestCase implements ITest implements ITestCase {
 		hasError:Bool,
 		stdout:String,
 		stderr:String,
-		prints:Array<String>
+		prints:String,
 	};
 
-	static public var server:HaxeServerAsync;
+	static public var server:CoroHaxeServer;
 	static public var rootCwd:String;
 
 	var vfs:Vfs;
 	var testDir:String;
-	var lastResult:HaxeServerRequestResult;
+	var lastResult:RequestResult;
 	var messages:Array<String> = [];
 	var errorMessages = [];
 
@@ -110,7 +109,7 @@ class TestCase implements ITest implements ITestCase {
 
 	public function teardown() {}
 
-	function handleResult(result:HaxeServerRequestResult) {
+	function handleResult(result:RequestResult) {
 		lastResult = result;
 		debugLastResult = {
 			hasError: lastResult.hasError,
@@ -118,10 +117,13 @@ class TestCase implements ITest implements ITestCase {
 			stderr: lastResult.stderr,
 			stdout: lastResult.stdout
 		};
+		// verbose server messages (reusing, skipping, etc.) from process stdout
 		sendLogMessage(result.stdout);
-		for (print in result.prints) {
-			var line = print.trim();
-			messages.push('Haxe print: $line');
+		// trace/print output from compiled code via TAG_STDOUT frames
+		for (line in result.prints.split("\n")) {
+			var trimmed = line.trim();
+			if (trimmed.length > 0)
+				messages.push('Haxe print: $trimmed');
 		}
 	}
 
@@ -130,18 +132,11 @@ class TestCase implements ITest implements ITestCase {
 		messages = [];
 		errorMessages = [];
 
-		hxcoro.Coro.suspend(cont -> {
-			server.rawRequest(args, null, function(result) {
-				handleResult(result);
-				if (result.hasError) {
-					sendErrorMessage(result.stderr);
-				}
-				cont.resume(null, null);
-			}, err -> {
-				sendErrorMessage(err);
-				cont.resume(null, null);
-			});
-		});
+		final result = server.request(args);
+		handleResult(result);
+		if (result.hasError) {
+			sendErrorMessage(result.stderr);
+		}
 	}
 
 	@:coroutine
@@ -152,34 +147,27 @@ class TestCase implements ITest implements ITestCase {
 		messages = [];
 		errorMessages = [];
 
-		return hxcoro.Coro.suspend(cont -> {
-			server.rawRequest(args, null, function(result) {
-				// TODO: would be nicer to not have that here either, but it makes 3 tests fail.
-				sendLogMessage(result.stdout);
-				var json:JsonRpcResponse<Response<TResponse>, Array<Any>> = try {
-					Json.parse(result.stderr);
-				} catch (e) {
-					cont.resume(null, new TestException("Response: " + result.stderr, pos));
-					return;
-				}
+		final result = server.request(args);
+		sendLogMessage(result.stdout);
+		var json:JsonRpcResponse<Response<TResponse>, Array<Any>> = try {
+			Json.parse(result.stderr);
+		} catch (e) {
+			throw new TestException("Response: " + result.stderr, pos);
+		}
 
-				if (json.result != null) {
-					cont.resume(json.result?.result, null);
-				} else {
-					// TODO: This needs some serious cleanup in the compiler so all methods return
-					// properly typed data.
-					final obj = json.error.data[0];
-					final message:String = if (obj is String) {
-						(obj : String);
-					} else {
-						(obj : HaxeResponseErrorData).message;
-					}
-					cont.resume(null, new TestException(message, pos));
-				}
-			}, function(msg) {
-				cont.resume(null, new TestException(msg, pos));
-			});
-		});
+		if (json.result != null) {
+			return json.result?.result;
+		} else {
+			// TODO: This needs some serious cleanup in the compiler so all methods return
+			// properly typed data.
+			final obj = json.error.data[0];
+			final message:String = if (obj is String) {
+				(obj : String);
+			} else {
+				(obj : HaxeResponseErrorData).message;
+			}
+			throw new TestException(message, pos);
+		}
 	}
 
 	function sendErrorMessage(msg:String) {

@@ -256,7 +256,7 @@ module WorkerDomain = struct
 		Mutex.unlock rq.mutex;
 		List.iter (fun req ->
 			let comm = req.comm() in
-			(try comm.write_err "\x02\nServer shutdown\n"; with _ -> ());
+			(try comm.write_err "\x02\n"; comm.write_err "Server shutdown\n"; with _ -> ());
 			comm.close();
 		) pending
 
@@ -268,12 +268,12 @@ module WorkerDomain = struct
 		with
 		| Cancelled ->
 			ServerMessage.uncaught_error "Compilation cancelled";
-			(try comm.write_err "\x02\nCancelled\n"; with _ -> ());
+			(try comm.write_err "\x02\n"; comm.write_err "Cancelled\n"; with _ -> ());
 			comm;
 		| e ->
 			let estr = Printexc.to_string e in
 			ServerMessage.uncaught_error estr;
-			(try comm.write_err ("\x02\n" ^ estr); with _ -> ());
+			(try comm.write_err "\x02\n"; comm.write_err (estr ^ "\n"); with _ -> ());
 			if Helper.is_debug_run then print_endline (estr ^ "\n" ^ Printexc.get_backtrace());
 			if e = Out_of_memory then begin
 				comm.close();

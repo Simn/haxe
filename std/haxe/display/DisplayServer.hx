@@ -1,3 +1,5 @@
+package haxe.display;
+
 import haxe.Exception;
 import haxe.coro.IContinuation;
 import haxe.display.Protocol;
@@ -16,10 +18,13 @@ import sys.thread.Deque;
 typedef RequestResult = {
 	/** True if the server signalled a compilation error (TAG_ERROR frame). */
 	var hasError:Bool;
-	/** Accumulated stdout (display JSON-RPC responses arrive here in v2). */
+	/** Process stdout of the Haxe server (verbose messages: reusing, skipping, not-cached, etc.).
+	    These come from `print_endline` calls in `serverMessage.ml` when the server is started with `-v`. */
 	var stdout:String;
-	/** Accumulated stderr (compiler messages arrive here in v2). */
+	/** Accumulated TAG_STDERR frames: compile errors, warnings, display JSON-RPC responses. */
 	var stderr:String;
+	/** Accumulated TAG_STDOUT frames: trace/print output from compiled user code. */
+	var prints:String;
 }
 
 // ---------------------------------------------------------------------------
@@ -53,53 +58,81 @@ private typedef PendingRequest = {
 //
 //   Server → socket : streaming binary frames, terminated by TAG_DONE:
 //     [tag : 1 byte][length : 4 bytes BE uint32][payload : length bytes]
-//     TAG_STDOUT (0x01) – stdout chunk  (display JSON-RPC response)
-//     TAG_STDERR (0x02) – stderr chunk  (compiler messages, warnings)
+//     TAG_STDOUT (0x01) – stdout chunk  (trace/print output from compiled code)
+//     TAG_STDERR (0x02) – stderr chunk  (compiler messages, display JSON-RPC responses)
 //     TAG_ERROR  (0x03) – error flag    (empty payload)
 //     TAG_DONE   (0x04) – end-of-request sentinel
 //
 // Protocol v2 is activated by prepending `-D haxe.protocol-version=2` to
 // each request's argument list (done automatically by this class).
+//
+// Verbose server messages (reusing, skipping, etc.) from `print_endline` in
+// `serverMessage.ml` go to the actual process stdout (not through the socket).
+// These are captured by reading `proc.stdout` in a background thread and
+// returned as `RequestResult.stdout`.
 // ---------------------------------------------------------------------------
 class CoroHaxeServer {
 	/** Requests queued by suspended coroutines; null sentinel = shut down. */
 	final requestDeque:Deque<Null<PendingRequest>>;
 
+	/** Chunks of process stdout (verbose server messages). */
+	final procStdoutDeque:Deque<Null<String>>;
+
+	/** Arguments prepended to every request (e.g. `-D disable-hxb-cache`). */
+	var defaultArguments:Array<String> = [];
+
 	public function new(command:String, arguments:Array<String>) {
 		requestDeque = new Deque();
+		procStdoutDeque = new Deque();
 
 		// Bind a server socket on an OS-assigned port
 		final server = new Socket();
 		server.bind(new Host("127.0.0.1"), 0);
 		server.listen(1);
 		final port = server.host().port;
-		trace('Listening on port $port');
 
 		// Spawn the Haxe compiler, telling it to connect back to us
 		final proc = new Process(command, arguments.concat(["--server-connect", '127.0.0.1:$port']));
+
+		// Background thread: read verbose messages from process stdout line by line.
+		// These are `print_endline` calls in serverMessage.ml (reusing, skipping, etc.)
+		// and go to the real process stdout rather than through the socket protocol.
+		sys.thread.Thread.create(() -> {
+			try {
+				while (true)
+					procStdoutDeque.push(proc.stdout.readLine());
+			} catch (_:haxe.io.Eof) {
+				procStdoutDeque.push(null); // EOF sentinel
+			}
+		});
 
 		sys.thread.Thread.create(() -> {
 			// Accept Haxe's single inbound connection (blocking)
 			final conn = server.accept();
 			server.close();
-			trace("Haxe connected!");
 
 			// I/O worker loop – processes one request at a time
 			while (true) {
 				final req = requestDeque.pop(true);
 				if (req == null) {
 					conn.close();
+					proc.kill();
 					proc.close();
 					return;
 				}
 				try {
-					final result = doRequest(conn, req.arguments, req.stdin, req.onStdout, req.onStderr);
+					final result = doRequest(conn, procStdoutDeque, req.arguments, req.stdin, req.onStdout, req.onStderr);
 					req.cont.resume(result, null);
 				} catch (e:Exception) {
 					req.cont.resume(null, e);
 				}
 			}
 		});
+	}
+
+	/** Sets arguments prepended to every request (e.g. `-D disable-hxb-cache`). */
+	public function setDefaultRequestArguments(args:Array<String>):Void {
+		defaultArguments = args;
 	}
 
 	// -----------------------------------------------------------------------
@@ -114,6 +147,7 @@ class CoroHaxeServer {
 
 	static function doRequest(
 		conn:Socket,
+		procStdoutDeque:Deque<Null<String>>,
 		arguments:Array<String>,
 		stdin:Null<Bytes>,
 		onStdout:Null<String->Void>,
@@ -168,10 +202,22 @@ class CoroHaxeServer {
 			}
 		}
 
+		// Drain process-stdout lines that arrived during this request.
+		// The Haxe server writes verbose messages (reusing, skipping, etc.) to its
+		// real stdout via `print_endline`. By the time TAG_DONE arrives, those writes
+		// have already been flushed (io.close joins the background threads before
+		// comm.close sends TAG_DONE), so whatever is in the deque now belongs to
+		// this request.
+		final procStdoutBuf = new StringBuf();
+		var line:Null<String>;
+		while ((line = procStdoutDeque.pop(false)) != null)
+			procStdoutBuf.add(line + "\n");
+
 		return {
 			hasError: hasError,
-			stdout: stdoutBuf.toString(),
+			stdout: procStdoutBuf.toString(),
 			stderr: stderrBuf.toString(),
+			prints: stdoutBuf.toString(),
 		};
 	}
 
@@ -204,7 +250,7 @@ class CoroHaxeServer {
 	):RequestResult {
 		return suspend(cont -> {
 			requestDeque.push({
-				arguments: arguments,
+				arguments: defaultArguments.concat(arguments),
 				stdin: stdin,
 				onStdout: onStdout,
 				onStderr: onStderr,
@@ -247,7 +293,7 @@ class CoroHaxeServer {
 	final raw = server.request(["--display", json], null, null, onStderr);
 	final responseText = StringTools.trim(raw.stderr);
 	if (responseText == "") {
-		throw new Exception('No display response (stderr empty). stdout:\n${raw.stdout}');
+		throw new Exception('No display response (stderr empty). prints:\n${raw.prints}');
 	}
 	// The server returns a JSON-RPC envelope: {jsonrpc, id, result: TResponse}.
 	final envelope:{result:TResponse, ?error:Dynamic} = haxe.Json.parse(responseText);

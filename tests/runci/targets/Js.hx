@@ -125,15 +125,11 @@ class Js {
 		runCommand("haxe", ["run.hxml"]);
 
 		runci.targets.Jvm.getJavaDependencies(); // this is awkward
-		haxelibInstallGit("Simn", "haxeserver");
 		haxelibInstallGit("HaxeFoundation", "hxcoro", Config.hxcoroVersion);
 		changeDirectory(serverDir);
 		runCommand("haxe", ["build.hxml"]);
-		runCommand("node", ["test.js"]);
 		runCommand("haxe", ["build.hxml", "-D", "disable-hxb-optimizations"]);
-		runCommand("node", ["test.js"]);
 		runCommand("haxe", ["build.hxml", "-D", "disable-hxb-cache"]);
-		runCommand("node", ["test.js"]);
 
 		changeDirectory(sysDir);
 		installNpmPackages(["deasync"]);

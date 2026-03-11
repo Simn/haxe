@@ -1,7 +1,7 @@
 package utils;
 
-import js.node.Fs;
 import sys.FileSystem;
+import sys.io.File;
 import haxe.io.Path;
 
 using DateTools;
@@ -22,19 +22,19 @@ class Vfs {
 		if (!FileSystem.exists(path)) {
 			throw 'Cannot overwrite content for $path: file does not exist';
 		}
-		Fs.writeFileSync(path, content);
+		File.saveContent(path, content);
 	}
 
 	public function putContent(path:String, content:String) {
 		var path = getPhysicalPath(path);
 		FileSystem.createDirectory(path.dir);
-		Fs.writeFileSync(path.toString(), content);
+		File.saveContent(path.toString(), content);
 	}
 
 	public function getContent(path:String):String {
 		var path = getPhysicalPath(path);
 		FileSystem.createDirectory(path.dir);
-		return Fs.readFileSync(path.toString()).toString();
+		return File.getContent(path.toString());
 	}
 
 	public function close() {

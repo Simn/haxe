@@ -11,7 +11,7 @@ class Markers {
 	/** Parsed document with all markers removed. */
 	public final source:String;
 
-	final offsets:Array<Int>;
+	final offsets:Array<Null<Int>>;
 	final positions:Array<Position>;
 
 	static public function parse(doc:String):Markers {
