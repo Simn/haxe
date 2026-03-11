@@ -31,7 +31,7 @@ class Hl {
 			return;
 		}
 		if (!FileSystem.exists(hlSrc))
-			runCommand("git", ["clone", "https://github.com/HaxeFoundation/hashlink.git", hlSrc]);
+			runCommand("git", ["clone", "--depth=1", "https://github.com/HaxeFoundation/hashlink.git", hlSrc]);
 		else
 			infoMsg("Reusing hashlink repository");
 
@@ -175,6 +175,9 @@ class Hl {
 		// so they are not skipped with --skip-hl-jit
 		changeDirectory(getMiscSubDir(""));
 		runCommand("haxe", ["run-base.hxml", "--run", "Main", "hl"]);
+
+		changeDirectory(hlcodeDir);
+		runCommand("haxe", ["compile.hxml"]);
 
 		if (Hl.withHlcTests) {
 			final hlcTemplateDefine = systemName == "Windows" ? "hlgen.makefile=vs2022" : "hlgen.makefile=make";

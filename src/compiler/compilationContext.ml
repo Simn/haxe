@@ -8,7 +8,6 @@ type communication = {
 	write_err : string -> unit;
 	close     : unit -> unit;
 	flush     : compilation_context -> unit;
-	exit      : Timer.timer_context -> int -> unit;
 	is_server : bool;
 	stdin     : in_channel option;
 }

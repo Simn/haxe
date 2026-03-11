@@ -186,6 +186,7 @@ end
 let create_request_scope () =
 	{
 		stats = Stats.create ();
+		timer_ctx = Timer.make_context (Timer.make ["other"]);
 		cancellation_requested = false;
 	}
 

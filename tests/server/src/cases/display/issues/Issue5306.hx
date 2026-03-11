@@ -15,8 +15,8 @@ class Issue5306 extends DisplayTestCase {
 		}
 	**/
 	function test(_) {
-		runHaxeJson([], DisplayMethods.Diagnostics, {file: file});
-		var diags = parseDiagnostics();
+		var files = runHaxeJson([], DisplayMethods.Diagnostics, {file: file});
+		final diags:Array<haxe.display.Diagnostic<Any>> = files != null && files.length > 0 ? cast files[0].diagnostics : [];
 		Assert.isTrue(diags.exists(d -> d.kind == DKParserError && d.args == "Missing ;"));
 		Assert.isTrue(diags.exists(d -> d.kind == DKCompilerError && (d.args:String).indexOf("InvalidType") != -1));
 		Assert.isTrue(diags.exists(d -> d.kind == DKCompilerError && (d.args:String).indexOf("ib") != -1));

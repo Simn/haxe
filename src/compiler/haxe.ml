@@ -113,5 +113,10 @@ end;
 let sctx = Server.setup_server_context false in
 let comm = ServerCommunication.Communication.create_stdio () in
 let request_scope = create_request_scope() in
-Compiler.HighLevel.entry sctx request_scope comm parsed_args;
+let code = Compiler.HighLevel.entry sctx request_scope comm parsed_args in
+if code = 0 then begin
+	let timer_ctx = request_scope.timer_ctx in
+	if timer_ctx.measure_times = Yes then Timer.report_times timer_ctx (fun s -> prerr_string (s ^ "\n"));
+end;
 ServerCompilationContext.dispose sctx;
+exit code;

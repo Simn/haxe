@@ -533,13 +533,12 @@ let compile_ctx sctx ctx =
 	end else
 		catch_completion_and_exit ctx sctx run
 
-let create_context comm sctx request_scope timer_ctx compilation_step (parsed_args : parsed_arg list) =
+let create_context comm sctx request_scope compilation_step (parsed_args : parsed_arg list) =
 	let io = ServerIo.create_io comm in
 	let part_scope = {
 		warned_positions = Hashtbl.create 0;
 		diagnostics_messages = [];
 		io;
-		timer_ctx;
 	} in
 	let com = Common.create sctx request_scope part_scope compilation_step (Args.to_raw_args parsed_args) (DisplayTypes.DisplayMode.create DMNone) in
 	{
@@ -605,7 +604,7 @@ module HighLevel = struct
 			) [] (List.rev lines) in
 			lines
 
-	let create_context_from_part (sctx : ServerCompilationContext.t) comm request_scope timer_ctx has_display part =
+	let create_context_from_part (sctx : ServerCompilationContext.t) comm (request_scope : request_scope) has_display part =
 		(* Expand Expand markers by calling haxelib, caching the result in the marker state *)
 		let expand_part_libs has_global (part_args : parsed_arg list) =
 			let expand_one arg = match arg with
@@ -614,7 +613,7 @@ module HighLevel = struct
 					| AlreadyExpanded expanded ->
 						expanded
 					| NotYetExpanded (AddLibs libs) ->
-						let raw_lines = add_libs timer_ctx libs (if has_global then ["--haxelib-global"] else []) sctx.cs has_display in
+						let raw_lines = add_libs request_scope.timer_ctx libs (if has_global then ["--haxelib-global"] else []) sctx.cs has_display in
 						let expanded = Args.parse_args raw_lines in
 						ex.state <- AlreadyExpanded expanded;
 						expanded)
@@ -625,36 +624,32 @@ module HighLevel = struct
 		let has_global = List.exists (fun a -> a = HaxelibGlobal) part.Args.args in
 		let expanded_args = expand_part_libs has_global part.Args.args in
 		sctx.compilation_step <- sctx.compilation_step + 1;
-		create_context comm sctx request_scope timer_ctx sctx.compilation_step expanded_args
+		create_context comm sctx request_scope sctx.compilation_step expanded_args
 
 	let entry sctx request_scope comm (args : parsed_arg list) =
-		let timer_ctx = Timer.make_context (Timer.make ["other"]) in
 		let curdir = Unix.getcwd () in
-		let code =
-			try
-				let request_args = Args.expand_args args in
-				let has_display = request_args.display_arg <> None in
-				let rec loop = function
-					| [] -> 0
-					| part :: rest ->
-						(* Re-apply original dir in case --cwd was used in a previous part *)
-						Unix.chdir curdir;
-						let ctx = create_context_from_part sctx comm request_scope timer_ctx has_display part in
-						if rest <> [] then ctx.has_next <- true;
-						ctx.runtime_args <- part.Args.runtime_args;
-						let code = compile_ctx sctx ctx in
-						if code = 0 && rest <> [] && not has_display then
-							loop rest
-						else
-							code
-				in
-				loop request_args.parts
-			with Arg.Bad msg ->
-				Unix.chdir curdir;
-				(* TODO: this is silly *)
-				let ctx = create_context comm sctx request_scope timer_ctx 0 args in
-				error ctx ("Error: " ^ msg) null_pos;
-				compile_ctx sctx ctx
-		in
-		comm.exit timer_ctx code
+		try
+			let request_args = Args.expand_args args in
+			let has_display = request_args.display_arg <> None in
+			let rec loop = function
+				| [] -> 0
+				| part :: rest ->
+					(* Re-apply original dir in case --cwd was used in a previous part *)
+					Unix.chdir curdir;
+					let ctx = create_context_from_part sctx comm request_scope has_display part in
+					if rest <> [] then ctx.has_next <- true;
+					ctx.runtime_args <- part.Args.runtime_args;
+					let code = compile_ctx sctx ctx in
+					if code = 0 && rest <> [] && not has_display then
+						loop rest
+					else
+						code
+			in
+			loop request_args.parts
+		with Arg.Bad msg ->
+			Unix.chdir curdir;
+			(* TODO: this is silly *)
+			let ctx = create_context comm sctx request_scope 0 args in
+			error ctx ("Error: " ^ msg) null_pos;
+			compile_ctx sctx ctx
 end
