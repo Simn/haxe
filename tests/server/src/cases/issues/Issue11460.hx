@@ -48,6 +48,6 @@ class Issue11460 extends TestCase {
 		vfs.putContent("Main.hx", mainContentWithInline);
 		runHaxeJson([], ServerMethods.Invalidate, {file: new FsPath("Main.hx")});
 		runHaxe(args);
-		utest.Assert.match(~/WInlineOptimizedField/, lastResult.stderr);
+		utest.Assert.match(~/WInlineOptimizedField/, lastResult.log);
 	}
 }

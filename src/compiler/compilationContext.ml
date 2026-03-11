@@ -4,12 +4,17 @@ open ParsedArg
 exception Abort
 
 type communication = {
-	write_out : string -> unit;
-	write_err : string -> unit;
-	close     : unit -> unit;
-	flush     : compilation_context -> unit;
-	is_server : bool;
-	stdin     : in_channel option;
+	write_out     : string -> unit;
+	write_err     : string -> unit;
+	(** Send a display JSON-RPC response frame (TAG_RESULT in protocol v2). *)
+	write_result  : string -> unit;
+	(** Signal that the current request ended with an error.  In v2 this sets the
+	    status byte of the TAG_DONE frame; in v1 it writes the legacy [\x02\n] marker. *)
+	signal_error  : unit -> unit;
+	close         : unit -> unit;
+	flush         : compilation_context -> unit;
+	is_server     : bool;
+	stdin         : in_channel option;
 }
 
 and compilation_context = {

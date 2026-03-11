@@ -13,6 +13,6 @@ class Issue9690 extends TestCase {
 		assertSuccess();
 		runHaxe(['--cmd', 'node test.js']);
 		Assert.isTrue(lastResult.hasError);
-		Assert.isTrue(lastResult.stderr.contains('Error: side effect!'));
+		Assert.isTrue(lastResult.log.contains('Error: side effect!'));
 	}
 }

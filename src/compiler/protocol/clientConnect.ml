@@ -64,12 +64,12 @@ let poll sock print =
 	end
 
 (** Protocol v2 (binary) client receive loop.
-    Reads frames from the server until the connection closes.  Each frame
+    Reads frames from the server until TAG_DONE is received.  Each frame
     carries a one-byte tag and a big-endian uint32 payload length.  Callbacks
     are invoked immediately on receipt of each complete frame, giving byte-level
     streaming with no newline-alignment requirement.
     Unknown tags are silently ignored for forward compatibility. *)
-let poll_new sock ~on_stdout ~on_stderr ~on_error =
+let poll_new sock ~on_print ~on_log ~on_result ~on_done =
 	start_stdin_forward_thread sock;
 	let read_exactly n =
 		let buf = Bytes.create n in
@@ -93,8 +93,13 @@ let poll_new sock ~on_stdout ~on_stderr ~on_error =
 				(Char.code (Bytes.get header 4))
 			in
 			let payload = if len > 0 then Bytes.unsafe_to_string (read_exactly len) else "" in
-			if      tag = Protocol.tag_stdout then on_stdout payload
-			else if tag = Protocol.tag_stderr then on_stderr payload
-			else if tag = Protocol.tag_error  then on_error ()
+			if      tag = Protocol.tag_print   then on_print payload
+			else if tag = Protocol.tag_log     then on_log payload
+			else if tag = Protocol.tag_result  then on_result payload
+			else if tag = Protocol.tag_done    then begin
+				let has_error = len > 0 && Char.code (String.get payload 0) <> 0 in
+				on_done has_error;
+				raise Exit  (* orderly exit; caught by the with below *)
+			end
 		done
 	with _ -> ())

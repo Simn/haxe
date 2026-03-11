@@ -93,6 +93,7 @@ let create_io comm =
 		{
 			Gctx.print = comm.write_out;
 			print_err = comm.write_err;
+			print_result = comm.write_result;
 			stdout = stdout_ch;
 			stderr = stderr_ch;
 			stdin = stdin_ch;
@@ -110,6 +111,7 @@ let create_io comm =
 		{
 			Gctx.print = comm.write_out;
 			print_err = comm.write_err;
+			print_result = (fun s -> prerr_string s);
 			stdout = Stdlib.stdout;
 			stderr = Stdlib.stderr;
 			stdin = Stdlib.stdin;

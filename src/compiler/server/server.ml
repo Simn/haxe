@@ -83,9 +83,10 @@ module Connect = struct
 		let has_error = ref false in
 		if protocol_version >= Protocol.version_current then
 			ClientConnect.poll_new sock
-				~on_stdout:(fun s -> print_string s; flush stdout)
-				~on_stderr:(fun s -> prerr_string s)
-				~on_error:(fun () -> has_error := true)
+				~on_print:(fun s -> print_string s; flush stdout)
+				~on_log:(fun s -> prerr_string s)
+				~on_result:(fun s -> prerr_string s)
+				~on_done:(fun err -> has_error := err)
 		else begin
 			let print line =
 				match (if line = "" then '\x00' else line.[0]) with
@@ -256,7 +257,7 @@ module WorkerDomain = struct
 		Mutex.unlock rq.mutex;
 		List.iter (fun req ->
 			let comm = req.comm() in
-			(try comm.write_err "\x02\n"; comm.write_err "Server shutdown\n"; with _ -> ());
+			(try comm.signal_error(); comm.write_err "Server shutdown\n"; with _ -> ());
 			comm.close();
 		) pending
 
@@ -268,12 +269,12 @@ module WorkerDomain = struct
 		with
 		| Cancelled ->
 			ServerMessage.uncaught_error "Compilation cancelled";
-			(try comm.write_err "\x02\n"; comm.write_err "Cancelled\n"; with _ -> ());
+			(try comm.signal_error(); comm.write_err "Cancelled\n"; with _ -> ());
 			comm;
 		| e ->
 			let estr = Printexc.to_string e in
 			ServerMessage.uncaught_error estr;
-			(try comm.write_err "\x02\n"; comm.write_err (estr ^ "\n"); with _ -> ());
+			(try comm.signal_error(); comm.write_err (estr ^ "\n"); with _ -> ());
 			if Helper.is_debug_run then print_endline (estr ^ "\n" ^ Printexc.get_backtrace());
 			if e = Out_of_memory then begin
 				comm.close();

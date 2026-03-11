@@ -13,9 +13,10 @@ open ParsedArg
 
     Version 2 — binary length-prefixed frames:
     - Frame format: [1 byte tag][4 bytes big-endian uint32 length][payload bytes]
-    - Tag [0x01]: stdout chunk (raw bytes, no escaping needed)
-    - Tag [0x02]: stderr chunk (raw bytes)
-    - Tag [0x03]: error flag (empty payload)
+    - Tag [0x01] tag_print:  trace/print output from compiled user code
+    - Tag [0x02] tag_log:    compiler diagnostic messages (errors, warnings, info)
+    - Tag [0x03] tag_result: display JSON-RPC response
+    - Tag [0x04] tag_done:   end of request; payload = 1 byte (0x00 = success, 0x01 = error)
 
     Stdin data is forwarded as raw bytes in both protocols, appended after the
     null-terminated argument string. *)
@@ -25,13 +26,13 @@ let version_current = 2
 
 (** Tag bytes for protocol v2 binary frames (server → client).
 
-    [tag_stdout], [tag_stderr], and [tag_error] can be sent at any time during
+    [tag_print], [tag_log], and [tag_result] can be sent at any time during
     a request; they carry streaming output.  [tag_done] is sent exactly once,
-    at the end of every request, to signal completion.  Clients wait for
-    [tag_done] rather than a length prefix, which is what enables streaming. *)
-let tag_stdout = 0x01
-let tag_stderr = 0x02
-let tag_error  = 0x03
+    at the end of every request, together with a 1-byte status payload
+    (0x00 = success, 0x01 = error). *)
+let tag_print  = 0x01
+let tag_log    = 0x02
+let tag_result = 0x03
 let tag_done   = 0x04
 
 (** Extract the requested protocol version from a pre-parsed argument list.

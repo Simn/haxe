@@ -11,7 +11,7 @@ class Issue9359 extends TestCase {
 		runHaxe(args);
 		assertSuccess();
 		assertHasPrint("stdout line");
-		Assert.isTrue(lastResult.stderr.contains("stderr line"));
+		Assert.isTrue(lastResult.log.contains("stderr line"));
 	}
 
 	// Sys.print() and Sys.println() already use com.print, so they route correctly.

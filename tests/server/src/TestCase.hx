@@ -44,8 +44,9 @@ typedef JsonRpcResponse<Result, ErrorData> = {
 class TestCase implements ITest implements ITestCase {
 	static public var debugLastResult:{
 		hasError:Bool,
-		stdout:String,
-		stderr:String,
+		serverOutput:String,
+		log:String,
+		response:String,
 		prints:String,
 	};
 
@@ -114,12 +115,13 @@ class TestCase implements ITest implements ITestCase {
 		debugLastResult = {
 			hasError: lastResult.hasError,
 			prints: lastResult.prints,
-			stderr: lastResult.stderr,
-			stdout: lastResult.stdout
+			log: lastResult.log,
+			response: lastResult.response,
+			serverOutput: lastResult.serverOutput
 		};
 		// verbose server messages (reusing, skipping, etc.) from process stdout
-		sendLogMessage(result.stdout);
-		// trace/print output from compiled code via TAG_STDOUT frames
+		sendLogMessage(result.serverOutput);
+		// trace/print output from compiled code via TAG_PRINT frames
 		for (line in result.prints.split("\n")) {
 			var trimmed = line.trim();
 			if (trimmed.length > 0)
@@ -135,7 +137,7 @@ class TestCase implements ITest implements ITestCase {
 		final result = server.request(args);
 		handleResult(result);
 		if (result.hasError) {
-			sendErrorMessage(result.stderr);
+			sendErrorMessage(result.log);
 		}
 	}
 
@@ -148,11 +150,11 @@ class TestCase implements ITest implements ITestCase {
 		errorMessages = [];
 
 		final result = server.request(args);
-		sendLogMessage(result.stdout);
+		sendLogMessage(result.serverOutput);
 		var json:JsonRpcResponse<Response<TResponse>, Array<Any>> = try {
-			Json.parse(result.stderr);
+			Json.parse(result.response);
 		} catch (e) {
-			throw new TestException("Response: " + result.stderr, pos);
+			throw new TestException("Response: " + result.response, pos);
 		}
 
 		if (json.result != null) {
@@ -228,7 +230,7 @@ class TestCase implements ITest implements ITestCase {
 	}
 
 	function assertSilence() {
-		return Assert.isTrue(lastResult.stderr == "");
+		return Assert.isTrue(lastResult.log == "");
 	}
 
 	function assertSuccess(?p:haxe.PosInfos) {

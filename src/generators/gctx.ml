@@ -11,6 +11,9 @@ type context_main = {
 type compilation_io = {
 	print : string -> unit;
 	print_err : string -> unit;
+	(** Send a display JSON-RPC response.  In server-mode v2 this uses TAG_RESULT;
+	    in non-server mode it goes to stderr just like [print_err]. *)
+	print_result : string -> unit;
 	stdout : out_channel;
 	stderr : out_channel;
 	stdin : in_channel;
