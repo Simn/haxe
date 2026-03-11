@@ -822,6 +822,11 @@ class texpr_to_jvm
 			self#read_anon_field cast e1.etype cf;
 		| FDynamic s | FInstance(_,_,{cf_name = s}) | FEnum(_,{ef_name = s}) | FClosure(None,{cf_name = s}) ->
 			dynamic_read s
+		| FClosure((Some(c,_)),cf) when c.cl_path = string_path ->
+			(* String instance methods need JVM-compatible wrappers (e.g. charAt returns char not
+			   String in Java). Redirect the closure creation through Jvm.readField which already
+			   handles all string methods correctly via StringExt. *)
+			dynamic_read cf.cf_name
 		| FClosure((Some(c,_)),cf) ->
 			if has_class_flag c CInterface then
 				dynamic_read cf.cf_name
@@ -1134,7 +1139,10 @@ class texpr_to_jvm
 		| [TObject(path1,_);sig2] when jc#has_typed_function path1 || path1 = haxe_function_path ->
 			code#swap;
 			fun_compare path1 sig2
-		| [(TObject _ | TArray _ | TMethod _) as t1;(TObject _ | TArray _ | TMethod _) as t2] ->
+		| [TMethod _;_] | [_;TMethod _] ->
+			jm#invokestatic haxe_jvm_path "compareFunctions" (method_sig [object_sig;object_sig] (Some TBool));
+			CmpNormal(op,TBool)
+		| [(TObject _ | TArray _) as t1;(TObject _ | TArray _) as t2] ->
 			CmpSpecial ((if op = CmpEq then code#if_acmp_ne else code#if_acmp_eq) t1 t2)
 		| [TDouble;TDouble] ->
 			let op = flip_cmp_op op in

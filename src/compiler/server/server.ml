@@ -99,7 +99,7 @@ module Connect = struct
 			in
 			ClientConnect.poll sock print
 		end;
-		if !has_error then exit 1 else exit 0
+		if !has_error then 1 else 0
 end
 
 module SocketRequest = struct
@@ -174,6 +174,11 @@ module SocketRequest = struct
 				end
 		in
 		let data = read_loop 0 in
+		(* Switch to blocking mode before spawning the stdin forwarding thread.
+		   The socket was set to non-blocking for the request-parsing phase above
+		   (to handle slow clients with retries), but the forwarding thread needs
+		   blocking recv to avoid exiting prematurely on EWOULDBLOCK. *)
+		Unix.clear_nonblock sin;
 		let stdin = setup_client_stdin_forward !overflow sin in
 		{ data; stdin }
 end
@@ -320,9 +325,6 @@ end
 let setup_server_context verbose =
 	if verbose then ServerMessage.enable_all ();
 	Sys.catch_break false; (* Sys can never catch a break *)
-	(* Ignore SIGPIPE to prevent process termination when stdin pipe is closed.
-	   Sys.sigpipe may not map to the real signal number, so use 13 directly. *)
-	(try Sys.set_signal 13 Sys.Signal_ignore with _ -> ());
 	(* Create server context and set up hooks for parsing and typing *)
 	let sctx = ServerCompilationContext.create verbose in
 	ServerCache.enable_cache_mode sctx;
@@ -350,7 +352,7 @@ let wait_loop entry verbose accept =
 						None,s
 				in
 				let data = Helper.parse_hxml_data hxml in
-				let parsed_args = Args.parse_args sctx data in
+				let parsed_args = Args.parse_args data in
 				let protocol_version = Protocol.detect_version parsed_args in
 				conn.set_version protocol_version;
 				let comm () = ServerCommunication.Communication.create_pipe sctx conn protocol_version in
@@ -397,7 +399,6 @@ let init_wait_socket ip port =
 		let stdin_pipe = ref None in
 		let read () =
 			let req = SocketRequest.read sin bufsize in
-			Unix.clear_nonblock sin;
 			stdin_pipe := Some (req.stdin);
 			req.data
 		in
