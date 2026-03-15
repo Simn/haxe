@@ -175,28 +175,65 @@ allocations at the source level, either:
 `caml_compare` (2 %) and `caml_equal` (1 %). These are triggered by OCaml's
 polymorphic `(=)` and `compare` operators.
 
-**Key call sites in hot paths:**
+**Important:** OCaml's native compiler specialises `=` when the types
+are known at compile-time, but **only for types whose constructors are all
+constant** (take no arguments). If any constructor of the type carries
+data (e.g. `Var of var_kind`), OCaml emits a call to `caml_equal` even
+when the concrete values at runtime might be constant constructors.
 
-- **`src/typing/typeloadCheck.ml:187`** — `| a, b when a = b -> ()` comparing
-  `field_kind` values (contains `var_access` / `method_kind`).
-- **`src/typing/typeloadCheck.ml:432`** — `mkind m1 = mkind m2` comparing
-  method kinds.
-- **`src/typing/typeloadCheck.ml:66`** — `not (m1 = MethDynamic)` comparing
-  method kinds.
-- **`src/typing/fields.ml:41`** — `!(a.a_status) = Const` comparing
-  `anon_status`.
-- **`src/typing/fields.ml:141,194`** — `e.eexpr = TConst TSuper` comparing
-  `texpr_expr` constructors (cheap since TConst is simple).
-- **`src/optimization/optimizerTexpr.ml:189`** — `a = b` comparing arbitrary
-  constants.
-- **Path comparisons** (10 sites) — `c.cl_path = path` etc. These compare
-  `string list * string` tuples, which is relatively cheap.
-- **Hashtbl operations** — `Hashtbl.find`/`Hashtbl.mem` use polymorphic
-  hashing and equality by default. `nullSafety.ml` has 26 such call sites.
+One exception: when one side of `=` is a **literal constant constructor**
+(e.g. `x = Const`), OCaml recognises that the constant constructor is
+an immediate and emits a direct `cmpq` regardless of whether the type
+has structured variants.
 
-**Recommendation:** Replace polymorphic `(=)` with typed equality in the
-hottest paths, especially `typeloadCheck.ml`. For `Hashtbl`, consider using
-functorized hash tables with custom hash/equality for type keys.
+Confirmed by inspecting the generated assembly (`ocamlfind ocamlopt -S`):
+
+| Expression | Type | Assembly | Polymorphic? |
+|---|---|---|---|
+| `(a : method_kind) = (b : method_kind)` | all-constant ctors | `cmpq` | No |
+| `(m : method_kind) = MethDynamic` | literal constant | `cmpq` | No |
+| `!(a.a_status) = Const` | literal constant | `cmpq` | No |
+| `mkind m1 = mkind m2` | `int = int` | `cmpq` | No |
+| `(a : field_kind) = (b : field_kind)` | has `Var of var_kind` | `caml_equal` | **Yes** |
+| `(a : tconstant) = (b : tconstant)` | has `TInt of int32` etc. | `caml_equal` | **Yes** |
+| `e.eexpr = TConst TSuper` | literal structured ctor | `caml_equal` | **Yes** (but shallow) |
+| `(a : var_access) = (b : var_access)` | has `AccRequire of ...` | `caml_equal` | **Yes** |
+| `(a : path) = (b : path)` | `string list * string` | `caml_equal` | **Yes** |
+
+**Confirmed polymorphic call sites:**
+
+1. **`src/typing/typeloadCheck.ml:187`** — `| a, b when a = b -> ()`:
+   compares two `field_kind` variables. `field_kind` has `Var of var_kind`,
+   so OCaml cannot specialise this. Fixing: decompose into a pattern match
+   or a custom `field_kind_eq` helper.
+2. **`src/typing/fields.ml:141,194`** — `e.eexpr = TConst TSuper`:
+   `texpr_expr` is massively structured. However, this comparison is
+   **shallow** — `caml_equal` checks the constructor tag first, and both
+   `TConst` and `TSuper` are quickly resolved. Low priority.
+3. **`src/optimization/optimizerTexpr.ml:189`** — `a = b` comparing two
+   `tconstant` values (has `TInt of int32`, `TString of string`, etc.).
+4. **Path comparisons** (~10 sites) — `c.cl_path = path` compares
+   `string list * string` tuples.
+5. **`src/typing/nullSafety.ml`** — polymorphic `Hashtbl` with
+   `safety_subject` keys (a variant with `SFieldOfClass of path * string list`
+   etc.). Every `Hashtbl.find`/`Hashtbl.mem`/`Hashtbl.replace` call
+   triggers both `caml_hash` and `caml_equal`.
+
+**Not polymorphic (previously incorrectly listed):**
+
+- `typeloadCheck.ml:66` — `not (m1 = MethDynamic)`: `method_kind` has only
+  constant constructors → direct `cmpq`.
+- `typeloadCheck.ml:432` — `mkind m1 = mkind m2`: projects to `int` first
+  → direct `cmpq`.
+- `fields.ml:41` — `!(a.a_status) = Const`: comparing against a literal
+  constant constructor → direct `cmpq`.
+
+**Recommendation:** The total cost is modest (3.1 %). The most impactful
+fix would be switching `nullSafety.ml` to functorized hash tables with a
+custom hash/equal for `safety_subject`, which would also eliminate the
+`caml_hash` overhead (2.4 % of perf time, much of which likely comes from
+these tables). The `field_kind = field_kind` comparison at
+`typeloadCheck.ml:187` can be replaced with a pattern match.
 
 ### 3. HXB Zip I/O
 
@@ -219,12 +256,98 @@ deduplication here would yield diminishing returns.
 
 Worker domains spin-wait on `Multi_channel.recv_poll_loop` even for small
 compilations. The `ManagedPool` in `parallel.ml` already supports lazy
-acquisition and teardown, but the pool is created at the start of
-compilation regardless of workload size.
+acquisition and teardown, but once acquired the pool's domains spin until
+explicitly released.
 
-**Recommendation:** The Domainslib API creates a fixed pool of domains.
-A better approach would be to use OCaml 5's `Domain.spawn` directly for
-short parallel sections (like HXB export) instead of maintaining a
-persistent pool. This avoids idle spin-waiting entirely. Alternatively,
-gate pool creation behind a module-count threshold (e.g., only create
-the pool when there are > 50 modules to process in parallel).
+**Current architecture:**
+- A single `ManagedPool.t` is created in `ServerCompilationContext.create`
+  (or `haxe.ml` for one-shot mode).
+- `run_with_pool` lazily acquires the pool on first use and keeps it alive.
+- Callers pass `Some pool` to `ParallelArray.iter`/`map` to opt into
+  parallelism. Passing `None` runs sequentially.
+- `run_parallel_for` creates and tears down a fresh pool each time (used
+  only by HL/C backends).
+
+**Problem:** Domainslib's `Task.setup_pool` spawns N OS-level domains that
+spin-wait on a lock-free multi-channel. Even when there is no work to do,
+each domain busy-loops, consuming CPU. For single-file compilations or
+eval-only runs, the pool is acquired but domains sit idle for 80 %+ of the
+compilation.
+
+**Proposed framework — `Domain.spawn`-based work distribution:**
+
+Replace the persistent Domainslib pool with a lightweight `Domain.spawn`
+wrapper for parallel map/iter operations. The key insight is that the
+compiler's parallel sections are all simple data-parallel loops (iterate
+over arrays of modules/types) — they don't need work-stealing or nested
+task parallelism, which is what Domainslib provides.
+
+```ocaml
+(* parallel.ml — proposed replacement for the Domainslib-based functions *)
+
+(** Partition [length] items into [num_domains] contiguous chunks.
+    Returns an array of (start, finish) pairs. *)
+let partition_work num_domains length =
+  let chunk = length / num_domains in
+  let remainder = length mod num_domains in
+  Array.init num_domains (fun i ->
+    let start = i * chunk + min i remainder in
+    let finish = start + chunk - 1 + (if i < remainder then 1 else 0) in
+    (start, finish))
+
+(** Run [f] over indices [0..length-1] across [num_domains] domains.
+    Each domain processes a contiguous slice. No persistent pool needed. *)
+let parallel_for ~num_domains length f =
+  if num_domains <= 1 || length <= num_domains then
+    for i = 0 to length - 1 do f i done
+  else
+    let chunks = partition_work num_domains length in
+    (* Spawn (num_domains - 1) extra domains; run one chunk on the
+       current domain to avoid wasting it. *)
+    let domains = Array.init (num_domains - 1) (fun i ->
+      let (start, finish) = chunks.(i + 1) in
+      Domain.spawn (fun () ->
+        for j = start to finish do f j done))
+    in
+    let (start0, finish0) = chunks.(0) in
+    for j = start0 to finish0 do f j done;
+    Array.iter Domain.join domains
+
+(** Map an array in parallel. *)
+let parallel_map ~num_domains f a default =
+  let len = Array.length a in
+  if num_domains <= 1 || len <= num_domains then
+    Array.map f a
+  else
+    let out = Array.make len default in
+    parallel_for ~num_domains len (fun i ->
+      Array.unsafe_set out i (f (Array.unsafe_get a i)));
+    out
+```
+
+**Integration strategy:**
+
+1. Add a `min_parallel_items` threshold (e.g. 32) — below this, run
+   sequentially. This eliminates domain spawn overhead for small arrays.
+2. Keep `Domain.recommended_domain_count()` as the default parallelism
+   level, matching the current behaviour.
+3. The `ManagedPool` type and `run_with_pool` can be replaced with a
+   simple `num_domains : int` parameter threaded through the existing
+   callsites. No pool lifecycle management needed.
+4. Callers that currently do `ParallelArray.iter pool f a` would become
+   `ParallelArray.iter ~num_domains f a`.
+5. The server context no longer needs a `pool` field — just store
+   `num_domains : int`.
+
+**Why this works for the Haxe compiler:**
+- All parallel sections are "embarrassingly parallel" data-parallel loops
+  over arrays of modules or types. No task dependencies, no nested
+  parallelism.
+- `Domain.spawn` + `Domain.join` has low overhead (~10 μs per spawn on
+  Linux, vs ~5 μs for posting to a Domainslib channel, but without the
+  continuous spin-wait cost).
+- Domains are spawned only when work is available and join immediately
+  after. Zero idle CPU consumption between parallel sections.
+- The main risk is domain count: OCaml has a hard limit of 128 domains
+  total. Spawning + joining in rapid succession should be fine since
+  joined domains release their slot immediately.
