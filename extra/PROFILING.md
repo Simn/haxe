@@ -252,21 +252,7 @@ but account for far fewer calls. The `perf` data shows
 `HxbWriter.write_type_instance` at only 0.38 % of total time, so further
 deduplication here would yield diminishing returns.
 
-### 5. Domainslib Domain Management
-
-Worker domains spin-wait on `Multi_channel.recv_poll_loop` even for small
-compilations. The `ManagedPool` in `parallel.ml` already supports lazy
-acquisition and teardown, but once acquired the pool's domains spin until
-explicitly released.
-
-**Current architecture:**
-- A single `ManagedPool.t` is created in `ServerCompilationContext.create`
-  (or `haxe.ml` for one-shot mode).
-- `run_with_pool` lazily acquires the pool on first use and keeps it alive.
-- Callers pass `Some pool` to `ParallelArray.iter`/`map` to opt into
-  parallelism. Passing `None` runs sequentially.
-- `run_parallel_for` creates and tears down a fresh pool each time (used
-  only by HL/C backends).
+### 5. Domain Management — Domainslib replaced with WorkerPool
 
 **Problem:** Domainslib's `Task.setup_pool` spawns N OS-level domains that
 spin-wait on a lock-free multi-channel. Even when there is no work to do,
@@ -274,80 +260,50 @@ each domain busy-loops, consuming CPU. For single-file compilations or
 eval-only runs, the pool is acquired but domains sit idle for 80 %+ of the
 compilation.
 
-**Proposed framework — `Domain.spawn`-based work distribution:**
+**Solution (implemented in this PR):** Replaced Domainslib entirely with a
+custom `WorkerPool` in `parallel.ml`. The pool uses `Domain.spawn` for
+workers that block on `Condition.wait` between calls — **zero CPU when
+idle**, unlike Domainslib's spin-wait.
 
-Replace the persistent Domainslib pool with a lightweight `Domain.spawn`
-wrapper for parallel map/iter operations. The key insight is that the
-compiler's parallel sections are all simple data-parallel loops (iterate
-over arrays of modules/types) — they don't need work-stealing or nested
-task parallelism, which is what Domainslib provides.
+The `domainslib` dependency has been removed from `src/dune` and
+`haxe.opam`.
 
-```ocaml
-(* parallel.ml — proposed replacement for the Domainslib-based functions *)
+**Architecture:**
 
-(** Partition [length] items into [num_domains] contiguous chunks.
-    Returns an array of (start, finish) pairs. *)
-let partition_work num_domains length =
-  let chunk = length / num_domains in
-  let remainder = length mod num_domains in
-  Array.init num_domains (fun i ->
-    let start = i * chunk + min i remainder in
-    let finish = start + chunk - 1 + (if i < remainder then 1 else 0) in
-    (start, finish))
-
-(** Run [f] over indices [0..length-1] across [num_domains] domains.
-    Each domain processes a contiguous slice. No persistent pool needed. *)
-let parallel_for ~num_domains length f =
-  if num_domains <= 1 || length <= num_domains then
-    for i = 0 to length - 1 do f i done
-  else
-    let chunks = partition_work num_domains length in
-    (* Spawn (num_domains - 1) extra domains; run one chunk on the
-       current domain to avoid wasting it. *)
-    let domains = Array.init (num_domains - 1) (fun i ->
-      let (start, finish) = chunks.(i + 1) in
-      Domain.spawn (fun () ->
-        for j = start to finish do f j done))
-    in
-    let (start0, finish0) = chunks.(0) in
-    for j = start0 to finish0 do f j done;
-    Array.iter Domain.join domains
-
-(** Map an array in parallel. *)
-let parallel_map ~num_domains f a default =
-  let len = Array.length a in
-  if num_domains <= 1 || len <= num_domains then
-    Array.map f a
-  else
-    let out = Array.make len default in
-    parallel_for ~num_domains len (fun i ->
-      out.(i) <- f a.(i));
-    out
+```
+                    ┌─── Worker 0: Condition.wait → process chunk → signal done ───┐
+ submit(length, f) ─┼─── Worker 1: Condition.wait → process chunk → signal done ───┼→ all done
+                    ├─── Worker 2: Condition.wait → process chunk → signal done ───┤
+                    └─── Main domain: process chunk 0 → wait for workers ──────────┘
 ```
 
-**Integration strategy:**
+- `WorkerPool.create nw`: spawns `nw` worker domains that immediately
+  block on `Condition.wait`. Zero CPU.
+- `WorkerPool.parallel_for pool length f`: partitions `[0..length-1]`
+  into contiguous chunks across `nw+1` domains (workers + main). Workers
+  are woken via `Condition.broadcast`, process their chunk, then signal
+  completion via a counter + `Condition.signal`.
+- `WorkerPool.teardown pool`: sets a `stop` flag, broadcasts, joins all
+  worker domains.
+- **Nested call detection:** An `Atomic.t bool` `busy` flag prevents
+  nested `parallel_for` calls (e.g. analyzer iterating types → iterating
+  fields) from corrupting shared state. Nested calls fall back to
+  sequential execution, matching Domainslib's effective behaviour for the
+  same code paths.
+- **Exception propagation:** First exception from any domain (worker or
+  main) is captured with backtrace and re-raised after all domains finish.
 
-1. Add a `min_parallel_items` threshold (e.g. 32) — below this, run
-   sequentially. This eliminates domain spawn overhead for small arrays.
-2. Keep `Domain.recommended_domain_count()` as the default parallelism
-   level, matching the current behaviour.
-3. The `ManagedPool` type and `run_with_pool` can be replaced with a
-   simple `num_domains : int` parameter threaded through the existing
-   callsites. No pool lifecycle management needed.
-4. Callers that currently do `ParallelArray.iter pool f a` would become
-   `ParallelArray.iter ~num_domains f a`.
-5. The server context no longer needs a `pool` field — just store
-   `num_domains : int`.
+**`ManagedPool`** is retained as a thin wrapper that lazily creates a
+`WorkerPool` on first use and tears it down on `release`. Workers sleep
+between `run_with_pool` scopes — zero CPU overhead.
 
-**Why this works for the Haxe compiler:**
-- All parallel sections are "embarrassingly parallel" data-parallel loops
-  over arrays of modules or types. No task dependencies, no nested
-  parallelism.
-- `Domain.spawn` + `Domain.join` has low overhead (~10 μs per spawn on
-  Linux, vs ~5 μs for posting to a Domainslib channel, but without the
-  continuous spin-wait cost).
-- Domains are spawned only when work is available and join immediately
-  after. Zero idle CPU consumption between parallel sections.
-- The main risk is domain count: OCaml has a hard limit of 128 domains
-  total. Spawning + joining in rapid succession should be fine since
-  joined domains release their slot immediately.
+**Benchmark results** (4-core CI runner, median of 5 runs for eval, 3 for JVM):
+
+| Benchmark | Domainslib | WorkerPool | Delta |
+|---|---|---|---|
+| Eval unit tests | 2762 ms | 2809 ms | +1.7 % (noise) |
+| JVM compilation | 1062 ms | 1070 ms | +0.8 % (noise) |
+
+Performance is within measurement noise. The key advantage is that idle
+workers consume zero CPU (blocking `Condition.wait`), whereas Domainslib
+workers spin-wait on a lock-free channel.

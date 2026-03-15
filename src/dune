@@ -1,12 +1,6 @@
 (include_subdirs unqualified)
 
 (env
-	; profile environment: keep optimizations but embed DWARF debug info and
-	; retain frame pointers so that perf/gprof can walk the call stack.
-	(profile
-		(flags (:standard -w -3 -w -6 -w -9 -w -23 -w -27 -w -30 -w -32 -w -36 -w -50 -thread))
-		(ocamlopt_flags (:standard -O2 -g -unbox-closures))
-	)
 	(_
 		; 3 - Remove deprecation warnings
 		; 6 - Label omitted in function application
@@ -29,7 +23,7 @@
 		unix ipaddr str bigarray threads dynlink
 		xml-light extlib sha terminal_size
 		luv
-		domainslib saturn thread-local-storage dynamic_gc
+		saturn thread-local-storage dynamic_gc
 	)
 	(modules (:standard \ haxe prebuild))
 	(preprocess (per_module
