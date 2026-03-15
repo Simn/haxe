@@ -72,7 +72,7 @@ let check_hxb_output com config =
 		let path = Str.global_replace (Str.regexp "\\$target") (platform_name com.platform) path in
 		let t = Timer.start_timer com.timer_ctx ["generate";"hxb"] in
 		Path.mkdir_from_path path;
-		let zip = new Zip_output.zip_output path 6 in
+		let zip = new Zip_output.zip_output path 0 in
 		let export com config =
 			let cc = CommonCache.get_cache com in
 			let target = Common.platform_name_macro com in
