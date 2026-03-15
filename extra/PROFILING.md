@@ -304,6 +304,9 @@ between `run_with_pool` scopes — zero CPU overhead.
 | Eval unit tests | 2762 ms | 2809 ms | +1.7 % (noise) |
 | JVM compilation | 1062 ms | 1070 ms | +0.8 % (noise) |
 
-Performance is within measurement noise. The key advantage is that idle
-workers consume zero CPU (blocking `Condition.wait`), whereas Domainslib
-workers spin-wait on a lock-free channel.
+Throughput is within measurement noise — the WorkerPool is not faster for
+active parallel work. The primary benefit is eliminating idle CPU
+consumption: Domainslib workers spin-wait on a lock-free channel even when
+no work is available, whereas WorkerPool workers block on `Condition.wait`
+and consume zero CPU between parallel sections. This matters for the
+compilation server where the pool persists across requests.
