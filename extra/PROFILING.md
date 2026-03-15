@@ -321,7 +321,7 @@ let parallel_map ~num_domains f a default =
   else
     let out = Array.make len default in
     parallel_for ~num_domains len (fun i ->
-      Array.unsafe_set out i (f (Array.unsafe_get a i)));
+      out.(i) <- f a.(i));
     out
 ```
 
