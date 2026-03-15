@@ -19,7 +19,7 @@ build: [
 install: [make "install" "INSTALL_DIR=%{prefix}%"]
 remove: [make "uninstall" "INSTALL_DIR=%{prefix}%"]
 depends: [
-  "ocaml" {>= "5.0"}  # required by domainslib for multicore support
+  "ocaml" {>= "5.0"}  # required for Domain.spawn multicore support
   "ocamlfind" {build}
   "dune" {>= "3.17"}
   "sedlex" {>= "2.0"}
@@ -34,7 +34,6 @@ depends: [
   "luv" {>= "0.5.13"}
   "ipaddr"
   "terminal_size"
-  "domainslib" {>= "0.5.2"}
   "saturn"
   "thread-local-storage"
   "dynamic_gc"
