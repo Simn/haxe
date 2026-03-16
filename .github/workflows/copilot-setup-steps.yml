@@ -11,13 +11,17 @@ on:
 
 jobs:
   copilot-setup-steps:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     env:
-      PLATFORM: linux64
       OCAML_VERSION: 5.3.0
       OPAMYES: 1
+      MINGW_ARCH: x86_64
+      CYG_ROOT: C:\cygwin
 
     steps:
       - name: Checkout repository
@@ -27,6 +31,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           set -ex
           sudo apt-get update -qqy
@@ -37,6 +42,7 @@ jobs:
             libuv1-dev libreadline-dev
 
       - name: Cache opam
+        if: runner.os == 'Linux'
         id: cache-opam
         uses: actions/cache@v4
         with:
@@ -44,7 +50,7 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-5.3.0-${{ hashFiles('./haxe.opam', './libs/') }}-1
 
       - name: Initialize opam and install OCaml 5.3.0
-        if: steps.cache-opam.outputs.cache-hit != 'true'
+        if: runner.os == 'Linux' && steps.cache-opam.outputs.cache-hit != 'true'
         run: |
           set -ex
           opam init -c 5.3.0 --no-setup
@@ -54,6 +60,7 @@ jobs:
           ocamlopt -v
 
       - name: Persist opam environment for subsequent steps
+        if: runner.os == 'Linux'
         run: |
           set -ex
           eval $(opam env)
@@ -62,17 +69,23 @@ jobs:
           echo "CAML_LD_LIBRARY_PATH=$CAML_LD_LIBRARY_PATH" >> $GITHUB_ENV
           echo "OCAML_TOPLEVEL_PATH=$OCAML_TOPLEVEL_PATH" >> $GITHUB_ENV
 
+      - name: Setup OCaml (Windows)
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/setup-ocaml-windows
+
       - name: Setup Neko
         uses: ./.github/actions/setup-neko
         env:
-          PLATFORM: linux64
+          PLATFORM: ${{ runner.os == 'Linux' && 'linux64' || 'windows64' }}
 
       - name: Make Neko shared libraries available to the dynamic linker
+        if: runner.os == 'Linux'
         run: |
           echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/local.conf
           sudo ldconfig
 
-      - name: Build Haxe
+      - name: Build Haxe (Linux)
+        if: runner.os == 'Linux'
         run: |
           set -ex
           eval $(opam env)
@@ -83,10 +96,22 @@ jobs:
           ldd -v ./haxe
           ldd -v ./haxelib
 
+      - name: Build Haxe (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-PSDebug -Trace 1
+          $PSNativeCommandUseErrorActionPreference = $true
+          $ErrorActionPreference = 'Stop'
+          opam exec -- make -s -f Makefile.win -j"$env:NUMBER_OF_PROCESSORS" haxe
+          opam exec -- make -s -f Makefile.win haxelib
+
       - name: Add workspace to PATH
+        shell: bash
         run: echo "$GITHUB_WORKSPACE" >> $GITHUB_PATH
 
       - name: Setup haxelib
+        shell: bash
         run: |
           set -ex
           mkdir ~/haxelib
