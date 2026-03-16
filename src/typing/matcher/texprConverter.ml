@@ -202,22 +202,89 @@ type dt_recursion =
 	| AfterSwitch
 	| Deep
 
+(* Mark decision tree nodes that are referenced multiple times as goto targets. *)
+let mark_goto_targets dt =
+	let visited = Hashtbl.create 16 in
+	let rec visit dt =
+		if Hashtbl.mem visited dt.dt_i then
+			dt.dt_goto_target <- true
+		else begin
+			Hashtbl.add visited dt.dt_i ();
+			match dt.dt_t with
+			| Leaf _ | Fail -> ()
+			| Switch(_, cases, default) ->
+				List.iter (fun sc -> visit sc.sc_dt) cases;
+				visit default
+			| Bind(_, dt') -> visit dt'
+			| Guard(_, dt1, dt2) | GuardNull(_, dt1, dt2) ->
+				visit dt1; visit dt2
+		end
+	in
+	visit dt
+
+(* Check if a dt node has a trivial body not worth deduplicating. *)
+let is_trivial_default dt = match dt.dt_t with
+	| Fail -> true
+	| Leaf case -> case.case_expr = None
+	| _ -> false
+
+(* Find the shared default dt node at the top level of the decision tree. *)
+let rec find_shared_default dt = match dt.dt_t with
+	| Switch(_, _, default) when default.dt_goto_target && not (is_trivial_default default) ->
+		Some default
+	| Guard(_, _, dt2) | GuardNull(_, _, dt2) when dt2.dt_goto_target && not (is_trivial_default dt2) ->
+		Some dt2
+	| Bind(_, inner_dt) -> find_shared_default inner_dt
+	| _ -> None
+
+(* Check that all Switch nodes in the decision tree have at most 1 case,
+   ensuring we generate TIf chains (not TSwitch) that work with the do-while optimization. *)
+let rec all_single_case_dt dt = match dt.dt_t with
+	| Switch(_, cases, default) ->
+		List.length cases <= 1
+		&& List.for_all (fun sc -> all_single_case_dt sc.sc_dt) cases
+		&& all_single_case_dt default
+	| Bind(_, dt') -> all_single_case_dt dt'
+	| Guard(_, dt1, dt2) | GuardNull(_, dt1, dt2) ->
+		all_single_case_dt dt1 && all_single_case_dt dt2
+	| Leaf _ | Fail -> true
+
 let to_texpr ctx t_switch with_type dt =
 	let v_lookup = ref IntMap.empty in
 	let com = ctx.com in
 	let p = dt.dt_pos in
+	let shared_default_id = ref None in
 	let mk_index_call e =
 		mk (TEnumIndex e) com.basic.tint e.epos
 	in
-	let rec loop dt_rec params dt = match dt.dt_texpr with
-		| Some e ->
-			Some e
-		| None ->
+	let rec loop dt_rec params dt =
+		(* In do-while mode, the shared default returns None (fall-through) *)
+		let is_shared_default = match !shared_default_id with
+			| Some target_i -> target_i = dt.dt_i
+			| None -> false
+		in
+		if is_shared_default then
+			None
+		else begin
+			let in_dowhile_mode = Option.is_some !shared_default_id in
+			match (if in_dowhile_mode then None else dt.dt_texpr) with
+			| Some e ->
+				Some e
+			| None ->
 			let e = match dt.dt_t with
 				| Leaf case ->
+					(* In do-while mode, append TBreak to success paths *)
 					begin match case.case_expr with
-						| Some e -> Some e
-						| None -> Some (mk (TBlock []) ctx.t.tvoid case.case_pos)
+						| Some e ->
+							if in_dowhile_mode then
+								Some (mk (TBlock [e; mk TBreak com.basic.tvoid e.epos]) e.etype e.epos)
+							else
+								Some e
+						| None ->
+							if in_dowhile_mode then
+								Some (mk TBreak com.basic.tvoid case.case_pos)
+							else
+								Some (mk (TBlock []) ctx.t.tvoid case.case_pos)
 					end
 				| Switch(e_subject,[{sc_con = (ConFields _,_)} as sc],_) -> (* TODO: Can we improve this by making it more general? *)
 					begin match loop dt_rec params sc.sc_dt with
@@ -235,7 +302,9 @@ let to_texpr ctx t_switch with_type dt =
 					let unmatched = ExtList.List.filter_map (unify_constructor ctx params e_subject.etype) unmatched in
 					let loop params dt = match loop dt_rec' params dt with
 						| None ->
-							begin match with_type,finiteness with
+							if in_dowhile_mode then
+								None
+							else begin match with_type,finiteness with
 							| WithType.NoValue,Infinite when toplevel -> None
 							| _,CompileTimeFinite when unmatched = [] -> None
 							| _ when ignore_error ctx.com -> None
@@ -280,19 +349,29 @@ let to_texpr ctx t_switch with_type dt =
 						| SKEnum -> mk_index_call e_subject
 						| SKLength -> ExprToPattern.type_field_access ctx e_subject "length"
 					in
+					let can_fold_conditions e_default e_default2 =
+						match e_default,e_default2 with
+						| Some(e1),Some(e2) when e1 == e2 -> true
+						| None,None when in_dowhile_mode -> true
+						| _ -> false
+					in
+					let make_if e1 e2 =
+						let e_op = mk (TBinop(OpEq,e_subject,e1)) ctx.t.tbool e_subject.epos in
+						begin match e2.eexpr with
+							| TIf(e_op2,e3,e_default2) when can_fold_conditions e_default e_default2 ->
+								let eand = binop OpBoolAnd e_op e_op2 ctx.t.tbool (punion e_op.epos e_op2.epos) in
+								mk (TIf(eand,e3,e_default)) t_switch dt.dt_pos
+							| _ ->
+								mk (TIf(e_op,e2,e_default)) t_switch dt.dt_pos
+						end
+					in
 					let e = match cases,e_default,with_type with
 						| [case],None,_ when (match finiteness with RunTimeFinite -> true | _ -> false) && not is_nullable_subject ->
 							{case.case_expr with etype = t_switch}
-						| [{case_patterns = [e1];case_expr = e2}],Some _,_
-						| [{case_patterns = [e1];case_expr = e2}],None,NoValue ->
-							let e_op = mk (TBinop(OpEq,e_subject,e1)) ctx.t.tbool e_subject.epos in
-							begin match e2.eexpr with
-								| TIf(e_op2,e3,e_default2) when (match e_default,e_default2 with Some(e1),Some(e2) when e1 == e2 -> true | _ -> false) ->
-									let eand = binop OpBoolAnd e_op e_op2 ctx.t.tbool (punion e_op.epos e_op2.epos) in
-									mk (TIf(eand,e3,e_default)) t_switch dt.dt_pos
-								| _ ->
-									mk (TIf(e_op,e2,e_default)) t_switch dt.dt_pos
-							end
+						| [{case_patterns = [e1];case_expr = e2}],Some _,_ ->
+							make_if e1 e2
+						| [{case_patterns = [e1];case_expr = e2}],None,_ when with_type = NoValue || in_dowhile_mode ->
+							make_if e1 e2
 						| [{case_patterns = [{eexpr = TConst (TBool true)}];case_expr = e2};{case_patterns = [{eexpr = TConst (TBool false)}];case_expr = e1}],None,_
 						| [{case_patterns = [{eexpr = TConst (TBool false)}];case_expr = e2};{case_patterns = [{eexpr = TConst (TBool true)}];case_expr = e1}],None,_ ->
 							mk (TIf(e_subject,e1,Some e2)) t_switch dt.dt_pos
@@ -323,7 +402,7 @@ let to_texpr ctx t_switch with_type dt =
 						| Some e_else ->
 							Some (mk (TIf(e,e_then,Some e_else)) t_switch (punion e_then.epos e_else.epos))
 						| None ->
-							if with_type = NoValue && toplevel then
+							if (with_type = NoValue && toplevel) || in_dowhile_mode then
 								Some (mk (TIf(e,e_then,None)) ctx.t.tvoid (punion e.epos e_then.epos))
 							else
 								None
@@ -349,7 +428,15 @@ let to_texpr ctx t_switch with_type dt =
 					let e_then = loop dt_rec params dt1 in
 					begin match e_then with
 					| None ->
-						if toplevel then begin match loop dt_rec params dt2 with
+						if in_dowhile_mode then begin
+							(* Null case leads to shared default (fall-through).
+							   Generate: if(e != null) { non_null_branch } *)
+							match loop dt_rec params dt2 with
+							| None -> None
+							| Some e_else ->
+								let e_not_null = mk (TBinop(OpNotEq,e,make_null e.etype e.epos)) ctx.t.tbool e.epos in
+								Some (mk (TIf(e_not_null,e_else,None)) t_switch e_else.epos)
+						end else if toplevel then begin match loop dt_rec params dt2 with
 							| None ->
 								None
 							| Some e_else ->
@@ -365,7 +452,7 @@ let to_texpr ctx t_switch with_type dt =
 						let e_else = loop dt_rec params dt2 in
 						begin match e_else with
 						| None ->
-							if toplevel && with_type = NoValue then
+							if (toplevel && with_type = NoValue) || in_dowhile_mode then
 								Some (mk (TIf(e_cond,e_then,None)) t_switch e_then.epos)
 							else
 								report_not_exhaustive !v_lookup e []
@@ -390,13 +477,49 @@ let to_texpr ctx t_switch with_type dt =
 				| Fail ->
 					None
 			in
-			dt.dt_texpr <- e;
+			if not in_dowhile_mode then dt.dt_texpr <- e;
 			e
+		end
 	in
 	let params = extract_param_types ctx.type_params in
-	let e = loop Toplevel params dt in
-	match e with
+	(* Try the do-while optimization for shared defaults *)
+	mark_goto_targets dt;
+	let can_optimize =
+		(match with_type with WithType.NoValue -> true | _ -> ExtType.is_void (follow t_switch))
+		&& all_single_case_dt dt
+	in
+	let shared_default = if can_optimize then find_shared_default dt else None in
+	match shared_default with
+	| Some default_dt ->
+		(* Convert default first in normal mode *)
+		let e_default = loop Toplevel params default_dt in
+		(* Convert main tree in do-while mode: shared default returns None, leaves get break *)
+		shared_default_id := Some default_dt.dt_i;
+		let e_body = loop Toplevel params dt in
+		shared_default_id := None;
+		begin match e_body, e_default with
+		| Some e_body, Some e_default ->
+			let body_elements = match e_body.eexpr with
+				| TBlock el -> el
+				| _ -> [e_body]
+			in
+			let e_false = mk (TConst (TBool false)) com.basic.tbool p in
+			let e_while_body = mk (TBlock (body_elements @ [e_default])) com.basic.tvoid p in
+			let e_while = mk (TWhile(e_false, e_while_body, DoWhile)) com.basic.tvoid p in
+			Texpr.duplicate_tvars e_identity e_while
+		| _ ->
+			(* Fallback: re-convert without do-while mode *)
+			let e = loop Toplevel params dt in
+			begin match e with
+			| None -> raise_typing_error "Unmatched patterns: _" p
+			| Some e -> Texpr.duplicate_tvars e_identity e
+			end
+		end
 	| None ->
-		raise_typing_error "Unmatched patterns: _" p;
-	| Some e ->
-		Texpr.duplicate_tvars e_identity e
+		let e = loop Toplevel params dt in
+		begin match e with
+		| None ->
+			raise_typing_error "Unmatched patterns: _" p;
+		| Some e ->
+			Texpr.duplicate_tvars e_identity e
+		end
