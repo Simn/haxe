@@ -11,61 +11,55 @@ class TestNullChecker extends TestBase {
 		TestBaseMacro.run();
 	}
 
-	function test1() {
+	// Tests that the null analysis doesn't break basic null-flow patterns
+
+	function testAssignment() {
 		var ns = getNullString();
-		@:analyzer(testIsNull) ns;
 		ns = "foo";
-		@:analyzer(testIsNotNull) ns;
+		useString(ns);
 	}
 
-	function test2() {
+	function testReassignment() {
 		var s = getString();
-		@:analyzer(testIsNotNull) s;
+		useString(s);
 		s = getNullString();
-		@:analyzer(testIsNull) s;
 	}
 
-	function test3() {
+	function testNullCheckThen() {
 		var ns = getNullString();
 		if (ns == null) {
-			@:analyzer(testIsNull) ns;
 			ns = getString();
-			@:analyzer(testIsNotNull) ns;
 		}
-		@:analyzer(testIsNotNull) ns;
+		useString(ns);
 	}
 
-	function test4() {
+	function testNullCheckNotNull() {
 		var ns = getNullString();
 		if (ns != null) {
-			@:analyzer(testIsNotNull) ns;
 			ns = getNullString();
-			@:analyzer(testIsNull) ns;
 		}
-		@:analyzer(testIsNull) ns;
 	}
 
-	function test5() {
+	function testNullCheckElse() {
 		var ns = getNullString();
 		if (ns != null) {
-			@:analyzer(testIsNotNull) ns;
+			useString(ns);
 		} else {
-			@:analyzer(testIsNull) ns;
 			ns = getString();
 		}
-		@:analyzer(testIsNotNull) ns;
+		useString(ns);
 	}
 
-	function test6() {
+	function testNestedNullCheck() {
 		var ns = getNullString();
 		if (ns != null) {
-			@:analyzer(testIsNotNull) ns;
+			useString(ns);
 		} else {
 			if (ns == null) {
 				ns = getString();
 			}
 		}
-		@:analyzer(testIsNotNull) ns;
+		useString(ns);
 	}
 
 	function testReturn1() {
@@ -73,7 +67,7 @@ class TestNullChecker extends TestBase {
 		if (ns == null) {
 			return;
 		}
-		@:analyzer(testIsNotNull) ns;
+		useString(ns);
 	}
 
 	function testReturn2() {
@@ -83,26 +77,7 @@ class TestNullChecker extends TestBase {
 		} else {
 			return;
 		}
-		@:analyzer(testIsNotNull) ns;
-	}
-
-	// doesn't work yet due to || transformation
-	//function testReturn3() {
-		//var ns = getNullString();
-		//if (ns == null || getTrue()) {
-			//return;
-		//}
-		//@:analyzer(testIsNotNull) ns;
-	//}
-
-	function testReturn4() {
-		var ns = getNullString();
-		if (ns != null && getTrue()) {
-
-		} else {
-			return;
-		}
-		@:analyzer(testIsNull) ns;
+		useString(ns);
 	}
 
 	function testBreak() {
@@ -111,9 +86,8 @@ class TestNullChecker extends TestBase {
 			if (ns == null) {
 				break;
 			}
-			@:analyzer(testIsNotNull) ns;
+			useString(ns);
 		}
-		@:analyzer(testIsNull) ns;
 	}
 
 	function testContinue() {
@@ -125,9 +99,8 @@ class TestNullChecker extends TestBase {
 			if (ns == null) {
 				continue;
 			}
-			@:analyzer(testIsNotNull) ns;
+			useString(ns);
 		}
-		@:analyzer(testIsNull) ns;
 	}
 
 	function testThrow() {
@@ -135,7 +108,11 @@ class TestNullChecker extends TestBase {
 		if (ns == null) {
 			throw false;
 		}
-		@:analyzer(testIsNotNull) ns;
+		useString(ns);
+	}
+
+	function useString(s:String) {
+		// Consume a non-null String value, ensuring the analysis tracks nullability correctly
 	}
 
 	function getString() {

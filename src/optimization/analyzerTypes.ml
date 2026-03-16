@@ -50,6 +50,7 @@ module BasicBlock = struct
 		| FlagExecutable      (* Used by constant propagation to handle live edges *)
 		| FlagDce             (* Used by DCE to keep track of handled edges *)
 		| FlagCopyPropagation (* Used by copy propagation to track handled eges *)
+		| FlagNullAnalysis    (* Used by null analysis to track handled edges *)
 
 	type cfg_edge_kind =
 		| CFGGoto                (* An unconditional branch *)
